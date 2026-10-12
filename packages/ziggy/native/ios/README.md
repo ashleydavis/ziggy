@@ -1,9 +1,9 @@
 # ZiggyShellIOS
 
-Ziggy's shell code for iOS, as a Swift package (swift-tools-version 5.7, iOS 14). One class, `ZiggyBridge`, serves the app.
+Ziggy's native app code for iOS, as a Swift package (swift-tools-version 5.7, iOS 14). One class, `ZiggyBridge`, serves the app.
 
 - `CZiggy` is a system library target whose `ziggy.h` is a link to the core's own header (`packages/ziggy/core/src/lib/ziggy.h`).
-- `ZiggyShellIOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards UI messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url`, and creates and destroys the core.
+- `ZiggyShellIOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards UI messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the core.
 
 The static library with the core (`libziggy_example.a` for the example) is linked by the app project.
 
@@ -21,7 +21,7 @@ The UI and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `pack
 
 ## Test hooks
 
-When the linked library has the test hooks and `ZIGGY_TEST_MODE` is set, the shell starts the control connection and writes its port to the file named by `ZIGGY_TEST_PORT_FILE`.
+When the linked library has the test hooks and `ZIGGY_TEST_MODE` is set, the native app starts the control connection and writes its port to the file named by `ZIGGY_TEST_PORT_FILE`.
 
 ## Failures
 
@@ -38,14 +38,14 @@ The core's `keep_alive` callback reaches `ZiggyBridge`, which takes a background
 `UIDocumentPickerViewController` is presented over the web view's window, with the delegate's callbacks (including cancel) answering.
 
 - Open files uses `forOpeningContentTypes: [.item], asCopy: true` with multiple selection. The paths are copies in the app's temporary directory, which the app can read and write freely until the system clears that directory. The originals are untouched.
-- Folder uses `forOpeningContentTypes: [.folder]`. The shell calls `startAccessingSecurityScopedResource` on the folder and keeps access for the rest of the process, so the folder's path and everything inside it can be listed, read and written. A path from an earlier run, or a path inside the folder used after the app restarts, is denied until the user picks the folder again, because keeping access across runs needs a bookmark.
+- Folder uses `forOpeningContentTypes: [.folder]`. The native app calls `startAccessingSecurityScopedResource` on the folder and keeps access for the rest of the process, so the folder's path and everything inside it can be listed, read and written. A path from an earlier run, or a path inside the folder used after the app restarts, is denied until the user picks the folder again, because keeping access across runs needs a bookmark.
 - Save: iOS has no dialog for choosing where to save a file, so the callback fails and the core replies to the request with an error.
 
 A loopback server the UI loads media from needs `NSAllowsLocalNetworking` in the app's `Info.plist`.
 
 ## Host requests
 
-A host request is how the core asks the app's own code for something only the platform can do (a permission prompt, the keychain, a share sheet), named by a method. The app gives `ZiggyBridge.setHostRequestHandler` an object that conforms to `ZiggyHostRequestHandler` before `start`. The core calls it from a worker thread with the method name and the JSON text of its argument, and the handler returns the JSON text of the answer or throws `ZiggyHostRequestError` with a reason in words the user can act on. The handler may block, for instance on a permission dialog, because the core's worker thread waits and the main thread does not. The shell knows no method names. With no handler set the core has no host request callback, and a request fails with a message saying so.
+A host request is how the core asks the app's own code for something only the platform can do (a permission prompt, the keychain, a share sheet), named by a method. The app gives `ZiggyBridge.setHostRequestHandler` an object that conforms to `ZiggyHostRequestHandler` before `start`. The core calls it from a worker thread with the method name and the JSON text of its argument, and the handler returns the JSON text of the answer or throws `ZiggyHostRequestError` with a reason in words the user can act on. The handler may block, for instance on a permission dialog, because the core's worker thread waits and the main thread does not. The native app knows no method names. With no handler set the core has no host request callback, and a request fails with a message saying so.
 
 ## Starting work from the app
 

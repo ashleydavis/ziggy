@@ -1,13 +1,13 @@
 # Ziggy example
 
-A small complete app built on Ziggy, kept as the reference for building an app on it and as the template a new app is copied from. It has a UI (TypeScript and HTML, which runs in the system web view; see [the definition](../../README.md#the-ui)), a Zig core with its own channel handlers and task handlers, a native shell for each platform and smoke tests. It takes Ziggy as a dependency exactly as an app in another repository does, and nothing in Ziggy knows about it. See [Ziggy architecture](../../docs/architecture.md) for how the parts fit, and [Building your app](../../docs/building-your-app.md) for starting a new app from it.
+A small complete app built on Ziggy, kept as the reference for building an app on it and as the template a new app is copied from. It has a UI (TypeScript and HTML, which runs in the system web view; see [the definition](../../README.md#glossary)), a Zig core with its own channel handlers and task handlers, a native app for each platform and smoke tests. It takes Ziggy as a dependency exactly as an app in another repository does, and nothing in Ziggy knows about it. See [Ziggy architecture](../../docs/architecture.md) for how the parts fit, and [Building your app](../../docs/building-your-app.md) for starting a new app from it.
 
 ## What it shows
 
 - The UI asks the Zig core a question (`ping`) and shows the answer.
-- Tasks: a short task, a long task that queues child tasks and waits for them, several long tasks at once, cancelling by source, and a task that fails. Output text, `job-progress` messages and every `task-message` and `task-completed` event appear in the UI.
-- The edges of the bridge: a multi-megabyte payload, text with quotes, newlines and non-ASCII characters, an error reply, and a file written and read in the app's private data directory.
-- A native host callback: the UI asks for the operating system's version, a task calls the shell's callback and the answer comes back to the UI.
+- Tasks: a short task, a long task that queues child tasks and waits for them, several long tasks at once, cancelling by source and a task that fails. Output text, `job-progress` messages and every `task-message` and `task-completed` event appear in the UI.
+- The edges of the bridge: a multi-megabyte payload, text with quotes, newlines and non-ASCII characters, an error reply and a file written and read in the app's private data directory.
+- A native host callback: the UI asks for the operating system's version, a task calls the native app's callback and the answer comes back to the UI.
 - File and folder pickers: three buttons ask the core for the native dialogs (`pick-files`, `pick-folder`, `pick-file`), and the UI shows the paths chosen. A phone has no save dialog, so that button gives an error on iOS.
 - A loopback HTTP server in the core (the example's own code, not Ziggy's) that serves an example image and video to the UI, which loads them and asks for a range of bytes.
 - Keep-alive tasks: a background task type registered as keep-alive that goes on running when the app is sent to the background (a phone), and a normal one that does not.
@@ -19,10 +19,10 @@ A small complete app built on Ziggy, kept as the reference for building an app o
 
 Everything here is the example's own. Ziggy, the package it is built on, is in `packages/ziggy` at the root of this repository.
 
-- `build.zig` and `build.zig.zon`: the example's Zig build. It takes Ziggy as the dependency `ziggy` by the path `../..`, and builds the core (`ziggy-example-core`), the Linux and Windows shells (`ziggy-example-linux`, `ziggy-example-windows`) and the core's unit tests (`test`) with Ziggy's build functions.
+- `build.zig` and `build.zig.zon`: the example's Zig build. It takes Ziggy as the dependency `ziggy` by the path `../..`, and builds the core (`ziggy-example-core`), the Linux and Windows native apps (`ziggy-example-linux`, `ziggy-example-windows`) and the core's unit tests (`test`) with Ziggy's build functions.
 - `ui/`: the UI. `ui/index.html` is the UI and `ui/src/lib` holds the plain functions that have unit tests. `vite.config.ts` is its build, which writes `dist` with relative paths and a classic script so it loads from an address of the app's own in every web view. `dist` is embedded in the app's own code on every platform (the Linux and Windows executables, and the core library that the MacOS, iOS and Android apps contain), so no platform has a folder of UI files (see the [architecture guide](../../docs/architecture.md#the-bundled-ui)).
 - `core/`: the example's Zig library, which adds its channel handlers and task handlers to Ziggy's core.
-- `shells/<platform>/`: the example's native project for each platform: its name, window, icon and the app's core and UI packaged together. Each one builds on Ziggy's framework half for that platform in `packages/ziggy/native/<platform>`: the Linux and Windows shells through the Zig build, the Xcode projects through a local Swift package, and the Android project through an included Gradle build.
+- `shells/<platform>/`: the example's native project for each platform: its name, window, icon and the app's core and UI packaged together. Each one builds on the part Ziggy provides for that platform, in `packages/ziggy/native/<platform>`: the Linux and Windows native apps through the Zig build, the Xcode projects through a local Swift package and the Android project through an included Gradle build.
 - `scripts`: the build, run, packaging and setup scripts, and the shell libraries the scripts and smoke tests share (`scripts/lib`), each with a markdown file beside it.
 - `smoke-tests`: the smoke test scenarios and a library for each platform. See `smoke-tests/run.md`.
 
@@ -42,7 +42,7 @@ From the root of this repository, `<platform>` being `linux`, `windows`, `macos`
 | `bun run test:ziggy-example:and` | The smoke tests on an attached Android emulator or device. |
 | `bun run test:ziggy-example:ios` | The smoke tests on the iOS simulator. |
 
-`bun run --filter=ziggy-example test` runs the UI's unit tests, `bun run --filter=ziggy-example test:zig` the core's, and `bun run --filter=ziggy-example test:zig:android` (or `:ios`) the core's on an emulator or simulator.
+`bun run --filter=ziggy-example test` runs the UI's unit tests, `bun run --filter=ziggy-example test:zig` the core's and `bun run --filter=ziggy-example test:zig:android` (or `:ios`) the core's on an emulator or simulator.
 
 `bun run package:ziggy-example:<platform>` builds the release app, without the test hooks, and writes unsigned packages. Each platform's script doc says where they go and what they need:
 
@@ -56,7 +56,7 @@ From the root of this repository, `<platform>` being `linux`, `windows`, `macos`
 
 ## What each platform needs
 
-- **Linux:** the GTK 3 and WebKitGTK 4.1 runtime libraries (`libgtk-3-0`, `libwebkit2gtk-4.1-0`) and the GStreamer plugins WebKitGTK plays video with (`gstreamer1.0-plugins-good`, `gstreamer1.0-libav`) to build and run, with no development packages, `xvfb`, `xwininfo` and `jq` for the smoke tests, and `zip` and `dpkg-deb` to package. If the web view's sandbox cannot start on your system the app says so and runs without it. See `scripts/run-linux.md`.
+- **Linux:** the GTK 3 and WebKitGTK 4.1 runtime libraries (`libgtk-3-0`, `libwebkit2gtk-4.1-0`) and the GStreamer plugins WebKitGTK plays video with (`gstreamer1.0-plugins-good`, `gstreamer1.0-libav`) to build and run, with no development packages, `zip` and `dpkg-deb` to package and `xvfb`, `xwininfo` and `jq` for the smoke tests. If the web view's sandbox cannot start on your system the app says so and runs without it. See `scripts/run-linux.md`.
 - **Windows:** the scripts are bash scripts and run under Git Bash. The tools `mise install` puts in place (`bun`, `zig`, `jq`) must be on PATH: add `%LOCALAPPDATA%\mise\shims` to PATH, or activate mise in your shell. Then run `bun run --filter=ziggy-example setup` once. Building needs Microsoft's C++ toolchain and the Windows SDK (Visual Studio or its Build Tools, the "Desktop development with C++" workload), because the WebView2 loader is linked into the exe from the SDK's static library and that library is built with it, and packaging needs the WiX Toolset. Setup downloads the pinned WebView2 SDK and a pinned WiX Toolset, which need no administrator approval, and installs the C++ toolchain and the Windows SDK through `winget` when they are missing, which does. See `scripts/setup-windows.md`.
 - **MacOS and iOS:** a Mac with macOS 12.7.6 or newer and Xcode 14.2 or newer.
 - **Android:** `bun run --filter=ziggy-example setup`, which installs the Android SDK, the NDK `shells/android/variables.gradle` pins and a JDK 17 where they are missing (`scripts/install-android-sdk.md`). The smoke tests use any attached emulator or device.

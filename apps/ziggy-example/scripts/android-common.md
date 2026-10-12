@@ -1,6 +1,6 @@
 # android-common.sh
 
-Shared by the `*-android.sh` scripts and by the smoke test platform library (`smoke-tests/lib/android.sh`). It is sourced, never run, and has no arguments.
+Shared by the `*-android.sh` scripts and by the smoke test platform library (`smoke-tests/lib/android.sh`). It is sourced, never run and has no arguments.
 
 It resolves a JDK 17 and the Android SDK by sourcing [lib/android-env.sh](lib/android-env.md) (which exits with a message when either is missing), and defines:
 

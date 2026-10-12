@@ -1,6 +1,6 @@
 # fetch-wix.sh
 
-Downloads the pinned WiX Toolset binaries zip from GitHub into `apps/ziggy-example/wix/` (gitignored), verifies it against a pinned sha256, and extracts it to `wix/wix-<version>/`. `package-windows.sh` builds the MSI installer with the `candle.exe` and `light.exe` in there. Nothing is installed: no installer runs and no administrator approval is needed. The tools run on the .NET Framework 4 that Windows ships with.
+Downloads the pinned WiX Toolset binaries zip from GitHub into `apps/ziggy-example/wix/` (gitignored), verifies it against a pinned sha256 and extracts it to `wix/wix-<version>/`. `package-windows.sh` builds the MSI installer with the `candle.exe` and `light.exe` in there. Nothing is installed: no installer runs and no administrator approval is needed. The tools run on the .NET Framework 4 that Windows ships with.
 
 Run it as `bash apps/ziggy-example/scripts/fetch-wix.sh`. It takes no arguments and can be run again safely: a download already present with the right hash is reused. `setup-windows.sh` runs it.
 

@@ -79,8 +79,8 @@ pub fn build(b: *std.Build) !void {
 What Ziggy's `build.zig` gives an app:
 
 - `dependency(b, target, optimize, test_hooks)`: Ziggy for the target, as `IZiggy`: the dependency itself, `module` (the core, which the app's code imports as `@import("ziggy")`) and `task_queue` (imported as `@import("task-queue")`). Ask twice for a build that needs both, such as an app built without the test hooks and its unit tests, which run with them.
-- `addAppCore(b, ziggy, app, target, optimize)`: builds the app's core as a library, installed with `ziggy.h` beside it by the `<name>-core` step, with the app's built UI embedded in it as the `ui-files` import. For an Android target it also builds the shared library the Android shell loads. It returns both libraries, so an app can link more into them (a system library, for one).
-- `addLinuxShell` and `addWindowsShell`: the app's Linux executable (`<name>-linux`, installed to `bin/<name>`) and Windows executable (`<name>-windows`), each with the UI embedded, and a step that compiles the Windows shell without linking it (`<name>-windows-check`), for a machine without Microsoft's toolchain.
+- `addAppCore(b, ziggy, app, target, optimize)`: builds the app's core as a library, installed with `ziggy.h` beside it by the `<name>-core` step, with the app's built UI embedded in it as the `ui-files` import. For an Android target it also builds the shared library the Android native app loads. It returns both libraries, so an app can link more into them (a system library, for one).
+- `addLinuxShell` and `addWindowsShell`: the app's Linux executable (`<name>-linux`, installed to `bin/<name>`) and Windows executable (`<name>-windows`), each with the UI embedded, and a step that compiles the Windows native app without linking it (`<name>-windows-check`), for a machine without Microsoft's toolchain.
 - `embedUi`: the module that embeds a built UI, for a build that makes its own modules (an app's unit tests, for one).
 - `addDirectoryTests`: compiles every `*.test.zig` under a directory's `src/test` into one test program and runs it, which is how the example runs its core's tests.
 
@@ -88,15 +88,15 @@ The app's own options (`test-hooks`, `optimize`, `compile-only`) are passed on t
 
 ## The Xcode projects (MacOS and iOS)
 
-From a local path: the project holds a folder reference to the shell's Swift package and links its product. Add `../ziggy/packages/ziggy/native/macos` (the MacOS project) or `../ziggy/packages/ziggy/native/ios` (the iOS project) to the project as a folder, which Xcode treats as a local package, then add the product `ZiggyShellMacOS` or `ZiggyShellIOS` to the app target's Frameworks, Libraries, and Embedded Content. The example's projects (`apps/ziggy-example/shells/macos` and `apps/ziggy-example/shells/ios`) do this with a relative path, which a copied project only has to adjust.
+From a local path: the project holds a folder reference to Ziggy's Swift package for that platform and links its product. Add `../ziggy/packages/ziggy/native/macos` (the MacOS project) or `../ziggy/packages/ziggy/native/ios` (the iOS project) to the project as a folder, which Xcode treats as a local package, then add the product `ZiggyShellMacOS` or `ZiggyShellIOS` to the app target's Frameworks, Libraries, and Embedded Content. The example's projects (`apps/ziggy-example/shells/macos` and `apps/ziggy-example/shells/ios`) do this with a relative path, which a copied project only has to adjust.
 
-From a version tag: File > Add Package Dependencies, the repository's URL (`https://github.com/<owner>/ziggy`), the rule Exact Version with the version of the tag without its `v` (Swift Package Manager reads `v0.1.0` as the version `0.1.0`), and the product `ZiggyShellMacOS` or `ZiggyShellIOS`. The package Xcode fetches is the `Package.swift` at the root of this repository, which holds both shells.
+From a version tag: File > Add Package Dependencies, the repository's URL (`https://github.com/<owner>/ziggy`), the rule Exact Version with the version of the tag without its `v` (Swift Package Manager reads `v0.1.0` as the version `0.1.0`) and the product `ZiggyShellMacOS` or `ZiggyShellIOS`. The package Xcode fetches is the `Package.swift` at the root of this repository, which holds both native apps.
 
 Either way the app's project also links the app's core library (`lib<name>.a`, built by the `<name>-core` step) and finds `ziggy.h` beside it, as the example's sync scripts and projects do.
 
 ## The Android Gradle project
 
-Ziggy's Android shell is a Gradle build of its own that produces the module `dev.ziggy:ziggy-shell-android`. The app's `app/build.gradle` depends on it the same way in both cases:
+Ziggy's Android native app is a Gradle build of its own that produces the module `dev.ziggy:ziggy-shell-android`. The app's `app/build.gradle` depends on it the same way in both cases:
 
 ```groovy
 dependencies {
@@ -104,7 +104,7 @@ dependencies {
 }
 ```
 
-From a local path, the app's `settings.gradle` includes the shell's build, and Gradle builds it from the checkout in place of the dependency, whatever version the dependency names:
+From a local path, the app's `settings.gradle` includes Ziggy's Android build, and Gradle builds it from the checkout in place of the dependency, whatever version the dependency names:
 
 ```groovy
 includeBuild('../ziggy/packages/ziggy/native/android') {
@@ -112,7 +112,7 @@ includeBuild('../ziggy/packages/ziggy/native/android') {
 }
 ```
 
-From a version tag, the app's `settings.gradle` declares the repository as a source dependency, and Gradle checks it out at the tag the dependency's version names and builds the shell from it:
+From a version tag, the app's `settings.gradle` declares the repository as a source dependency, and Gradle checks it out at the tag the dependency's version names and builds Ziggy's Android native app from it:
 
 ```groovy
 sourceControl {
@@ -123,7 +123,7 @@ sourceControl {
 }
 ```
 
-The app must use the same version of the Android Gradle plugin as the shell (see `packages/ziggy/native/android/build.gradle`), because Gradle does not allow two versions of it in one build. The shell sets its own `compileSdkVersion` and `minSdkVersion`, and the app's `minSdkVersion` must be at least the shell's. Nothing is published to a Maven repository, and no shell source is copied into the app.
+The app must use the same version of the Android Gradle plugin as Ziggy's Android native app (see `packages/ziggy/native/android/build.gradle`), because Gradle does not allow two versions of it in one build. Ziggy's Android native app sets its own `compileSdkVersion` and `minSdkVersion`, and the app's `minSdkVersion` must be at least Ziggy's. Nothing is published to a Maven repository, and none of Ziggy's native app source is copied into the app.
 
 ## The UI (package.json)
 

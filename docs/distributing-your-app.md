@@ -32,20 +32,20 @@ None of the packages is signed for a store. What each platform needs before a bu
 
 ### Android, through Firebase App Distribution
 
-Tester builds of an Android app go out through [Firebase App Distribution](https://firebase.google.com/docs/app-distribution). It takes an APK, emails the testers you have added, and installs onto their phones through the Firebase App Tester app. There is no store listing and no review, so a tester has the build a couple of minutes after the upload finishes. It is free on Firebase's Spark plan. The example's `distribute-android.sh` (`bun run distribute:ziggy-example:android`) does the whole upload.
+Tester builds of an Android app go out through [Firebase App Distribution](https://firebase.google.com/docs/app-distribution). It takes an APK, emails the testers you have added and installs onto their phones through the Firebase App Tester app. There is no store listing and no review, so a tester has the build a couple of minutes after the upload finishes. It is free on Firebase's Spark plan. The example's `distribute-android.sh` (`bun run distribute:ziggy-example:android`) does the whole upload.
 
 One-time setup:
 
 1. In the [Firebase console](https://console.firebase.google.com), signed in with the Google account that should own it, create a project. Google Analytics is not needed.
 2. The distribute script finds the Firebase app by the Android package name (the `applicationId` in `shells/android/app/build.gradle`) and creates it when the project has none for that package, so nothing has to be added by hand. Skip the `google-services.json` download and the SDK steps the console offers: App Distribution needs none of them.
 3. Open App Distribution and click Get started, which turns the API on for the project.
-4. On the Testers & Groups tab, create a group named Testers, check its alias is `testers` (the alias is what the upload names), and add the testers' email addresses, including your own.
+4. On the Testers & Groups tab, create a group named Testers, check its alias is `testers` (the alias is what the upload names) and add the testers' email addresses, including your own.
 5. Install the Firebase CLI (`curl -sL https://firebase.tools | bash`) and sign in (`firebase login`) with the account that owns the project.
 6. Set the Firebase project in the distribute script (`FIREBASE_PROJECT`), or pass `--project <id>` each time.
 
 Then each new build is one command, which builds the release APK for arm64 and uploads it for the `testers` group (`--groups a,b` for other groups). The release notes are the commits since the last version tag, from `scripts/release-notes.sh`, cut to the newest because Firebase rejects long notes. The version name is the app's version followed by `-dev.` and the time of the build, and the version code is minutes since the epoch, so each upload is an update on the phone.
 
-What a tester does the first time: they open the invitation email and tap Get started, which downloads App Tester; Android refuses to install it until they allow installs from that source (Settings, "Allow from this source", then Install); in App Tester they sign in with the invited account, tap "Start testing on this device", then Download on the release, and allow installs from App Tester the same way. After that each new build arrives as a notification in App Tester.
+What a tester does the first time: they open the invitation email and tap Get started, which downloads App Tester; Android refuses to install it until they allow installs from that source (Settings, "Allow from this source", then Install); in App Tester they sign in with the invited account, tap "Start testing on this device", then Download on the release and allow installs from App Tester the same way. After that each new build arrives as a notification in App Tester.
 
 When something goes wrong:
 
@@ -60,7 +60,7 @@ When something goes wrong:
 
 ### iOS, through TestFlight
 
-Archive the app signed for distribution, upload it to App Store Connect from Xcode's Organizer, and add testers to the build in TestFlight. Internal testers (members of the App Store Connect team) get it at once; external testers after a short review.
+Archive the app signed for distribution, upload it to App Store Connect from Xcode's Organizer and add testers to the build in TestFlight. Internal testers (members of the App Store Connect team) get it at once; external testers after a short review.
 
 ### Desktop
 

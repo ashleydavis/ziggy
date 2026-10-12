@@ -1,6 +1,6 @@
 # sync-linux.sh
 
-Builds the example's UI (`bun run bundle:ui`) and its Linux shell (the `ziggy-example-linux` step of the example's `build.zig`, installed to `shells/linux/zig-out`). The shell's build embeds every file of the built UI in the executable, so `shells/linux/zig-out/bin/ziggy-example` is the whole app and needs no files beside it. Runs on Linux.
+Builds the example's UI (`bun run bundle:ui`) and its Linux native app (the `ziggy-example-linux` step of the example's `build.zig`, installed to `shells/linux/zig-out`). The native app's build embeds every file of the built UI in the executable, so `shells/linux/zig-out/bin/ziggy-example` is the whole app and needs no files beside it. Runs on Linux.
 
 ## Usage
 

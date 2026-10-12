@@ -27,7 +27,7 @@ Builds the example twice for the platform, once with the test hooks and once wit
 - `17-ui-storage`: a value the UI writes to `localStorage` and to IndexedDB is still there after the app is quit and started again. It waits before the restart because Android's web view writes `localStorage` to disk a few seconds after the UI sets it.
 - `18-keep-alive-survives-leaving`: on a phone, a keep-alive background task goes on counting in a file in the data directory when the app is sent to the background, and on Android the foreground service is running. On a desktop, closing the window quits the app even with a keep-alive task running, and the scenario checks the app ends.
 
-The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a phone, because the menu is a desktop feature. They choose menu items through the control connection's `menu` command, which calls the shell's own function for the item, the one a click runs, so the shell's actions really happen:
+The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a phone, because the menu is a desktop feature. They choose menu items through the control connection's `menu` command, which calls the native app's own function for the item, the one a click runs, so the native app's actions really happen:
 
 - `11-menu-ui-actions`: About, and the items that start and cancel tasks, do what their buttons do.
 - `12-menu-view`: Reload starts the UI afresh, and the zoom items change the size of the area the UI is drawn in.
@@ -35,7 +35,7 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a pho
 - `14-menu-quit`: Quit ends the app and everything it started, with tasks running.
 - `15-menu-devtools`: Toggle Developer Tools opens and closes the developer tools, seen the way each platform shows them.
 - `19-normal-task-ends-with-window`: closing the window with only a normal background task running ends the app.
-- `20-drop-files`: a file dropped on the window gets its real path from `getPathForFile`, and a file of another size does not. The drop is faked in two steps, because no tool can drag a file into the window: the `drop` command records it with the core and `drop-file` gives the UI a drop event. The shell's own reading of a real drop is tested by hand.
+- `20-drop-files`: a file dropped on the window gets its real path from `getPathForFile`, and a file of another size does not. The drop is faked in two steps, because no tool can drag a file into the window: the `drop` command records it with the core and `drop-file` gives the UI a drop event. The native app's own reading of a real drop is tested by hand.
 
 Toggle Full Screen is not smoke tested. The Linux suite runs on a virtual display with no window manager, and nothing honours a request for full screen there, so there is nothing to see change.
 
