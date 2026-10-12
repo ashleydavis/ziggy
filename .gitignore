@@ -1,0 +1,24 @@
+node_modules
+dist
+build
+coverage
+tsconfig.tsbuildinfo
+tmp/
+
+# Zig build outputs
+zig-out/
+.zig-cache/
+zig-pkg/
+
+# The WebView2 SDK and the WiX Toolset fetched by the Ziggy example's setup-windows script, and the build that its
+# package-windows script packages
+apps/ziggy-example/webview2-sdk/
+apps/ziggy-example/wix/
+apps/ziggy-example/shells/windows/package/
+
+# What the Ziggy example's package scripts produce
+apps/ziggy-example/out/
+apps/ziggy-example/release/
+apps/ziggy-example/dist-build.*
+packages/ziggy/native/android/build/
+packages/ziggy/native/android/.gradle/

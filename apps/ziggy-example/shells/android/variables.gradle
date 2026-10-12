@@ -1,0 +1,9 @@
+// The SDK levels, the NDK and the library versions of the example's Android project, in one place: the root build.gradle applies
+// this file, and scripts/android-common.sh reads the NDK version and the minimum SDK level from it, so the Zig library is linked
+// against the same NDK and SDK level that Gradle builds and strips it with.
+ext {
+    minSdkVersion = 24
+    compileSdkVersion = 35
+    targetSdkVersion = 35
+    ndkVersion = "25.1.8937393"
+}

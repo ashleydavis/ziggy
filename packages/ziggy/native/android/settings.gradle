@@ -1,0 +1,4 @@
+// Ziggy's Android shell, a Gradle build of its own. An app takes it as the dependency `dev.ziggy:ziggy-shell-android`: from a Ziggy
+// checkout with `includeBuild` in its settings.gradle, or from a version tag of Ziggy's repository as a source dependency. See
+// README.md.
+rootProject.name = 'ziggy-shell-android'

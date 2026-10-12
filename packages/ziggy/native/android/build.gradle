@@ -1,0 +1,47 @@
+// Ziggy's Android shell: the Java framework code that hosts a WebView, injects window.ziggy and moves messages between
+// the page and the core. It is a Gradle build of its own, which an app's Gradle project includes (see settings.gradle and
+// README.md), and Gradle builds it in place of the dependency `dev.ziggy:ziggy-shell-android`.
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // An app that includes this build must use the same version of the Android plugin: Gradle does not allow two in one build.
+        classpath 'com.android.tools.build:gradle:8.6.0'
+    }
+}
+
+repositories {
+    google()
+    mavenCentral()
+}
+
+apply plugin: 'com.android.library'
+
+group = 'dev.ziggy'
+version = '0.1.0'
+
+android {
+    namespace "dev.ziggy.shell"
+    compileSdkVersion 35
+
+    defaultConfig {
+        // The lowest Android an app built on Ziggy can run on. An app may set a higher one of its own.
+        minSdkVersion 24
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    // Plain-JVM unit tests of the parts that need no platform.
+    testImplementation "junit:junit:4.13.2"
+
+    // WebViewCompat.addDocumentStartJavaScript, which runs the injected script before the page's own scripts.
+    implementation "androidx.webkit:webkit:1.6.1"
+}

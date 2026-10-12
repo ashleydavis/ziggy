@@ -1,0 +1,216 @@
+# Ziggy architecture
+
+Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the user interface and Zig for everything else. One app runs on Linux, Windows, macOS, Android and iOS, using each platform's system web view. The Ziggy example in this repository is an app built on it, and the last section says where each part is.
+
+## Terms
+
+- **Page:** the user interface running inside the web view.
+- **Core:** the Zig library that holds the app's logic and state.
+- **Shell:** the native program for one platform that hosts the web view and the core.
+- **Handle:** the value `ziggy_create` returns to stand for one running core. The shell passes it back on every call.
+- **Message:** a JSON object passed between the page and the core.
+- **Channel:** the name of a kind of message, such as `add-task`. The core routes each message to the handler registered for its channel.
+- **Request, reply and event:** a request goes from the page to the core and expects a reply. An event goes from the core to the page and expects no reply.
+- **Dispatcher:** the part of the core that reads a message and passes it to the handler for its channel.
+- **Handler:** the Zig function that runs for a channel or a task type.
+- **Platform layer:** the small TypeScript module in the user interface that implements the app's platform abstraction on top of `window.ziggy`. It is the only place that knows the app is running on Ziggy.
+- **Shared UI:** the user interface code that runs unchanged on every platform and knows nothing about Ziggy.
+- **Task:** work that runs on a worker thread and reports back by messages. Its **task type** names the handler that runs it.
+- **Task context:** what a running task is given to work with: `sendMessage` to report, `isCancelled` to check whether it should stop, and the means to queue child tasks and wait for them.
+- **Source:** a label a task is queued under. Cancelling a source cancels every task queued under it.
+- **Native host callback:** a function the shell registers with the core so the core can ask the operating system for something it cannot do itself, such as showing a file dialog.
+- **Loopback:** the address `127.0.0.1`, reachable only from the same machine.
+- **UI thread:** the one thread of a shell that is allowed to touch the window and the web view.
+
+## Parts
+
+- **Core library**: a Zig library. It exposes a C interface, holds all state behind one handle, runs the task handlers on a pool of threads and answers every message the page sends. An app adds its own channel handlers and task handlers to it, and builds the result as a static library for every target and as a shared library for Android.
+- **Shells**: one per platform. A shell creates a window, hosts the system web view, injects the `window.ziggy` script, loads the bundled page, calls `ziggy_create`, forwards page messages to Zig and Zig messages to the page. A shell does nothing else except what the operating system forces (menus, dialogs, drag and drop, background scheduling, photo library access).
+- **User interface**: the TypeScript app that runs in the web view, with a small platform layer that connects it to `window.ziggy`.
+- **Task queue**: the `task-queue` module, which the core depends on and which an app shares, so code written against the task queue runs on the core's runner.
+
+Ziggy and the app built on it are kept in separate places. Ziggy's code never names the app and never imports its packages. The app uses Ziggy only through its interfaces: the C interface, `window.ziggy`, handler registration in the dispatcher and the task runner, and the host callbacks. The last section lists where each part of Ziggy is.
+
+## Languages and shells
+
+| Platform | Shell | Web view |
+|---|---|---|
+| Linux | Zig executable | WebKitGTK 4.1 with GTK 3 |
+| Windows | Zig executable | WebView2 |
+| MacOS | Swift | WKWebView |
+| Android | Java activity, JNI entry points written in Zig | Android WebView |
+| iOS | Swift | WKWebView |
+
+Every platform has its own native project.
+
+## The bundled page
+
+The page is built once (Vite writes `dist`) and every platform delivers the same files, embedded in the app's own code so there is no folder of page files to install beside it. How the web view reaches them differs:
+
+- **Linux and Windows**: the files are embedded in the executable. The app's `build.zig` builds its shell with Ziggy's `addLinuxShell` or `addWindowsShell`, which call Ziggy's `embedPage` function with the page directory. It reads the directory every time the build runs, embeds each file with `@embedFile` and returns a module whose `files` the app passes to the shell as `AppConfig.ui_files` (a list of `UiFile`, each a path and its bytes). The module does not compile when `dist` is missing or has no `index.html`, so the page has to be built first, and a changed file rebuilds the executable. Nothing else in the build is affected by a missing page. The lookup of a request path in that list and the choice of content type from the file's extension are in the core (`ui-files.zig`), so every shell shares and tests them once. A path that is not in the list gets a not found answer.
+  - On Linux the shell registers the URL scheme `ziggy-app` with WebKitGTK and answers each request for `ziggy-app://app/<path>` from the list. The page's URL prefix, which the core's origin check allows, is `ziggy-app://app/`.
+  - On Windows the shell asks WebView2 for every request to `https://ziggy-app.invalid/*` (a host name that can never be looked up) with `AddWebResourceRequestedFilter`, and answers each one from the list in its `WebResourceRequested` handler. That address is the page's URL prefix. WebView2's loader is linked into the executable from the SDK's static library, which needs Microsoft's toolchain to link, so there is no loader DLL beside the executable.
+- **MacOS, iOS and Android**: the files are embedded in the app's core library, which is already part of the app. The app's `build.zig` builds its core with Ziggy's `addAppCore`, which calls the same `embedPage` for the app's core and puts the result in its `AppHandlers.ui_files`. The shell asks the core for each file through the C interface (`ziggy_ui_file`, and `uiFileContent` and `uiFileContentType` through JNI on Android).
+  - On MacOS and iOS the bridge registers a `WKURLSchemeHandler` for the `ziggy-app` scheme and answers each request for `ziggy-app://app/<path>` from the core.
+  - On Android the shell answers every request to `https://ziggy-app.invalid/` in `shouldInterceptRequest`, so the APK holds no page files of its own.
+
+Every shell serves the page from an address of its own (never `file://`), so the page's build writes relative paths and a classic script instead of a module script.
+
+## The message bridge
+
+The page reaches Zig by JSON messages.
+
+Each shell injects a script before the page loads, taken from the core library where it is embedded (`ziggy_inject_script`), so an app supplies nothing for it. It exposes only `window.ziggy`, with `invoke`, `send`, `onMessage`, `removeAllListeners` and `getPathForFile`. It also catches a drop of files and fires it again carrying Files that give their real paths (see `get-dropped-paths` below). UI code never uses the web view's own native handle (`window.chrome.webview`, `window.webkit.messageHandlers`, the Android interface object) directly.
+
+A message from the page is `{ "id", "channel", "data" }`. A reply is `{ "id", "ok", "data" }` or `{ "id", "ok": false, "error" }`. An unknown channel gets an error reply, never silence. A one-way message (`send`) has no reply. An event from Zig to the page is `{ "channel", "data" }`.
+
+### The C interface
+
+The shells are written in Swift, Java and Zig, and the core is Zig. Every shell reaches the core through the same C interface, because C is the one calling convention all three can use. It is declared in `ziggy.h`, beside the API file:
+
+- `ziggy_create(callbacks)` returns the handle. `callbacks` holds the function pointer that delivers a JSON message from Zig to the shell, a function pointer for each native host callback the shell provides (see "Native host callbacks"), and a user-data pointer the shell supplies. Pool sizes and the child task limit are also passed in here.
+- `ziggy_destroy(handle)` cancels every running task, waits for the workers to stop and releases everything. No task runs after it returns.
+- `ziggy_post_message(handle, json_ptr, json_len)` delivers a page message to Zig.
+- `ziggy_page_query(handle, length)` returns the query of the page's address, the text after the question mark, which the app supplies. The app's core gives Ziggy a function (`AppHandlers.page_query`) that returns the query text and is told whether the test mode switch is on, and the core hands that text to the shell unread. The shell asks once the core exists, appends `?` and the text to the page's address (nothing when the text is empty) and loads it, so the page's first render already holds what the app told it at start-up. No shell composes a query itself, and Ziggy names none of its parts: the example's says `testMode=1` in test mode and nothing else, and another app's can carry whatever its page needs at start-up, such as the address of a server the core runs. A shell that gets nothing back does not load the page.
+
+A message passed in either direction is valid only while the call or callback carrying it is running. The receiver copies it before returning and nothing is freed across the boundary. The callback can be invoked from any worker thread, so each shell delivers the message to the web view on its UI thread. The core never assumes which thread calls it.
+
+### Delivering a message to the page
+
+1. Zig builds a JSON message, either a reply or an event, from any thread.
+2. The core calls the callback the shell gave `ziggy_create`, passing the message.
+3. The shell copies the message and moves to its UI thread.
+4. The shell runs it in the web view: `webkit_web_view_evaluate_javascript` on Linux, WebView2's web message API on Windows, JavaScript evaluation on a `WKWebView` on MacOS and iOS, and `evaluateJavascript` on Android.
+5. The injected `window.ziggy` script receives it. A reply resolves the pending `invoke` promise with the same `id`. An event calls the `onMessage` callbacks registered for its channel.
+
+### Sending a message from the page
+
+1. The page calls `window.ziggy.invoke(channel, data)` or `window.ziggy.send(channel, data)`. `invoke` gives the message an `id` and keeps a pending promise under it, and `send` has no `id` and no promise.
+2. The injected script posts the JSON message to the shell: through a `WebKitUserContentManager` script message handler on Linux, WebView2's web message API on Windows, a `WKScriptMessageHandler` on MacOS and iOS, and the `addJavascriptInterface` object on Android.
+3. The shell receives it on its UI thread and passes it to `ziggy_post_message`.
+4. The core parses it and routes it by `channel` to its handler, on a worker thread when the handler is a task. An unknown channel gets an error reply.
+5. If the message had an `id`, the reply returns to the page by the route above.
+
+### Origin check
+
+A shell accepts messages only from the app's own bundled page, blocks navigation to anything else, and opens external links in the system browser. Whether an address is the app's own is a Zig function in the core (`origin-check.zig`) called by the shell, so it is written and tested once. It compares against a URL prefix the shell gives the core (`app_url_prefix`), which is `ziggy-app://app/` on Linux, MacOS and iOS and `https://ziggy-app.invalid/` on Windows and Android.
+
+## Tasks
+
+The task runner runs handlers on a pool of threads inside the core. It provides task types, task messages, task context (`sendMessage`, `isCancelled`, `maxConcurrentChildTasks`, child tasks queued and awaited), priorities and cancellation by source. The page queues work with `add-task` and cancels with `cancel-tasks`, and receives `task-message` and `task-completed` events.
+
+- The shell passes the worker thread count and one child task limit, which applies to every parent task, to `ziggy_create`.
+- Children run on the same pool as their parent. A parent that waits for children gives up its place on a worker thread while it waits, so the pool cannot deadlock when every worker is held by a waiting parent.
+- Cancelling a source cancels its queued and running tasks, including children. A failed child makes `awaitTask` return its failure to the parent.
+- There is one queue. An interactive task goes at the head of it and a background task at the end, so a second interactive task goes in front of the first one still waiting and background tasks keep their arrival order. A child runs at the priority it asks for, and otherwise at its parent's.
+
+### Task queue interfaces
+
+The core depends on the `task-queue` module (with the helpers it is written with), which the app shares, and on no app. It implements the `IQueueBackend` of `task-queue` on top of its runner (`queue-backend.zig`), so code written against `TaskQueue` and `IQueueBackend` runs on it unchanged, and it sets that backend as the one `task-queue` hands out for the life of the core.
+
+- A handler registered with `task-queue` (`worker.registerHandler`, with its `ITaskContext`) runs on the runner for any task type the app has no entry of its own for. The app registers its handlers before it queues work. A task type that nothing is registered for fails as `UnknownTaskType`.
+- A task a handler queues through the backend runs at the priority of the task running on that thread, unless it asks for one, as `priorityOfRunningTask` of the Electron pool does.
+- `onTaskComplete` callbacks are told of a task that ran, with its type, input and outputs, and a cancelled one as failed with the message `Cancelled`. A task cancelled while it waited in the queue is not reported to them, as in the Electron pool, though the page is told.
+
+### Keep-alive tasks
+
+An app registers each task type as `normal` (the default) or `keep-alive` in the Zig code that registers it (the `kind` of its `TaskHandlerEntry`), so the page's code and the data it queues a task with do not change. A child task is covered by its parent, which lives at least as long.
+
+The core counts the keep-alive tasks that are queued or running, and calls one host callback, `keep_alive`, with the same meaning wherever a shell provides it: true when the first such task is queued, false when the last one ends. It asks when the task is queued, because platforms require the request while the app is in the foreground. The callback is called from the thread that queued or ended the task, while the core holds a lock, so a shell hands the work to its own thread and the callback never calls back into the core. Only the phone shells provide it:
+
+- **Android:** a foreground service (`ZiggyKeepAliveService`, with a notification whose wording the app supplies through `ZiggyShell.setKeepAliveNotification`) is started when the callback says true and stopped when it says false, so the process is not stopped when the app goes to the background. Finishing the activity still ends the app's tasks.
+- **iOS:** a background task assertion (`beginBackgroundTask`) is taken and given back. The system ends it after a limited time, and the app is suspended then.
+- **Linux, Windows and MacOS:** a desktop shell provides no `keep_alive` callback.
+
+## Messages that belong to Ziggy
+
+- `add-task` and `cancel-tasks` from the page, which queue and cancel tasks. They carry the payloads of the Electron app, so the same page code runs on both. `add-task` takes `{taskType, data, source, taskId, priority}`, where `priority` is `"interactive"` or `"background"` and a missing one runs as background. `cancel-tasks` takes the source as a bare string.
+- `task-message` and `task-completed` to the page, which report a task's messages and its end. `task-message` carries `{taskId, source, message}`. `task-completed` carries `{taskId, result}`, where `result` has the fields of `ITaskResult`: `taskId`, `status` (`succeeded` or `failed`), `error` and `errorMessage` when it failed, `outputs`, `type` and `inputs`. `ITaskResult` has no cancelled status, so a cancelled task is reported as failed with the error message `Cancelled`.
+- `get-platform`, which reports `platformKind` (`desktop` or `mobile`) so the platform layer does not sniff the user agent.
+- `get-dropped-paths`, which the inject script sends when files are dropped on the window, and which replies with the real paths of the files in the last drop as an array of strings. A page cannot read a path from a File, and WebKitGTK gives the page no Files and hides the file addresses, so on a desktop the shell reads the paths of a drop and reports them to the core (`ziggy_files_dropped`) before the page's drop event runs: Linux reads them from `drag-data-received`, MacOS from the drag pasteboard, and Windows has WebView2 hand over the dropped Files, which have their paths. The inject script catches the drop, asks for the paths, and fires the drop again holding one empty File per path that it made and remembers the path of, and `window.ziggy.getPathForFile(file)` answers from that memory, synchronously, as Electron's does. A phone has no drop. See [the drag and drop findings](../../../docs/ziggy-drag-and-drop-findings.md) for the evidence on each platform.
+
+Every other message belongs to the app. Each channel's request and reply types are defined in the same file as its handler, so the handler is the source of truth for its payload.
+
+## Channels
+
+A channel is how the page and the core talk. The page sends requests on a channel and the core answers, and the core sends events on a channel to the page. A channel connects the page and the core, and the shell only carries its messages.
+
+To add a channel:
+
+1. Prefer an existing channel. Send a named action from the page to the core through one generic command channel that takes the action's name, rather than adding a channel per action (for example a dedicated channel to toggle developer tools).
+2. If a new channel is unavoidable, define its request and reply types beside its handler.
+3. Write the handler in the core, register it in the dispatcher, and write its unit test beside the core's other tests.
+4. Platform-specific code never goes in the shared UI. The platform layer passes platform behaviour into it through the platform abstraction the shared UI defines.
+
+A handler that fails gives the page an error reply, and the reply's text is the name of the Zig error, because a Zig error carries no message. An app whose code records the reason for a failure somewhere else gives the core a `describe_error` function in its handlers. The core calls it with the error a channel handler or a task handler returned, on the thread that handled the message, and uses the text it returns in the error reply (the reply of a request answered by a task, and the `task-completed` error). It returns null for an error it has nothing to say about, and the reply then carries the error's name.
+
+## Native host callbacks
+
+A native host callback is how the core asks the operating system for something only native code can do, such as showing a file dialog, reading the photo library or scheduling background work. It is a function the shell provides, and a channel is not involved: the page never sees it. A callback connects the core and the shell.
+
+- **Registration:** the shell puts a function pointer for each callback it provides in the `callbacks` struct it passes to `ziggy_create`, with its user-data pointer. The core keeps them in the handle. A callback the platform does not need is left empty, and the core fails with a clear error if it calls one that is empty.
+- **Calling:** the core calls the function from a worker thread and waits for it to return. The shell does the work on its UI thread and returns the result, so a callback that waits for the user, like a dialog, must be called from a task and never from the dispatcher.
+- **Result:** the function returns its result as a JSON message, valid only until the next call, and the core copies it, as for any message across the C interface.
+
+To add a native host callback:
+
+1. Declare its function pointer in `ziggy.h` and add it to the `callbacks` struct.
+2. Implement it in every shell that supports it, on the shell's UI thread.
+3. Call it from the core's handler and write the unit test with a test implementation of the callback.
+
+### The host request
+
+Most things only the platform can do are not worth a callback of their own: an app that has several of them (a share sheet, a permission prompt, a keychain) would add a function pointer and a change to every shell for each. The `host_request` callback is one function for all of them: the core gives it the name of a method and the JSON text of its argument, and the shell does what the name says and writes the JSON text of its answer into the buffer it is given. A method the shell cannot do, or does not know, is answered by writing the reason in words the user can act on and returning its length negated. A task makes the request with `TaskContext.hostRequest(method, request_json)`, which gives the answer and whether the shell succeeded, and gives `error.HostCallbackMissing` on a platform with no callback. The core knows no method names: they are the app's and the shell's. It is last in `ziggy_config`, so a shell that does not provide it needs no change.
+
+### The file and folder dialogs
+
+The `pick_paths` callback shows a native dialog: it is given what to show (open files, save a file, or choose a folder), a title, an initial name (the suggested file name for a save, and for a dialog that opens files or a folder the folder it starts in), and a buffer it writes the answer into as a JSON array of paths, `[]` when the user cancelled. The shell shows the dialog on its UI thread and the calling worker thread waits, so the window stays responsive. A task asks for it with `pickPaths` on its task context.
+
+A request channel can be answered by a task, so a slow answer such as a dialog never holds up the thread that handles page messages: an app lists it in `task_channels` with the task type that answers it, and the core queues the page's request as that task and sends the reply when it ends. A task that fails or is cancelled gives an error reply, and a request without an id is an error.
+
+The Ziggy example answers `pick-files`, `pick-folder` and `pick-file` this way, with the same names, data and replies as the Electron app: `pick-files` takes a title and replies with the paths or null, `pick-folder` takes an options object that may carry a `title` and replies with a path or null, and `pick-file` is a save dialog that takes a suggested file name and replies with a path or null. Null is a cancelled dialog, which Electron gives as undefined. A phone has no save dialog of this kind, so `pick-file` replies with an error on iOS.
+
+### App state and task observers
+
+An app that has to remember things while it runs (whether a database is open, whether syncing is allowed, a timer) gives the core a `state` in its handlers: a `create` function the core calls once the task runner is running, a `stop` function it calls first when the core is destroyed, before the task runner stops, so a thread the state owns can end while tasks can still be queued, and a `destroy` function it calls last, after the task runner has stopped, so nothing a running task reads (the state itself, a log file) is gone while a task can still run. The core holds the value `create` returns and hands it back as `Core.app_state` to a channel handler, and as `TaskContext.appState()` to a task handler. The app casts it back to its own type, and the core never looks inside it.
+
+An app that has to know how every task ended, and every message a task sends, gives `on_task_end` and `on_task_message`. The core calls them after it has told the page, from the thread the event happened on, with no lock held, and the values they are given are valid only during the call. `on_task_end` gets the task's id, type, source and input as well as how it ended, which the page's `task-completed` event does not need to carry because the page knows what it asked for. An observer must not call back into something that takes the lock it is called under, and cancelling a source from inside one ends tasks on the same thread, so an app that keeps its own lock must not hold it while it cancels.
+
+## Menus
+
+A desktop app has a menu, written once in Zig and drawn natively by the shell of each desktop platform: a menu bar in the window on Linux and Windows, and the main menu on MacOS. A phone's shell never draws it. The Android shell's `menu_action` host callback sends every action to the page as a `menu-action` message, because a phone has none of the shell's own actions, so the control connection's `menu` command still works there.
+
+The app gives the core its menu as JSON text in `menu_json` of its handlers. It is an array of menus, each `{"label", "items"}`, where an item is `{"label", "action", "accelerator"}`, or `{"separator": true}`, and may hold its own `"items"` for a submenu. A shell reads the text with `ziggy_menu_json` and reads each shortcut with `ziggy_parse_accelerator`, which gives modifier bits and a key name so no shell parses shortcut text itself. A shortcut is modifiers and a key joined by plus signs, in Electron's form: `CmdOrCtrl+Shift+I`, `F12`, `CmdOrCtrl+Plus`. `CmdOrCtrl` is Command on MacOS and Control elsewhere.
+
+Every shell does these actions itself, because only the shell can: `quit`, `close-window`, `reload`, `toggle-devtools`, `toggle-fullscreen`, `zoom-in`, `zoom-out`, `zoom-reset`, `undo`, `redo`, `cut`, `copy`, `paste`, `select-all` and `focus-window`, which the core asks for when a second copy of the app was started and which brings the window to the front, restoring it first if it is minimised. Any other action is the app's. The shell sends `{"channel": "menu-action", "data": {"action": "<action>"}}` to the core, and the core hands it to the page as a `menu-action` event. The page decides what it means, and the example's page presses the same button the item stands for.
+
+Shortcuts are registered with the window, so they work wherever the focus is, including inside the web view.
+
+The developer tools open with `toggle-devtools` in every build, release included, and are not a test hook.
+
+The window icon is the app's: on Linux `AppConfig.icon_png` holds the bytes of a PNG file, which an app's build gives to its main file with an `app-icon` import, and on Windows `AppConfig.icon_resource` is the number of an icon in the executable's resources, which the app's build adds from a resource script. An app with no icon passes null and shows the desktop's generic one. On MacOS, iOS and Android the icon belongs to the app's bundle, from an asset catalog or the launcher icons in the app's resources.
+
+## Test hooks
+
+A test hook is a feature that exists in the shipped app only so that automated tests can control it or look inside it. Smoke tests drive the real app from outside, and some things cannot be reached that way. A script cannot click a native file dialog, cannot read what the web view shows, and cannot wait for the page to finish loading, so the app has to offer a way in.
+
+Test hooks are also a way into the app that a normal run must not have, so they are kept out of anything released. The hooks are compiled in only when the app is built for testing, with the core's `test_hooks` build option, which is off by default. The release packages are never built with it, so a released app contains no test mode, no control connection and no dialog overrides to switch on. The smoke tests and the story player run the test build. An app ships only the hooks it lists, and a test sets up its state from outside the app (config files and data placed on disk) wherever it can. These are the hooks Ziggy provides, each with why the tests cannot do without it.
+
+| Hook | Why the tests need it |
+|---|---|
+| A test mode switch read at start-up and passed to the page as the `testMode` query parameter, present only in a test build | Switches on the other hooks, and nothing below is reachable without it |
+| A host-side control connection, present only in a test build, bound to loopback on an operating-system chosen port written to a file under the log directory | Lets the smoke test scripts and the story player send commands to the running app: ready, navigate, menu, click, type, drop, get-value, screenshot, cycle-advance and quit |
+| The control connection's `pick-answer` command, `{"command": "pick-answer", "paths": [...]}`, in a test build | A native dialog cannot be driven from a script. The answer is used for the next dialog only, and no dialog is shown |
+| In a test build in test mode, anything the app does by itself over the network is skipped, the single-instance rule is skipped, and any fixed network port is replaced by a free one | Stops tests depending on the network, on each other and on a fixed port |
+
+The shells read two environment variables, and only in a test build: `ZIGGY_TEST_MODE` switches the hooks on and `ZIGGY_TEST_PORT_FILE` is the file the core writes the control connection's port to (on Android the same two arrive as Intent extras, and on the iOS simulator as `SIMCTL_CHILD_`-prefixed variables). A command is one line holding a JSON object with a `command` field. The core answers `quit` itself, through the shell's quit callback, and forwards every other command to the page as a `test-command` event. The page answers on the `test-result` channel, and the answer is written back as one line. The Ziggy example's page performs `ready`, `click`, `type`, `get-value`, `get-text`, and `exists`, by `data-id`. The page tells the core it is listening with `test-page-ready`, and the core holds commands until then. The control connection serves each connection on a thread of its own and handles one command at a time. The control connection's `menu` command, `{"command": "menu", "action": "..."}`, chooses a menu item as a user would: the core calls the shell's `menu_action` host callback, which runs the same function a menu click runs, so the shell's own actions (reload, zoom, developer tools, the editing commands, quit) really happen and any other action reaches the page. Choosing reload makes commands wait until the page says it is listening again. The example's page also answers `viewport` (the size of the area it is drawn in) and `insert` (type text so the browser can undo it). The control connection's `drop` command, `{"command": "drop", "paths": [...]}`, records a drop of files with the core, as the shell does when the user drops files, because no tool can drag a file into the window of an app on a virtual display. The shell's own reading of a real drop is not covered by it. The example's page also answers `drop-file` (a drop event for a File of a given name and size). The control connection's `screenshot` command, `{"command": "screenshot", "outputPath": "<absolute path>"}`, writes a PNG of the app's window to the path: the core waits for the page, then calls the shell's `screenshot` host callback, which takes the picture on its UI thread and returns once the file is written, or returns the reason it could not. On Linux the shell asks the web view for a snapshot (`webkit_web_view_get_snapshot`) and writes it with cairo, on Windows it uses WebView2's `CapturePreview`, and on MacOS it uses `WKWebView.takeSnapshot`. The Windows and MacOS shells have not been built or run on those systems yet. Android and the iOS simulator leave the callback empty, because a path the app is given on a phone is a path on the phone: the smoke test scripts' `send_command` takes the `screenshot` command on those platforms from the host instead, with `adb exec-out screencap -p` and `xcrun simctl io <device> screenshot`, and writes the PNG to the host path. That picture is the whole screen, status bar included. A shell with no callback answers `HostCallbackMissing`. The `cycle-advance` command needs nothing native: it is one of the page's own commands, performed by the shared test driver (it fires the `cycle-advance` window event the stories cycle listens for), so the core forwards it like `click`.
+
+## Where things are
+
+- `packages/ziggy/core`: the core library (the C interface, dispatcher, task runner, origin check, host callback plumbing and test hooks), which an app imports as `@import("ziggy")`.
+- `packages/ziggy/task-queue`: the task queue and the helpers it is written with, which an app imports as `@import("task-queue")`.
+- `packages/ziggy/bridge`: the `window.ziggy` script and its types.
+- `packages/ziggy/native/<platform>`: the framework half of each shell: `linux`, `windows`, `macos`, `ios` and `android`.
+- `build.zig`: builds Ziggy and its tests, and holds the functions an app's own `build.zig` calls (`dependency`, `addAppCore`, `embedPage`, `addLinuxShell`, `addWindowsShell`, `addDirectoryTests`). See the [guide to integrating Ziggy](integrating-ziggy.md).
+
+The Ziggy example, a small complete app built on Ziggy and kept as the reference for building an app on it, lives in `apps/ziggy-example` (its page, Zig core, native projects, scripts and smoke tests). It takes Ziggy as a dependency exactly as an app in another repository does, so it is also a standing test that Ziggy has not become tangled with any app: Ziggy never names one. See its [README](../apps/ziggy-example/README.md).

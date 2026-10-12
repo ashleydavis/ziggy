@@ -1,0 +1,11 @@
+// The Ziggy example's Android project: the app, and Ziggy's Android shell, which is a Gradle build of its own that this one
+// includes. Gradle builds the shell from the Ziggy checkout and puts it in place of the dependency `dev.ziggy:ziggy-shell-android`
+// that app/build.gradle declares. See the guide to integrating Ziggy for the lines that take the shell from a version tag of Ziggy's
+// repository instead.
+rootProject.name = 'ziggy-example-android'
+
+include ':app'
+includeBuild('../../../../packages/ziggy/native/android') {
+    // Named so its tasks are :ziggy-shell-android:<task>, not :android:<task> after its directory.
+    name = 'ziggy-shell-android'
+}

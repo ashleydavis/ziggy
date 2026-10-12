@@ -1,0 +1,15 @@
+# What the app's builds, packages and tests write, relative to the app's folder. An app copied from the example keeps this file.
+node_modules
+dist
+dist-build.*
+build
+coverage
+tsconfig.tsbuildinfo
+tmp/
+zig-out/
+.zig-cache/
+zig-pkg/
+out/
+webview2-sdk/
+wix/
+shells/windows/package/
