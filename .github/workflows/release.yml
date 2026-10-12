@@ -317,10 +317,6 @@ jobs:
         shell: bash
         run: bun run --filter=ziggy-example setup
 
-      - name: Check the iOS toolchain (iOS)
-        if: matrix.platform == 'ios'
-        run: bun run --filter=ziggy-example setup
-
       - name: Setup JDK 17 (Android)
         if: matrix.platform == 'android'
         uses: actions/setup-java@v4
