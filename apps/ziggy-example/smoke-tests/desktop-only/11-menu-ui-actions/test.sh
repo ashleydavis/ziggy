@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# The menu items that are the page's own do what the buttons they stand for do: the task items start and cancel tasks, and About shows
+# The menu items that are the UI's own do what the buttons they stand for do: the task items start and cancel tasks, and About shows
 # its text.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"

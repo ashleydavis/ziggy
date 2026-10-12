@@ -80,7 +80,7 @@ pub fn nextZoom(current: f64, direction: i32) f64 {
 }
 
 //
-// The message a menu action the app owns becomes: the JSON text the core takes from a page.
+// The message a menu action the app owns becomes: the JSON text the core takes from a UI.
 //
 const MenuActionMessage = struct {
     // The channel the core routes it by.
@@ -111,8 +111,8 @@ pub fn menuActionMessage(allocator: std.mem.Allocator, action: []const u8) ![]u8
 }
 
 //
-// The script that returns the text the user has selected in the page: the selected part of the focused text field or text
-// area, or else the page's own selection.
+// The script that returns the text the user has selected in the UI: the selected part of the focused text field or text
+// area, or else the UI's own selection.
 //
 pub const selection_script =
     "(function () { var element = document.activeElement; if (element && (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') && typeof element.selectionStart === 'number') { return element.value.substring(element.selectionStart, element.selectionEnd); } return String(window.getSelection()); })();";

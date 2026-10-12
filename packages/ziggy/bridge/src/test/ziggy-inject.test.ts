@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 
 //
-// A stand-in for the page's window, with the native handle of the platform under test.
+// A stand-in for the UI's window, with the native handle of the platform under test.
 //
 interface IFakeWindow {
     webkit?: { messageHandlers: { ziggy: { postMessage: (text: string) => void } } };

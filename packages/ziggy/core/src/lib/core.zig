@@ -1,6 +1,6 @@
 //
 // The core: everything behind one handle. It owns the task runner, knows the channel handlers and the host callbacks,
-// and routes every message from the page.
+// and routes every message from the UI.
 //
 
 const std = @import("std");
@@ -28,7 +28,7 @@ pub const ChannelHandler = *const fn (core: *Core, arena: std.mem.Allocator, dat
 // A channel and its handler.
 //
 pub const ChannelEntry = struct {
-    // The channel name the page sends on.
+    // The channel name the UI sends on.
     name: []const u8,
     // The function that answers it.
     handler: ChannelHandler,
@@ -43,14 +43,14 @@ pub const AppHandlers = struct {
     // The app's task types.
     tasks: []const task_runner.TaskHandlerEntry,
     // The app's request channels that are answered by a task, so that a slow answer, such as a dialog waiting for the user, does
-    // not hold up the thread that handles page messages.
+    // not hold up the thread that handles UI messages.
     task_channels: []const TaskChannelEntry,
     // The desktop menu as JSON: an array of menus, each {"label", "items"}, where an item is {"label", "action", "accelerator"}
     // or {"separator": true}, and may hold its own "items" for a submenu. "[]" for an app with no menu. Shells show it on
     // desktop only. See "Menus" in the architecture document.
     menu_json: []const u8,
-    // The files of the app's bundled page, embedded in the app's library, for a shell that serves the page by asking the core
-    // for each file (the MacOS, iOS and Android shells). Empty for an app whose shell embeds the page itself.
+    // The files of the app's bundled UI, embedded in the app's library, for a shell that serves the UI by asking the core
+    // for each file (the MacOS, iOS and Android shells). Empty for an app whose shell embeds the UI itself.
     ui_files: []const ui_files.UiFile,
     // Turns the error a channel handler returned into the text of the error reply, for an app whose code reports the reason for
     // a failure somewhere other than the error's name (a Zig error carries no message). It returns null when it has nothing to
@@ -60,25 +60,25 @@ pub const AppHandlers = struct {
     // Where the app keeps what it remembers while it runs, which the core holds and hands back to the app's handlers through
     // `Core.app_state`. Null for an app that keeps nothing.
     state: ?AppState = null,
-    // Called when a task has ended, after the page has been told, from the thread that ran it, with no lock held. The values are
+    // Called when a task has ended, after the UI has been told, from the thread that ran it, with no lock held. The values are
     // valid only during the call.
     on_task_end: ?*const fn (core: *Core, end: types.TaskEnd) void = null,
-    // Called when a task has sent a message, after the page has been told, from the thread that sent it, with no lock held. The values
+    // Called when a task has sent a message, after the UI has been told, from the thread that sent it, with no lock held. The values
     // are valid only during the call.
     on_task_message: ?*const fn (core: *Core, sent: types.TaskSentMessage) void = null,
-    // Gives the query text the shell appends to the address of the page, after the question mark, so the page's first render already
-    // holds what the app tells it at start-up. Null for an app whose page needs no query. See `PageQuery`.
-    page_query: ?PageQuery = null,
+    // Gives the query text the shell appends to the address of the UI, after the question mark, so the UI's first render already
+    // holds what the app tells it at start-up. Null for an app whose UI needs no query. See `UiQuery`.
+    ui_query: ?UiQuery = null,
 };
 
 //
-// An app's function for the query of the page's address. The core calls it when the shell asks (the shell asks once the core exists,
-// before it loads the page), with whether the test mode switch is on, which the app says in the query however it likes. It returns
+// An app's function for the query of the UI's address. The core calls it when the shell asks (the shell asks once the core exists,
+// before it loads the UI), with whether the test mode switch is on, which the app says in the query however it likes. It returns
 // the text after the question mark, such as `restApiUrl=...&testMode=1`, or an empty string for no query, allocated with the
 // allocator given, which is an arena that is released when the call returns. Ziggy passes the text through unread, so no shell
 // composes a query and Ziggy names none of its parts.
 //
-pub const PageQuery = *const fn (core: *Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8;
+pub const UiQuery = *const fn (core: *Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8;
 
 //
 // The state an app keeps in the core. The core makes it when it is created, after the task runner is running. When the core is
@@ -101,11 +101,11 @@ pub const AppState = struct {
 pub const ErrorDescriber = types.ErrorDescriber;
 
 //
-// A request channel answered by a task: the page's request is queued as a task of this type, with the request's data as its input, and
+// A request channel answered by a task: the UI's request is queued as a task of this type, with the request's data as its input, and
 // the task's result is the reply. A task that fails or is cancelled gives an error reply.
 //
 pub const TaskChannelEntry = struct {
-    // The channel name the page sends on.
+    // The channel name the UI sends on.
     name: []const u8,
     // The task type that answers it.
     task_type: []const u8,
@@ -141,8 +141,8 @@ const ziggy_channels = [_]ChannelEntry{
         .handler = testResultHandler,
     },
     .{
-        .name = "test-page-ready",
-        .handler = testPageReadyHandler,
+        .name = "test-ui-ready",
+        .handler = testUiReadyHandler,
     },
 } else [_]ChannelEntry{};
 
@@ -164,7 +164,7 @@ pub const Core = struct {
     next_request_task: std.atomic.Value(u64),
     // The desktop menu as JSON, owned by the app.
     menu_json: []const u8,
-    // The files of the app's bundled page, owned by the app.
+    // The files of the app's bundled UI, owned by the app.
     ui_files: []const ui_files.UiFile,
     // Gives the text of an error reply, or null to use the error's name. Owned by the app.
     describe_error: ?ErrorDescriber,
@@ -176,10 +176,10 @@ pub const Core = struct {
     on_task_end: ?*const fn (core: *Core, end: types.TaskEnd) void,
     // The app's function for a message a task sent, or null.
     on_task_message: ?*const fn (core: *Core, sent: types.TaskSentMessage) void,
-    // The app's function for the query of the page's address, or null.
-    page_query: ?PageQuery,
-    // The text the last call to `pageQuery` returned, owned by the core, or null before the first call.
-    page_query_text: ?[:0]u8,
+    // The app's function for the query of the UI's address, or null.
+    ui_query: ?UiQuery,
+    // The text the last call to `uiQuery` returned, owned by the core, or null before the first call.
+    ui_query_text: ?[:0]u8,
     // The shell's configuration. The strings in it are copies owned by the core.
     config: ZiggyConfig,
     // The owned copy of the app's URL prefix.
@@ -225,8 +225,8 @@ pub const Core = struct {
         core.app_state = null;
         core.on_task_end = app.on_task_end;
         core.on_task_message = app.on_task_message;
-        core.page_query = app.page_query;
-        core.page_query_text = null;
+        core.ui_query = app.ui_query;
+        core.ui_query_text = null;
         core.config = config;
         core.app_url_prefix = try allocator.dupeZ(u8, std.mem.span(config.app_url_prefix));
         errdefer allocator.free(core.app_url_prefix);
@@ -299,7 +299,7 @@ pub const Core = struct {
         self.queue_backend.destroy();
         self.threaded.deinit();
         self.dropped.deinit();
-        if (self.page_query_text) |text| {
+        if (self.ui_query_text) |text| {
             self.allocator.free(text);
         }
         self.allocator.free(self.channels);
@@ -317,28 +317,28 @@ pub const Core = struct {
     }
 
     //
-    // Asks the app for the query of the page's address and returns the text after the question mark, empty when the app has none. The
+    // Asks the app for the query of the UI's address and returns the text after the question mark, empty when the app has none. The
     // text is owned by the core and stays valid until the next call or until the core is destroyed. The shell calls it once the core
-    // exists, before it loads the page.
+    // exists, before it loads the UI.
     //
-    pub fn pageQuery(self: *Core) ![:0]const u8 {
-        const page_query = self.page_query orelse {
+    pub fn uiQuery(self: *Core) ![:0]const u8 {
+        const ui_query = self.ui_query orelse {
             return "";
         };
         // The app allocates from an arena that goes when the call returns, so it need not free what it uses to make the text.
         var arena_state = std.heap.ArenaAllocator.init(self.allocator);
         defer arena_state.deinit();
-        const text = try page_query(self, arena_state.allocator(), self.config.test_mode);
+        const text = try ui_query(self, arena_state.allocator(), self.config.test_mode);
         const owned = try self.allocator.dupeZ(u8, text);
-        if (self.page_query_text) |old| {
+        if (self.ui_query_text) |old| {
             self.allocator.free(old);
         }
-        self.page_query_text = owned;
+        self.ui_query_text = owned;
         return owned;
     }
 
     //
-    // Finds the bundled page's file for the path of a request, or null when the page has no such file. See ui-files.zig.
+    // Finds the bundled UI's file for the path of a request, or null when the UI has no such file. See ui-files.zig.
     //
     pub fn uiFile(self: *Core, request_path: []const u8) ?*const ui_files.UiFile {
         return ui_files.findFile(self.ui_files, request_path);
@@ -346,7 +346,7 @@ pub const Core = struct {
 
     //
     // Records the files the user dropped on the window, replacing the last drop. The shell calls it when the drop happens, before the
-    // page's own drop event, with the paths as the JSON text of an array of strings.
+    // UI's own drop event, with the paths as the JSON text of an array of strings.
     //
     pub fn filesDropped(self: *Core, paths_json: []const u8) !void {
         try self.dropped.replace(self.io(), paths_json);
@@ -360,7 +360,7 @@ pub const Core = struct {
     }
 
     //
-    // Sends a JSON message to the shell, and so to the page.
+    // Sends a JSON message to the shell, and so to the UI.
     //
     pub fn deliver(self: *Core, message: []const u8) void {
         const deliver_fn = self.config.deliver.?;
@@ -368,8 +368,8 @@ pub const Core = struct {
     }
 
     //
-    // Handles one message from the page: parses it, routes it by channel and replies when it carries an id.
-    // A message that cannot be answered, because it has no usable id, is reported to the page as a core-error event
+    // Handles one message from the UI: parses it, routes it by channel and replies when it carries an id.
+    // A message that cannot be answered, because it has no usable id, is reported to the UI as a core-error event
     // and never dropped silently.
     //
     pub fn postMessage(self: *Core, message: []const u8) void {
@@ -525,7 +525,7 @@ fn getPlatformHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Valu
 }
 
 //
-// Answers add-task: queues the task the page asked for.
+// Answers add-task: queues the task the UI asked for.
 //
 fn addTaskHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     const task_type = json_util.getString(data, "taskType") orelse {
@@ -550,7 +550,7 @@ fn addTaskHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) a
 }
 
 //
-// Turns the priority of an add-task request into the runner's TaskPriority. The page sends TaskPriority, "interactive" or
+// Turns the priority of an add-task request into the runner's TaskPriority. The UI sends TaskPriority, "interactive" or
 // "background", and leaves it out when the task has no preference, which runs as background.
 //
 pub fn priorityFromText(text: ?[]const u8) !task_runner.TaskPriority {
@@ -567,7 +567,7 @@ pub fn priorityFromText(text: ?[]const u8) !task_runner.TaskPriority {
 }
 
 //
-// Cancels the tasks queued under a source. The page sends the source as a bare string.
+// Cancels the tasks queued under a source. The UI sends the source as a bare string.
 //
 fn cancelTasksHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     if (data != .string) {
@@ -579,7 +579,7 @@ fn cancelTasksHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Valu
 }
 
 //
-// Answers test-result: hands the result the page computed for a test control request to the connection waiting for it.
+// Answers test-result: hands the result the UI computed for a test control request to the connection waiting for it.
 //
 fn testResultHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     const control = core.control orelse {
@@ -595,20 +595,20 @@ fn testResultHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value
 }
 
 //
-// Answers test-page-ready: tells the test control connection the page has loaded.
+// Answers test-ui-ready: tells the test control connection the UI has loaded.
 //
-fn testPageReadyHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
+fn testUiReadyHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = data;
     const control = core.control orelse {
         return error.TestControlNotRunning;
     };
-    control.markPageReady();
+    control.markUiReady();
     return try arena.dupe(u8, "{}");
 }
 
 //
 // A menu item was chosen, by the user or by a keyboard shortcut, and the shell passes its action on. The core hands it to the
-// page as a menu-action event, which is how the page learns of every action the shell did not do itself.
+// UI as a menu-action event, which is how the UI learns of every action the shell did not do itself.
 //
 fn menuActionHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     const action = json_util.getString(data, "action") orelse {
@@ -633,7 +633,7 @@ fn filesDroppedFromControl(user_data: ?*anyopaque, paths_json: []const u8) anyer
 }
 
 //
-// Answers the page's request for the paths of the files in the last drop, as an array of strings (empty when nothing was dropped).
+// Answers the UI's request for the paths of the files in the last drop, as an array of strings (empty when nothing was dropped).
 //
 fn getDroppedPathsHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = data;

@@ -75,7 +75,7 @@ ziggy_platform_stop() {
     fi
     if [ "${2:-}" = "keep-device" ]; then
         # The app is about to start again on the same data. WebView2 refuses to create its controller while the first run's browser
-        # process still holds the user data folder: the Windows job of the Ziggy example workflow failed scenario 17-page-storage
+        # process still holds the user data folder: the Windows job of the Ziggy example workflow failed scenario 17-ui-storage
         # on its restart with "ziggy shell: creating the WebView2 controller failed with HRESULT 0x800700AA" (ERROR_BUSY). So the
         # restart waits until no WebView2 process is left.
         local waited=0
@@ -124,10 +124,10 @@ ziggy_platform_has_control_port() {
 }
 
 #
-# Succeeds when the developer tools are showing. WebView2 opens them as a window of their own, so the page's area does not change and
-# they are found by their window's title, "DevTools - " and the page's address. Only the WebView2 processes are asked, because asking
+# Succeeds when the developer tools are showing. WebView2 opens them as a window of their own, so the UI's area does not change and
+# they are found by their window's title, "DevTools - " and the UI's address. Only the WebView2 processes are asked, because asking
 # every process for its window title takes many seconds.
-# Usage: ziggy_platform_devtools_visible <test_dir> <the page's area before they opened>
+# Usage: ziggy_platform_devtools_visible <test_dir> <the UI's area before they opened>
 #
 ziggy_platform_devtools_visible() {
     local windows

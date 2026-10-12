@@ -30,7 +30,7 @@ STAGE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ziggy-example-package-XXXXXX")"
 (cd "$EXAMPLE_DIR" && zig build ziggy-example-linux -Doptimize=ReleaseSafe -p "$STAGE_DIR/prefix")
 mkdir -p "$OUTPUT_DIR"
 
-# The zip holds the executable, which has the page embedded, in one folder.
+# The zip holds the executable, which has the UI embedded, in one folder.
 mkdir -p "$STAGE_DIR/zip/ziggy-example"
 cp "$STAGE_DIR/prefix/bin/ziggy-example" "$STAGE_DIR/zip/ziggy-example/"
 rm -f "$OUTPUT_DIR/$BASE_NAME.zip"

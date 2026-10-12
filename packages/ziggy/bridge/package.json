@@ -1,7 +1,7 @@
 {
     "name": "ziggy-bridge",
     "version": "1.0.0",
-    "description": "Ziggy's page side: the window.ziggy script every shell injects, and its types.",
+    "description": "Ziggy's UI side: the window.ziggy script every shell injects, and its types.",
     "main": "src/index.ts",
     "type": "module",
     "private": true,

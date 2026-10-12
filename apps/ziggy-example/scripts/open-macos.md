@@ -1,6 +1,6 @@
 # open-macos
 
-Runs `sync-macos.sh`, then opens `shells/macos/ZiggyExample.xcodeproj` in Xcode, so a build from Xcode finds the library and the page.
+Runs `sync-macos.sh`, then opens `shells/macos/ZiggyExample.xcodeproj` in Xcode, so a build from Xcode finds the library and the UI.
 
 Run it on a Mac: `bash apps/ziggy-example/scripts/open-macos.sh`.
 

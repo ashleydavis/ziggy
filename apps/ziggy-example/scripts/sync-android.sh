@@ -83,9 +83,9 @@ if [ "$test_hooks" = "true" ]; then
     test_hooks_argument="-Dtest-hooks=true"
 fi
 
-# The page is embedded in the library, so it is built first.
+# The UI is embedded in the library, so it is built first.
 if [ "$skip_ui" = "false" ]; then
-    echo "Building the page..."
+    echo "Building the UI..."
     (cd "$ZIGGY_EXAMPLE_DIR" && bun run bundle:ui)
 fi
 if [ ! -f "$ZIGGY_EXAMPLE_DIR/dist/index.html" ]; then
@@ -119,7 +119,7 @@ for arch in $arch_list; do
     cp "$generated_dir/zig-out/$abi/lib/libziggy_example.so" "$generated_dir/jniLibs/$abi/libziggy_example.so"
 done
 
-# An earlier version of this script put the page and the inject script in the assets. Both are in the library now, so the old
+# An earlier version of this script put the UI and the inject script in the assets. Both are in the library now, so the old
 # copies are deleted, one file at a time, rather than left to be packaged into the APK.
 if [ -d "$generated_dir/assets" ]; then
     find "$generated_dir/assets" -type f -delete

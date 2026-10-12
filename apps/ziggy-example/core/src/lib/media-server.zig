@@ -1,9 +1,9 @@
 //
-// A loopback HTTP server that serves the example's image and video to the page. It is the example's own code and not part of
-// Ziggy: an app that needs to show media from outside the page's origin starts one like it, and the web view fetches the media
+// A loopback HTTP server that serves the example's image and video to the UI. It is the example's own code and not part of
+// Ziggy: an app that needs to show media from outside the UI's origin starts one like it, and the web view fetches the media
 // from it as it would from any web server. It listens on 127.0.0.1 only, on a port the operating system chooses.
 //
-// It runs as a task so that the task's stack owns its state and cancelling the task stops it. The task tells the page its port
+// It runs as a task so that the task's stack owns its state and cancelling the task stops it. The task tells the UI its port
 // with a "media-server" message.
 //
 
@@ -110,7 +110,7 @@ pub fn findAsset(request_path: []const u8) ?*const Asset {
 }
 
 //
-// The task: listens, tells the page the port and serves connections until the task is cancelled. A connection is served on a
+// The task: listens, tells the UI the port and serves connections until the task is cancelled. A connection is served on a
 // thread of its own that owns everything it uses, because a browser opens connections it never sends a request on and a thread
 // waiting on one cannot be woken. Such a thread ends when the browser closes the connection, and the task does not wait for it.
 //

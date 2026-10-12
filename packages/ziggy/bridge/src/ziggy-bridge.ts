@@ -1,5 +1,5 @@
 //
-// The page's view of Ziggy: the methods every shell exposes as window.ziggy, and the JSON types messages are made of.
+// The UI's view of Ziggy: the methods every shell exposes as window.ziggy, and the JSON types messages are made of.
 //
 
 //
@@ -20,8 +20,8 @@ export type IJsonValue = string | number | boolean | null | IJsonValue[] | IJson
 export type IMessageCallback<TData> = (data: TData) => void;
 
 //
-// What every shell injects into the page as window.ziggy. Nothing wider than these methods is exposed, and the
-// web view's own native handle is never used by the page directly.
+// What every shell injects into the UI as window.ziggy. Nothing wider than these methods is exposed, and the
+// web view's own native handle is never used by the UI directly.
 //
 export interface IZiggyBridge {
     //
@@ -53,7 +53,7 @@ export interface IZiggyBridge {
 
 declare global {
     interface Window {
-        // Injected by the shell before the page's scripts run.
+        // Injected by the shell before the UI's scripts run.
         ziggy: IZiggyBridge;
     }
 }

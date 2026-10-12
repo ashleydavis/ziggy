@@ -94,15 +94,15 @@ pub fn build(b: *std.Build) !void {
     })).step);
 
     // The tests of the Ziggy example, which is a build of its own that takes Ziggy as a dependency, as every app does. Its core embeds
-    // its built page, which its build reads when it starts, so the page is built first and the example's build is then run as a program
+    // its built UI, which its build reads when it starts, so the UI is built first and the example's build is then run as a program
     // of its own.
-    const bundle_example_page = b.addSystemCommand(&.{ "bun", "run", "bundle:ui" });
-    bundle_example_page.setCwd(b.path("apps/ziggy-example"));
-    bundle_example_page.has_side_effects = true;
+    const bundle_example_ui = b.addSystemCommand(&.{ "bun", "run", "bundle:ui" });
+    bundle_example_ui.setCwd(b.path("apps/ziggy-example"));
+    bundle_example_ui.has_side_effects = true;
     const test_example = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test", "--summary", "all" });
     test_example.setCwd(b.path("apps/ziggy-example"));
     test_example.has_side_effects = true;
-    test_example.step.dependOn(&bundle_example_page.step);
+    test_example.step.dependOn(&bundle_example_ui.step);
     test_step.dependOn(&test_example.step);
 }
 
@@ -182,9 +182,9 @@ pub const IAppCore = struct {
     title: []const u8,
     // The root source file of the app's core, relative to the app's build root.
     root_source_file: []const u8,
-    // The directory of the app's built page, relative to the app's build root, which is embedded in the core as "page-files".
-    page_directory: []const u8,
-    // The modules the app's core imports besides "ziggy" and "page-files".
+    // The directory of the app's built UI, relative to the app's build root, which is embedded in the core as "ui-files".
+    ui_directory: []const u8,
+    // The modules the app's core imports besides "ziggy" and "ui-files".
     imports: []const IImport,
 };
 
@@ -242,7 +242,7 @@ pub fn addAppCore(
 }
 
 //
-// Makes the root module of an app's core library: the app's root source file, importing Ziggy's core, the app's built page and the
+// Makes the root module of an app's core library: the app's root source file, importing Ziggy's core, the app's built UI and the
 // app's own modules.
 //
 fn createAppCoreModule(
@@ -259,7 +259,7 @@ fn createAppCoreModule(
         .link_libc = true,
     });
     module.addImport("ziggy", ziggy.module);
-    module.addImport("page-files", try embedPage(b, ziggy.module, "ziggy", app.page_directory));
+    module.addImport("ui-files", try embedUi(b, ziggy.module, "ziggy", app.ui_directory));
     for (app.imports) |import| {
         module.addImport(import.name, import.module);
     }
@@ -267,7 +267,7 @@ fn createAppCoreModule(
 }
 
 //
-// Makes the module of the list of the bundled page's files and the lookup in it, which the shells of the platforms that embed the page
+// Makes the module of the list of the bundled UI's files and the lookup in it, which the shells of the platforms that embed the UI
 // import as "ui-files".
 //
 fn createUiFilesModule(
@@ -294,20 +294,20 @@ fn appPath(b: *std.Build, directory: []const u8, sub_path: []const u8) []const u
 }
 
 //
-// Makes the module that holds an app's built page, a list of every file under the page's directory (a path relative to the root of
+// Makes the module that holds an app's built UI, a list of every file under the UI's directory (a path relative to the root of
 // the repository), each embedded with @embedFile. Pass the module to the app's shell code and give the list to AppConfig.ui_files.
-// The directory is read every time the build runs, so whatever the page build produced is what gets embedded, with no list of files
+// The directory is read every time the build runs, so whatever the UI build produced is what gets embedded, with no list of files
 // to keep up to date. A changed file rebuilds the executable. When the directory is missing or has no index.html, which means the
-// page was not built first, the module does not compile and says so: the build of anything that does not use the page is not
+// UI was not built first, the module does not compile and says so: the build of anything that does not use the UI is not
 // affected.
 //
-pub fn embedPage(b: *std.Build, shell_module: *std.Build.Module, shell_import_name: []const u8, page_directory: []const u8) !*std.Build.Module {
+pub fn embedUi(b: *std.Build, shell_module: *std.Build.Module, shell_import_name: []const u8, ui_directory: []const u8) !*std.Build.Module {
     const io = b.graph.io;
     var source: std.ArrayList(u8) = .empty;
     var embedded_names: std.ArrayList([]const u8) = .empty;
     var embedded_paths: std.ArrayList([]const u8) = .empty;
     var has_index = false;
-    if (b.build_root.handle.openDir(io, page_directory, .{
+    if (b.build_root.handle.openDir(io, ui_directory, .{
         .iterate = true,
     })) |opened| {
         var directory = opened;
@@ -323,7 +323,7 @@ pub fn embedPage(b: *std.Build, shell_module: *std.Build.Module, shell_import_na
             std.mem.replaceScalar(u8, path, '\\', '/');
             const import_name = b.fmt("ui-file-{d}", .{embedded_names.items.len});
             try embedded_names.append(b.allocator, import_name);
-            try embedded_paths.append(b.allocator, b.fmt("{s}/{s}", .{ page_directory, path }));
+            try embedded_paths.append(b.allocator, b.fmt("{s}/{s}", .{ ui_directory, path }));
             try source.appendSlice(b.allocator, b.fmt("    .{{\n        .path = \"{s}\",\n        .content = @embedFile(\"{s}\"),\n    }},\n", .{ path, import_name }));
             if (std.mem.eql(u8, path, "index.html")) {
                 has_index = true;
@@ -331,7 +331,7 @@ pub fn embedPage(b: *std.Build, shell_module: *std.Build.Module, shell_import_na
         }
         try source.appendSlice(b.allocator, "};\n");
     } else |err| {
-        // A page directory that is missing means the page was not built, which the compile error below says. Any other failure is
+        // A UI directory that is missing means the UI was not built, which the compile error below says. Any other failure is
         // reported as it is.
         if (err != error.FileNotFound) {
             return err;
@@ -341,7 +341,7 @@ pub fn embedPage(b: *std.Build, shell_module: *std.Build.Module, shell_import_na
         source.clearRetainingCapacity();
         embedded_names.clearRetainingCapacity();
         embedded_paths.clearRetainingCapacity();
-        try source.appendSlice(b.allocator, b.fmt("comptime {{\n    @compileError(\"The built page is not in {s}, or has no index.html. Build the page first.\");\n}}\n", .{page_directory}));
+        try source.appendSlice(b.allocator, b.fmt("comptime {{\n    @compileError(\"The built UI is not in {s}, or has no index.html. Build the UI first.\");\n}}\n", .{ui_directory}));
     }
 
     const generated = b.addWriteFiles();
@@ -506,8 +506,8 @@ pub const IShellApp = struct {
     // (`shells/linux/src/main.zig`, `shells/windows/src/main.zig`) and the WebView2 SDK
     // (`webview2-sdk`) are.
     directory: []const u8,
-    // The directory of the app's built page, relative to the app's build root, which is embedded in the executable.
-    page_directory: []const u8,
+    // The directory of the app's built UI, relative to the app's build root, which is embedded in the executable.
+    ui_directory: []const u8,
     // The PNG file of the app's window icon on Linux, which the shell's `app-icon` import gives to the app's main file, or null for none.
     linux_icon: ?[]const u8,
     // The Windows resource script of the app's executable icon, or null for none.
@@ -516,7 +516,7 @@ pub const IShellApp = struct {
 
 //
 // Builds an app's Linux shell, installed to zig-out/bin/<name> by the `<name>-linux` step. The shell is Zig that talks to GTK 3 and
-// WebKitGTK 4.1 through their C headers, and to the core through ziggy.h. The built page (made by `bun run bundle:ui`) is embedded in
+// WebKitGTK 4.1 through their C headers, and to the core through ziggy.h. The built UI (made by `bun run bundle:ui`) is embedded in
 // the executable, so the executable is the whole app.
 //
 pub fn addLinuxShell(
@@ -574,7 +574,7 @@ pub fn addLinuxShell(
             .root_source_file = b.path(icon),
         });
     }
-    module.addImport("ui-files", try embedPage(b, shell_module, "ziggy-shell-linux", app.page_directory));
+    module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-shell-linux", app.ui_directory));
     module.linkLibrary(core_library);
     const executable = b.addExecutable(.{
         .name = app.name,
@@ -585,8 +585,8 @@ pub fn addLinuxShell(
 
 //
 // Builds an app's Windows shell, installed to zig-out/<name>/<name>.exe by the `<name>-windows` step. The shell is Zig that talks to
-// Win32 and to WebView2 through their C headers. The executable is the whole app: the built page is embedded in it and WebView2's
-// loader is linked into it. The page is expected in the app's page directory (bun run bundle:ui) and the loader's static library in the
+// Win32 and to WebView2 through their C headers. The executable is the whole app: the built UI is embedded in it and WebView2's
+// loader is linked into it. The UI is expected in the app's UI directory (bun run bundle:ui) and the loader's static library in the
 // app's webview2-sdk directory (the setup script), and the build fails when either is missing. The `<name>-windows-check` step
 // compiles the shell without linking it, for a machine that cannot link a Windows executable. With compile_only the loader is not
 // linked, which is how that machine checks the shell.
@@ -662,7 +662,7 @@ pub fn addWindowsShell(
             .file = b.path(resource),
         });
     }
-    module.addImport("ui-files", try embedPage(b, shell_module, "ziggy-shell-windows", app.page_directory));
+    module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-shell-windows", app.ui_directory));
     module.linkLibrary(core_library);
     const executable = b.addExecutable(.{
         .name = app.name,
@@ -688,7 +688,7 @@ pub fn addWindowsShell(
     check_module.addImport("ziggy-shell-windows", shell_module);
     // The icon resource is left out: a resource is not Zig, so it has no type errors to find, and an object cannot hold it ("coff does
     // not support linking multiple objects into one").
-    check_module.addImport("ui-files", try embedPage(b, shell_module, "ziggy-shell-windows", app.page_directory));
+    check_module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-shell-windows", app.ui_directory));
     check_step.dependOn(&b.addObject(.{
         .name = b.fmt("{s}-check", .{app.name}),
         .root_module = check_module,

@@ -35,7 +35,7 @@ export interface IJobProgressMessage {
 }
 
 //
-// A job as the page lists it.
+// A job as the UI lists it.
 //
 export interface IJob {
     // The job's id.

@@ -59,7 +59,7 @@ fn sendJobProgress(context: *TaskContext, job: ?JobTag, started_at: i64, progres
 }
 
 //
-// Sends an output message, whose text the page shows in its output area.
+// Sends an output message, whose text the UI shows in its output area.
 //
 fn sendOutput(context: *TaskContext, text: []const u8) !void {
     try context.sendMessage(.{

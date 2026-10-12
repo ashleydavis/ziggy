@@ -7,7 +7,7 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# The example's core embeds the built page, so the page is built before anything here.
+# The example's core embeds the built UI, so the UI is built before anything here.
 (cd "$EXAMPLE_DIR" && bun run bundle:ui)
 
 ACTION="${1:-}"

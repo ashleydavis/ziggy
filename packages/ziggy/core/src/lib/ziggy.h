@@ -25,7 +25,7 @@ typedef void (*ziggy_quit_fn)(void *user_data);
 
 // Native host callback: does a menu action as if the user had chosen its menu item, by the path the menu item takes in the shell,
 // so the shell's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
-// other action reaches the page. The core calls it, from the thread of the test control connection, only to let a test choose a
+// other action reaches the UI. The core calls it, from the thread of the test control connection, only to let a test choose a
 // menu item. The shell does the work on its UI thread and returns at once.
 typedef void (*ziggy_menu_action_fn)(void *user_data, const char *action);
 
@@ -44,7 +44,7 @@ typedef void (*ziggy_keep_alive_fn)(void *user_data, bool keep_running);
 // the JSON text of the method's argument (NUL terminated), and the shell writes the JSON text of its answer into the buffer and returns
 // the number of bytes written. When it cannot do what was asked it writes the text of the reason and returns that number of bytes
 // negated. The shell may show native interface and wait for the user, so the core calls it from a worker thread, never from the one that
-// handles page messages, and it may take a long time.
+// handles UI messages, and it may take a long time.
 typedef intptr_t (*ziggy_host_request_fn)(void *user_data, const char *method, const char *request_json, char *buffer, size_t capacity);
 
 // What a shell is asked to show in ziggy_pick_paths_fn.
@@ -60,7 +60,7 @@ enum {
 // Native host callback: shows a native file or folder dialog, waits for the user, and writes what they chose into the buffer
 // the core gives it, as a JSON array of path strings ("[]" when they cancelled). Returns the number of bytes written, or a
 // negative number on failure. The title is NUL terminated and may be NULL. The initial name is NUL terminated and may be NULL,
-// and is used only to save. The core calls it from a worker thread, never from the one that handles page messages, so the
+// and is used only to save. The core calls it from a worker thread, never from the one that handles UI messages, so the
 // shell shows the dialog on its UI thread and waits.
 typedef intptr_t (*ziggy_pick_paths_fn)(void *user_data, int32_t kind, const char *title, const char *initial_name, char *buffer, size_t capacity);
 
@@ -68,7 +68,7 @@ typedef intptr_t (*ziggy_pick_paths_fn)(void *user_data, int32_t kind, const cha
 typedef struct ziggy_config {
     // The shell's own pointer, passed back on every callback.
     void *user_data;
-    // Delivers a message to the page. Required.
+    // Delivers a message to the UI. Required.
     ziggy_deliver_fn deliver;
     // Native host callback: the operating system's version. NULL when the platform has none.
     ziggy_os_version_fn os_version;
@@ -85,7 +85,7 @@ typedef struct ziggy_config {
     uint32_t worker_threads;
     // The limit on child tasks in flight for any one parent task.
     uint32_t max_concurrent_child_tasks;
-    // The URL prefix of the app's own bundled page, such as "ziggy-app://app/" or "https://ziggy-app.invalid/", the address the shell serves the page from (NUL terminated).
+    // The URL prefix of the app's own bundled UI, such as "ziggy-app://app/" or "https://ziggy-app.invalid/", the address the shell serves the UI from (NUL terminated).
     const char *app_url_prefix;
     // The app's private data directory (NUL terminated).
     const char *data_dir;
@@ -103,7 +103,7 @@ typedef struct ziggy_config {
 
 // The result of ziggy_check_url.
 enum {
-    // The address is the app's own page.
+    // The address is the app's own UI.
     ZIGGY_URL_ALLOW = 0,
     // The address is an external link, to open in the system browser.
     ZIGGY_URL_OPEN_EXTERNALLY = 1,
@@ -118,7 +118,7 @@ void *ziggy_create(const ziggy_config *config);
 // delivered after it returns.
 void ziggy_destroy(void *handle);
 
-// Delivers a JSON message from the page to the core. The message is valid only while the call runs.
+// Delivers a JSON message from the UI to the core. The message is valid only while the call runs.
 void ziggy_post_message(void *handle, const char *message, size_t message_len);
 
 // Decides what to do with an address the web view is about to load: a ZIGGY_URL_ value.
@@ -148,7 +148,7 @@ typedef struct ziggy_accelerator {
 // show it, and a phone's shell never calls this. The length is written to the pointer given.
 const char *ziggy_menu_json(void *handle, size_t *length);
 
-// A file of the app's bundled page, as ziggy_ui_file gives it.
+// A file of the app's bundled UI, as ziggy_ui_file gives it.
 typedef struct ziggy_ui_file_result {
     // The file's bytes, valid for as long as the library is loaded.
     const uint8_t *content;
@@ -158,12 +158,12 @@ typedef struct ziggy_ui_file_result {
     const char *content_type;
 } ziggy_ui_file_result;
 
-// Finds a file of the app's bundled page by the path of a request, which starts with a slash ("/" is the page itself), and
-// writes it into the struct given. Returns false, leaving the struct unchanged, when the page has no such file. Used by the
-// shells that serve the page by asking the core for each file (MacOS, iOS and Android).
+// Finds a file of the app's bundled UI by the path of a request, which starts with a slash ("/" is the UI itself), and
+// writes it into the struct given. Returns false, leaving the struct unchanged, when the UI has no such file. Used by the
+// shells that serve the UI by asking the core for each file (MacOS, iOS and Android).
 bool ziggy_ui_file(void *handle, const char *path, size_t path_len, ziggy_ui_file_result *result);
 
-// The script a shell injects into the page before the page's own scripts, which exposes window.ziggy (NUL terminated, valid for
+// The script a shell injects into the UI before the UI's own scripts, which exposes window.ziggy (NUL terminated, valid for
 // as long as the library is loaded). It is embedded in the library, so an app supplies nothing. The length, not counting the
 // terminator, is written to the pointer given.
 const char *ziggy_inject_script(size_t *length);
@@ -172,16 +172,16 @@ const char *ziggy_inject_script(size_t *length);
 // Control elsewhere. Returns false, leaving the struct unchanged, when the text is not a shortcut.
 bool ziggy_parse_accelerator(const char *text, size_t text_len, ziggy_accelerator *result);
 
-// Records the files the user dropped on the window, replacing the last drop, so the page can ask for each one's path with
-// getPathForFile. The shell calls it when the drop happens, before the page's own drop event. The paths are the JSON text of an array
+// Records the files the user dropped on the window, replacing the last drop, so the UI can ask for each one's path with
+// getPathForFile. The shell calls it when the drop happens, before the UI's own drop event. The paths are the JSON text of an array
 // of strings. Returns false, after logging why, when a path is not a readable file or the text is not such an array.
 bool ziggy_files_dropped(void *handle, const char *paths_json, size_t paths_len);
 
-// Returns the query of the page's address, which the app supplies, as the text after the question mark (NUL terminated, empty when
-// the app has none), valid until the next call or ziggy_destroy. The shell appends a question mark and this text to the page's
+// Returns the query of the UI's address, which the app supplies, as the text after the question mark (NUL terminated, empty when
+// the app has none), valid until the next call or ziggy_destroy. The shell appends a question mark and this text to the UI's
 // address and passes it through unread. The length, not counting the terminator, is written to the pointer given. Returns NULL,
-// after printing why, when the app could not make it, and the shell then does not load the page.
-const char *ziggy_page_query(void *handle, size_t *length);
+// after printing why, when the app could not make it, and the shell then does not load the UI.
+const char *ziggy_ui_query(void *handle, size_t *length);
 
 // Returns true when the library was built with the test hooks.
 bool ziggy_test_hooks_enabled(void);

@@ -1,4 +1,4 @@
-// The Ziggy example's Android app. The Zig library per ABI and the built page are generated into build/ziggy by
+// The Ziggy example's Android app. The Zig library per ABI and the built UI are generated into build/ziggy by
 // scripts/sync-android.sh before Gradle runs, so Gradle never runs zig.
 
 apply plugin: 'com.android.application'

@@ -1,6 +1,6 @@
 //
-// Ziggy's Linux shell. It creates the window, hosts WebKitGTK, injects window.ziggy, loads the app's bundled page,
-// calls the core through the C interface and moves messages between the page and the core.
+// Ziggy's Linux shell. It creates the window, hosts WebKitGTK, injects window.ziggy, loads the app's bundled UI,
+// calls the core through the C interface and moves messages between the UI and the core.
 //
 // Messages from the core arrive on any thread, so they are queued and delivered to the web view from the GTK main thread.
 //
@@ -12,10 +12,10 @@ const menu_keys = @import("menu-keys.zig");
 const geometry_lib = @import("geometry.zig");
 const ui_files = @import("ui-files");
 
-// The URL scheme the bundled page is served under. WebKitGTK asks the shell for each file instead of reading a directory.
+// The URL scheme the bundled UI is served under. WebKitGTK asks the shell for each file instead of reading a directory.
 const app_scheme = "ziggy-app";
 
-// The URL prefix of the bundled page, with a trailing slash. It is what the core allows the web view to navigate to.
+// The URL prefix of the bundled UI, with a trailing slash. It is what the core allows the web view to navigate to.
 const app_url_prefix = app_scheme ++ "://app/";
 
 //
@@ -56,12 +56,12 @@ pub const AppConfig = struct {
     default_height: c_int,
     // The PNG file of the window icon, or null when the app has none and the window shows the desktop's generic one.
     icon_png: ?[]const u8,
-    // The files of the app's bundled page, embedded in the executable. One of them must be "index.html".
+    // The files of the app's bundled UI, embedded in the executable. One of them must be "index.html".
     ui_files: []const ui_files.UiFile,
 };
 
 //
-// A message from the core, waiting to be delivered to the page.
+// A message from the core, waiting to be delivered to the UI.
 //
 const PendingMessage = struct {
     // The JSON text of the message.
@@ -166,7 +166,7 @@ fn fatal(comptime format: []const u8, arguments: anytype) noreturn {
 // namespace. Some systems do not allow that to an ordinary program (Ubuntu's default restriction on user namespaces is one),
 // and the web view then cannot start at all. This runs the same bubblewrap setup WebKitGTK does, and when it fails turns the
 // sandbox off for this process through the environment variable WebKitGTK documents for it, and says so on standard error.
-// The app loads only its own bundled page and refuses every other navigation, which is what limits what runs without the
+// The app loads only its own bundled UI and refuses every other navigation, which is what limits what runs without the
 // sandbox. A setting made in the environment is left alone, so it can still be set either way from outside.
 //
 fn turnSandboxOffWhenItCannotStart() !void {
@@ -183,14 +183,14 @@ fn turnSandboxOffWhenItCannotStart() !void {
 }
 
 //
-// Answers a web view request for one of the bundled page's files, from the files embedded in the executable. A path that
+// Answers a web view request for one of the bundled UI's files, from the files embedded in the executable. A path that
 // is not one of them is answered with a not found error.
 //
 fn onUriSchemeRequest(request: *c.WebKitURISchemeRequest, user_data: c.gpointer) callconv(.c) void {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
     const request_path = std.mem.span(c.webkit_uri_scheme_request_get_path(request));
     const file = ui_files.findFile(shell.app_config.ui_files, request_path) orelse {
-        const not_found = c.g_error_new_literal(c.g_io_error_quark(), c.G_IO_ERROR_NOT_FOUND, "the page has no such file");
+        const not_found = c.g_error_new_literal(c.g_io_error_quark(), c.G_IO_ERROR_NOT_FOUND, "the UI has no such file");
         c.webkit_uri_scheme_request_finish_error(request, not_found);
         c.g_error_free(not_found);
         return;
@@ -212,16 +212,16 @@ fn onActivate(application: *c.GtkApplication, user_data: ?*anyopaque) callconv(.
 }
 
 //
-// Creates the window and the web view, creates the core and loads the page.
+// Creates the window and the web view, creates the core and loads the UI.
 //
 fn start(shell: *Shell, application: *c.GtkApplication) !void {
     const test_hooks = z.ziggy_test_hooks_enabled();
     shell.test_mode = test_hooks and c.g_getenv("ZIGGY_TEST_MODE") != null;
 
     if (ui_files.findFile(shell.app_config.ui_files, "/") == null) {
-        return error.UiHasNoIndexPage;
+        return error.UiHasNoIndexHtml;
     }
-    // The page's own scripts are classic scripts, but a page may also fetch its files, which needs the scheme to be
+    // The UI's own scripts are classic scripts, but a UI may also fetch its files, which needs the scheme to be
     // allowed to make cross-origin style requests and to count as a secure context like https does.
     const web_context = c.webkit_web_context_get_default();
     c.webkit_web_context_register_uri_scheme(web_context, app_scheme, onUriSchemeRequest, shell, null);
@@ -307,20 +307,20 @@ fn start(shell: *Shell, application: *c.GtkApplication) !void {
 
     // The app supplies the query unread, and the core says nothing about its parts.
     var query_length: usize = 0;
-    const query_pointer = z.ziggy_page_query(shell.core, &query_length) orelse {
-        return error.PageQueryFailed;
+    const query_pointer = z.ziggy_ui_query(shell.core, &query_length) orelse {
+        return error.UiQueryFailed;
     };
     const query = query_pointer[0..query_length];
     const query_separator: []const u8 = if (query.len > 0) "?" else "";
-    const page_url = try std.fmt.allocPrintSentinel(std.heap.c_allocator, "{s}index.html{s}{s}", .{ app_url_prefix, query_separator, query }, 0);
-    defer std.heap.c_allocator.free(page_url);
-    c.webkit_web_view_load_uri(web_view, page_url.ptr);
+    const ui_url = try std.fmt.allocPrintSentinel(std.heap.c_allocator, "{s}index.html{s}{s}", .{ app_url_prefix, query_separator, query }, 0);
+    defer std.heap.c_allocator.free(ui_url);
+    c.webkit_web_view_load_uri(web_view, ui_url.ptr);
     c.gtk_widget_show_all(window_widget);
     c.gtk_window_present(window);
 }
 
 //
-// A message from the page: hands it to the core.
+// A message from the UI: hands it to the core.
 //
 fn onScriptMessage(content_manager: *c.WebKitUserContentManager, result: *c.WebKitJavascriptResult, user_data: ?*anyopaque) callconv(.c) void {
     _ = content_manager;
@@ -329,7 +329,7 @@ fn onScriptMessage(content_manager: *c.WebKitUserContentManager, result: *c.WebK
         return;
     };
     const text = c.jsc_value_to_string(c.webkit_javascript_result_get_js_value(result)) orelse {
-        fatal("the page posted a message that is not a string", .{});
+        fatal("the UI posted a message that is not a string", .{});
     };
     defer c.g_free(text);
     const slice = std.mem.span(@as([*:0]const u8, @ptrCast(text)));
@@ -337,7 +337,7 @@ fn onScriptMessage(content_manager: *c.WebKitUserContentManager, result: *c.WebK
 }
 
 //
-// Decides every navigation with the core's origin check: the app's own page loads, external links open in the system
+// Decides every navigation with the core's origin check: the app's own UI loads, external links open in the system
 // browser, and everything else is blocked.
 //
 fn onDecidePolicy(web_view: *c.WebKitWebView, decision: *c.WebKitPolicyDecision, decision_type: c.WebKitPolicyDecisionType, user_data: ?*anyopaque) callconv(.c) c.gboolean {
@@ -363,9 +363,9 @@ fn onDecidePolicy(web_view: *c.WebKitWebView, decision: *c.WebKitPolicyDecision,
 }
 
 //
-// Records the files of a drop on the web view with the core, so the page can ask for their paths. WebKitGTK gives the page no files and
+// Records the files of a drop on the web view with the core, so the UI can ask for their paths. WebKitGTK gives the UI no files and
 // hides the file addresses, so the paths can only be read here. This handler runs before WebKit's own, which is the default handler of
-// the signal and runs last, so the paths are recorded before the page's drop is handled. Anything dropped that is not a file is ignored.
+// the signal and runs last, so the paths are recorded before the UI's drop is handled. Anything dropped that is not a file is ignored.
 //
 fn onDragDataReceived(widget: *c.GtkWidget, drag_context: *c.GdkDragContext, x: c_int, y: c_int, data: *c.GtkSelectionData, info: c_uint, time: c_uint, user_data: ?*anyopaque) callconv(.c) void {
     _ = widget;
@@ -427,7 +427,7 @@ fn onShutdown(application: *c.GApplication, user_data: ?*anyopaque) callconv(.c)
 }
 
 //
-// Destroys the core once. After it nothing more is delivered to the page.
+// Destroys the core once. After it nothing more is delivered to the UI.
 //
 fn destroyCore(shell: *Shell) void {
     const core = shell.core orelse {
@@ -439,7 +439,7 @@ fn destroyCore(shell: *Shell) void {
 }
 
 //
-// Frees the messages queued for the page that were never delivered.
+// Frees the messages queued for the UI that were never delivered.
 //
 fn discardPending(shell: *Shell) void {
     while (c.g_async_queue_try_pop(shell.queue)) |item| {
@@ -464,7 +464,7 @@ fn deliver(user_data: ?*anyopaque, message: [*c]const u8, message_len: usize) ca
 }
 
 //
-// Runs on the main thread: sends every queued message to the page, in the order they were queued.
+// Runs on the main thread: sends every queued message to the UI, in the order they were queued.
 //
 fn drainQueue(user_data: ?*anyopaque) callconv(.c) c.gboolean {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -704,7 +704,7 @@ fn onMenuItemActivate(menu_item: *c.GtkWidget, user_data: ?*anyopaque) callconv(
 
 //
 // Does a menu action. The actions every shell does itself are done here, and any other is the app's, which goes to the core to
-// be handed to the page.
+// be handed to the UI.
 //
 fn performAction(shell: *Shell, action: []const u8) !void {
     const web_view = shell.web_view.?;

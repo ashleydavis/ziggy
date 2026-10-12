@@ -22,7 +22,7 @@ interface ITaskMessageEvent {
 }
 
 //
-// A message that tells the page the media server is listening.
+// A message that tells the UI the media server is listening.
 //
 interface IMediaServerMessage {
     // Always "media-server".
@@ -33,7 +33,7 @@ interface IMediaServerMessage {
 }
 
 //
-// A message whose text the page shows in its output area.
+// A message whose text the UI shows in its output area.
 //
 interface IOutputMessage {
     // Always "output".
@@ -121,7 +121,7 @@ interface ITestCommandEvent {
 function element(dataId: string): HTMLElement {
     const found = document.querySelector<HTMLElement>(`[data-id="${dataId}"]`);
     if (!found) {
-        throw new Error(`The page has no element with the data-id ${dataId}.`);
+        throw new Error(`The UI has no element with the data-id ${dataId}.`);
     }
     return found;
 }
@@ -166,7 +166,7 @@ function jobTag(name: string, source: string): IJsonValue {
 }
 
 async function showReply(): Promise<void> {
-    const reply = await window.ziggy.invoke<IPingReply>("ping", { greeting: "hello from the page" });
+    const reply = await window.ziggy.invoke<IPingReply>("ping", { greeting: "hello from the UI" });
     element("reply").textContent = formatPingReply(reply);
 }
 
@@ -248,7 +248,7 @@ function startEdgeChecks(): void {
 }
 //
 // The file and folder pickers. Each is a request to the core on the Electron app's channel for it, and the reply is shown in
-// the page. A cancelled dialog replies null.
+// the UI. A cancelled dialog replies null.
 //
 function startPickers(): void {
     const picked = element("picked");
@@ -269,7 +269,7 @@ function startPickers(): void {
 
 //
 // Loads the example image and video from the media server on the loopback port, and asks it for a range of bytes with a
-// request from the page's script, which the browser lets through only because the server allows the page's origin. The
+// request from the UI's script, which the browser lets through only because the server allows the UI's origin. The
 // status shows what each of the three did.
 //
 function showMedia(port: number): void {
@@ -310,7 +310,7 @@ function startMedia(): void {
 }
 
 //
-// Files dropped on the drop zone, written the way a page written for Electron would: for each File of the drop it asks
+// Files dropped on the drop zone, written the way a UI written for Electron would: for each File of the drop it asks
 // window.ziggy.getPathForFile for the real path. A drop anywhere else does nothing, rather than the web view navigating to the file.
 //
 function startDrop(): void {
@@ -409,7 +409,7 @@ function listenForEvents(): void {
 }
 
 //
-// Does what a menu item asks that the shell did not do itself. A task action presses the same button the page shows.
+// Does what a menu item asks that the shell did not do itself. A task action presses the same button the UI shows.
 //
 function listenForMenuActions(): void {
     window.ziggy.onMessage<IMenuActionEvent>("menu-action", event => {
@@ -422,13 +422,13 @@ function listenForMenuActions(): void {
             element("edge-result").textContent = aboutText;
         }
         else {
-            throw new Error(`The page does not know the menu action ${event.action}.`);
+            throw new Error(`The UI does not know the menu action ${event.action}.`);
         }
     });
 }
 
 //
-// Answers the commands the test control connection forwards. It does nothing unless the shell started the page in test
+// Answers the commands the test control connection forwards. It does nothing unless the shell started the UI in test
 // mode, which it does only in a test hooks build, and it tells the core when it is listening so that no command is sent
 // before it can be heard.
 //
@@ -460,7 +460,7 @@ function listenForTestCommands(): void {
             result: testResultToJson(result),
         });
     });
-    window.ziggy.send("test-page-ready", null);
+    window.ziggy.send("test-ui-ready", null);
 }
 
 listenForEvents();

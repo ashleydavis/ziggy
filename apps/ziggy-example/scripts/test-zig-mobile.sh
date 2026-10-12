@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# The example's core embeds the built page, so the page is built before anything here.
+# The example's core embeds the built UI, so the UI is built before anything here.
 (cd "$EXAMPLE_DIR" && bun run bundle:ui)
 
 packages="$EXAMPLE_DIR/core"

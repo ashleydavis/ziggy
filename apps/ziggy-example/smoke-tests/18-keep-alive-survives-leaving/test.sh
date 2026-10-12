@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # A keep-alive task goes on running when a phone's app goes to the background. It counts in a file in the data directory, which is
-# what the scenario watches, because the page is not there to ask. On Android the foreground service is running too. A desktop has no
+# what the scenario watches, because the UI is not there to ask. On Android the foreground service is running too. A desktop has no
 # background: closing the window quits the app, keep-alive task or not, so there the scenario checks the app ends and the task with it.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"

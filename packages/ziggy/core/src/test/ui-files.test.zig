@@ -17,7 +17,7 @@ test "a request path finds the file with that path" {
     try std.testing.expectEqualStrings("run();", file.content);
 }
 
-test "the bare root finds the page" {
+test "the bare root finds the UI" {
     const file = ui_files.findFile(&files, "/").?;
     try std.testing.expectEqualStrings("index.html", file.path);
     try std.testing.expectEqualStrings("index.html", ui_files.findFile(&files, "").?.path);
@@ -28,7 +28,7 @@ test "a path that is not a file finds nothing" {
     try std.testing.expect(ui_files.findFile(&files, "/assets/") == null);
 }
 
-test "a path that climbs out of the page finds nothing" {
+test "a path that climbs out of the UI finds nothing" {
     try std.testing.expect(ui_files.findFile(&files, "/assets/../index.html") == null);
     try std.testing.expect(ui_files.findFile(&files, "/../etc/passwd") == null);
 }
@@ -39,7 +39,7 @@ test "a known extension gets its content type, whatever its case" {
     try std.testing.expectEqualStrings("image/png", ui_files.contentType("logo.PNG"));
 }
 
-test "every font format a page can embed gets a font type" {
+test "every font format a UI can embed gets a font type" {
     try std.testing.expectEqualStrings("font/woff", ui_files.contentType("assets/a.woff"));
     try std.testing.expectEqualStrings("font/woff2", ui_files.contentType("assets/a.woff2"));
     try std.testing.expectEqualStrings("font/ttf", ui_files.contentType("assets/fa-solid-900.ttf"));

@@ -21,14 +21,14 @@ pub fn build(b: *std.Build) !void {
         .name = "ziggy-example",
         .title = "the Ziggy example",
         .root_source_file = "core/src/index.zig",
-        .page_directory = "dist",
+        .ui_directory = "dist",
         .imports = &.{},
     }, target, optimize);
     const app: ziggy_build.IShellApp = .{
         .name = "ziggy-example",
         .title = "the Ziggy example",
         .directory = ".",
-        .page_directory = "dist",
+        .ui_directory = "dist",
         .linux_icon = null,
         .windows_resource = null,
     };
@@ -44,7 +44,7 @@ pub fn build(b: *std.Build) !void {
         .link_libc = true,
     });
     example_for_tests.addImport("ziggy", test_ziggy.module);
-    example_for_tests.addImport("page-files", try ziggy_build.embedPage(b, test_ziggy.module, "ziggy", "dist"));
+    example_for_tests.addImport("ui-files", try ziggy_build.embedUi(b, test_ziggy.module, "ziggy", "dist"));
     const test_step = b.step("test", "Run the unit tests of the Ziggy example's core");
     const test_binary_step = b.step("test-binary-ziggy-example-core", "Build the unit test program of the Ziggy example's core and install it to test-bin without running it");
     try ziggy_build.addDirectoryTests(b, test_step, "core", &.{

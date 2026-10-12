@@ -1,5 +1,5 @@
 //
-// What the page shows after a file or folder picker. The pickers reply as the Electron app's do: the paths chosen, or null
+// What the UI shows after a file or folder picker. The pickers reply as the Electron app's do: the paths chosen, or null
 // (Electron's undefined) when the user cancelled.
 //
 

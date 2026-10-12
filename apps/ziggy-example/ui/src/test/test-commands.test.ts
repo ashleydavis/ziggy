@@ -85,7 +85,7 @@ describe("testResultToJson", () => {
 });
 
 describe("performViewportCommand", () => {
-    test("answers the width and height of the page's area", () => {
+    test("answers the width and height of the UI's area", () => {
         expect(performViewportCommand(900, 760)).toEqual({ ok: true, value: "900x760" });
     });
 });

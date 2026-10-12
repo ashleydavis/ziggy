@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# What every scenario uses: start the app, talk to its test control connection, and check what the page shows.
+# What every scenario uses: start the app, talk to its test control connection, and check what the UI shows.
 #
 # A scenario sources this file. It defines functions only. The platform library chosen by the runner implements:
 #
@@ -18,9 +18,9 @@
 #   ziggy_platform_stop <test_dir> [keep-device]
 #       Stops the app and everything it started. With keep-device a phone stays claimed, so a restart finds its data.
 #
-#   ziggy_platform_devtools_visible <test_dir> <the page's area before they opened>   (desktop platforms)
+#   ziggy_platform_devtools_visible <test_dir> <the UI's area before they opened>   (desktop platforms)
 #       Succeeds when the developer tools are showing. How a script sees them differs: on Linux and macOS they dock inside the
-#       window and shrink the page's area, and on Windows they are a window of their own.
+#       window and shrink the UI's area, and on Windows they are a window of their own.
 #
 #   ziggy_platform_leave_app <test_dir>
 #       Takes the app out of the user's sight without ending it: on a desktop it closes the window (the File menu's Close Window), on
@@ -40,7 +40,7 @@ source "$ZIGGY_SMOKE_APP_DIR/scripts/lib/process-control.sh"
 source "$ZIGGY_SMOKE_DIR/lib/$ZIGGY_SMOKE_PLATFORM.sh"
 
 
-# Seconds the page has to show something before a wait gives up.
+# Seconds the UI has to show something before a wait gives up.
 WAIT_TIMEOUT_SECONDS=60
 
 fail() {
@@ -120,7 +120,7 @@ control() {
 }
 
 #
-# Waits until the page answers commands, which means it has loaded and the bridge works.
+# Waits until the UI answers commands, which means it has loaded and the bridge works.
 #
 wait_for_ready() {
     local waited=0
@@ -133,7 +133,7 @@ wait_for_ready() {
         sleep 1
         waited=$((waited + 1))
     done
-    fail "the page never answered a ready command"
+    fail "the UI never answered a ready command"
 }
 
 #
@@ -249,7 +249,7 @@ answer_next_dialog() {
 
 #
 # Chooses a menu item as a user would, through the shell, so the shell's own actions really happen and any other action reaches the
-# page. Usage: choose_menu_item <action>
+# UI. Usage: choose_menu_item <action>
 #
 choose_menu_item() {
     local answer
@@ -260,7 +260,7 @@ choose_menu_item() {
 }
 
 #
-# Prints the size in pixels of the area the page is drawn in, as <width>x<height>. Zooming, docking the developer tools and going
+# Prints the size in pixels of the area the UI is drawn in, as <width>x<height>. Zooming, docking the developer tools and going
 # full screen change it.
 #
 viewport_size() {
@@ -268,7 +268,7 @@ viewport_size() {
 }
 
 #
-# Waits until the page's area is a size other than the one given, and prints the new size. Fails when it never is.
+# Waits until the UI's area is a size other than the one given, and prints the new size. Fails when it never is.
 # Usage: wait_for_viewport_other_than <size>
 #
 wait_for_viewport_other_than() {
@@ -283,11 +283,11 @@ wait_for_viewport_other_than() {
         sleep 1
         waited=$((waited + 1))
     done
-    fail "the page's area stayed $1"
+    fail "the UI's area stayed $1"
 }
 
 #
-# Waits until the page's area is the size given. Fails when it never is. Usage: wait_for_viewport <size>
+# Waits until the UI's area is the size given. Fails when it never is. Usage: wait_for_viewport <size>
 #
 wait_for_viewport() {
     local waited=0
@@ -298,7 +298,7 @@ wait_for_viewport() {
         sleep 1
         waited=$((waited + 1))
     done
-    fail "the page's area never went back to $1. It is $(viewport_size)"
+    fail "the UI's area never went back to $1. It is $(viewport_size)"
 }
 
 #

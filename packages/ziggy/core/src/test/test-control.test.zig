@@ -3,7 +3,7 @@ const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
 
 //
-// One client conversation with the control connection, run on its own thread because the answer waits for the page.
+// One client conversation with the control connection, run on its own thread because the answer waits for the UI.
 //
 const Client = struct {
     // Where the answer goes.
@@ -50,7 +50,7 @@ fn startControlledCore(shell: *helpers.FakeShell, tmp: *std.testing.TmpDir) !*zi
     return try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
 }
 
-test "a command reaches the page and its answer comes back" {
+test "a command reaches the UI and its answer comes back" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var shell: helpers.FakeShell = undefined;
@@ -65,7 +65,7 @@ test "a command reaches the page and its answer comes back" {
         .answer = null,
         .closed_without_answer = false,
     };
-    core.postMessage("{\"channel\":\"test-page-ready\",\"data\":null}");
+    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
     const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
     try shell.expectMessageContaining("\"channel\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"click\",\"dataId\":\"go\"}}");
     core.postMessage("{\"id\":9,\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"clicked\":true}}}");
@@ -88,7 +88,7 @@ test "the port is written to the port file" {
     try std.testing.expectEqual(core.control.?.port, port);
 }
 
-test "a line that is not JSON is answered with an error and never reaches the page" {
+test "a line that is not JSON is answered with an error and never reaches the UI" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var shell: helpers.FakeShell = undefined;
@@ -110,7 +110,7 @@ test "a line that is not JSON is answered with an error and never reaches the pa
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
 }
 
-test "a JSON object with no command field is answered with an error and never reaches the page" {
+test "a JSON object with no command field is answered with an error and never reaches the UI" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var shell: helpers.FakeShell = undefined;
@@ -203,7 +203,7 @@ test "a second connection is served while the first stays open, and stopping end
     core.destroy();
 }
 
-test "a command waits until the page says it is listening" {
+test "a command waits until the UI says it is listening" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var shell: helpers.FakeShell = undefined;
@@ -219,10 +219,10 @@ test "a command waits until the page says it is listening" {
         .closed_without_answer = false,
     };
     const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    // The page has not said it is listening, so the command is not sent to it.
+    // The UI has not said it is listening, so the command is not sent to it.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
-    core.postMessage("{\"channel\":\"test-page-ready\",\"data\":null}");
+    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
     try shell.expectMessageContaining("\"channel\":\"test-command\"");
     core.postMessage("{\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
     thread.join();
@@ -276,7 +276,7 @@ test "an answer for a dialog that is not an array of strings is refused" {
     try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.answer.?);
 }
 
-test "the menu command chooses the menu item through the shell's callback once the page is listening" {
+test "the menu command chooses the menu item through the shell's callback once the UI is listening" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var shell: helpers.FakeShell = undefined;
@@ -292,17 +292,17 @@ test "the menu command chooses the menu item through the shell's callback once t
         .closed_without_answer = false,
     };
     const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    // The page is not listening yet, so nothing is chosen.
+    // The UI is not listening yet, so nothing is chosen.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.chosen_actions.items.len);
-    core.postMessage("{\"channel\":\"test-page-ready\",\"data\":null}");
+    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
     thread.join();
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
     try std.testing.expectEqualStrings("zoom-in\n", shell.chosen_actions.items);
 }
 
-test "choosing reload makes commands wait for the page to say it is listening again" {
+test "choosing reload makes commands wait for the UI to say it is listening again" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var shell: helpers.FakeShell = undefined;
@@ -310,7 +310,7 @@ test "choosing reload makes commands wait for the page to say it is listening ag
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"test-page-ready\",\"data\":null}");
+    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
     var reload = Client{
         .allocator = std.testing.allocator,
         .port = core.control.?.port,
@@ -330,10 +330,10 @@ test "choosing reload makes commands wait for the page to say it is listening ag
         .closed_without_answer = false,
     };
     const next_thread = try std.Thread.spawn(.{}, Client.run, .{&next});
-    // The page is reloading, so the next command is held back and not sent to it.
+    // The UI is reloading, so the next command is held back and not sent to it.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
-    core.postMessage("{\"channel\":\"test-page-ready\",\"data\":null}");
+    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
     try shell.expectMessageContaining("\"channel\":\"test-command\"");
     core.postMessage("{\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
     next_thread.join();
@@ -368,7 +368,7 @@ test "the menu command on a shell with no menu callback says what is missing" {
     try std.testing.expectEqualStrings("{\"error\":\"HostCallbackMissing\"}", client.answer.?);
 }
 
-test "the drop command records a drop the way the shell does, so the page can ask for the paths of a drop" {
+test "the drop command records a drop the way the shell does, so the UI can ask for the paths of a drop" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(std.testing.io, .{
@@ -411,7 +411,7 @@ test "the drop command records a drop the way the shell does, so the page can as
     try shell.expectMessageContaining(expected);
 }
 
-test "a drop that names an element is also sent to the page, and the page's answer is the answer" {
+test "a drop that names an element is also sent to the UI, and the UI's answer is the answer" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(std.testing.io, .{
@@ -440,7 +440,7 @@ test "a drop that names an element is also sent to the page, and the page's answ
         .answer = null,
         .closed_without_answer = false,
     };
-    core.postMessage("{\"channel\":\"test-page-ready\",\"data\":null}");
+    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
     const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
     try shell.expectMessageContaining("\"channel\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"drop\",\"dataId\":\"zone\"");
     core.postMessage("{\"id\":9,\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"dropped\":true}}}");
@@ -465,7 +465,7 @@ test "the screenshot command asks the shell to write a picture of the window to 
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"test-page-ready\",\"data\":null}");
+    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
     var client = Client{
         .allocator = std.testing.allocator,
         .port = core.control.?.port,
@@ -488,7 +488,7 @@ test "the screenshot command answers with the reason when the shell cannot captu
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"test-page-ready\",\"data\":null}");
+    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
     var client = Client{
         .allocator = std.testing.allocator,
         .port = core.control.?.port,

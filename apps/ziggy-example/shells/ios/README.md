@@ -1,6 +1,6 @@
 # Ziggy example, iOS shell
 
-A UIKit app: one view controller whose view is Ziggy's `WKWebView`. All the Ziggy behaviour is in the `ZiggyShellIOS` Swift package (`packages/ziggy/native/ios`), referenced as a local package. The deployment target is iOS 14.0. The app has no network permissions to declare, because the example page is loaded from a file. There is no way to quit an iOS app, so the test control connection's quit command destroys the core and ends the process.
+A UIKit app: one view controller whose view is Ziggy's `WKWebView`. All the Ziggy behaviour is in the `ZiggyShellIOS` Swift package (`packages/ziggy/native/ios`), referenced as a local package. The deployment target is iOS 14.0. The app has no network permissions to declare, because the example UI is loaded from a file. There is no way to quit an iOS app, so the test control connection's quit command destroys the core and ends the process.
 
 ## Web view API used
 
@@ -8,7 +8,7 @@ A UIKit app: one view controller whose view is Ziggy's `WKWebView`. All the Zigg
 
 ## Building
 
-The project links `libziggy_example.a` from the directory in the `ZIGGY_NATIVE_DIR` build setting (default `zig-out` beside the project) (which has the page embedded in it, so the app has no page files of its own). That library is built for one SDK and architecture, so fill the directory with `scripts/sync-ios.sh --sdk simulator|device` for the one you build. The build and run scripts do it for you. Code signing is off, so the app runs on a simulator and a device build must be signed before it installs.
+The project links `libziggy_example.a` from the directory in the `ZIGGY_NATIVE_DIR` build setting (default `zig-out` beside the project) (which has the UI embedded in it, so the app has no UI files of its own). That library is built for one SDK and architecture, so fill the directory with `scripts/sync-ios.sh --sdk simulator|device` for the one you build. The build and run scripts do it for you. Code signing is off, so the app runs on a simulator and a device build must be signed before it installs.
 
 ## What you do on the Mac
 

@@ -1,6 +1,6 @@
 //
-// The Ziggy example's Linux shell: what is the example's own (its name, its window and its page) on top of Ziggy's shell.
-// The page is embedded in the executable by build.zig.
+// The Ziggy example's Linux shell: what is the example's own (its name, its window and its UI) on top of Ziggy's shell.
+// The UI is embedded in the executable by build.zig.
 //
 
 const std = @import("std");

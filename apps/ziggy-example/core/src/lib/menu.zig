@@ -3,7 +3,7 @@
 //
 // An action the shells know does what it says in the shell: quit, close-window, reload, toggle-devtools, toggle-fullscreen, zoom-in,
 // zoom-out, zoom-reset, undo, redo, cut, copy, paste and select-all. Every other action is the app's own, and the core hands it
-// to the page as a menu-action event. See "Menus" in the architecture document.
+// to the UI as a menu-action event. See "Menus" in the architecture document.
 //
 pub const menu_json =
     \\[

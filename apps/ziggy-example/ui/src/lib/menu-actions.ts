@@ -1,5 +1,5 @@
 //
-// What the page does for each action of the example's menu that the shells hand it. The shells do the rest themselves
+// What the UI does for each action of the example's menu that the shells hand it. The shells do the rest themselves
 // (quit, reload, developer tools, zoom, full screen and the editing commands).
 //
 

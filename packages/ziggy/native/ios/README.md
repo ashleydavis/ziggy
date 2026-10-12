@@ -3,7 +3,7 @@
 Ziggy's shell code for iOS, as a Swift package (swift-tools-version 5.7, iOS 14). One class, `ZiggyBridge`, serves the app.
 
 - `CZiggy` is a system library target whose `ziggy.h` is a link to the core's own header (`packages/ziggy/core/src/lib/ziggy.h`).
-- `ZiggyShellIOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards page messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url`, and creates and destroys the core.
+- `ZiggyShellIOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards UI messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url`, and creates and destroys the core.
 
 The static library with the core (`libziggy_example.a` for the example) is linked by the app project.
 
@@ -12,12 +12,12 @@ The static library with the core (`libziggy_example.a` for the example) is linke
 ```swift
 let bridge = ZiggyBridge(frame: frame)  // web view, injected script, message handler
 // put bridge.webView on screen
-bridge.start()                          // creates the core and loads the page, which the core serves
+bridge.start()                          // creates the core and loads the UI, which the core serves
 // when the app ends:
 bridge.shutdown()                       // ziggy_destroy, once
 ```
 
-The page and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/bridge/inject`) are both embedded in the app's core library, so the app bundle holds neither.
+The UI and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/bridge/inject`) are both embedded in the app's core library, so the app bundle holds neither.
 
 ## Test hooks
 
@@ -25,7 +25,7 @@ When the linked library has the test hooks and `ZIGGY_TEST_MODE` is set, the she
 
 ## Failures
 
-A failure that leaves the app unusable prints to standard error and exits non-zero. A page that fails to load, a blocked navigation and a failed delivery print to standard error and the app carries on.
+A failure that leaves the app unusable prints to standard error and exits non-zero. A UI that fails to load, a blocked navigation and a failed delivery print to standard error and the app carries on.
 
 ## Keeping the app running
 
@@ -41,7 +41,7 @@ The core's `keep_alive` callback reaches `ZiggyBridge`, which takes a background
 - Folder uses `forOpeningContentTypes: [.folder]`. The shell calls `startAccessingSecurityScopedResource` on the folder and keeps access for the rest of the process, so the folder's path and everything inside it can be listed, read and written. A path from an earlier run, or a path inside the folder used after the app restarts, is denied until the user picks the folder again, because keeping access across runs needs a bookmark.
 - Save: iOS has no dialog for choosing where to save a file, so the callback fails and the core replies to the request with an error.
 
-A loopback server the page loads media from needs `NSAllowsLocalNetworking` in the app's `Info.plist`.
+A loopback server the UI loads media from needs `NSAllowsLocalNetworking` in the app's `Info.plist`.
 
 ## Host requests
 
@@ -49,4 +49,4 @@ A host request is how the core asks the app's own code for something only the pl
 
 ## Starting work from the app
 
-When the system wakes the app with no page on screen (a background task, for instance) the app starts work in the core itself. `ZiggyBridge.request(channel:data:completion:)` makes a request as the page's `invoke` does, and its reply goes to the completion and not to the page. `ZiggyBridge.send(channel:data:)` is the one-way form. `keepRunningChanged` is called on the main thread each time the core says the app must be kept running or no longer must be.
+When the system wakes the app with no UI on screen (a background task, for instance) the app starts work in the core itself. `ZiggyBridge.request(channel:data:completion:)` makes a request as the UI's `invoke` does, and its reply goes to the completion and not to the UI. `ZiggyBridge.send(channel:data:)` is the one-way form. `keepRunningChanged` is called on the main thread each time the core says the app must be kept running or no longer must be.

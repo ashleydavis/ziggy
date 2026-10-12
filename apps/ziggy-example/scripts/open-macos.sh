@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Syncs the page and Zig library, then opens the MacOS Xcode project. See open-macos.md.
+# Syncs the UI and Zig library, then opens the MacOS Xcode project. See open-macos.md.
 
 set -euo pipefail
 

@@ -297,7 +297,7 @@ fn installSignalHandlers() void {
 
 //
 // The native host callback that does a menu action. A phone has no menu bar and none of the shell's own actions (reload, zoom,
-// full screen, quit), so every action reaches the page as a menu-action message, the way an action of the page's own does on a
+// full screen, quit), so every action reaches the UI as a menu-action message, the way an action of the UI's own does on a
 // desktop. The core calls it from the thread of the test control connection.
 //
 fn menuActionCallback(user_data: ?*anyopaque, action: [*:0]const u8) callconv(.c) void {
@@ -409,7 +409,7 @@ fn newJavaBytes(env: *c.JNIEnv, bytes: []const u8) c.jbyteArray {
 // The native host callback that does one thing only the app's own code can do, by calling ZiggyHost.hostRequest, which may wait for
 // the user. The core calls it from a worker thread with no lock held. The method and the request cross as UTF-8 bytes, and Java answers
 // with a status byte (1 when it did what was asked, 0 when it could not) followed by the answer or the reason. Every way the call can
-// fail is returned as a failure with a reason, so the core reports it to the page.
+// fail is returned as a failure with a reason, so the core reports it to the UI.
 //
 fn hostRequestCallback(user_data: ?*anyopaque, method: [*:0]const u8, request_json: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
     const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
@@ -466,7 +466,7 @@ const CreateArguments = struct {
     worker_threads: u32,
     // The limit on child tasks in flight for any one parent task.
     max_concurrent_child_tasks: u32,
-    // The URL prefix of the app's bundled page.
+    // The URL prefix of the app's bundled UI.
     app_url_prefix: c.jstring,
     // The app's private data directory.
     data_dir: c.jstring,
@@ -634,14 +634,14 @@ pub fn exportJni(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // Passes a message from the page to the core.
+        // Passes a message from the UI to the core.
         //
         fn postMessage(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, message: c.jbyteArray) callconv(.c) void {
             _ = class;
             const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
             const copy = copyJavaBytes(env, std.heap.smp_allocator, message) catch |err| {
                 if (err != error.JavaException) {
-                    throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy a message from the page");
+                    throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy a message from the UI");
                 }
                 return;
             };
@@ -666,14 +666,14 @@ pub fn exportJni(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // Copies the Java byte array of a request path and finds the bundled page's file for it. Null when there is no such
+        // Copies the Java byte array of a request path and finds the bundled UI's file for it. Null when there is no such
         // file, or when the path could not be copied (in which case a Java exception is pending).
         //
         fn findUiFile(env: *c.JNIEnv, handle: c.jlong, path: c.jbyteArray) ?*const ui_files.UiFile {
             const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
             const copy = copyJavaBytes(env, std.heap.smp_allocator, path) catch |err| {
                 if (err != error.JavaException) {
-                    throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy a page path");
+                    throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy a UI path");
                 }
                 return null;
             };
@@ -682,7 +682,7 @@ pub fn exportJni(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // Gives the script to inject into the page before it loads, as UTF-8 bytes.
+        // Gives the script to inject into the UI before it loads, as UTF-8 bytes.
         //
         fn injectScript(env: *c.JNIEnv, class: c.jclass) callconv(.c) c.jbyteArray {
             _ = class;
@@ -697,27 +697,27 @@ pub fn exportJni(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // The query of the page's address as UTF-8 bytes, or null, with a Java exception pending, when the app could not make it.
+        // The query of the UI's address as UTF-8 bytes, or null, with a Java exception pending, when the app could not make it.
         //
-        fn pageQuery(env: *c.JNIEnv, class: c.jclass, handle: c.jlong) callconv(.c) c.jbyteArray {
+        fn uiQuery(env: *c.JNIEnv, class: c.jclass, handle: c.jlong) callconv(.c) c.jbyteArray {
             _ = class;
             const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
-            const text = bridge.core.pageQuery() catch |err| {
+            const text = bridge.core.uiQuery() catch |err| {
                 throwJava(env, "java/lang/IllegalStateException", @errorName(err));
                 return null;
             };
             const array = envTable(env).NewByteArray.?(env, @intCast(text.len));
             if (array == null) {
-                failOnPendingException(env, "Ziggy JNI: could not allocate a byte array for the page query");
-                fatal(env, "Ziggy JNI: could not allocate a byte array for the page query");
+                failOnPendingException(env, "Ziggy JNI: could not allocate a byte array for the UI query");
+                fatal(env, "Ziggy JNI: could not allocate a byte array for the UI query");
             }
             envTable(env).SetByteArrayRegion.?(env, array, 0, @intCast(text.len), @ptrCast(text.ptr));
-            failOnPendingException(env, "Ziggy JNI: could not copy the page query into a byte array");
+            failOnPendingException(env, "Ziggy JNI: could not copy the UI query into a byte array");
             return array;
         }
 
         //
-        // Gives the bytes of a file of the bundled page, or null when the page has no such file.
+        // Gives the bytes of a file of the bundled UI, or null when the UI has no such file.
         //
         fn uiFileContent(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, path: c.jbyteArray) callconv(.c) c.jbyteArray {
             _ = class;
@@ -726,16 +726,16 @@ pub fn exportJni(comptime app: core_module.AppHandlers) void {
             };
             const array = envTable(env).NewByteArray.?(env, @intCast(file.content.len));
             if (array == null) {
-                failOnPendingException(env, "Ziggy JNI: could not allocate a byte array for a page file");
-                fatal(env, "Ziggy JNI: could not allocate a byte array for a page file");
+                failOnPendingException(env, "Ziggy JNI: could not allocate a byte array for a UI file");
+                fatal(env, "Ziggy JNI: could not allocate a byte array for a UI file");
             }
             envTable(env).SetByteArrayRegion.?(env, array, 0, @intCast(file.content.len), @ptrCast(file.content.ptr));
-            failOnPendingException(env, "Ziggy JNI: could not copy a page file into a byte array");
+            failOnPendingException(env, "Ziggy JNI: could not copy a UI file into a byte array");
             return array;
         }
 
         //
-        // Gives the content type of a file of the bundled page, or null when the page has no such file.
+        // Gives the content type of a file of the bundled UI, or null when the UI has no such file.
         //
         fn uiFileContentType(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, path: c.jbyteArray) callconv(.c) c.jstring {
             _ = class;
@@ -771,8 +771,8 @@ pub fn exportJni(comptime app: core_module.AppHandlers) void {
     @export(&Exports.injectScript, .{
         .name = "Java_dev_ziggy_shell_ZiggyNative_injectScript",
     });
-    @export(&Exports.pageQuery, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_pageQuery",
+    @export(&Exports.uiQuery, .{
+        .name = "Java_dev_ziggy_shell_ZiggyNative_uiQuery",
     });
     @export(&Exports.uiFileContent, .{
         .name = "Java_dev_ziggy_shell_ZiggyNative_uiFileContent",

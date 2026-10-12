@@ -179,7 +179,7 @@ test "check url uses the configured prefix" {
     try std.testing.expectEqual(ziggy.types.UrlDecision.block, core.checkUrl("file:///other/index.html"));
 }
 
-test "a menu-action message from a shell reaches the page as a menu-action event" {
+test "a menu-action message from a shell reaches the UI as a menu-action event" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
@@ -209,7 +209,7 @@ test "the core holds the app's menu for shells to read" {
     try std.testing.expectEqualStrings("[]", core.menu_json);
 }
 
-test "the core finds a file of the app's bundled page by the path of a request" {
+test "the core finds a file of the app's bundled UI by the path of a request" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();

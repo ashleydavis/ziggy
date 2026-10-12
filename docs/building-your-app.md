@@ -1,6 +1,6 @@
 # Building your app
 
-A new app starts as a copy of the Ziggy example (`apps/ziggy-example`), which is a complete app with a page, a Zig core, a native project for each platform, build, run and package scripts, and smoke tests. The copy is the app's own code from then on. Ziggy itself is never copied: the app takes it as a dependency (see [Integrating Ziggy](integrating-ziggy.md)).
+A new app starts as a copy of the Ziggy example (`apps/ziggy-example`), which is a complete app with a UI, a Zig core, a native project for each platform, build, run and package scripts, and smoke tests. The copy is the app's own code from then on. Ziggy itself is never copied: the app takes it as a dependency (see [Integrating Ziggy](integrating-ziggy.md)).
 
 ## Starting a new app from the example
 
@@ -22,13 +22,13 @@ A new app starts as a copy of the Ziggy example (`apps/ziggy-example`), which is
    - The Firebase project in `scripts/distribute-android.sh`, when the app is distributed to testers (see [Distributing your app](distributing-your-app.md)).
 5. Run `bun install`, then the unit and smoke tests (below). They pass unchanged in a copy that is renamed and pointed at Ziggy: the test app built from the example passed every one on Linux and Android.
 
-Then change what the app does: its page, its core's channel and task handlers, its menu, its icon and its native projects.
+Then change what the app does: its UI, its core's channel and task handlers, its menu, its icon and its native projects.
 
 ## The parts of an app
 
-- **The page** (`page/`): the user interface, in TypeScript and HTML, built by Vite (`vite.config.ts`) into `dist`. It talks to the core through `window.ziggy`, whose types are in `ziggy-bridge`. `page/src/lib` holds plain functions with unit tests.
-- **The core** (`core/`): the app's Zig library. `core/src/index.zig` gives Ziggy the app's handlers: the channels the page sends requests on, the task types it queues, the menu, the page's query, and the keep-alive task types. `core/src/lib` holds them. The core embeds the built page, so `dist` must be built before the core.
-- **The handlers**: a channel handler answers a request from the page on the thread that handles the page's messages, so it must be quick. Anything slow is a task, which runs on the core's pool of threads, reports progress with task messages, and can be cancelled. See the [architecture guide](architecture.md#channels) for both.
+- **The UI** (`ui/`): the user interface, in TypeScript and HTML, built by Vite (`vite.config.ts`) into `dist`. It talks to the core through `window.ziggy`, whose types are in `ziggy-bridge`. `ui/src/lib` holds plain functions with unit tests.
+- **The core** (`core/`): the app's Zig library. `core/src/index.zig` gives Ziggy the app's handlers: the channels the UI sends requests on, the task types it queues, the menu, the UI's query, and the keep-alive task types. `core/src/lib` holds them. The core embeds the built UI, so `dist` must be built before the core.
+- **The handlers**: a channel handler answers a request from the UI on the thread that handles the UI's messages, so it must be quick. Anything slow is a task, which runs on the core's pool of threads, reports progress with task messages, and can be cancelled. See the [architecture guide](architecture.md#channels) for both.
 - **The shells** (`shells/<platform>/`): the app's native project for each platform, built on Ziggy's framework half for that platform: its name, window, icon, permissions and anything only the operating system can do. The Linux and Windows shells are Zig, built by `build.zig`. The MacOS and iOS shells are Xcode projects, the Android shell a Gradle project, each built by the app's scripts after the core library is built for that platform.
 - **The scripts** (`scripts/`): set up, sync, build, run, open, package, distribute and clean, for each platform, each with a markdown file beside it, and the shell libraries they share in `scripts/lib`.
 - **The smoke tests** (`smoke-tests/`): scenarios that start the real app, built with the test hooks, and drive it through the test control connection, with a library for each platform.
@@ -40,13 +40,13 @@ Run from the app's folder. `<platform>` is `linux`, `windows`, `macos`, `android
 | Command | What it does |
 |---|---|
 | `bun run setup` | One time per machine: the Android SDK, NDK and a JDK 17 on Linux and MacOS, a check of Xcode on MacOS, and the WebView2 SDK and WiX Toolset on Windows. |
-| `bun run build:<platform>` | Builds the page and the app. |
+| `bun run build:<platform>` | Builds the UI and the app. |
 | `bun run run:<platform>` | Builds the app and runs it (on an attached emulator or device for Android, on a simulator for iOS). |
 | `bun run open:<platform>` | Syncs, then opens the native project in its editor (Xcode, Android Studio). |
 | `bun run package:<platform>` | Packages the app for release (see [Distributing your app](distributing-your-app.md)). |
 | `bun run clean:<platform>` | Removes the platform's build output. |
-| `bun run compile` | Type-checks the page. |
-| `bun run test` | The page's unit tests. |
+| `bun run compile` | Type-checks the UI. |
+| `bun run test` | The UI's unit tests. |
 | `bun run test:zig` | The core's unit tests (`zig build test`). |
 | `bun run test:zig:android` | The core's unit tests on an attached Android emulator or device. |
 | `bun run test:zig:ios` | The core's unit tests on a booted iOS simulator. |

@@ -3,7 +3,7 @@ package dev.ziggy.shell;
 // What the core calls back into. The Zig side (the JNI entry points in Ziggy's core library) holds an object of this type
 // and calls these methods, from any thread.
 public interface ZiggyHost {
-    // A message from the core to the page, as UTF-8 JSON. Called from any thread, and the array belongs to the callee.
+    // A message from the core to the UI, as UTF-8 JSON. Called from any thread, and the array belongs to the callee.
     void onCoreMessage(byte[] message);
 
     // The operating system's version, as the text of a JSON string, such as "Android 16 (API 36)".

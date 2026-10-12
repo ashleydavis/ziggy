@@ -1,9 +1,9 @@
-// The script every shell injects into the page before its own scripts run. It exposes window.ziggy and nothing else
-// that a page should use, and it finds the web view's own native handle so the page never has to:
+// The script every shell injects into the UI before its own scripts run. It exposes window.ziggy and nothing else
+// that a UI should use, and it finds the web view's own native handle so the UI never has to:
 // WebKitGTK and WKWebView post through window.webkit.messageHandlers.ziggy, WebView2 through window.chrome.webview,
 // and the Android WebView through the interface object named ZiggyAndroid.
 //
-// A page message is the JSON text { "id", "channel", "data" } for a request, and the same without an id for a one-way
+// A UI message is the JSON text { "id", "channel", "data" } for a request, and the same without an id for a one-way
 // message. The shell delivers a message from the core by calling window.__ziggyReceive with the message as an object:
 // { "id", "ok", "data" } or { "id", "ok": false, "error" } for a reply, and { "channel", "data" } for an event.
 (function () {
@@ -66,12 +66,12 @@
         listeners.delete(channel);
     }
 
-    // Dropped files. A web view does not give the page the real paths of the files dropped on it: WebKitGTK lists file addresses as a
+    // Dropped files. A web view does not give the UI the real paths of the files dropped on it: WebKitGTK lists file addresses as a
     // type of the drop and gives no way to read them, and no File objects, and the others give Files that have no path readable by the
-    // page. The shell reads the paths natively and records them with the core. This catches every drop of files before the page does,
+    // UI. The shell reads the paths natively and records them with the core. This catches every drop of files before the UI does,
     // asks the core for the paths of the last drop, and fires the drop again holding one File per path, which it makes itself and
-    // remembers the path of. getPathForFile then answers from that memory, as Electron's does, so a page written for Electron runs
-    // unchanged. The Files are empty: a page that wants a dropped file's contents reads the path. WebView2 hands the shell the Files
+    // remembers the path of. getPathForFile then answers from that memory, as Electron's does, so a UI written for Electron runs
+    // unchanged. The Files are empty: a UI that wants a dropped file's contents reads the path. WebView2 hands the shell the Files
     // themselves, so there the shell reads their paths first. A drop of something else, such as a link, is left alone.
     var redispatchedDrops = new WeakSet();
     var pathsOfDroppedFiles = new WeakMap();

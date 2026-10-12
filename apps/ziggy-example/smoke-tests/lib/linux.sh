@@ -18,8 +18,8 @@ ziggy_platform_prepare() {
     (cd "$LINUX_EXAMPLE_DIR" && bun run bundle:ui) || return 1
     (cd "$LINUX_EXAMPLE_DIR" && zig build ziggy-example-linux -Dtest-hooks=true -p "$run_dir/test") || return 1
     (cd "$LINUX_EXAMPLE_DIR" && zig build ziggy-example-linux -p "$run_dir/release") || return 1
-    # The page is embedded in the executable, so nothing but the executable is installed. A scenario that passes proves the
-    # page loads from the executable alone, which is why nothing is copied beside it.
+    # The UI is embedded in the executable, so nothing but the executable is installed. A scenario that passes proves the
+    # UI loads from the executable alone, which is why nothing is copied beside it.
     local installed
     installed="$(find "$run_dir/test/bin" "$run_dir/release/bin" -type f | wc -l)"
     if [ "$installed" -ne 2 ]; then
@@ -110,8 +110,8 @@ ziggy_platform_has_control_port() {
 
 
 #
-# Succeeds when the developer tools are showing. They dock inside the window, so the page's area is smaller than it was.
-# Usage: ziggy_platform_devtools_visible <test_dir> <the page's area before they opened>
+# Succeeds when the developer tools are showing. They dock inside the window, so the UI's area is smaller than it was.
+# Usage: ziggy_platform_devtools_visible <test_dir> <the UI's area before they opened>
 #
 ziggy_platform_devtools_visible() {
     [ "$(viewport_size)" != "$2" ]

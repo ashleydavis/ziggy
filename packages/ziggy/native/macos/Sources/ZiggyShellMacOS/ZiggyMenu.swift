@@ -311,7 +311,7 @@ final class ZiggyMenu: NSObject {
         }
     }
 
-    // Sets the page zoom, rounded to a tenth and kept within the limits.
+    // Sets the UI zoom, rounded to a tenth and kept within the limits.
     private func setZoom(_ webView: WKWebView, _ level: Double) {
         let limited = min(max((level * 10).rounded() / 10, ZiggyMenu.zoomRange.lowerBound), ZiggyMenu.zoomRange.upperBound)
         webView.pageZoom = CGFloat(limited)

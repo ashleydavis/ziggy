@@ -309,7 +309,7 @@ pub const ZiggyQueueBackend = struct {
 
     //
     // Drops the queued tasks with the given source, tells the running ones to stop, and fires the callbacks registered for the source.
-    // (The page is told of each queued task that was dropped, as a cancelled completion.)
+    // (The UI is told of each queued task that was dropped, as a cancelled completion.)
     //
     pub fn cancelTasks(self: *ZiggyQueueBackend, source: []const u8) void {
         self.runner.cancelSource(source);
@@ -492,7 +492,7 @@ const ContextBridge = struct {
     };
 
     //
-    // Sends a message to the page and to the observers of the backend.
+    // Sends a message to the UI and to the observers of the backend.
     //
     fn sendMessageErased(ptr: *anyopaque, message: std.json.Value) void {
         const self: *ContextBridge = @ptrCast(@alignCast(ptr));
@@ -532,7 +532,7 @@ fn handlesTaskType(user_data: ?*anyopaque, task_type: []const u8) bool {
 //
 // Runs the handler registered for the task's type, with the context those handlers expect, and returns its outputs as JSON text.
 // A handler that fails gives the error it returned, with the message it recorded (the task queue's throwError), which the app's
-// describe_error gives to the page.
+// describe_error gives to the UI.
 //
 fn runRegisteredHandler(user_data: ?*anyopaque, context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     const backend: *ZiggyQueueBackend = @ptrCast(@alignCast(user_data.?));

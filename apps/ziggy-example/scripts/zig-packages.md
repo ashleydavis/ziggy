@@ -1,6 +1,6 @@
 # zig-packages.sh
 
-Builds the page first (`bun run bundle:ui`), because the example's core embeds it, then builds, cross-builds or tests the Zig parts of the example with the steps of the example's own `build.zig`, which takes Ziggy as a dependency: the example's core (`core`, with Ziggy's core built into it) and the shells.
+Builds the UI first (`bun run bundle:ui`), because the example's core embeds it, then builds, cross-builds or tests the Zig parts of the example with the steps of the example's own `build.zig`, which takes Ziggy as a dependency: the example's core (`core`, with Ziggy's core built into it) and the shells.
 
 ## Usage
 

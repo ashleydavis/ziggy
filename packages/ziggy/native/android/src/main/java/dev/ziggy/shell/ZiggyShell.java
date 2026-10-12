@@ -44,8 +44,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-// Ziggy's Android shell. It configures a WebView, injects window.ziggy before the page's own scripts, loads the app's
-// bundled page from the APK assets, calls the core through JNI and moves messages between the page and the core.
+// Ziggy's Android shell. It configures a WebView, injects window.ziggy before the UI's own scripts, loads the app's
+// bundled UI from the APK assets, calls the core through JNI and moves messages between the UI and the core.
 //
 // An activity creates one, calls start from onCreate and destroy from onDestroy. Messages from the core arrive on any
 // thread and are posted to the main thread in order before they touch the web view.
@@ -56,7 +56,7 @@ public final class ZiggyShell implements ZiggyHost {
     private static final String EXTRA_TEST_MODE = "ziggy.testMode";
     private static final String EXTRA_TEST_PORT_FILE = "ziggy.testPortFile";
 
-    // The prefix every address of the app's own page starts with. The page is embedded in the app's native library and each file is
+    // The prefix every address of the app's own UI starts with. The UI is embedded in the app's native library and each file is
     // answered from there in shouldInterceptRequest. The host name is under .invalid, which can never be looked up.
     private static final String APP_URL_PREFIX = "https://ziggy-app.invalid/";
 
@@ -72,18 +72,18 @@ public final class ZiggyShell implements ZiggyHost {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     // Calls into the core hold the read lock and destroy holds the write lock, so the core is never released while a
-    // message or an address check is inside it. The page's messages and the web view's request checks come in on threads
+    // message or an address check is inside it. The UI's messages and the web view's request checks come in on threads
     // of their own.
     private final ReentrantReadWriteLock coreLock = new ReentrantReadWriteLock();
 
     // The core's handle, or 0 before it is created and after it is destroyed. Guarded by coreLock.
     private long handle;
 
-    // True once the page has finished loading, so window.__ziggyReceive exists. Only the main thread reads or writes it.
-    private boolean pageReady;
+    // True once the UI has finished loading, so window.__ziggyReceive exists. Only the main thread reads or writes it.
+    private boolean uiReady;
 
-    // The messages the core sent before the page finished loading, held for the main thread to deliver when it has.
-    private final ArrayList<String> beforePage = new ArrayList<String>();
+    // The messages the core sent before the UI finished loading, held for the main thread to deliver when it has.
+    private final ArrayList<String> beforeUi = new ArrayList<String>();
 
     // Set once the core has been destroyed, so nothing queued for the main thread reaches the web view afterwards.
     private volatile boolean destroyed;
@@ -131,7 +131,7 @@ public final class ZiggyShell implements ZiggyHost {
         this.maxConcurrentChildTasks = maxConcurrentChildTasks;
     }
 
-    // Creates the core, configures the web view and loads the page. Call it once, on the main thread.
+    // Creates the core, configures the web view and loads the UI. Call it once, on the main thread.
     public void start() {
         System.loadLibrary(nativeLibraryName);
         Intent intent = activity.getIntent();
@@ -157,11 +157,11 @@ public final class ZiggyShell implements ZiggyHost {
         }
 
         configureWebView();
-        String query = new String(ZiggyNative.pageQuery(created), StandardCharsets.UTF_8);
+        String query = new String(ZiggyNative.uiQuery(created), StandardCharsets.UTF_8);
         webView.loadUrl(APP_URL_PREFIX + "index.html" + (query.isEmpty() ? "" : "?" + query));
     }
 
-    // Destroys the core once. After it returns nothing more is delivered to the page. Call it from onDestroy.
+    // Destroys the core once. After it returns nothing more is delivered to the UI. Call it from onDestroy.
     public void destroy() {
         destroyed = true;
         // Destroying the core waits for its worker threads, and one may be waiting on a picker that will now never answer.
@@ -184,11 +184,11 @@ public final class ZiggyShell implements ZiggyHost {
     }
 
     private void configureWebView() {
-        // The page is a classic script bundle served from the APK assets. File access is off, because the assets load
-        // without it, and nothing else on the file system is the page's to read.
+        // The UI is a classic script bundle served from the APK assets. File access is off, because the assets load
+        // without it, and nothing else on the file system is the UI's to read.
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
-        // localStorage and IndexedDB are off in a web view until this is set, and a page expects them to work.
+        // localStorage and IndexedDB are off in a web view until this is set, and a UI expects them to work.
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowFileAccessFromFileURLs(false);
@@ -201,16 +201,16 @@ public final class ZiggyShell implements ZiggyHost {
             WebView.setWebContentsDebuggingEnabled(true);
         }
 
-        // The script has to run before the page's own scripts, and only the document start API guarantees that: running it
-        // when the page starts loading races the page's first script. So a web view without the API is refused here, loudly,
+        // The script has to run before the UI's own scripts, and only the document start API guarantees that: running it
+        // when the UI starts loading races the UI's first script. So a web view without the API is refused here, loudly,
         // and there is no fallback that could quietly lose the race.
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
-            throw new IllegalStateException("This WebView cannot run a script at document start (WebViewFeature.DOCUMENT_START_SCRIPT), which Ziggy needs to expose window.ziggy before the page's scripts.");
+            throw new IllegalStateException("This WebView cannot run a script at document start (WebViewFeature.DOCUMENT_START_SCRIPT), which Ziggy needs to expose window.ziggy before the UI's scripts.");
         }
         WebViewCompat.addDocumentStartJavaScript(webView, new String(ZiggyNative.injectScript(), StandardCharsets.UTF_8), Collections.singleton("*"));
 
         // An app targeting Android 15 or later is drawn edge to edge, with the web view running under the status bar, the
-        // navigation bar and the keyboard. The page is shared with platforms that have no such bars, so the shell keeps the web
+        // navigation bar and the keyboard. The UI is shared with platforms that have no such bars, so the shell keeps the web
         // view's content clear of them by giving it margins of the insets the window reports, which also keeps working once the
         // platform stops letting an app opt out of edge to edge.
         // Before Android 11 the window insets have no per-bar types, and before Android 15 the system keeps an app inside the
@@ -218,7 +218,7 @@ public final class ZiggyShell implements ZiggyHost {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             webView.setOnApplyWindowInsetsListener((view, insets) -> {
                 Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.ime());
-                // Margins, not padding: a web view lays its page out over its padding.
+                // Margins, not padding: a web view lays its UI out over its padding.
                 ViewGroup.MarginLayoutParams layout = (ViewGroup.MarginLayoutParams) view.getLayoutParams();
                 layout.setMargins(bars.left, bars.top, bars.right, bars.bottom);
                 view.setLayoutParams(layout);
@@ -226,7 +226,7 @@ public final class ZiggyShell implements ZiggyHost {
             });
         }
 
-        webView.addJavascriptInterface(new PageBridge(), "ZiggyAndroid");
+        webView.addJavascriptInterface(new UiBridge(), "ZiggyAndroid");
         webView.setWebViewClient(new ZiggyWebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -234,15 +234,15 @@ public final class ZiggyShell implements ZiggyHost {
                 Log.println(
                     message.messageLevel() == ConsoleMessage.MessageLevel.ERROR ? Log.ERROR : Log.INFO,
                     TAG,
-                    "page console: " + message.message() + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
+                    "UI console: " + message.message() + " (" + message.sourceId() + ":" + message.lineNumber() + ")");
                 return true;
             }
         });
     }
 
-    // Answers a request to the app's own page from the files embedded in the core library: the file's bytes with its content
-    // type, or a 404 when the page has no such file. Anything asked after the core is destroyed is refused.
-    private WebResourceResponse pageResponse(String url) {
+    // Answers a request to the app's own UI from the files embedded in the core library: the file's bytes with its content
+    // type, or a 404 when the UI has no such file. Anything asked after the core is destroyed is refused.
+    private WebResourceResponse uiResponse(String url) {
         String path = url.substring(APP_URL_PREFIX.length());
         int pathEnd = path.length();
         for (int index = 0; index < path.length(); index++) {
@@ -301,8 +301,8 @@ public final class ZiggyShell implements ZiggyHost {
                 if (destroyed) {
                     return;
                 }
-                if (!pageReady) {
-                    beforePage.add(text);
+                if (!uiReady) {
+                    beforeUi.add(text);
                     return;
                 }
                 webView.evaluateJavascript("window.__ziggyReceive(" + text + ");", null);
@@ -639,14 +639,14 @@ public final class ZiggyShell implements ZiggyHost {
         return file.getAbsolutePath();
     }
 
-    // The object the page reaches as window.ZiggyAndroid. Its one method is how the injected script posts a message.
-    private final class PageBridge {
+    // The object the UI reaches as window.ZiggyAndroid. Its one method is how the injected script posts a message.
+    private final class UiBridge {
         @JavascriptInterface
         public void postMessage(String message) {
             coreLock.readLock().lock();
             try {
                 if (handle == 0) {
-                    Log.w(TAG, "A message from the page arrived after the core was destroyed and was dropped");
+                    Log.w(TAG, "A message from the UI arrived after the core was destroyed and was dropped");
                     return;
                 }
                 ZiggyNative.postMessage(handle, message.getBytes(StandardCharsets.UTF_8));
@@ -656,23 +656,23 @@ public final class ZiggyShell implements ZiggyHost {
         }
     }
 
-    // Decides every navigation and request with the core's origin check: the app's own page loads, http, https and mailto
+    // Decides every navigation and request with the core's origin check: the app's own UI loads, http, https and mailto
     // links open in the system browser, and everything else is blocked.
     private final class ZiggyWebViewClient extends WebViewClient {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
-            pageReady = false;
+            uiReady = false;
         }
 
         // The injected script ran at document start, so window.__ziggyReceive exists now: the messages the core sent while the
-        // page was loading are delivered in the order they were sent.
+        // UI was loading are delivered in the order they were sent.
         @Override
         public void onPageFinished(WebView view, String url) {
-            pageReady = true;
-            for (String text : beforePage) {
+            uiReady = true;
+            for (String text : beforeUi) {
                 webView.evaluateJavascript("window.__ziggyReceive(" + text + ");", null);
             }
-            beforePage.clear();
+            beforeUi.clear();
         }
 
         @Override
@@ -698,9 +698,9 @@ public final class ZiggyShell implements ZiggyHost {
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             String url = request.getUrl().toString();
             if (url.startsWith(APP_URL_PREFIX)) {
-                return pageResponse(url);
+                return uiResponse(url);
             }
-            // Only a navigation is checked, as on every other platform. The page loads media from a server on the loopback address.
+            // Only a navigation is checked, as on every other platform. The UI loads media from a server on the loopback address.
             if (!request.isForMainFrame() || checkUrl(url) == URL_ALLOW) {
                 return null;
             }

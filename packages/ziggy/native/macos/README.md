@@ -3,7 +3,7 @@
 Ziggy's shell code for MacOS, as a Swift package (swift-tools-version 5.7, macOS 11). One class, `ZiggyBridge`, serves the app.
 
 - `CZiggy` is a system library target whose `ziggy.h` is a link to the core's own header (`packages/ziggy/core/src/lib/ziggy.h`).
-- `ZiggyShellMacOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards page messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url`, and creates and destroys the core.
+- `ZiggyShellMacOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards UI messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url`, and creates and destroys the core.
 
 The static library with the core (`libziggy_example.a` for the example) is linked by the app project.
 
@@ -12,12 +12,12 @@ The static library with the core (`libziggy_example.a` for the example) is linke
 ```swift
 let bridge = ZiggyBridge(frame: frame)  // web view, injected script, message handler
 // put bridge.webView on screen
-bridge.start()                          // creates the core and loads the page, which the core serves
+bridge.start()                          // creates the core and loads the UI, which the core serves
 // when the app ends:
 bridge.shutdown()                       // ziggy_destroy, once
 ```
 
-The page and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/bridge/inject`) are both embedded in the app's core library, so the app bundle holds neither.
+The UI and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/bridge/inject`) are both embedded in the app's core library, so the app bundle holds neither.
 
 ## Test hooks
 
@@ -25,7 +25,7 @@ When the linked library has the test hooks and `ZIGGY_TEST_MODE` is set, the she
 
 ## Failures
 
-A failure that leaves the app unusable prints to standard error and exits non-zero. A page that fails to load, a blocked navigation and a failed delivery print to standard error and the app carries on.
+A failure that leaves the app unusable prints to standard error and exits non-zero. A UI that fails to load, a blocked navigation and a failed delivery print to standard error and the app carries on.
 
 ## Menu and developer tools
 
@@ -43,6 +43,6 @@ Developer tools are on in every build. The `developerExtrasEnabled` preference g
 
 ## Dropped files
 
-The web view is a subclass (`ZiggyWebView`) that overrides `performDragOperation`, reads the file paths from the dragging pasteboard, records them with the core (`ziggy_files_dropped`) and then lets the web view carry on. The inject script gives the page the paths.
+The web view is a subclass (`ZiggyWebView`) that overrides `performDragOperation`, reads the file paths from the dragging pasteboard, records them with the core (`ziggy_files_dropped`) and then lets the web view carry on. The inject script gives the UI the paths.
 
-A loopback server the page loads media from needs `NSAllowsLocalNetworking` in the app's `Info.plist`.
+A loopback server the UI loads media from needs `NSAllowsLocalNetworking` in the app's `Info.plist`.

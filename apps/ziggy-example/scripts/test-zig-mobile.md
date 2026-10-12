@@ -12,4 +12,4 @@ Runs the unit tests of the example's core (`core`) on a phone platform, and of Z
 - `ios`: builds the programs for the iOS simulator (`aarch64-ios.14.0-simulator`) and runs each with `xcrun simctl spawn` on the booted simulator. A simulator must already be booted, and the script fails when none is. It needs a Mac.
 - `--ziggy-dir <dir>`: a checkout of Ziggy, whose core's tests run as well.
 
-Both start by building the page (`bun run bundle:ui`), because the example's core embeds it.
+Both start by building the UI (`bun run bundle:ui`), because the example's core embeds it.

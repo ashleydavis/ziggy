@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Builds the example's page and its Linux shell, which embeds the page in the executable. See sync-linux.md.
+# Builds the example's UI and its Linux shell, which embeds the UI in the executable. See sync-linux.md.
 
 set -eu
 

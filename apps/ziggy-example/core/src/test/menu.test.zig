@@ -2,7 +2,7 @@ const std = @import("std");
 const ziggy = @import("ziggy");
 const example = @import("ziggy-example-core");
 
-// The actions every shell performs itself. Every other action in the menu is the app's and goes to the page.
+// The actions every shell performs itself. Every other action in the menu is the app's and goes to the UI.
 const shell_actions = [_][]const u8{ "quit", "close-window", "reload", "toggle-devtools", "toggle-fullscreen", "zoom-in", "zoom-out", "zoom-reset", "undo", "redo", "cut", "copy", "paste", "select-all" };
 
 fn checkItems(items: std.json.Value, seen_accelerators: *std.ArrayList([]const u8)) !void {
@@ -40,7 +40,7 @@ test "the menu is valid JSON of menus with labelled items, each with an action a
     }
 }
 
-test "the menu has the actions the page handles and the developer tools item" {
+test "the menu has the actions the UI handles and the developer tools item" {
     for ([_][]const u8{ "start-short", "start-long", "start-many", "cancel-long", "about", "toggle-devtools", "quit" }) |action| {
         const wanted = try std.fmt.allocPrint(std.testing.allocator, "\"action\": \"{s}\"", .{action});
         defer std.testing.allocator.free(wanted);
@@ -48,10 +48,10 @@ test "the menu has the actions the page handles and the developer tools item" {
     }
 }
 
-test "the actions that are not the shells' own are the page's, and none is spelled like a shell action" {
+test "the actions that are not the shells' own are the UI's, and none is spelled like a shell action" {
     var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, example.app.menu_json, .{});
     defer parsed.deinit();
-    var page_actions: usize = 0;
+    var ui_actions: usize = 0;
     for (parsed.value.array.items) |menu| {
         for (menu.object.get("items").?.array.items) |item| {
             const action = ziggy.json_util.getString(item, "action") orelse continue;
@@ -62,9 +62,9 @@ test "the actions that are not the shells' own are the page's, and none is spell
                 }
             }
             if (!is_shell_action) {
-                page_actions += 1;
+                ui_actions += 1;
             }
         }
     }
-    try std.testing.expectEqual(@as(usize, 5), page_actions);
+    try std.testing.expectEqual(@as(usize, 5), ui_actions);
 }

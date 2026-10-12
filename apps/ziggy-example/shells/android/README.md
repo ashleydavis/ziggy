@@ -5,7 +5,7 @@ The example's Android project: one activity (`MainActivity`) that hosts a web vi
 What is packaged:
 
 - The Zig core library `libziggy_example.so` per architecture (`arm64-v8a` and `x86_64`), with the JNI entry points in Zig.
-- The built page and the script that exposes `window.ziggy`, both embedded in `libziggy_example.so`. The shell answers every request to `https://ziggy-app.invalid/` from the page, so the APK has no page files and no assets of its own.
+- The built UI and the script that exposes `window.ziggy`, both embedded in `libziggy_example.so`. The shell answers every request to `https://ziggy-app.invalid/` from the UI, so the APK has no UI files and no assets of its own.
 
 All of it is generated into `app/build/ziggy` by `scripts/sync-android.sh`; see `scripts/*-android.md` for the setup, sync, build, run, open, package and clean scripts.
 

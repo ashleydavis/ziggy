@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- The example's media server listens on the loopback address, and opening a socket needs this permission. The app reaches no
-         other host: its page is in the APK and external links open in the system browser. -->
+         other host: its UI is in the APK and external links open in the system browser. -->
     <uses-permission android:name="android.permission.INTERNET" />
 
     <application

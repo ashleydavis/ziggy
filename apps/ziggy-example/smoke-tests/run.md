@@ -13,9 +13,9 @@ Builds the example twice for the platform, once with the test hooks and once wit
 
 ## Scenarios
 
-- `1-reply`: the page loads and the Zig core answers a request.
+- `1-reply`: the UI loads and the Zig core answers a request.
 - `2-short-task`: a short task sends output and progress and its job goes away.
-- `3-long-task-with-children`: a long task queues children and waits for them while the page stays responsive.
+- `3-long-task-with-children`: a long task queues children and waits for them while the UI stays responsive.
 - `4-cancel-long-task`: cancelling a source stops its task early.
 - `5-cancel-one-of-several-sources`: cancelling one source leaves the other tasks running.
 - `6-edges`: a large payload, text with quotes and non-ASCII characters, an error reply, a failing task, a file in the data directory and the native host callback.
@@ -23,19 +23,19 @@ Builds the example twice for the platform, once with the test hooks and once wit
 - `8-release-has-no-hooks`: the release build has no control connection.
 - `9-quit-ends-everything`: quitting with tasks running ends the app and everything it started.
 - `10-pickers`: the file and folder buttons show what the dialogs return, several files, a folder, a save location and a cancel. The scenario answers each dialog through the control connection, so no native dialog is shown.
-- `16-media-server`: the page loads an image and a video from the loopback HTTP server in the example's core, and asks it for a range of bytes. The video is read to its metadata only, because the Android emulator's software video decoding crashes the emulator.
-- `17-page-storage`: a value the page writes to `localStorage` and to IndexedDB is still there after the app is quit and started again. It waits before the restart because Android's web view writes `localStorage` to disk a few seconds after the page sets it.
+- `16-media-server`: the UI loads an image and a video from the loopback HTTP server in the example's core, and asks it for a range of bytes. The video is read to its metadata only, because the Android emulator's software video decoding crashes the emulator.
+- `17-ui-storage`: a value the UI writes to `localStorage` and to IndexedDB is still there after the app is quit and started again. It waits before the restart because Android's web view writes `localStorage` to disk a few seconds after the UI sets it.
 - `18-keep-alive-survives-leaving`: on a phone, a keep-alive background task goes on counting in a file in the data directory when the app is sent to the background, and on Android the foreground service is running. On a desktop, closing the window quits the app even with a keep-alive task running, and the scenario checks the app ends.
 
 The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a phone, because the menu is a desktop feature. They choose menu items through the control connection's `menu` command, which calls the shell's own function for the item, the one a click runs, so the shell's actions really happen:
 
-- `11-menu-page-actions`: About, and the items that start and cancel tasks, do what their buttons do.
-- `12-menu-view`: Reload starts the page afresh, and the zoom items change the size of the area the page is drawn in.
-- `13-menu-edit`: Select All, Cut, Paste, Copy, Undo and Redo edit the page's text area.
+- `11-menu-ui-actions`: About, and the items that start and cancel tasks, do what their buttons do.
+- `12-menu-view`: Reload starts the UI afresh, and the zoom items change the size of the area the UI is drawn in.
+- `13-menu-edit`: Select All, Cut, Paste, Copy, Undo and Redo edit the UI's text area.
 - `14-menu-quit`: Quit ends the app and everything it started, with tasks running.
 - `15-menu-devtools`: Toggle Developer Tools opens and closes the developer tools, seen the way each platform shows them.
 - `19-normal-task-ends-with-window`: closing the window with only a normal background task running ends the app.
-- `20-drop-files`: a file dropped on the window gets its real path from `getPathForFile`, and a file of another size does not. The drop is faked in two steps, because no tool can drag a file into the window: the `drop` command records it with the core and `drop-file` gives the page a drop event. The shell's own reading of a real drop is tested by hand.
+- `20-drop-files`: a file dropped on the window gets its real path from `getPathForFile`, and a file of another size does not. The drop is faked in two steps, because no tool can drag a file into the window: the `drop` command records it with the core and `drop-file` gives the UI a drop event. The shell's own reading of a real drop is tested by hand.
 
 Toggle Full Screen is not smoke tested. The Linux suite runs on a virtual display with no window manager, and nothing honours a request for full screen there, so there is nothing to see change.
 

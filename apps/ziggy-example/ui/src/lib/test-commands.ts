@@ -1,7 +1,7 @@
 import type { IJsonObject } from "ziggy-bridge";
 
 //
-// The commands the test control connection forwards to the page, performed on the page's DOM by data-id. The page
+// The commands the test control connection forwards to the UI, performed on the UI's DOM by data-id. The UI
 // answers each with a result. These exist only so the smoke tests can drive the real app, and the core sends them only in
 // a test hooks build.
 //
@@ -27,7 +27,7 @@ export interface ITestCommand {
 }
 
 //
-// What the page answers a command with.
+// What the UI answers a command with.
 //
 export interface ITestResult {
     // Whether the command did what it was asked.
@@ -41,7 +41,7 @@ export interface ITestResult {
 }
 
 //
-// What a command needs to find and act on elements. The page gives the real document and a test gives a stand-in.
+// What a command needs to find and act on elements. The UI gives the real document and a test gives a stand-in.
 //
 export interface IElementFinder {
     // Finds the element with the data-id, or null.
@@ -108,7 +108,7 @@ export function performTestCommand(finder: IElementFinder, command: ITestCommand
 }
 
 //
-// Converts a result to the JSON the page sends back on the test-result channel. A field with no value is left out.
+// Converts a result to the JSON the UI sends back on the test-result channel. A field with no value is left out.
 //
 export function testResultToJson(result: ITestResult): IJsonObject {
     const json: IJsonObject = { ok: result.ok };
@@ -122,7 +122,7 @@ export function testResultToJson(result: ITestResult): IJsonObject {
 }
 
 //
-// Answers the viewport command: the size in pixels of the area the page is drawn in, as "<width>x<height>". Zooming, docking the
+// Answers the viewport command: the size in pixels of the area the UI is drawn in, as "<width>x<height>". Zooming, docking the
 // developer tools and going full screen all change it, which is how a test sees the View menu's items do their work.
 //
 export function performViewportCommand(width: number, height: number): ITestResult {
@@ -131,7 +131,7 @@ export function performViewportCommand(width: number, height: number): ITestResu
 
 //
 // Answers the insert command: puts focus in the element and inserts the text at its cursor the way typing does, so the browser
-// records it for undo, which setting a value does not. The page gives the function that does the insertion.
+// records it for undo, which setting a value does not. The UI gives the function that does the insertion.
 //
 export function performInsertCommand(finder: IElementFinder, command: ITestCommand, insertText: (text: string) => boolean): ITestResult {
     if (command.dataId === undefined || command.text === undefined) {
@@ -150,7 +150,7 @@ export function performInsertCommand(finder: IElementFinder, command: ITestComma
 
 //
 // Answers the drop-file command: drops a file of the given name and size on the element, as the browser does when the user drops a
-// file there, so the page's drop handling runs. The page gives the function that makes the drop event, which carries a File.
+// file there, so the UI's drop handling runs. The UI gives the function that makes the drop event, which carries a File.
 //
 export function performDropFileCommand(finder: IElementFinder, command: ITestCommand, makeDropEvent: (fileName: string, fileSize: number) => Event): ITestResult {
     if (command.dataId === undefined || command.fileName === undefined || command.fileSize === undefined) {

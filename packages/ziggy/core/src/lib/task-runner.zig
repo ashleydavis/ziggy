@@ -59,7 +59,7 @@ pub const TaskKind = enum {
 // A task type and its handler.
 //
 pub const TaskHandlerEntry = struct {
-    // The task type string the page queues the task under.
+    // The task type string the UI queues the task under.
     name: []const u8,
     // The function that runs the task.
     handler: TaskHandler,
@@ -143,7 +143,7 @@ const TaskState = enum {
 };
 
 //
-// The error of a failed task in a task-completed event, laid out like the error objects the page reads, with the fields that survive JSON.
+// The error of a failed task in a task-completed event, laid out like the error objects the UI reads, with the fields that survive JSON.
 //
 const ErrorObject = struct {
     // The text of the error.
@@ -155,7 +155,7 @@ const ErrorObject = struct {
 // parent can await one after it has finished.
 //
 const Task = struct {
-    // The id the page gave the task, or the parent's id with a child suffix for a child.
+    // The id the UI gave the task, or the parent's id with a child suffix for a child.
     id: []u8,
     // The task type string.
     task_type: []u8,
@@ -186,7 +186,7 @@ const Task = struct {
     next_child: u32,
     // How the task ended, once it has.
     completion: ?Completion,
-    // For a task that answers a request from the page: the JSON text of the request's id. When the task ends the core sends the
+    // For a task that answers a request from the UI: the JSON text of the request's id. When the task ends the core sends the
     // reply to that request, instead of the task-completed event. Owned.
     reply_id_json: ?[]u8,
 };
@@ -269,7 +269,7 @@ pub const TaskContext = struct {
     }
 
     //
-    // Sends any value std.json can serialise to the page as the message of a task-message event.
+    // Sends any value std.json can serialise to the UI as the message of a task-message event.
     //
     pub fn sendMessage(self: *TaskContext, message: anytype) !void {
         const json = try json_util.stringify(self.arena, message);
@@ -277,7 +277,7 @@ pub const TaskContext = struct {
     }
 
     //
-    // Sends JSON text to the page as the message of a task-message event.
+    // Sends JSON text to the UI as the message of a task-message event.
     //
     pub fn sendRawMessage(self: *TaskContext, json: []const u8) !void {
         try self.runner.emitTaskMessage(self.task, json);
@@ -527,7 +527,7 @@ pub const TaskRunner = struct {
 
     //
     // Queues a top level task and returns at once. Two live tasks may share an id, and each reports its own completion. When
-    // reply_id_json is given, the task answers the page request with that id: its end is reported as that request's reply, and no
+    // reply_id_json is given, the task answers the UI request with that id: its end is reported as that request's reply, and no
     // task-completed event is sent.
     //
     pub fn addTask(self: *TaskRunner, task_id: []const u8, task_type: []const u8, source: []const u8, data_json: []const u8, priority: TaskPriority, reply_id_json: ?[]const u8) !void {
@@ -871,7 +871,7 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Records how a task ended, tells the page, then tells the parent, and releases a top level task. The page is told
+    // Records how a task ended, tells the UI, then tells the parent, and releases a top level task. The UI is told
     // first because the moment the parent knows a child is done it may release that child.
     //
     fn finish(self: *TaskRunner, task: *Task, completion: Completion) void {
@@ -1041,7 +1041,7 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Tells the page a task sent a message, then the observer.
+    // Tells the UI a task sent a message, then the observer.
     //
     fn emitTaskMessage(self: *TaskRunner, task: *Task, message_json: []const u8) !void {
         if (self.silent.load(.acquire)) {
@@ -1070,7 +1070,7 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Sends the reply to the page request a task was answering: the task's result on success, or an error reply saying why not.
+    // Sends the reply to the UI request a task was answering: the task's result on success, or an error reply saying why not.
     //
     fn emitReply(self: *TaskRunner, reply_id_json: []const u8, completion: Completion) void {
         if (self.silent.load(.acquire)) {
@@ -1095,7 +1095,7 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Tells the page a task has ended, with the payload `{taskId, result}`, where result is the
+    // Tells the UI a task has ended, with the payload `{taskId, result}`, where result is the
     // full ITaskResult (taskId, status, errorMessage, outputs, type, inputs). TaskStatus has no cancelled, so a cancelled task is
     // reported as failed with the error message "Cancelled". The runner knows the task's type and input, so they come from it.
     //

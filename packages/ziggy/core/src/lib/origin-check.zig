@@ -1,5 +1,5 @@
 //
-// Decides whether an address is the app's own bundled page. Written once, here, and called by every shell.
+// Decides whether an address is the app's own bundled UI. Written once, here, and called by every shell.
 //
 
 const types = @import("types.zig");

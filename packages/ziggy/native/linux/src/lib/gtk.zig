@@ -214,7 +214,7 @@ pub const GErrorFields = extern struct {
     message: [*:0]const u8,
 };
 
-// WebKitSnapshotRegion: WEBKIT_SNAPSHOT_REGION_VISIBLE is the part of the page the window shows.
+// WebKitSnapshotRegion: WEBKIT_SNAPSHOT_REGION_VISIBLE is the part of the UI the window shows.
 pub const WEBKIT_SNAPSHOT_REGION_VISIBLE: c_uint = 0;
 
 // WebKitSnapshotOptions: WEBKIT_SNAPSHOT_OPTIONS_NONE.

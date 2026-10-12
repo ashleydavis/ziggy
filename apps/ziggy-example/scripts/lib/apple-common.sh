@@ -71,7 +71,7 @@ apple_zig_arch() {
     esac
 }
 
-# Bundles the example's page and builds the Zig static library, which embeds the page, so an Xcode build has everything it links.
+# Bundles the example's UI and builds the Zig static library, which embeds the UI, so an Xcode build has everything it links.
 # <native_dir> gets lib/libziggy_example.a and include/ziggy.h.
 # Usage: apple_sync_native <zig_target> <native_dir> <yes|no test hooks> <zig optimize mode>
 apple_sync_native() {
@@ -80,8 +80,8 @@ apple_sync_native() {
     local test_hooks="$3"
     local optimize="$4"
     apple_require_tool bun zig rsync xcrun
-    echo "Bundling the page..."
-    (cd "$APPLE_EXAMPLE_DIR" && bun run bundle:ui) || apple_fail "bundling the page failed."
+    echo "Bundling the UI..."
+    (cd "$APPLE_EXAMPLE_DIR" && bun run bundle:ui) || apple_fail "bundling the UI failed."
     echo "Building the Zig library for $zig_target (optimize $optimize, test hooks $test_hooks)..."
     if [ "$test_hooks" = "yes" ]; then
         (cd "$APPLE_EXAMPLE_DIR" && zig build ziggy-example-core -Dtarget="$zig_target" -Doptimize="$optimize" -Dtest-hooks=true -p "$native_dir") || apple_fail "the Zig build failed."

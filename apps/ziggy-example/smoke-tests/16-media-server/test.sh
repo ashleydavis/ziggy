@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# The page loads an image and a video from the loopback media server that is part of the example's core, and asks it for a
-# range of bytes with a script request, which the web view allows only when the server answers with the page's origin allowed.
+# The UI loads an image and a video from the loopback media server that is part of the example's core, and asks it for a
+# range of bytes with a script request, which the web view allows only when the server answers with the UI's origin allowed.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 

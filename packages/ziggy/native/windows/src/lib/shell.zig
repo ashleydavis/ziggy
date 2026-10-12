@@ -1,6 +1,6 @@
 //
-// Ziggy's Windows shell. It creates the window, hosts WebView2, injects window.ziggy, loads the app's bundled page,
-// calls the core through the C interface and moves messages between the page and the core.
+// Ziggy's Windows shell. It creates the window, hosts WebView2, injects window.ziggy, loads the app's bundled UI,
+// calls the core through the C interface and moves messages between the UI and the core.
 //
 // Messages from the core arrive on any thread, so they are queued and delivered to the web view from the UI thread.
 //
@@ -19,7 +19,7 @@ const menu_lib = @import("menu.zig");
 const pickers_lib = @import("pickers.zig");
 
 //
-// The URL prefix the bundled page is served under, with a trailing slash. The host name is under .invalid, which can never
+// The URL prefix the bundled UI is served under, with a trailing slash. The host name is under .invalid, which can never
 // be looked up, so a request to it can only ever be answered by the shell. It is what the core allows the web view to navigate to.
 const app_url_prefix = "https://ziggy-app.invalid/";
 
@@ -37,7 +37,7 @@ pub const AppConfig = struct {
     default_height: c_int,
     // The number of the icon resource in the executable (the `1 ICON` of a resource script) the window shows, or null when the app has none.
     icon_resource: ?u16,
-    // The files of the app's bundled page, embedded in the executable. One of them must be "index.html".
+    // The files of the app's bundled UI, embedded in the executable. One of them must be "index.html".
     ui_files: []const ui_files.UiFile,
 };
 
@@ -151,7 +151,7 @@ const NavigationHandler = ComHandler(c.ICoreWebView2NavigationStartingEventHandl
 //
 const NewWindowHandler = ComHandler(c.ICoreWebView2NewWindowRequestedEventHandler, c.IID_ICoreWebView2NewWindowRequestedEventHandler);
 //
-// The handler object for the WebResourceRequested callback, which WebView2 calls on the UI thread for each request to the bundled page.
+// The handler object for the WebResourceRequested callback, which WebView2 calls on the UI thread for each request to the bundled UI.
 //
 const ResourceHandler = ComHandler(c.ICoreWebView2WebResourceRequestedEventHandler, c.IID_ICoreWebView2WebResourceRequestedEventHandler);
 //
@@ -167,7 +167,7 @@ const ScriptExecutedHandler = ComHandler(c.ICoreWebView2ExecuteScriptCompletedHa
 //
 const DevToolsCallHandler = ComHandler(c.ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, c.IID_ICoreWebView2CallDevToolsProtocolMethodCompletedHandler);
 //
-// The handler object for the AcceleratorKey callback, which WebView2 calls on the UI thread before a key press reaches the page.
+// The handler object for the AcceleratorKey callback, which WebView2 calls on the UI thread before a key press reaches the UI.
 //
 const AcceleratorHandler = ComHandler(c.ICoreWebView2AcceleratorKeyPressedEventHandler, c.IID_ICoreWebView2AcceleratorKeyPressedEventHandler);
 //
@@ -233,8 +233,8 @@ const Shell = struct {
     destroyed: std.atomic.Value(bool),
     // Set on the UI thread when the window starts closing, so the creation callbacks still to come do nothing.
     closing: bool,
-    // The page's address as UTF-16, including the query the app supplies. Made once the core exists. Owned.
-    page_url: [:0]u16,
+    // The UI's address as UTF-16, including the query the app supplies. Made once the core exists. Owned.
+    ui_url: [:0]u16,
     // The script that exposes window.ziggy, as UTF-16. Owned.
     inject_script: [:0]u16,
     // The directory of the app's private data. Owned.
@@ -247,13 +247,13 @@ const Shell = struct {
     environment_handler: EnvironmentHandler,
     // Receives the WebView2 controller.
     controller_handler: ControllerHandler,
-    // Receives messages posted by the page.
+    // Receives messages posted by the UI.
     web_message_handler: WebMessageHandler,
     // Receives the start of every navigation.
     navigation_handler: NavigationHandler,
     // Receives every request to open a new window.
     new_window_handler: NewWindowHandler,
-    // Receives every request to the bundled page, which is answered from the files embedded in the executable.
+    // Receives every request to the bundled UI, which is answered from the files embedded in the executable.
     resource_handler: ResourceHandler,
     // The WebView2 environment, which makes the responses to those requests. Null until it exists.
     environment: ?*c.ICoreWebView2Environment,
@@ -269,11 +269,11 @@ const Shell = struct {
     fullscreen: bool,
     // Where the window was before it went full screen.
     saved_placement: c.WINDOWPLACEMENT,
-    // Receives the keys pressed inside the web view before the page sees them.
+    // Receives the keys pressed inside the web view before the UI sees them.
     accelerator_handler: AcceleratorHandler,
-    // Receives the selected text a copy asked the page for.
+    // Receives the selected text a copy asked the UI for.
     copy_handler: ScriptExecutedHandler,
-    // Receives the selected text a cut asked the page for.
+    // Receives the selected text a cut asked the UI for.
     cut_handler: ScriptExecutedHandler,
     // Receives the end of a paste, which is a DevTools protocol call.
     paste_handler: DevToolsCallHandler,
@@ -303,7 +303,7 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .queue = .empty,
         .destroyed = .init(false),
         .closing = false,
-        .page_url = undefined,
+        .ui_url = undefined,
         .inject_script = undefined,
         .data_directory = undefined,
         .test_mode = false,
@@ -486,7 +486,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
     }
 
     if (ui_files.findFile(shell.app_config.ui_files, "/") == null) {
-        return error.UiHasNoIndexPage;
+        return error.UiHasNoIndexHtml;
     }
     var inject_script_length: usize = 0;
     const inject_script = c.ziggy_inject_script(&inject_script_length);
@@ -532,7 +532,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
         }
     }
 
-    // Without this Windows scales the window as a bitmap on a high resolution screen and the page looks blurred.
+    // Without this Windows scales the window as a bitmap on a high resolution screen and the UI looks blurred.
     if (c.SetProcessDpiAwarenessContext(c.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == 0) {
         std.debug.print("ziggy shell: could not set per monitor DPI awareness, error {d}\n", .{c.GetLastError()});
     }
@@ -557,7 +557,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
         return error.WindowClassFailed;
     }
 
-    // The size the command line gives is the size of the page, and a pixel here is a pixel at 96 DPI.
+    // The size the command line gives is the size of the UI, and a pixel here is a pixel at 96 DPI.
     const dpi = c.GetDpiForSystem();
     var frame = c.RECT{
         .left = 0,
@@ -735,7 +735,7 @@ fn closeWebView(shell: *Shell) void {
 }
 
 //
-// Destroys the core once. After it nothing more is delivered to the page.
+// Destroys the core once. After it nothing more is delivered to the UI.
 //
 fn destroyCore(shell: *Shell) void {
     const core = shell.core orelse {
@@ -747,7 +747,7 @@ fn destroyCore(shell: *Shell) void {
 }
 
 //
-// Frees the messages queued for the page that were never delivered.
+// Frees the messages queued for the UI that were never delivered.
 //
 fn discardPending(shell: *Shell, allocator: std.mem.Allocator) void {
     for (shell.queue.items) |text| {
@@ -774,7 +774,7 @@ fn deliver(user_data: ?*anyopaque, message: [*c]const u8, message_len: usize) ca
 }
 
 //
-// Runs on the UI thread: sends every queued message to the page, in the order they were queued.
+// Runs on the UI thread: sends every queued message to the UI, in the order they were queued.
 //
 fn drainQueue(shell: *Shell) void {
     const allocator = std.heap.c_allocator;
@@ -904,17 +904,17 @@ fn onControllerCreated(shell: *Shell, controller: *c.ICoreWebView2Controller) vo
 
     // The app supplies the query unread, and the core says nothing about its parts.
     var query_length: usize = 0;
-    const query_pointer = c.ziggy_page_query(shell.core, &query_length) orelse {
-        fatal("the app could not make the page's query", .{});
+    const query_pointer = c.ziggy_ui_query(shell.core, &query_length) orelse {
+        fatal("the app could not make the UI's query", .{});
     };
     const query = query_pointer[0..query_length];
     const query_separator: []const u8 = if (query.len > 0) "?" else "";
-    const page_url_utf8 = std.mem.concat(std.heap.c_allocator, u8, &.{ app_url_prefix, "index.html", query_separator, query }) catch |err| {
-        fatal("could not make the page's address: {s}", .{@errorName(err)});
+    const ui_url_utf8 = std.mem.concat(std.heap.c_allocator, u8, &.{ app_url_prefix, "index.html", query_separator, query }) catch |err| {
+        fatal("could not make the UI's address: {s}", .{@errorName(err)});
     };
-    defer std.heap.c_allocator.free(page_url_utf8);
-    shell.page_url = std.unicode.utf8ToUtf16LeAllocZ(std.heap.c_allocator, page_url_utf8) catch |err| {
-        fatal("could not make the page's address: {s}", .{@errorName(err)});
+    defer std.heap.c_allocator.free(ui_url_utf8);
+    shell.ui_url = std.unicode.utf8ToUtf16LeAllocZ(std.heap.c_allocator, ui_url_utf8) catch |err| {
+        fatal("could not make the UI's address: {s}", .{@errorName(err)});
     };
 
     var settings: ?*c.ICoreWebView2Settings = null;
@@ -1117,7 +1117,7 @@ fn buildMenu(shell: *Shell, core: *anyopaque) !void {
 
 //
 // Runs a menu action. The actions the shell knows are done here, and any other is sent to the core as a menu-action
-// message, which the core hands to the page.
+// message, which the core hands to the UI.
 //
 fn runAction(shell: *Shell, action: []const u8) void {
     const known = actions_lib.fromName(action) orelse {
@@ -1263,7 +1263,7 @@ fn sendMenuAction(shell: *Shell, action: []const u8) void {
 }
 
 //
-// Steps the page zoom up or down by a tenth, or back to 100 percent for a direction of zero.
+// Steps the UI zoom up or down by a tenth, or back to 100 percent for a direction of zero.
 //
 fn changeZoom(controller: *c.ICoreWebView2Controller, direction: i32) void {
     var current: f64 = 1.0;
@@ -1272,12 +1272,12 @@ fn changeZoom(controller: *c.ICoreWebView2Controller, direction: i32) void {
 }
 
 //
-// Runs a script in the page, with the handler that receives its result.
+// Runs a script in the UI, with the handler that receives its result.
 //
 fn runScript(web_view: *c.ICoreWebView2, script: []const u8, handler: *c.ICoreWebView2ExecuteScriptCompletedHandler) void {
     const allocator = std.heap.c_allocator;
     const wide_script = std.unicode.utf8ToUtf16LeAllocZ(allocator, script) catch {
-        fatal("a script to run in the page is not valid text", .{});
+        fatal("a script to run in the UI is not valid text", .{});
     };
     defer allocator.free(wide_script);
     check("ExecuteScript", web_view.lpVtbl.*.ExecuteScript.?(web_view, wide_script.ptr, handler));
@@ -1285,14 +1285,14 @@ fn runScript(web_view: *c.ICoreWebView2, script: []const u8, handler: *c.ICoreWe
 
 //
 // Copies the selected text to the clipboard. document.execCommand('copy') and ('cut') are refused to a script, which has no
-// user gesture, so the shell asks the page for the selected text and puts it on the clipboard itself.
+// user gesture, so the shell asks the UI for the selected text and puts it on the clipboard itself.
 //
 fn copySelection(web_view: *c.ICoreWebView2, handler: *c.ICoreWebView2ExecuteScriptCompletedHandler) void {
     runScript(web_view, actions_lib.selection_script, handler);
 }
 
 //
-// Pastes the clipboard into the page with the web view's own paste command, as the paste key does, so the paste is an undo
+// Pastes the clipboard into the UI with the web view's own paste command, as the paste key does, so the paste is an undo
 // step of its own. document.execCommand('paste') is refused to a script and WebView2 has no paste call, so the command is
 // sent through the DevTools protocol, whose key events can carry editing commands.
 //
@@ -1306,7 +1306,7 @@ fn pasteClipboard(shell: *Shell, web_view: *c.ICoreWebView2) void {
 }
 
 //
-// The page has been given the clipboard text to paste: checks that it worked.
+// The UI has been given the clipboard text to paste: checks that it worked.
 //
 fn pasteInvoke(this: [*c]c.ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = this;
@@ -1350,7 +1350,7 @@ fn setClipboardText(shell: *Shell, text: []const u8) void {
 }
 
 //
-// The page has returned the selected text: puts it on the clipboard. Nothing selected leaves the clipboard as it was.
+// The UI has returned the selected text: puts it on the clipboard. Nothing selected leaves the clipboard as it was.
 //
 fn takeSelection(shell: *Shell, error_code: c.HRESULT, result: [*c]const c.WCHAR) bool {
     check("reading the selected text", error_code);
@@ -1360,7 +1360,7 @@ fn takeSelection(shell: *Shell, error_code: c.HRESULT, result: [*c]const c.WCHAR
     };
     defer allocator.free(json);
     const text = actions_lib.selectionText(allocator, json) catch |err| {
-        fatal("the page gave a selection that is not a string: {s}", .{@errorName(err)});
+        fatal("the UI gave a selection that is not a string: {s}", .{@errorName(err)});
     };
     defer allocator.free(text);
     if (text.len == 0) {
@@ -1371,7 +1371,7 @@ fn takeSelection(shell: *Shell, error_code: c.HRESULT, result: [*c]const c.WCHAR
 }
 
 //
-// The page has returned the selected text for a copy: puts it on the clipboard.
+// The UI has returned the selected text for a copy: puts it on the clipboard.
 //
 fn copyInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = takeSelection(ScriptExecutedHandler.fromInterface(this).shell, error_code, result);
@@ -1379,7 +1379,7 @@ fn copyInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code
 }
 
 //
-// The page has returned the selected text for a cut: puts it on the clipboard and deletes it from the page.
+// The UI has returned the selected text for a cut: puts it on the clipboard and deletes it from the UI.
 //
 fn cutInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     const shell = ScriptExecutedHandler.fromInterface(this).shell;
@@ -1607,7 +1607,7 @@ fn writeCapture(stream: *c.IStream, path: [:0]const u16) ?[]u8 {
 }
 
 //
-// Runs an editing command in the page with document.execCommand, because WebView2 has no editing commands of its own.
+// Runs an editing command in the UI with document.execCommand, because WebView2 has no editing commands of its own.
 //
 fn runEditCommand(shell: *Shell, web_view: *c.ICoreWebView2, command: []const u8) void {
     var script_buffer: [96]u8 = undefined;
@@ -1660,7 +1660,7 @@ fn toggleFullscreen(shell: *Shell) void {
 }
 
 //
-// A key was pressed with the keyboard inside the web view, before the page sees it. When it is a menu shortcut the shell
+// A key was pressed with the keyboard inside the web view, before the UI sees it. When it is a menu shortcut the shell
 // runs the action and marks the key handled. The editing shortcuts are left to the web view, which does them natively.
 //
 fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler, sender: [*c]c.ICoreWebView2Controller, args: [*c]c.ICoreWebView2AcceleratorKeyPressedEventArgs) callconv(.c) c.HRESULT {
@@ -1944,7 +1944,7 @@ fn controllerInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2ControllerComplet
 }
 
 //
-// Records the files that came with a message from the page, which WebView2 gives the native side as objects with real paths,
+// Records the files that came with a message from the UI, which WebView2 gives the native side as objects with real paths,
 // as a drop with the core.
 //
 fn recordPostedFiles(core: ?*anyopaque, args: [*c]c.ICoreWebView2WebMessageReceivedEventArgs) void {
@@ -1989,7 +1989,7 @@ fn recordPostedFiles(core: ?*anyopaque, args: [*c]c.ICoreWebView2WebMessageRecei
 }
 
 //
-// A message from the page: hands it to the core.
+// A message from the UI: hands it to the core.
 //
 fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2WebMessageReceivedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
@@ -2000,13 +2000,13 @@ fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sen
     var wide: [*c]c.WCHAR = null;
     const status = args.*.lpVtbl.*.TryGetWebMessageAsString.?(args, &wide);
     if (status < 0) {
-        fatal("the page posted a message that is not a string (HRESULT 0x{X:0>8})", .{@as(u32, @bitCast(status))});
+        fatal("the UI posted a message that is not a string (HRESULT 0x{X:0>8})", .{@as(u32, @bitCast(status))});
     }
     const text = takeAddress(wide);
     defer std.heap.c_allocator.free(text);
     if (std.mem.eql(u8, text, "ziggy-file")) {
-        // The page's getPathForFile handed the web view the File itself, which has its real path. It is recorded with the core, and the
-        // page's request for the path follows on the same channel.
+        // The UI's getPathForFile handed the web view the File itself, which has its real path. It is recorded with the core, and the
+        // UI's request for the path follows on the same channel.
         recordPostedFiles(core, args);
         return c.S_OK;
     }
@@ -2015,7 +2015,7 @@ fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sen
 }
 
 //
-// Decides every navigation with the core's origin check: the app's own page loads, external links open in the system
+// Decides every navigation with the core's origin check: the app's own UI loads, external links open in the system
 // browser, and everything else is blocked.
 //
 fn navigationInvoke(this: [*c]c.ICoreWebView2NavigationStartingEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2NavigationStartingEventArgs) callconv(.c) c.HRESULT {
@@ -2074,15 +2074,15 @@ fn memoryStream(content: []const u8) *c.IStream {
 }
 
 //
-// Answers a request to the bundled page from the files embedded in the executable, with a header that allows any origin to read the
-// file (the page script is a module loaded with the crossorigin attribute). A path that is not one of them is
+// Answers a request to the bundled UI from the files embedded in the executable, with a header that allows any origin to read the
+// file (the UI script is a module loaded with the crossorigin attribute). A path that is not one of them is
 // answered with a 404.
 //
 fn resourceInvoke(this: [*c]c.ICoreWebView2WebResourceRequestedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2WebResourceRequestedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
     const shell = ResourceHandler.fromInterface(this).shell;
     const environment = shell.environment orelse {
-        fatal("a page request arrived before the web view environment existed", .{});
+        fatal("a UI request arrived before the web view environment existed", .{});
     };
     var request: ?*c.ICoreWebView2WebResourceRequest = null;
     check("get_Request", args.*.lpVtbl.*.get_Request.?(args, @ptrCast(&request)));
@@ -2139,7 +2139,7 @@ fn openAddress(address: []const u8) void {
 }
 
 //
-// The injected script is in place, so the page can load.
+// The injected script is in place, so the UI can load.
 //
 fn scriptAddedInvoke(this: [*c]c.ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler, error_code: c.HRESULT, id: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = id;
@@ -2151,17 +2151,17 @@ fn scriptAddedInvoke(this: [*c]c.ICoreWebView2AddScriptToExecuteOnDocumentCreate
     const web_view = shell.web_view orelse {
         fatal("the injected script was added without a web view", .{});
     };
-    check("Navigate", web_view.lpVtbl.*.Navigate.?(web_view, shell.page_url.ptr));
+    check("Navigate", web_view.lpVtbl.*.Navigate.?(web_view, shell.ui_url.ptr));
     return c.S_OK;
 }
 
 //
-// A message has been delivered to the page: checks that it worked.
+// A message has been delivered to the UI: checks that it worked.
 //
 fn scriptExecutedInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = this;
     _ = result;
-    check("delivering a message to the page", error_code);
+    check("delivering a message to the UI", error_code);
     return c.S_OK;
 }
 

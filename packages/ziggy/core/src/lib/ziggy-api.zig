@@ -12,7 +12,7 @@ const ui_files = @import("ui-files.zig");
 const inject_script = @import("inject-script.zig");
 
 //
-// What ziggy_ui_file gives back for a file of the bundled page. Laid out like ziggy_ui_file_result in ziggy.h.
+// What ziggy_ui_file gives back for a file of the bundled UI. Laid out like ziggy_ui_file_result in ziggy.h.
 //
 const UiFileResult = extern struct {
     // The file's bytes, which stay valid for as long as the library is loaded.
@@ -25,7 +25,7 @@ const UiFileResult = extern struct {
 
 //
 // Exports every function declared in ziggy.h (ziggy_create, ziggy_destroy, ziggy_post_message, ziggy_check_url, ziggy_menu_json,
-// ziggy_ui_file, ziggy_inject_script, ziggy_parse_accelerator, ziggy_test_hooks_enabled, ziggy_files_dropped and ziggy_page_query) from the library
+// ziggy_ui_file, ziggy_inject_script, ziggy_parse_accelerator, ziggy_test_hooks_enabled, ziggy_files_dropped and ziggy_ui_query) from the library
 // that calls this, serving the given app handlers. It is called once, in a comptime block of the app's root file.
 //
 pub fn exportApi(comptime app: core_module.AppHandlers) void {
@@ -51,7 +51,7 @@ pub fn exportApi(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // ziggy_post_message: passes a message from the page to the core.
+        // ziggy_post_message: passes a message from the UI to the core.
         //
         fn postMessage(handle: ?*core_module.Core, message_ptr: [*]const u8, message_len: usize) callconv(.c) void {
             const core = handle orelse {
@@ -82,7 +82,7 @@ pub fn exportApi(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // ziggy_ui_file: finds a file of the bundled page by the path of a request, and says whether the page has it.
+        // ziggy_ui_file: finds a file of the bundled UI by the path of a request, and says whether the UI has it.
         //
         fn uiFile(handle: ?*core_module.Core, path_ptr: [*]const u8, path_len: usize, result: *UiFileResult) callconv(.c) bool {
             const core = handle orelse {
@@ -100,7 +100,7 @@ pub fn exportApi(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // ziggy_inject_script: gives the script to inject into the page before it loads and writes its length to the pointer given.
+        // ziggy_inject_script: gives the script to inject into the UI before it loads and writes its length to the pointer given.
         //
         fn injectScript(length: *usize) callconv(.c) [*:0]const u8 {
             length.* = inject_script.text.len;
@@ -132,14 +132,14 @@ pub fn exportApi(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // ziggy_page_query: gives the query of the page's address, or null when the app could not make it.
+        // ziggy_ui_query: gives the query of the UI's address, or null when the app could not make it.
         //
-        fn pageQuery(handle: ?*core_module.Core, length: *usize) callconv(.c) ?[*:0]const u8 {
+        fn uiQuery(handle: ?*core_module.Core, length: *usize) callconv(.c) ?[*:0]const u8 {
             const core = handle orelse {
-                @panic("ziggy_page_query called with a null handle");
+                @panic("ziggy_ui_query called with a null handle");
             };
-            const text = core.pageQuery() catch |err| {
-                std.debug.print("ziggy_page_query failed: {s}\n", .{@errorName(err)});
+            const text = core.uiQuery() catch |err| {
+                std.debug.print("ziggy_ui_query failed: {s}\n", .{@errorName(err)});
                 return null;
             };
             length.* = text.len;
@@ -183,7 +183,7 @@ pub fn exportApi(comptime app: core_module.AppHandlers) void {
     @export(&Api.filesDropped, .{
         .name = "ziggy_files_dropped",
     });
-    @export(&Api.pageQuery, .{
-        .name = "ziggy_page_query",
+    @export(&Api.uiQuery, .{
+        .name = "ziggy_ui_query",
     });
 }

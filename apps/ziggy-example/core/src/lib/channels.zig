@@ -20,7 +20,7 @@ pub fn pingHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.j
 }
 
 //
-// Replies with the length in bytes and the CRC-32 of the "text" field, so the page can check a large payload
+// Replies with the length in bytes and the CRC-32 of the "text" field, so the UI can check a large payload
 // arrived whole without the payload coming back.
 //
 pub fn payloadStatsHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
@@ -59,7 +59,7 @@ pub fn fileRoundtripHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, da
 }
 
 //
-// Always fails, so the page can check that an error reply reaches it.
+// Always fails, so the UI can check that an error reply reaches it.
 //
 pub fn failHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = core;

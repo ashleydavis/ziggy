@@ -38,13 +38,13 @@ pub const PickKind = enum(i32) {
 // buffer the core gives it, as a JSON array of path strings ("[]" when they cancelled). Returns the number of bytes written, or
 // a negative number on failure. The title is NUL terminated and may be null. The initial name is NUL terminated and may be
 // null: for a save dialog it is the suggested file name, and for a dialog that opens files or a folder it is the folder the dialog
-// starts in, which a shell that cannot start a dialog in a folder leaves out. The core calls it from a worker thread, never from the one that handles page messages, so
+// starts in, which a shell that cannot start a dialog in a folder leaves out. The core calls it from a worker thread, never from the one that handles UI messages, so
 // the shell shows the dialog on its UI thread and waits.
 //
 //
 // A native host callback that does a menu action as if the user had chosen its menu item, by the path the menu item takes in the
 // shell, so the shell's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
-// other action reaches the page. The core calls it, from the thread of the test control connection, only to let a test choose a
+// other action reaches the UI. The core calls it, from the thread of the test control connection, only to let a test choose a
 // menu item. The shell does the work on its UI thread and returns at once.
 //
 pub const MenuActionFn = *const fn (user_data: ?*anyopaque, action: [*:0]const u8) callconv(.c) void;
@@ -72,7 +72,7 @@ pub const PickPathsFn = *const fn (user_data: ?*anyopaque, kind: i32, title: ?[*
 // request is the JSON text of the method's argument (NUL terminated), and the shell writes the JSON text of its answer into the
 // buffer and returns the number of bytes written. When it cannot do what was asked it writes the text of the reason, in words the user
 // can act on, and returns that number of bytes negated. The shell may show native interface and wait for the user, so the core calls
-// it from a worker thread, never from the one that handles page messages, and it may take a long time.
+// it from a worker thread, never from the one that handles UI messages, and it may take a long time.
 //
 pub const HostRequestFn = *const fn (user_data: ?*anyopaque, method: [*:0]const u8, request_json: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize;
 
@@ -93,7 +93,7 @@ pub const HostReply = struct {
 pub const ZiggyConfig = extern struct {
     // The shell's own pointer, passed back on every callback.
     user_data: ?*anyopaque,
-    // Delivers a message to the page.
+    // Delivers a message to the UI.
     deliver: ?DeliverFn,
     // Native host callback: the operating system's version. Null when the platform has none.
     os_version: ?OsVersionFn,
@@ -110,7 +110,7 @@ pub const ZiggyConfig = extern struct {
     worker_threads: u32,
     // The limit on child tasks in flight for any one parent task.
     max_concurrent_child_tasks: u32,
-    // The URL prefix of the app's own bundled page, such as "ziggy-app://app/" or "https://ziggy-app.invalid/", the address the shell serves the page from (NUL terminated).
+    // The URL prefix of the app's own bundled UI, such as "ziggy-app://app/" or "https://ziggy-app.invalid/", the address the shell serves the UI from (NUL terminated).
     app_url_prefix: [*:0]const u8,
     // The app's private data directory (NUL terminated).
     data_dir: [*:0]const u8,
@@ -131,7 +131,7 @@ pub const ZiggyConfig = extern struct {
 // The result of a URL check.
 //
 pub const UrlDecision = enum(i32) {
-    // The address is the app's own page.
+    // The address is the app's own UI.
     allow = 0,
     // The address is an external link, to open in the system browser.
     open_externally = 1,
@@ -149,7 +149,7 @@ pub const TaskStatus = enum {
 };
 
 //
-// The completion of a task, as reported to the page and to a parent that awaits it.
+// The completion of a task, as reported to the UI and to a parent that awaits it.
 //
 pub const Completion = struct {
     // How the task ended.
@@ -176,8 +176,8 @@ pub const TaskError = error{
 pub const ErrorDescriber = *const fn (err: anyerror) ?[]const u8;
 
 //
-// How a task ended, as reported to the app's observer: the task's type and input as well as its outcome, which the page's
-// task-completed event does not carry on its own account (the page knows what it asked for).
+// How a task ended, as reported to the app's observer: the task's type and input as well as its outcome, which the UI's
+// task-completed event does not carry on its own account (the UI knows what it asked for).
 //
 pub const TaskEnd = struct {
     // The id of the task.
@@ -221,8 +221,8 @@ pub const TaskSentMessage = struct {
 pub const TaskObserver = struct {
     // The observer's own pointer, passed back on every call.
     user_data: ?*anyopaque,
-    // Called when a task has ended, after the page has been told.
+    // Called when a task has ended, after the UI has been told.
     on_task_end: *const fn (user_data: ?*anyopaque, end: TaskEnd) void,
-    // Called when a task sends a message, after the page has been told.
+    // Called when a task sends a message, after the UI has been told.
     on_task_message: *const fn (user_data: ?*anyopaque, sent: TaskSentMessage) void,
 };

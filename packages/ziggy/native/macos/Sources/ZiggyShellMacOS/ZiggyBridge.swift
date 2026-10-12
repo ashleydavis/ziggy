@@ -1,9 +1,9 @@
 //
-// Ziggy's shell for MacOS. It owns the WKWebView, injects window.ziggy, loads the app's bundled page, calls the
-// core through the C interface and moves messages between the page and the core.
+// Ziggy's shell for MacOS. It owns the WKWebView, injects window.ziggy, loads the app's bundled UI, calls the
+// core through the C interface and moves messages between the UI and the core.
 //
 // Messages from the core arrive on any thread, so each is copied and handed to the main queue, which delivers them to the
-// page in the order they were handed over.
+// UI in the order they were handed over.
 //
 
 import Foundation
@@ -11,16 +11,16 @@ import WebKit
 import CZiggy
 import AppKit
 
-// Answers the web view's requests for the bundled page from the files embedded in the core library, which it asks for each
-// file with ziggy_ui_file. The page's address is ziggy-app://app/, and the core is given to the handler once it exists.
+// Answers the web view's requests for the bundled UI from the files embedded in the core library, which it asks for each
+// file with ziggy_ui_file. The UI's address is ziggy-app://app/, and the core is given to the handler once it exists.
 // It runs on the main thread, as does everything that sets or clears the core.
-final class ZiggyPageSchemeHandler: NSObject, WKURLSchemeHandler {
-    // The core's handle, from start until shutdown. Null means the page cannot be served.
+final class ZiggyUiSchemeHandler: NSObject, WKURLSchemeHandler {
+    // The core's handle, from start until shutdown. Null means the UI cannot be served.
     var core: UnsafeMutableRawPointer?
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url else {
-            ZiggyBridge.fail("a request for the page has no address")
+            ZiggyBridge.fail("a request for the UI has no address")
         }
         guard let handle = core else {
             urlSchemeTask.didFailWithError(URLError(.cancelled))
@@ -57,7 +57,7 @@ final class ZiggyPageSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 }
 
-// A web view that tells its owner the files of a drop before WebKit handles the drop, so that when the page's drop event runs the
+// A web view that tells its owner the files of a drop before WebKit handles the drop, so that when the UI's drop event runs the
 // files are already recorded with the core.
 final class ZiggyWebView: WKWebView {
     // Called with the paths of the files dropped on the view.
@@ -75,20 +75,20 @@ final class ZiggyWebView: WKWebView {
 // Hosts one web view and one Ziggy core for the app. The app creates it, puts webView on screen, calls start, and calls
 // shutdown when the app is ending.
 public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
-    // The web view that shows the app's page. The app puts it on screen.
+    // The web view that shows the app's UI. The app puts it on screen.
     public let webView: WKWebView
 
     // The core's handle, from start until shutdown.
     private var core: UnsafeMutableRawPointer?
 
-    // Set by shutdown. Read and written on the main thread only, so nothing is delivered to the page after it is set.
+    // Set by shutdown. Read and written on the main thread only, so nothing is delivered to the UI after it is set.
     private var destroyed: Bool
 
-    // Answers the web view's requests for the bundled page, from the core.
-    private let pageHandler = ZiggyPageSchemeHandler()
+    // Answers the web view's requests for the bundled UI, from the core.
+    private let uiHandler = ZiggyUiSchemeHandler()
 
-    // The scheme and address of the bundled page. The files are embedded in the core library, not in the app bundle.
-    private static let pageScheme = "ziggy-app"
+    // The scheme and address of the bundled UI. The files are embedded in the core library, not in the app bundle.
+    private static let uiScheme = "ziggy-app"
     private static let appUrlPrefix = "ziggy-app://app/"
 
     // The app's private data directory, which the core is given.
@@ -107,8 +107,8 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The name the os_version callback gives the operating system.
     private static let operatingSystemName = "macOS"
 
-    // Creates the web view with the injected script and the message handler. The page is not loaded and the core does not
-    // exist until start. The page and the injected script are both embedded in the core library, so the app supplies neither.
+    // Creates the web view with the injected script and the message handler. The UI is not loaded and the core does not
+    // exist until start. The UI and the injected script are both embedded in the core library, so the app supplies neither.
     public init(frame: CGRect) {
         let bundle = Bundle.main
         guard let bundleIdentifier = bundle.bundleIdentifier else {
@@ -141,7 +141,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         self.destroyed = false
 
         let configuration = WKWebViewConfiguration()
-        configuration.setURLSchemeHandler(pageHandler, forURLScheme: ZiggyBridge.pageScheme)
+        configuration.setURLSchemeHandler(uiHandler, forURLScheme: ZiggyBridge.uiScheme)
         let userScript = WKUserScript(source: injectScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(userScript)
         // Turns on the web inspector, and with it Inspect Element in the context menu. This key is not in the public API but
@@ -166,7 +166,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Runs on the main thread: records the files of a drop with the core, so the page can ask for the path of each one it is given.
+    // Runs on the main thread: records the files of a drop with the core, so the UI can ask for the path of each one it is given.
     private func filesDropped(_ paths: [String]) {
         guard let handle = core else {
             return
@@ -186,7 +186,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Creates the core and loads the app's page.
+    // Creates the core and loads the app's UI.
     public func start() {
         if core != nil || destroyed {
             ZiggyBridge.fail("start was called more than once")
@@ -204,7 +204,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             let bytes = UnsafeBufferPointer(start: UnsafeRawPointer(message).assumingMemoryBound(to: UInt8.self), count: messageLength)
             let text = String(decoding: bytes, as: UTF8.self)
             DispatchQueue.main.async {
-                bridge.deliverToPage(text)
+                bridge.deliverToUi(text)
             }
         }
         config.os_version = { userData, buffer, capacity in
@@ -288,7 +288,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             ZiggyBridge.fail("ziggy_create failed")
         }
         core = created
-        pageHandler.core = created
+        uiHandler.core = created
 
         var menuLength = 0
         guard let menuText = ziggy_menu_json(created, &menuLength) else {
@@ -298,28 +298,28 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
 
         // The app supplies the query, which is passed through unread.
         var queryLength = 0
-        guard let queryText = ziggy_page_query(created, &queryLength) else {
-            ZiggyBridge.fail("the app could not make the page's query")
+        guard let queryText = ziggy_ui_query(created, &queryLength) else {
+            ZiggyBridge.fail("the app could not make the UI's query")
         }
         let query = String(decoding: UnsafeRawBufferPointer(start: queryText, count: queryLength), as: UTF8.self)
         var components = URLComponents(string: ZiggyBridge.appUrlPrefix + "index.html")
         if !query.isEmpty {
             components?.percentEncodedQuery = query
         }
-        guard let pageURL = components?.url else {
-            ZiggyBridge.fail("could not build the page address")
+        guard let uiURL = components?.url else {
+            ZiggyBridge.fail("could not build the UI address")
         }
-        webView.load(URLRequest(url: pageURL))
+        webView.load(URLRequest(url: uiURL))
     }
 
-    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the page.
+    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the UI.
     public func shutdown() {
         guard let handle = core else {
             return
         }
         destroyed = true
         core = nil
-        pageHandler.core = nil
+        uiHandler.core = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: ZiggyBridge.handlerName)
         ziggy_destroy(handle)
     }
@@ -330,30 +330,30 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         NSApplication.shared.terminate(nil)
     }
 
-    // Runs on the main thread: sends one message from the core to the page.
-    private func deliverToPage(_ text: String) {
+    // Runs on the main thread: sends one message from the core to the UI.
+    private func deliverToUi(_ text: String) {
         // A message queued before shutdown is dropped here, because shutdown promises nothing is delivered after it.
         if destroyed {
             return
         }
         webView.evaluateJavaScript("window.__ziggyReceive(\(text));") { _, error in
             if let error = error {
-                ZiggyBridge.report("delivering a message to the page failed: \(error)")
+                ZiggyBridge.report("delivering a message to the UI failed: \(error)")
             }
         }
     }
 
-    // A message from the page: hands it to the core.
+    // A message from the UI: hands it to the core.
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let text = message.body as? String else {
-            ZiggyBridge.fail("the page posted a message that is not a string")
+            ZiggyBridge.fail("the UI posted a message that is not a string")
         }
         post(text)
     }
 
-    // Gives the core a JSON message, as if the page had posted it.
+    // Gives the core a JSON message, as if the UI had posted it.
     func post(_ text: String) {
-        // The page can still post while the app is ending. The core is gone by then, so there is nobody to give it to.
+        // The UI can still post while the app is ending. The core is gone by then, so there is nobody to give it to.
         guard let handle = core else {
             return
         }
@@ -362,7 +362,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Tells the core that an app-owned menu item was chosen, as the menu-action message the page's own code also gets.
+    // Tells the core that an app-owned menu item was chosen, as the menu-action message the UI's own code also gets.
     func postMenuAction(_ action: String) {
         let message: [String: Any] = [
             "channel": "menu-action",
@@ -396,14 +396,14 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         return nil
     }
 
-    // Reports a page that failed to load.
+    // Reports a UI that failed to load.
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        ZiggyBridge.report("the page failed to load: \(error)")
+        ZiggyBridge.report("the UI failed to load: \(error)")
     }
 
-    // Reports a page that failed part way through loading.
+    // Reports a UI that failed part way through loading.
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
-        ZiggyBridge.report("the page failed while loading: \(error)")
+        ZiggyBridge.report("the UI failed while loading: \(error)")
     }
 
     // The web content process dying leaves a blank page that nothing can recover, so the app stops.
@@ -412,7 +412,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     }
 
     // Asks the core what to do with an address. An external link is opened in the system browser here. Returns true when
-    // the web view may load the address, which is only for the app's own page in an existing frame.
+    // the web view may load the address, which is only for the app's own UI in an existing frame.
     private func shouldLoad(_ url: URL?, isNewWindow: Bool) -> Bool {
         guard let handle = core else {
             return false

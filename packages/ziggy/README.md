@@ -1,6 +1,6 @@
 # Ziggy package
 
-The package an app is built on: a Zig core, a task queue, a native host for each platform that shows the system web view, and a small TypeScript bridge that gives the page `window.ziggy`. The UI is TypeScript in the page, and everything else is Zig. Nothing in this folder names an app.
+The package an app is built on: a Zig core, a task queue, a native host for each platform that shows the system web view, and a small TypeScript bridge that gives the UI `window.ziggy`. The UI is TypeScript, and everything else is Zig. Nothing in this folder names an app.
 
 - `core/`: the core library every app links, imported as `@import("ziggy")`. It has the C interface (`core/src/lib/ziggy.h`), the message dispatcher, the task runner, the origin check, the host callback plumbing and the test control connection.
 - `task-queue/`: the task queue and the helpers it is written with, imported as `@import("task-queue")`.

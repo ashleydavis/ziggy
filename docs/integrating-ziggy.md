@@ -1,6 +1,6 @@
 # Integrating Ziggy
 
-An app uses Ziggy in each kind of project it has: its Zig build (`build.zig.zon` and `build.zig`), its Xcode projects (MacOS and iOS), its Android Gradle project (`settings.gradle` and `app/build.gradle`) and its page (`package.json`). Each can take Ziggy in one of two ways:
+An app uses Ziggy in each kind of project it has: its Zig build (`build.zig.zon` and `build.zig`), its Xcode projects (MacOS and iOS), its Android Gradle project (`settings.gradle` and `app/build.gradle`) and its UI (`package.json`). Each can take Ziggy in one of two ways:
 
 - **From a local path**: a checkout of this repository on the same machine. This is how the Ziggy example uses it (the path is the root of this repository), and how an app works against a change to Ziggy that is not released yet.
 - **From a version tag**: the git URL of this repository and a version tag, such as `v0.1.0`. This is how an app in another repository pins a released version. Nothing is published to a registry: every part is fetched from the repository at the tag.
@@ -58,7 +58,7 @@ pub fn build(b: *std.Build) !void {
         .name = "my-app",
         .title = "My App",
         .root_source_file = "core/src/index.zig",
-        .page_directory = "dist",
+        .ui_directory = "dist",
         .imports = &.{},
     }, target, optimize);
 
@@ -67,7 +67,7 @@ pub fn build(b: *std.Build) !void {
         .name = "my-app",
         .title = "My App",
         .directory = ".",
-        .page_directory = "dist",
+        .ui_directory = "dist",
         .linux_icon = null,
         .windows_resource = null,
     };
@@ -79,9 +79,9 @@ pub fn build(b: *std.Build) !void {
 What Ziggy's `build.zig` gives an app:
 
 - `dependency(b, target, optimize, test_hooks)`: Ziggy for the target, as `IZiggy`: the dependency itself, `module` (the core, which the app's code imports as `@import("ziggy")`) and `task_queue` (imported as `@import("task-queue")`). Ask twice for a build that needs both, such as an app built without the test hooks and its unit tests, which run with them.
-- `addAppCore(b, ziggy, app, target, optimize)`: builds the app's core as a library, installed with `ziggy.h` beside it by the `<name>-core` step, with the app's built page embedded in it as the `page-files` import. For an Android target it also builds the shared library the Android shell loads. It returns both libraries, so an app can link more into them (a system library, for one).
-- `addLinuxShell` and `addWindowsShell`: the app's Linux executable (`<name>-linux`, installed to `bin/<name>`) and Windows executable (`<name>-windows`), each with the page embedded, and a step that compiles the Windows shell without linking it (`<name>-windows-check`), for a machine without Microsoft's toolchain.
-- `embedPage`: the module that embeds a built page, for a build that makes its own modules (an app's unit tests, for one).
+- `addAppCore(b, ziggy, app, target, optimize)`: builds the app's core as a library, installed with `ziggy.h` beside it by the `<name>-core` step, with the app's built UI embedded in it as the `ui-files` import. For an Android target it also builds the shared library the Android shell loads. It returns both libraries, so an app can link more into them (a system library, for one).
+- `addLinuxShell` and `addWindowsShell`: the app's Linux executable (`<name>-linux`, installed to `bin/<name>`) and Windows executable (`<name>-windows`), each with the UI embedded, and a step that compiles the Windows shell without linking it (`<name>-windows-check`), for a machine without Microsoft's toolchain.
+- `embedUi`: the module that embeds a built UI, for a build that makes its own modules (an app's unit tests, for one).
 - `addDirectoryTests`: compiles every `*.test.zig` under a directory's `src/test` into one test program and runs it, which is how the example runs its core's tests.
 
 The app's own options (`test-hooks`, `optimize`, `compile-only`) are passed on to Ziggy, so `zig build my-app-core -Dtarget=aarch64-linux-android -Dtest-hooks=true` builds the core and Ziggy for that target with the test hooks.
@@ -125,9 +125,9 @@ sourceControl {
 
 The app must use the same version of the Android Gradle plugin as the shell (see `packages/ziggy/native/android/build.gradle`), because Gradle does not allow two versions of it in one build. The shell sets its own `compileSdkVersion` and `minSdkVersion`, and the app's `minSdkVersion` must be at least the shell's. Nothing is published to a Maven repository, and no shell source is copied into the app.
 
-## The page (package.json)
+## The UI (package.json)
 
-The page imports Ziggy's types from `ziggy-bridge`.
+The UI imports Ziggy's types from `ziggy-bridge`.
 
 From a local path:
 

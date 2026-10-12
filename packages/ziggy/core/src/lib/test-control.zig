@@ -3,7 +3,7 @@
 // commands to the running app over a loopback connection.
 //
 // A script connects to the port found in the port file and sends one line per command: a JSON object with a "command"
-// field. The core forwards the command to the page as a test-command event, the page performs it and answers on the
+// field. The core forwards the command to the UI as a test-command event, the UI performs it and answers on the
 // test-result channel, and the answer is written back as one line. A line that is not a command is answered with an
 // error.
 //
@@ -14,7 +14,7 @@ const types = @import("types.zig");
 const json_util = @import("json-util.zig");
 
 //
-// How long the page has to answer a command, in milliseconds.
+// How long the UI has to answer a command, in milliseconds.
 //
 const answer_timeout_ms: i64 = 30_000;
 
@@ -38,7 +38,7 @@ pub const TestControl = struct {
     io: std.Io,
     // The shell's configuration, for the quit callback.
     config: types.ZiggyConfig,
-    // Sends an event to the page.
+    // Sends an event to the UI.
     deliver: *const fn (user_data: ?*anyopaque, message: []const u8) void,
     // The pointer passed to deliver.
     deliver_user_data: ?*anyopaque,
@@ -54,7 +54,7 @@ pub const TestControl = struct {
     // Runs the connection tasks. The core's Io is single threaded and ignores cancel requests, and cancelling is the only way
     // to end a read that is waiting on a connection: on Windows shutting the socket down does not wake the read.
     connection_threaded: std.Io.Threaded,
-    // Held while a command is with the page, so only one is waiting for an answer at a time.
+    // Held while a command is with the UI, so only one is waiting for an answer at a time.
     command_mutex: std.Io.Mutex,
     // The thread that accepts connections.
     thread: std.Thread,
@@ -68,8 +68,8 @@ pub const TestControl = struct {
     waiting_request: ?u64,
     // The answer to the waiting command, as JSON text.
     answer: ?[]u8,
-    // Set when the page has said it is listening for test commands.
-    page_ready: std.atomic.Value(bool),
+    // Set when the UI has said it is listening for test commands.
+    ui_ready: std.atomic.Value(bool),
     // What a test has said the next native dialog returns, as the JSON text of an array of paths, until a dialog takes it. Guarded
     // by mutex.
     pick_answer: ?[]u8,
@@ -99,7 +99,7 @@ pub const TestControl = struct {
             .next_request = 1,
             .waiting_request = null,
             .answer = null,
-            .page_ready = .init(false),
+            .ui_ready = .init(false),
             .pick_answer = null,
         };
         errdefer self.server.deinit(io);
@@ -160,7 +160,7 @@ pub const TestControl = struct {
     }
 
     //
-    // Called when the page answers a command on the test-result channel.
+    // Called when the UI answers a command on the test-result channel.
     //
     //
     // Called by a task that is about to show a native dialog: takes the answer a test gave for it, copied with the allocator, or
@@ -179,21 +179,21 @@ pub const TestControl = struct {
     }
 
     //
-    // Called when the page says it is listening for test commands. A command sent before that would reach a page that is
+    // Called when the UI says it is listening for test commands. A command sent before that would reach a UI that is
     // not there to hear it, so commands wait for this.
     //
-    pub fn markPageReady(self: *TestControl) void {
-        self.page_ready.store(true, .release);
+    pub fn markUiReady(self: *TestControl) void {
+        self.ui_ready.store(true, .release);
     }
 
     //
-    // Waits until the page has said it is listening, or fails with PageDidNotAnswer when it never does.
+    // Waits until the UI has said it is listening, or fails with UiDidNotAnswer when it never does.
     //
-    fn waitForPage(self: *TestControl) !void {
+    fn waitForUi(self: *TestControl) !void {
         const deadline = std.Io.Clock.awake.now(self.io).addDuration(.fromMilliseconds(answer_timeout_ms));
-        while (!self.page_ready.load(.acquire)) {
+        while (!self.ui_ready.load(.acquire)) {
             if (std.Io.Clock.awake.now(self.io).durationTo(deadline).nanoseconds <= 0) {
-                return error.PageDidNotAnswer;
+                return error.UiDidNotAnswer;
             }
             self.io.sleep(.fromMilliseconds(5), .awake) catch @panic("sleep cancelled");
         }
@@ -302,16 +302,16 @@ pub const TestControl = struct {
         }
         if (std.mem.eql(u8, name, "menu")) {
             // Chooses a menu item as a user would, through the shell, so the shell's own actions really happen. Reloading unloads the
-            // page, which is not listening again until it says so, so commands wait for that.
+            // UI, which is not listening again until it says so, so commands wait for that.
             const action = json_util.getString(command, "action") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
             const choose = self.config.menu_action orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"HostCallbackMissing\"}");
             };
-            try self.waitForPage();
+            try self.waitForUi();
             if (std.mem.eql(u8, action, "reload")) {
-                self.page_ready.store(false, .release);
+                self.ui_ready.store(false, .release);
             }
             const action_text = try arena.dupeZ(u8, action);
             choose(self.config.user_data, action_text.ptr);
@@ -319,14 +319,14 @@ pub const TestControl = struct {
         }
         if (std.mem.eql(u8, name, "screenshot")) {
             // Writes a PNG of the app's window to the command's "outputPath" through the shell, which captures what is on screen.
-            // The page must be showing first, or the picture would be of a window with nothing in it.
+            // The UI must be showing first, or the picture would be of a window with nothing in it.
             const output_path = json_util.getString(command, "outputPath") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
             const capture = self.config.screenshot orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"HostCallbackMissing\"}");
             };
-            try self.waitForPage();
+            try self.waitForUi();
             const path_text = try arena.dupeZ(u8, output_path);
             var reason: [512]u8 = undefined;
             const result = capture(self.config.user_data, path_text.ptr, &reason, reason.len);
@@ -349,11 +349,11 @@ pub const TestControl = struct {
                     .@"error" = @errorName(err),
                 });
             };
-            // A drop that names a "dataId" is also a drop on that element of the page, so the page is asked to drop the same files on it
+            // A drop that names a "dataId" is also a drop on that element of the UI, so the UI is asked to drop the same files on it
             // and its answer is the answer.
             if (command.object.get("dataId") != null) {
-                try self.waitForPage();
-                return try self.askPage(arena, command_json);
+                try self.waitForUi();
+                return try self.askUi(arena, command_json);
             }
             return try self.allocator.dupe(u8, "{\"ok\":true}");
         }
@@ -380,14 +380,14 @@ pub const TestControl = struct {
             self.pick_answer = answer;
             return try self.allocator.dupe(u8, "{\"ok\":true}");
         }
-        try self.waitForPage();
-        return try self.askPage(arena, command_json);
+        try self.waitForUi();
+        return try self.askUi(arena, command_json);
     }
 
     //
-    // Sends a command to the page and waits for its answer.
+    // Sends a command to the UI and waits for its answer.
     //
-    fn askPage(self: *TestControl, arena: std.mem.Allocator, command_json: []const u8) ![]u8 {
+    fn askUi(self: *TestControl, arena: std.mem.Allocator, command_json: []const u8) ![]u8 {
         self.command_mutex.lockUncancelable(self.io);
         defer self.command_mutex.unlock(self.io);
         self.mutex.lockUncancelable(self.io);
@@ -414,7 +414,7 @@ pub const TestControl = struct {
         while (self.answer == null) {
             const remaining = std.Io.Clock.awake.now(self.io).durationTo(deadline);
             if (remaining.nanoseconds <= 0) {
-                return try self.allocator.dupe(u8, "{\"error\":\"PageDidNotAnswer\"}");
+                return try self.allocator.dupe(u8, "{\"error\":\"UiDidNotAnswer\"}");
             }
             self.waitAnswer(remaining);
         }
