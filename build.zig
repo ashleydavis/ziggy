@@ -556,6 +556,11 @@ pub fn addLinuxShell(
     });
     shell_module.addImport("c", translate_c.createModule());
     shell_module.addImport("ui-files", createUiFilesModule(b, ziggy, target, optimize));
+    shell_module.addImport("host-reply", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/host-reply.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
     for (runtime_library_paths.items) |path| {
         shell_module.addObjectFile(.{
             .cwd_relative = path,
