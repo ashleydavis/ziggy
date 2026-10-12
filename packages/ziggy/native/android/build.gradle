@@ -1,6 +1,6 @@
 // Ziggy's Android shell: the Java framework code that hosts a WebView, injects window.ziggy and moves messages between
 // the UI and the core. It is a Gradle build of its own, which an app's Gradle project includes (see settings.gradle and
-// README.md), and Gradle builds it in place of the dependency `dev.ziggy:ziggy-shell-android`.
+// README.md), and Gradle builds it in place of the dependency `dev.ziggy:ziggy-native-android`.
 
 buildscript {
     repositories {
@@ -24,7 +24,7 @@ group = 'dev.ziggy'
 version = '0.1.0'
 
 android {
-    namespace "dev.ziggy.shell"
+    namespace "dev.ziggy.nativeapp"
     compileSdkVersion 35
 
     defaultConfig {

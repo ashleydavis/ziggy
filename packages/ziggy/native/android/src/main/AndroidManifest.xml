@@ -9,7 +9,7 @@
 
     <application>
         <service
-            android:name="dev.ziggy.shell.ZiggyKeepAliveService"
+            android:name="dev.ziggy.nativeapp.ZiggyKeepAliveService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>

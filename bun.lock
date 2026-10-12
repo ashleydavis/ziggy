@@ -9,7 +9,7 @@
       "name": "ziggy-example",
       "version": "1.0.0",
       "dependencies": {
-        "ziggy-bridge": "workspace:*",
+        "ziggy-ui": "workspace:*",
       },
       "devDependencies": {
         "@types/jest": "^29.4.0",
@@ -21,8 +21,8 @@
         "vite": "^5.1.6",
       },
     },
-    "packages/ziggy/bridge": {
-      "name": "ziggy-bridge",
+    "packages/ziggy/ui": {
+      "name": "ziggy-ui",
       "version": "1.0.0",
       "devDependencies": {
         "@types/jest": "^29.4.0",
@@ -752,9 +752,9 @@
 
     "yocto-queue": ["yocto-queue@0.1.0", "", {}, "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q=="],
 
-    "ziggy-bridge": ["ziggy-bridge@workspace:packages/ziggy/bridge"],
-
     "ziggy-example": ["ziggy-example@workspace:apps/ziggy-example"],
+
+    "ziggy-ui": ["ziggy-ui@workspace:packages/ziggy/ui"],
 
     "@babel/core/semver": ["semver@6.3.1", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA=="],
 

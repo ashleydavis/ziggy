@@ -4,8 +4,8 @@
   "private": true,
   "description": "Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the user interface and Zig for everything else. One app runs on Linux, Windows, macOS, Android and iOS, using each platform's system web view.",
   "license": "MIT",
-  "main": "packages/ziggy/bridge/src/index.ts",
-  "types": "packages/ziggy/bridge/src/index.ts",
+  "main": "packages/ziggy/ui/src/index.ts",
+  "types": "packages/ziggy/ui/src/index.ts",
   "scripts": {
     "setup": "bun --filter '*' setup",
     "compile": "bun --filter '*' compile",
@@ -54,6 +54,6 @@
   },
   "workspaces": [
     "apps/*",
-    "packages/ziggy/bridge"
+    "packages/ziggy/ui"
   ]
 }

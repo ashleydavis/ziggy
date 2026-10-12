@@ -6,9 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the UI and Zig for everything else, using each platform's system web view. This repository holds Ziggy itself (`packages/ziggy`) and the Ziggy example (`apps/ziggy-example`), a small complete app built on it that a new app starts as a copy of. Use the terms "the UI", "the core", "the native app" and "the system web view" as the [glossary](README.md#glossary) defines them.
 
-- `packages/ziggy/core`: the core library every app links, imported as `@import("ziggy")`, with the C interface (`core/src/lib/ziggy.h`).
-- `packages/ziggy/task-queue`: the task queue the core runs tasks through, imported as `@import("task-queue")`.
-- `packages/ziggy/bridge`: the script every native app injects to create `window.ziggy`, and its TypeScript types (the `ziggy-bridge` package).
+- `packages/ziggy/core`: the core library every app links, `ziggy-core`, imported as `@import("ziggy-core")`, with the C interface (`core/src/lib/ziggy.h`), the task queue and the script every native app injects to create `window.ziggy`.
+- `packages/ziggy/ui`: the TypeScript types of `window.ziggy` and of the messages the core sends (the `ziggy-ui` package).
 - `packages/ziggy/native/<platform>`: the part of each native app that Ziggy provides.
 - `build.zig`: builds Ziggy, runs its tests and holds the functions an app's own `build.zig` calls. `Package.swift`: the MacOS and iOS native apps as one Swift package.
 - Ziggy's code never names the app and never imports its packages. The app uses Ziggy only through its interfaces.
@@ -96,7 +95,7 @@ Ziggy and the Ziggy example are developed on Linux and delivered and tested on L
 
 ### Run from repo root
 - `bun run compile` (alias `c`) - Type-check the TypeScript.
-- `bun run test` (alias `t`) - The TypeScript unit tests: the bridge and the example's UI.
+- `bun run test` (alias `t`) - The TypeScript unit tests: `ziggy-ui` and the example's UI.
 - `bun run test:zig` - Every Zig test (`zig build test`): Ziggy's core, the task queue, the parts of the Linux and Windows native apps that need no platform and the example's core.
 - `bun run test:zig:android` / `bun run test:zig:ios` - The Zig unit tests of Ziggy's core and the example's core, run on an Android emulator or device, or on a booted iOS simulator.
 - `bun run test:android-shell` - The JUnit tests of the Android native app, on this machine's JVM. Needs no device.

@@ -10,7 +10,7 @@ A new app starts as a copy of the Ziggy example (`apps/ziggy-example`), which is
    - `build.zig.zon`: the `ziggy` dependency's `.path` (`"../ziggy"`). Delete the `.fingerprint` line; `zig build` then prints a new one, which goes back in.
    - `shells/android/settings.gradle`: the path in `includeBuild` (`'../../../ziggy/packages/ziggy/native/android'`).
    - `shells/macos/ZiggyExample.xcodeproj/project.pbxproj` and `shells/ios/ZiggyExample.xcodeproj/project.pbxproj`: the `path` of the `macos` or `ios` package reference (`"../../../ziggy/packages/ziggy/native/macos"`).
-   - `package.json`: `"ziggy-bridge": "file:../ziggy/packages/ziggy/bridge"` in place of `workspace:*`.
+   - `package.json`: `"ziggy-ui": "file:../ziggy/packages/ziggy/ui"` in place of `workspace:*`.
 4. Rename the app. Every one of these names the example, and each must name the new app instead (the test app built from the example used `ziggy-test-app`, `ziggy_test_app`, `dev.ziggy.testapp`, `ZiggyTestApp` and "Ziggy test app"):
    - `ziggy-example`, the app's name: `package.json`'s `name`, the `name` given to `addAppCore` and `IShellApp` in `build.zig` (which names the steps `<name>-core`, `<name>-linux` and `<name>-windows`, and the executables) and every script, smoke test and doc that runs those steps or names the executables and packages.
    - `ziggy_example`, the name of the core library (`libziggy_example.a`, `libziggy_example.so`): the Xcode projects link it, `shells/android` loads it and the sync and package scripts copy it. `addAppCore` makes it from the app's name, with each `-` as `_`.
@@ -26,7 +26,7 @@ Then change what the app does: its UI, its core's channel and task handlers, its
 
 ## The parts of an app
 
-- **The UI** (`ui/`): the user interface, in TypeScript and HTML, built by Vite (`vite.config.ts`) into `dist`. It talks to the core through `window.ziggy`, whose types are in `ziggy-bridge`. `ui/src/lib` holds plain functions with unit tests.
+- **The UI** (`ui/`): the user interface, in TypeScript and HTML, built by Vite (`vite.config.ts`) into `dist`. It talks to the core through `window.ziggy`, whose types are in `ziggy-ui`. `ui/src/lib` holds plain functions with unit tests.
 - **The core** (`core/`): the app's Zig library. `core/src/index.zig` gives Ziggy the app's handlers: the channels the UI sends requests on, the task types it queues, the menu, the UI's query and the keep-alive task types. `core/src/lib` holds them. The core embeds the built UI, so `dist` must be built before the core.
 - **The handlers**: a channel handler answers a request from the UI on the thread that handles the UI's messages, so it must be quick. Anything slow is a task, which runs on the core's pool of threads, reports progress with task messages and can be cancelled. See the [architecture guide](architecture.md#channels) for both.
 - **The native apps** (`shells/<platform>/`): the app's native project for each platform, built on the part Ziggy provides for that platform: its name, window, icon, permissions and anything only the operating system can do. The Linux and Windows native apps are Zig, built by `build.zig`. The MacOS and iOS native apps are Xcode projects, the Android native app a Gradle project, each built by the app's scripts after the core library is built for that platform.

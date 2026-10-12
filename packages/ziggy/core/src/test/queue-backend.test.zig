@@ -4,9 +4,9 @@
 //
 
 const std = @import("std");
-const ziggy = @import("ziggy");
-const task_queue = @import("task-queue");
-const utils = @import("task-queue").utils;
+const ziggy = @import("ziggy-core");
+const task_queue = @import("ziggy-core").task_queue;
+const utils = @import("ziggy-core").task_queue.utils;
 const helpers = @import("helpers.zig");
 
 const types = task_queue.types;

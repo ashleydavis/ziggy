@@ -9,7 +9,7 @@
 const std = @import("std");
 const types = @import("types.zig");
 const json_util = @import("json-util.zig");
-const utils = @import("task-queue").utils;
+const utils = @import("task-queue.zig").utils;
 
 const Completion = types.Completion;
 const TaskStatus = types.TaskStatus;

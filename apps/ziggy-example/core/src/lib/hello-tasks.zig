@@ -3,7 +3,7 @@
 //
 
 const std = @import("std");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 
 const TaskContext = ziggy.task_runner.TaskContext;
 const json_util = ziggy.json_util;

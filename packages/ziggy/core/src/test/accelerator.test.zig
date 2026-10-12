@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 
 const accelerator = ziggy.accelerator;
 

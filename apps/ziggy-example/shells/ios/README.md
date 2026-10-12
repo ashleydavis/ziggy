@@ -1,6 +1,6 @@
 # Ziggy example, iOS native app
 
-A UIKit app: one view controller whose view is Ziggy's `WKWebView`. All the Ziggy behaviour is in the `ZiggyShellIOS` Swift package (`packages/ziggy/native/ios`), referenced as a local package. The deployment target is iOS 14.0. The app has no network permissions to declare, because the example UI is loaded from a file. There is no way to quit an iOS app, so the test control connection's quit command destroys the core and ends the process.
+A UIKit app: one view controller whose view is Ziggy's `WKWebView`. All the Ziggy behaviour is in the `ZiggyNativeIOS` Swift package (`packages/ziggy/native/ios`), referenced as a local package. The deployment target is iOS 14.0. The app has no network permissions to declare, because the example UI is loaded from a file. There is no way to quit an iOS app, so the test control connection's quit command destroys the core and ends the process.
 
 ## Web view API used
 

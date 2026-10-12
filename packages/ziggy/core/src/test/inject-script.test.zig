@@ -1,5 +1,5 @@
 const std = @import("std");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 
 test "the embedded inject script is the one that exposes window.ziggy on every platform's channel" {
     const text = ziggy.inject_script.text;

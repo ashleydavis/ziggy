@@ -6,14 +6,14 @@ import PackageDescription
 // core through the C interface in ziggy.h. The app's own Zig static library, which holds the core, is linked by the app
 // project, not by this package.
 let package = Package(
-    name: "ZiggyShellIOS",
+    name: "ZiggyNativeIOS",
     platforms: [
         .iOS(.v14),
     ],
     products: [
         .library(
-            name: "ZiggyShellIOS",
-            targets: ["ZiggyShellIOS"]
+            name: "ZiggyNativeIOS",
+            targets: ["ZiggyNativeIOS"]
         ),
     ],
     targets: [
@@ -22,7 +22,7 @@ let package = Package(
             path: "Sources/CZiggy"
         ),
         .target(
-            name: "ZiggyShellIOS",
+            name: "ZiggyNativeIOS",
             dependencies: ["CZiggy"]
         ),
     ]

@@ -1,8 +1,8 @@
 //
 // The JNI crossing for Ziggy's Android shell, written in Zig against the NDK's own jni.h. The Java class
-// dev.ziggy.shell.ZiggyNative declares the native methods and the Java interface dev.ziggy.shell.ZiggyHost is what the
+// dev.ziggy.nativeapp.ZiggyNative declares the native methods and the Java interface dev.ziggy.nativeapp.ZiggyHost is what the
 // core calls back into. An app calls exportJni with its own handlers, in a comptime block of its library's root file, and
-// the Java_dev_ziggy_shell_ZiggyNative_* functions below are exported from that library.
+// the Java_dev_ziggy_nativeapp_ZiggyNative_* functions below are exported from that library.
 //
 // Everything the crossing needs lives in a Bridge, which is allocated by create and whose address is the jlong handle the
 // Java side holds. The core's callbacks get the same address as their user_data. Nothing is kept in a global.
@@ -24,7 +24,7 @@ const host_reply = @import("host-reply.zig");
 //
 // The Java interface the core calls back into.
 //
-const host_class_name = "dev/ziggy/shell/ZiggyHost";
+const host_class_name = "dev/ziggy/nativeapp/ZiggyHost";
 
 //
 // Everything one created core needs to reach back into Java. The address of a Bridge is the handle the Java side holds.
@@ -558,7 +558,7 @@ fn createBridge(env: *c.JNIEnv, allocator: std.mem.Allocator, arguments: CreateA
 }
 
 //
-// Exports the JNI entry points of dev.ziggy.shell.ZiggyNative and JNI_OnLoad from the library that calls this, serving the
+// Exports the JNI entry points of dev.ziggy.nativeapp.ZiggyNative and JNI_OnLoad from the library that calls this, serving the
 // given app handlers. It is called once, in a comptime block of the app's root file, and only for an Android target.
 //
 pub fn exportJni(comptime app: core_module.AppHandlers) void {
@@ -754,30 +754,30 @@ pub fn exportJni(comptime app: core_module.AppHandlers) void {
         .name = "JNI_OnLoad",
     });
     @export(&Exports.testHooksEnabled, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_testHooksEnabled",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_testHooksEnabled",
     });
     @export(&Exports.create, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_create",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_create",
     });
     @export(&Exports.destroy, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_destroy",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_destroy",
     });
     @export(&Exports.postMessage, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_postMessage",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_postMessage",
     });
     @export(&Exports.checkUrl, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_checkUrl",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_checkUrl",
     });
     @export(&Exports.injectScript, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_injectScript",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_injectScript",
     });
     @export(&Exports.uiQuery, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_uiQuery",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_uiQuery",
     });
     @export(&Exports.uiFileContent, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_uiFileContent",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_uiFileContent",
     });
     @export(&Exports.uiFileContentType, .{
-        .name = "Java_dev_ziggy_shell_ZiggyNative_uiFileContentType",
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_uiFileContentType",
     });
 }

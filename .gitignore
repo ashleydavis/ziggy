@@ -1,6 +1,8 @@
 node_modules
 dist
 build
+# The code build.zig runs, which is source rather than output
+!/build/
 coverage
 tsconfig.tsbuildinfo
 tmp/

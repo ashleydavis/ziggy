@@ -5,7 +5,7 @@
 //
 
 const std = @import("std");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 
 const Core = ziggy.core.Core;
 const TaskContext = ziggy.task_runner.TaskContext;

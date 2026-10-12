@@ -16,8 +16,8 @@
 //
 
 const std = @import("std");
-const utils = @import("task-queue").utils;
-const task_queue = @import("task-queue");
+const utils = @import("task-queue.zig").utils;
+const task_queue = @import("task-queue.zig");
 
 const types = task_queue.types;
 const queue_backend = task_queue.queue_backend;

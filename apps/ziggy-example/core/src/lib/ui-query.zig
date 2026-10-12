@@ -3,7 +3,7 @@
 //
 
 const std = @import("std");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 
 //
 // Says whether the test mode switch is on, which is all the example's UI reads from its address.

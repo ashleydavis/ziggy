@@ -7,4 +7,4 @@ set -euo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/android-common.sh"
 
-ziggy_android_gradle :ziggy-shell-android:testDebugUnitTest --rerun-tasks
+ziggy_android_gradle :ziggy-native-android:testDebugUnitTest --rerun-tasks

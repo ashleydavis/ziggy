@@ -6,14 +6,14 @@ import PackageDescription
 // core through the C interface in ziggy.h. The app's own Zig static library, which holds the core, is linked by the app
 // project, not by this package.
 let package = Package(
-    name: "ZiggyShellMacOS",
+    name: "ZiggyNativeMacOS",
     platforms: [
         .macOS(.v11),
     ],
     products: [
         .library(
-            name: "ZiggyShellMacOS",
-            targets: ["ZiggyShellMacOS"]
+            name: "ZiggyNativeMacOS",
+            targets: ["ZiggyNativeMacOS"]
         ),
     ],
     targets: [
@@ -22,7 +22,7 @@ let package = Package(
             path: "Sources/CZiggy"
         ),
         .target(
-            name: "ZiggyShellMacOS",
+            name: "ZiggyNativeMacOS",
             dependencies: ["CZiggy"]
         ),
     ]

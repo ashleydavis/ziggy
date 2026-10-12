@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* AppMain.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* AppMain.swift */; };
 		A10000000000000000000002 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* AppDelegate.swift */; };
-		A10000000000000000000004 /* ZiggyShellMacOS in Frameworks */ = {isa = PBXBuildFile; productRef = A60000000000000000000001 /* ZiggyShellMacOS */; };
+		A10000000000000000000004 /* ZiggyNativeMacOS in Frameworks */ = {isa = PBXBuildFile; productRef = A60000000000000000000001 /* ZiggyNativeMacOS */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -25,7 +25,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000000000000000000004 /* ZiggyShellMacOS in Frameworks */,
+				A10000000000000000000004 /* ZiggyNativeMacOS in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,7 +84,7 @@
 			);
 			name = ZiggyExample;
 			packageProductDependencies = (
-				A60000000000000000000001 /* ZiggyShellMacOS */,
+				A60000000000000000000001 /* ZiggyNativeMacOS */,
 			);
 			productName = ZiggyExample;
 			productReference = A20000000000000000000005 /* ZiggyExample.app */;
@@ -248,9 +248,9 @@
 
 
 /* Begin XCSwiftPackageProductDependency section */
-		A60000000000000000000001 /* ZiggyShellMacOS */ = {
+		A60000000000000000000001 /* ZiggyNativeMacOS */ = {
 			isa = XCSwiftPackageProductDependency;
-			productName = ZiggyShellMacOS;
+			productName = ZiggyNativeMacOS;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

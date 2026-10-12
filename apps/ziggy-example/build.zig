@@ -43,13 +43,13 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
-    example_for_tests.addImport("ziggy", test_ziggy.module);
-    example_for_tests.addImport("ui-files", try ziggy_build.embedUi(b, test_ziggy.module, "ziggy", "dist"));
+    example_for_tests.addImport("ziggy-core", test_ziggy.module);
+    example_for_tests.addImport("ui-files", try ziggy_build.embedUi(b, test_ziggy.module, "ziggy-core", "dist"));
     const test_step = b.step("test", "Run the unit tests of the Ziggy example's core");
     const test_binary_step = b.step("test-binary-ziggy-example-core", "Build the unit test program of the Ziggy example's core and install it to test-bin without running it");
     try ziggy_build.addDirectoryTests(b, test_step, "core", &.{
         .{
-            .name = "ziggy",
+            .name = "ziggy-core",
             .module = test_ziggy.module,
         },
         .{

@@ -1,5 +1,5 @@
 const std = @import("std");
-const ui_files = @import("ziggy").ui_files;
+const ui_files = @import("ziggy-core").ui_files;
 
 const files = [_]ui_files.UiFile{
     .{

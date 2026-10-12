@@ -1,4 +1,4 @@
-import type { IJsonObject } from "ziggy-bridge";
+import type { IJsonObject } from "ziggy-ui";
 
 //
 // The commands the test control connection forwards to the UI, performed on the UI's DOM by data-id. The UI

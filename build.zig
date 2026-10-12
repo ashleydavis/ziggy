@@ -1,12 +1,11 @@
 const std = @import("std");
-const android_libc = @import("packages-zig/android-libc.zig");
+const android_libc = @import("build/android-libc.zig");
 
 //
-// Builds Ziggy, the shell its apps stand on, and registers its tests. As a dependency of an app's build it gives the app the
-// modules "ziggy" (the core, which the app's code imports as @import("ziggy")) and "task-queue" (the task queue and the helpers it is
-// written with, for code that queues tasks without the app shell), built for the target, optimize mode and test hooks the app asks
-// for. The functions below that are `pub` are what an app's build.zig calls to build its core library and its Linux and Windows
-// shells; it reaches them with @import("ziggy") in its build.zig.
+// Builds Ziggy and registers its tests. As a dependency of an app's build it gives the app the
+// module "ziggy-core" (the core, with its task queue, which the app's code imports as @import("ziggy-core")), built for the target,
+// optimize mode and test hooks the app asks for. The functions below that are `pub` are what an app's build.zig calls to build its
+// core library and its Linux and Windows native apps; it reaches them with @import("ziggy") in its build.zig.
 //
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -15,57 +14,39 @@ pub fn build(b: *std.Build) !void {
     // ReleaseSafe by default: the tests keep the safety checks.
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Prioritize performance, safety, or binary size (default: ReleaseSafe)") orelse .ReleaseSafe;
 
-    const task_queue = b.addModule("task-queue", .{
-        .root_source_file = b.path("packages/ziggy/task-queue/src/index.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
-    const core = b.addModule("ziggy", .{
+    const core = b.addModule("ziggy-core", .{
         .root_source_file = b.path("packages/ziggy/core/src/index.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    try configureCore(b, core, target, optimize, test_hooks, task_queue);
+    try configureCore(b, core, target, optimize, test_hooks);
 
-    // The unit tests of Ziggy's core, which run the core with the test hooks compiled in.
-    const test_step = b.step("test", "Run the unit tests of Ziggy (the core, the task queue and the shells) and of the Ziggy example");
+    // The unit tests of Ziggy's core and its task queue, which run the core with the test hooks compiled in.
+    const test_step = b.step("test", "Run the unit tests of Ziggy (the core and the native apps) and of the Ziggy example");
     const test_core = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/core/src/index.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    try configureCore(b, test_core, target, optimize, true, task_queue);
+    try configureCore(b, test_core, target, optimize, true);
     const core_test_binary_step = b.step("test-binary-ziggy-core", "Build the unit test program of Ziggy's core and install it to test-bin without running it");
     try addDirectoryTests(b, test_step, "packages/ziggy/core", &.{
         .{
-            .name = "ziggy",
+            .name = "ziggy-core",
             .module = test_core,
         },
-        .{
-            .name = "task-queue",
-            .module = task_queue,
-        },
     }, target, optimize, core_test_binary_step);
-
-    // The unit tests of the task queue and its helpers.
-    try addDirectoryTests(b, test_step, "packages/ziggy/task-queue", &.{
-        .{
-            .name = "task-queue",
-            .module = task_queue,
-        },
-    }, target, optimize, null);
 
     // The console writing to the real stdout, which a unit test cannot see: a program writes through it and the build checks what it
     // printed.
     const console_stdout_module = b.createModule(.{
-        .root_source_file = b.path("packages/ziggy/task-queue/src/test/fixtures/console-stdout.zig"),
+        .root_source_file = b.path("packages/ziggy/core/src/test/task-queue/fixtures/console-stdout.zig"),
         .target = target,
         .optimize = optimize,
     });
-    console_stdout_module.addImport("task-queue", task_queue);
+    console_stdout_module.addImport("ziggy-core", test_core);
     const run_console_stdout = b.addRunArtifact(b.addExecutable(.{
         .name = "console-stdout",
         .root_module = console_stdout_module,
@@ -80,7 +61,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{
-        .name = "ziggy-shell-linux",
+        .name = "ziggy-native-linux",
         .root_module = linux_tests_module,
     })).step);
     const windows_tests_module = b.createModule(.{
@@ -89,7 +70,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
     });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{
-        .name = "ziggy-shell-windows",
+        .name = "ziggy-native-windows",
         .root_module = windows_tests_module,
     })).step);
 
@@ -116,15 +97,10 @@ fn configureCore(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     test_hooks: bool,
-    task_queue: *std.Build.Module,
 ) !void {
     const options = b.addOptions();
     options.addOption(bool, "test_hooks", test_hooks);
     module.addOptions("build_options", options);
-    module.addImport("task-queue", task_queue);
-    module.addAnonymousImport("ziggy-inject", .{
-        .root_source_file = b.path("packages/ziggy/bridge/inject/ziggy-inject.js"),
-    });
 
     // The Android shell reaches the core through JNI, written in Zig against the NDK's own jni.h. Only an Android target has that
     // header, so the import exists only for one.
@@ -147,11 +123,8 @@ pub const IZiggy = struct {
     // The dependency named "ziggy" in the app's build.zig.zon.
     dependency: *std.Build.Dependency,
 
-    // The core, which the app's code imports as @import("ziggy").
+    // The core, with its task queue, which the app's code imports as @import("ziggy-core").
     module: *std.Build.Module,
-
-    // The task queue and its helpers, which the app's code imports as @import("task-queue").
-    task_queue: *std.Build.Module,
 };
 
 //
@@ -167,8 +140,7 @@ pub fn dependency(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
     });
     return .{
         .dependency = ziggy_dependency,
-        .module = ziggy_dependency.module("ziggy"),
-        .task_queue = ziggy_dependency.module("task-queue"),
+        .module = ziggy_dependency.module("ziggy-core"),
     };
 }
 
@@ -184,7 +156,7 @@ pub const IAppCore = struct {
     root_source_file: []const u8,
     // The directory of the app's built UI, relative to the app's build root, which is embedded in the core as "ui-files".
     ui_directory: []const u8,
-    // The modules the app's core imports besides "ziggy" and "ui-files".
+    // The modules the app's core imports besides "ziggy-core" and "ui-files".
     imports: []const IImport,
 };
 
@@ -199,7 +171,7 @@ pub const IAppCoreLibraries = struct {
 };
 
 //
-// Builds an app's core for the target, installed by the `<name>-core` step: a static library (with ziggy.h installed beside it) and,
+// Builds an app's core for the target, installed by the `<name>-core` step: a static library with ziggy.h installed beside it or,
 // for Android, a shared one. The platform shells that are not Zig (the Xcode projects and the Android project) are built by the app's
 // scripts, which ask this step for the libraries.
 //
@@ -220,10 +192,12 @@ pub fn addAppCore(
     });
     // The Xcode linker is not Zig's, so the compiler runtime (for example ___zig_probe_stack) must travel inside the archive.
     static_library.bundle_compiler_rt = true;
-    core_step.dependOn(&b.addInstallArtifact(static_library, .{}).step);
-    core_step.dependOn(&b.addInstallFileWithDir(ziggy.dependency.path("packages/ziggy/core/src/lib/ziggy.h"), .header, "ziggy.h").step);
     var shared_library: ?*std.Build.Step.Compile = null;
-    if (target.result.abi.isAndroid()) {
+    if (!target.result.abi.isAndroid()) {
+        core_step.dependOn(&b.addInstallArtifact(static_library, .{}).step);
+        core_step.dependOn(&b.addInstallFileWithDir(ziggy.dependency.path("packages/ziggy/core/src/lib/ziggy.h"), .header, "ziggy.h").step);
+    }
+    else {
         const library = b.addLibrary(.{
             .name = library_name,
             .root_module = try createAppCoreModule(b, ziggy, app, target, optimize),
@@ -258,8 +232,8 @@ fn createAppCoreModule(
         .optimize = optimize,
         .link_libc = true,
     });
-    module.addImport("ziggy", ziggy.module);
-    module.addImport("ui-files", try embedUi(b, ziggy.module, "ziggy", app.ui_directory));
+    module.addImport("ziggy-core", ziggy.module);
+    module.addImport("ui-files", try embedUi(b, ziggy.module, "ziggy-core", app.ui_directory));
     for (app.imports) |import| {
         module.addImport(import.name, import.module);
     }
@@ -573,13 +547,13 @@ pub fn addLinuxShell(
         .optimize = optimize,
         .link_libc = true,
     });
-    module.addImport("ziggy-shell-linux", shell_module);
+    module.addImport("ziggy-native-linux", shell_module);
     if (app.linux_icon) |icon| {
         module.addAnonymousImport("app-icon", .{
             .root_source_file = b.path(icon),
         });
     }
-    module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-shell-linux", app.ui_directory));
+    module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-native-linux", app.ui_directory));
     module.linkLibrary(core_library);
     const executable = b.addExecutable(.{
         .name = app.name,
@@ -661,13 +635,13 @@ pub fn addWindowsShell(
         .optimize = optimize,
         .link_libc = true,
     });
-    module.addImport("ziggy-shell-windows", shell_module);
+    module.addImport("ziggy-native-windows", shell_module);
     if (app.windows_resource) |resource| {
         module.addWin32ResourceFile(.{
             .file = b.path(resource),
         });
     }
-    module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-shell-windows", app.ui_directory));
+    module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-native-windows", app.ui_directory));
     module.linkLibrary(core_library);
     const executable = b.addExecutable(.{
         .name = app.name,
@@ -690,10 +664,10 @@ pub fn addWindowsShell(
         .optimize = optimize,
         .link_libc = true,
     });
-    check_module.addImport("ziggy-shell-windows", shell_module);
+    check_module.addImport("ziggy-native-windows", shell_module);
     // The icon resource is left out: a resource is not Zig, so it has no type errors to find, and an object cannot hold it ("coff does
     // not support linking multiple objects into one").
-    check_module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-shell-windows", app.ui_directory));
+    check_module.addImport("ui-files", try embedUi(b, shell_module, "ziggy-native-windows", app.ui_directory));
     check_step.dependOn(&b.addObject(.{
         .name = b.fmt("{s}-check", .{app.name}),
         .root_module = check_module,

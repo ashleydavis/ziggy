@@ -4,7 +4,7 @@
 //
 
 const std = @import("std");
-const shell = @import("ziggy-shell-windows");
+const shell = @import("ziggy-native-windows");
 const ui = @import("ui-files");
 
 pub fn main(init: std.process.Init) !u8 {

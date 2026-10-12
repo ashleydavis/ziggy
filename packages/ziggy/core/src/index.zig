@@ -17,4 +17,5 @@ pub const accelerator = @import("lib/accelerator.zig");
 pub const inject_script = @import("lib/inject-script.zig");
 pub const ui_files = @import("lib/ui-files.zig");
 pub const dropped_files = @import("lib/dropped-files.zig");
+pub const task_queue = @import("lib/task-queue.zig");
 pub const UiFile = ui_files.UiFile;

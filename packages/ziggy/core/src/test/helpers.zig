@@ -3,7 +3,7 @@
 //
 
 const std = @import("std");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 
 const core_module = ziggy.core;
 const task_runner = ziggy.task_runner;

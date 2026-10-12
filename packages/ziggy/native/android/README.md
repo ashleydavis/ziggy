@@ -1,6 +1,6 @@
 # Ziggy native app for Android
 
-Ziggy's Android framework code: a Java library (no Kotlin) that is a Gradle build of its own. An app's Gradle project takes it as the dependency `dev.ziggy:ziggy-shell-android`, built from a Ziggy checkout (`includeBuild` in the app's `settings.gradle`) or from a version tag of Ziggy's repository (a source dependency). The exact lines are in the guide to integrating Ziggy. It sets its own SDK levels (`compileSdkVersion` 35, `minSdkVersion` 24) and uses the same Android Gradle plugin version an app must use, because Gradle does not allow two versions of that plugin in one build.
+Ziggy's Android framework code: a Java library (no Kotlin) that is a Gradle build of its own. An app's Gradle project takes it as the dependency `dev.ziggy:ziggy-native-android`, built from a Ziggy checkout (`includeBuild` in the app's `settings.gradle`) or from a version tag of Ziggy's repository (a source dependency). The exact lines are in the guide to integrating Ziggy. It sets its own SDK levels (`compileSdkVersion` 35, `minSdkVersion` 24) and uses the same Android Gradle plugin version an app must use, because Gradle does not allow two versions of that plugin in one build.
 
 `ZiggyShell` takes an activity and a `WebView` and:
 

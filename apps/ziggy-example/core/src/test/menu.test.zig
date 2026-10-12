@@ -1,5 +1,5 @@
 const std = @import("std");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 const example = @import("ziggy-example-core");
 
 // The actions every shell performs itself. Every other action in the menu is the app's and goes to the UI.

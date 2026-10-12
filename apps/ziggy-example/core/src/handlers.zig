@@ -2,7 +2,7 @@
 // Everything the example adds to Ziggy's core: its channels and its task types.
 //
 
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 const channels = @import("lib/channels.zig");
 const hello_tasks = @import("lib/hello-tasks.zig");
 pub const media_server = @import("lib/media-server.zig");

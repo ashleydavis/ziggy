@@ -119,9 +119,4 @@ for arch in $arch_list; do
     cp "$generated_dir/zig-out/$abi/lib/libziggy_example.so" "$generated_dir/jniLibs/$abi/libziggy_example.so"
 done
 
-# An earlier version of this script put the UI and the inject script in the assets. Both are in the library now, so the old
-# copies are deleted, one file at a time, rather than left to be packaged into the APK.
-if [ -d "$generated_dir/assets" ]; then
-    find "$generated_dir/assets" -type f -delete
-fi
 echo "Synced into $generated_dir"

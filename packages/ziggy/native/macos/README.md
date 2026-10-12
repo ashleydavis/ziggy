@@ -1,9 +1,9 @@
-# ZiggyShellMacOS
+# ZiggyNativeMacOS
 
 Ziggy's native app code for MacOS, as a Swift package (swift-tools-version 5.7, macOS 11). One class, `ZiggyBridge`, serves the app.
 
 - `CZiggy` is a system library target whose `ziggy.h` is a link to the core's own header (`packages/ziggy/core/src/lib/ziggy.h`).
-- `ZiggyShellMacOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards UI messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the core.
+- `ZiggyNativeMacOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards UI messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the core.
 
 The static library with the core (`libziggy_example.a` for the example) is linked by the app project.
 
@@ -17,7 +17,7 @@ bridge.start()                          // creates the core and loads the UI, wh
 bridge.shutdown()                       // ziggy_destroy, once
 ```
 
-The UI and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/bridge/inject`) are both embedded in the app's core library, so the app bundle holds neither.
+The UI and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/core/src/lib`) are both embedded in the app's core library, so the app bundle holds neither.
 
 ## Test hooks
 

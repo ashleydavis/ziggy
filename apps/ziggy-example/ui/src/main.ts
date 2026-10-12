@@ -1,4 +1,4 @@
-import type { IJsonValue } from "ziggy-bridge";
+import type { IJsonValue, ITaskCompletedEvent, ITaskMessageEvent } from "ziggy-ui";
 import { formatPingReply, IPingReply } from "./lib/format-reply";
 import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobList, IJobProgressMessage } from "./lib/job-list";
 import { makeLargePayload } from "./lib/large-payload";
@@ -6,20 +6,6 @@ import { crc32 } from "./lib/crc32";
 import { ITestCommand, performDropFileCommand, performInsertCommand, performTestCommand, performViewportCommand, testResultToJson } from "./lib/test-commands";
 import { aboutText, buttonForMenuAction } from "./lib/menu-actions";
 import { formatPicked } from "./lib/picked-paths";
-
-//
-// What a task-message event carries.
-//
-interface ITaskMessageEvent {
-    // The task that sent the message.
-    taskId: string;
-
-    // The source the task was queued under.
-    source: string;
-
-    // The message the task sent.
-    message: IOutputMessage | IJobProgressMessage | IMediaServerMessage;
-}
 
 //
 // A message that tells the UI the media server is listening.
@@ -41,40 +27,6 @@ interface IOutputMessage {
 
     // The text to show.
     text: string;
-}
-
-//
-// The result of a task inside a task-completed event, as the Electron renderer receives it (ITaskResult).
-//
-interface ITaskResult {
-    // The task that ended.
-    taskId: string;
-
-    // How it ended. A cancelled task is reported as failed with the error message "Cancelled".
-    status: "succeeded" | "failed";
-
-    // Why it failed, when it did.
-    errorMessage?: string;
-
-    // What it returned, when it succeeded with a result.
-    outputs?: IJsonValue;
-
-    // The task type.
-    type: string;
-
-    // The data the task was queued with.
-    inputs: IJsonValue;
-}
-
-//
-// What a task-completed event carries.
-//
-interface ITaskCompletedEvent {
-    // The task that ended.
-    taskId: string;
-
-    // The full result of the task.
-    result: ITaskResult;
 }
 
 //
@@ -449,7 +401,7 @@ function startStorage(): void {
 }
 
 function listenForEvents(): void {
-    window.ziggy.onMessage<ITaskMessageEvent>("task-message", event => {
+    window.ziggy.onMessage<ITaskMessageEvent<IOutputMessage | IJobProgressMessage | IMediaServerMessage>>("task-message", event => {
         appendTo("event-log", `task-message ${event.taskId} ${JSON.stringify(event.message)}`);
         if (event.message.type === "output") {
             appendTo("output", event.message.text);

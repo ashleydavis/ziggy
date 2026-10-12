@@ -17,23 +17,10 @@ Electron was great, but it's had it's day. Ziggy aims for small standalone execu
 
 This repository holds:
 
-- **Ziggy**, the package an app is built on, in `packages/ziggy`: the Zig core, the task queue, the native app for each platform and the TypeScript bridge that gives the UI `window.ziggy`.
+- **Ziggy**, the package an app is built on, in `packages/ziggy`: the Zig core with its task queue, the native app for each platform and the TypeScript types of `window.ziggy` for the UI.
 - **The Ziggy example**, in `apps/ziggy-example`: a small complete app that shows how to use the package, with smoke tests on every platform. A new app starts as a copy of it.
 
 Nothing is published to npm or any other registry. An app uses Ziggy either from a checkout of this repository, by a local path, or from a version tag of this repository, by its git URL.
-
-## What is in the package
-
-- `packages/ziggy/core`: the core library every app links. It has the C interface (`ziggy.h`), the message dispatcher, the task runner, the origin check, the host callback plumbing and the test control connection. It is the same code on every platform and never touches a window. An app's Zig code imports it as `@import("ziggy")`.
-- `packages/ziggy/task-queue`: the task queue the core runs tasks through, and the helpers it is written with (logging, errors, IDs, timestamps, the process environment, running tools). An app imports it as `@import("task-queue")`, for code that queues tasks without the native app.
-- `packages/ziggy/bridge`: `inject/ziggy-inject.js`, the script every native app injects to create `window.ziggy` (it is embedded in the core, so an app supplies nothing for it), and its TypeScript types, the `ziggy-bridge` package.
-- `packages/ziggy/native/<platform>`: the part of each native app that Ziggy provides, which hosts the system web view, draws the menu, handles shortcuts and developer tools, shows the file and folder dialogs and moves messages between the UI and the core.
-  - `linux`: Zig, GTK 3 and WebKitGTK 4.1.
-  - `windows`: Zig and WebView2.
-  - `macos` and `ios`: Swift and WKWebView, each a Swift package.
-  - `android`: Java and the Android WebView, a Gradle build of its own, with the native methods implemented in the core.
-- `build.zig`: builds Ziggy, runs its tests and holds the functions an app's own `build.zig` calls to build its core and its Linux and Windows native apps.
-- `Package.swift`: the MacOS and iOS native apps as one Swift package, for an app that takes Ziggy from a version tag.
 
 ## Guides
 
@@ -42,6 +29,7 @@ Nothing is published to npm or any other registry. An app uses Ziggy either from
 - [Tasks](docs/tasks.md): how the task queue works, with a diagram, and how to write, register, queue, follow and cancel a task.
 - [Distributing your app](docs/distributing-your-app.md): packaging, signing and getting a build to testers and stores, on each platform.
 - [Releasing Ziggy](docs/releasing-ziggy.md): what the release workflow does on each push, and how a version of the package is released.
+- [Packages](docs/packages.md): each folder of the package, its language and why it is built separately.
 - [Architecture](docs/architecture.md): how the parts fit, the message protocol, tasks, channels, host callbacks, menus and test hooks.
 
 ## Getting started
@@ -50,7 +38,7 @@ The tools are pinned in `mise.toml`. Install them with `mise install`, then the 
 
 | Command | What it does |
 |---|---|
-| `bun run test` | The TypeScript unit tests: the bridge and the example's UI. |
+| `bun run test` | The TypeScript unit tests: `ziggy-ui` and the example's UI. |
 | `bun run test:zig` | Every Zig test (`zig build test`): Ziggy's core, the task queue, the parts of the Linux and Windows native apps that need no platform and the example's core. It builds the example's UI first. |
 | `bun run test:android-shell` | The JUnit tests of the Android native app, on this machine's JVM. |
 | `bun run compile` | Type-checks the TypeScript. |

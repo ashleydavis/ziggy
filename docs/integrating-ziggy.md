@@ -78,8 +78,8 @@ pub fn build(b: *std.Build) !void {
 
 What Ziggy's `build.zig` gives an app:
 
-- `dependency(b, target, optimize, test_hooks)`: Ziggy for the target, as `IZiggy`: the dependency itself, `module` (the core, which the app's code imports as `@import("ziggy")`) and `task_queue` (imported as `@import("task-queue")`). Ask twice for a build that needs both, such as an app built without the test hooks and its unit tests, which run with them.
-- `addAppCore(b, ziggy, app, target, optimize)`: builds the app's core as a library, installed with `ziggy.h` beside it by the `<name>-core` step, with the app's built UI embedded in it as the `ui-files` import. For an Android target it also builds the shared library the Android native app loads. It returns both libraries, so an app can link more into them (a system library, for one).
+- `dependency(b, target, optimize, test_hooks)`: Ziggy for the target, as `IZiggy`: the dependency itself, `module` (the core, which the app's code imports as `@import("ziggy-core")`). Ask twice for a build that needs both, such as an app built without the test hooks and its unit tests, which run with them.
+- `addAppCore(b, ziggy, app, target, optimize)`: builds the app's core as a library, installed by the `<name>-core` step with the app's built UI embedded in it as the `ui-files` import. For an Android target that is the shared library the Android native app loads, and for every other target a static library with `ziggy.h` beside it. It returns both libraries, so an app can link more into them (a system library, for one).
 - `addLinuxShell` and `addWindowsShell`: the app's Linux executable (`<name>-linux`, installed to `bin/<name>`) and Windows executable (`<name>-windows`), each with the UI embedded, and a step that compiles the Windows native app without linking it (`<name>-windows-check`), for a machine without Microsoft's toolchain.
 - `embedUi`: the module that embeds a built UI, for a build that makes its own modules (an app's unit tests, for one).
 - `addDirectoryTests`: compiles every `*.test.zig` under a directory's `src/test` into one test program and runs it, which is how the example runs its core's tests.
@@ -88,19 +88,19 @@ The app's own options (`test-hooks`, `optimize`, `compile-only`) are passed on t
 
 ## The Xcode projects (MacOS and iOS)
 
-From a local path: the project holds a folder reference to Ziggy's Swift package for that platform and links its product. Add `../ziggy/packages/ziggy/native/macos` (the MacOS project) or `../ziggy/packages/ziggy/native/ios` (the iOS project) to the project as a folder, which Xcode treats as a local package, then add the product `ZiggyShellMacOS` or `ZiggyShellIOS` to the app target's Frameworks, Libraries, and Embedded Content. The example's projects (`apps/ziggy-example/shells/macos` and `apps/ziggy-example/shells/ios`) do this with a relative path, which a copied project only has to adjust.
+From a local path: the project holds a folder reference to Ziggy's Swift package for that platform and links its product. Add `../ziggy/packages/ziggy/native/macos` (the MacOS project) or `../ziggy/packages/ziggy/native/ios` (the iOS project) to the project as a folder, which Xcode treats as a local package, then add the product `ZiggyNativeMacOS` or `ZiggyNativeIOS` to the app target's Frameworks, Libraries, and Embedded Content. The example's projects (`apps/ziggy-example/shells/macos` and `apps/ziggy-example/shells/ios`) do this with a relative path, which a copied project only has to adjust.
 
-From a version tag: File > Add Package Dependencies, the repository's URL (`https://github.com/<owner>/ziggy`), the rule Exact Version with the version of the tag without its `v` (Swift Package Manager reads `v0.1.0` as the version `0.1.0`) and the product `ZiggyShellMacOS` or `ZiggyShellIOS`. The package Xcode fetches is the `Package.swift` at the root of this repository, which holds both native apps.
+From a version tag: File > Add Package Dependencies, the repository's URL (`https://github.com/<owner>/ziggy`), the rule Exact Version with the version of the tag without its `v` (Swift Package Manager reads `v0.1.0` as the version `0.1.0`) and the product `ZiggyNativeMacOS` or `ZiggyNativeIOS`. The package Xcode fetches is the `Package.swift` at the root of this repository, which holds both native apps.
 
 Either way the app's project also links the app's core library (`lib<name>.a`, built by the `<name>-core` step) and finds `ziggy.h` beside it, as the example's sync scripts and projects do.
 
 ## The Android Gradle project
 
-Ziggy's Android native app is a Gradle build of its own that produces the module `dev.ziggy:ziggy-shell-android`. The app's `app/build.gradle` depends on it the same way in both cases:
+Ziggy's Android native app is a Gradle build of its own that produces the module `dev.ziggy:ziggy-native-android`. The app's `app/build.gradle` depends on it the same way in both cases:
 
 ```groovy
 dependencies {
-    implementation 'dev.ziggy:ziggy-shell-android:v0.1.0'
+    implementation 'dev.ziggy:ziggy-native-android:v0.1.0'
 }
 ```
 
@@ -108,7 +108,7 @@ From a local path, the app's `settings.gradle` includes Ziggy's Android build, a
 
 ```groovy
 includeBuild('../ziggy/packages/ziggy/native/android') {
-    name = 'ziggy-shell-android'
+    name = 'ziggy-native-android'
 }
 ```
 
@@ -117,7 +117,7 @@ From a version tag, the app's `settings.gradle` declares the repository as a sou
 ```groovy
 sourceControl {
     gitRepository(uri('https://github.com/<owner>/ziggy.git')) {
-        producesModule('dev.ziggy:ziggy-shell-android')
+        producesModule('dev.ziggy:ziggy-native-android')
         rootDir = 'packages/ziggy/native/android'
     }
 }
@@ -127,32 +127,32 @@ The app must use the same version of the Android Gradle plugin as Ziggy's Androi
 
 ## The UI (package.json)
 
-The UI imports Ziggy's types from `ziggy-bridge`.
+The UI imports Ziggy's types from `ziggy-ui`.
 
 From a local path:
 
 ```json
 "dependencies": {
-    "ziggy-bridge": "file:../ziggy/packages/ziggy/bridge"
+    "ziggy-ui": "file:../ziggy/packages/ziggy/ui"
 }
 ```
 
-From a version tag, the repository itself, whose root `package.json` points at the bridge:
+From a version tag, the repository itself, whose root `package.json` points at `packages/ziggy/ui`:
 
 ```json
 "dependencies": {
-    "ziggy-bridge": "git+https://github.com/<owner>/ziggy.git#v0.1.0"
+    "ziggy-ui": "git+https://github.com/<owner>/ziggy.git#v0.1.0"
 }
 ```
 
-Inside this repository the example uses `"ziggy-bridge": "workspace:*"`, because the bridge is a workspace of the same repository.
+Inside this repository the example uses `"ziggy-ui": "workspace:*"`, because `ziggy-ui` is a workspace of the same repository.
 
 ## Moving to a newer version
 
 1. Read the release notes of the new version and the changes to the guides, for anything an app has to change.
 2. In `build.zig.zon`, run `zig fetch --save=ziggy <the new tag's archive URL>`, which replaces the URL and the hash.
 3. In each Xcode project, change the package's exact version.
-4. In `app/build.gradle`, change the version of `dev.ziggy:ziggy-shell-android` to the new tag.
+4. In `app/build.gradle`, change the version of `dev.ziggy:ziggy-native-android` to the new tag.
 5. In `package.json`, change the tag after `#`, and run `bun install`.
 6. Build and run the app's unit and smoke tests on every platform.
 

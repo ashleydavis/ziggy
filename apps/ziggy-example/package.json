@@ -53,7 +53,7 @@
     "distribute:android": "bash ./scripts/distribute-android.sh"
   },
   "dependencies": {
-    "ziggy-bridge": "workspace:*"
+    "ziggy-ui": "workspace:*"
   },
   "devDependencies": {
     "@types/jest": "^29.4.0",

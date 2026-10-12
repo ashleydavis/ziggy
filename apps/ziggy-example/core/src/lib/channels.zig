@@ -4,7 +4,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 
 //
 // Replies with the Zig version, the target operating system and CPU architecture, and an echo of the payload.

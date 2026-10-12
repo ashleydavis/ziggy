@@ -4,7 +4,7 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.webkit.WebView;
-import dev.ziggy.shell.ZiggyShell;
+import dev.ziggy.nativeapp.ZiggyShell;
 
 // The Ziggy example's one screen: a web view run by Ziggy's shell. What is the example's own is the name of its core library
 // and the mobile limits on the core's threads.

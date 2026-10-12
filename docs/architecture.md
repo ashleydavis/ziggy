@@ -29,7 +29,7 @@ The UI, the core and the native app are defined in the [glossary in the README](
 - **Core library**: a Zig library. It exposes a C interface, holds all state behind one handle, runs the task handlers on a pool of threads and answers every message the UI sends. An app adds its own channel handlers and task handlers to it, and builds the result as a static library for every target and as a shared library for Android.
 - **Native apps**: one per platform. A native app creates a window, hosts the system web view, injects the `window.ziggy` script, loads the bundled UI, calls `ziggy_create`, forwards UI messages to Zig and Zig messages to the UI. A native app does nothing else except what the operating system forces (menus, dialogs, drag and drop, background scheduling, photo library access).
 - **User interface**: the TypeScript app that runs in the web view, with a small platform layer that connects it to `window.ziggy`.
-- **Task queue**: the `task-queue` module, which the core depends on and which an app shares, so code written against the task queue runs on the core's runner.
+- **Task queue**: part of the core (`core/src/lib/task-queue`), which an app reaches as `@import("ziggy-core").task_queue`, so code written against the task queue runs on the core's runner.
 
 Ziggy and the app built on it are kept in separate places. Ziggy's code never names the app and never imports its packages. The app uses Ziggy only through its interfaces: the C interface, `window.ziggy`, the host callbacks and handler registration in the dispatcher and the task runner. The last section lists where each part of Ziggy is.
 
@@ -108,9 +108,9 @@ The task runner runs handlers on a pool of threads inside the core. It provides 
 
 ### Task queue interfaces
 
-The core depends on the `task-queue` module (with the helpers it is written with), which the app shares, and on no app. It implements the `IQueueBackend` of `task-queue` on top of its runner (`queue-backend.zig`), so code written against `TaskQueue` and `IQueueBackend` runs on it unchanged, and it sets that backend as the one `task-queue` hands out for the life of the core.
+The core holds the task queue (with the helpers it is written with), which the app shares, and depends on no app. It implements the task queue's `IQueueBackend` on top of its runner (`queue-backend.zig`), so code written against `TaskQueue` and `IQueueBackend` runs on it unchanged, and it sets that backend as the one the task queue hands out for the life of the core.
 
-- A handler registered with `task-queue` (`worker.registerHandler`, with its `ITaskContext`) runs on the runner for any task type the app has no entry of its own for. The app registers its handlers before it queues work. A task type that nothing is registered for fails as `UnknownTaskType`.
+- A handler registered with the task queue (`worker.registerHandler`, with its `ITaskContext`) runs on the runner for any task type the app has no entry of its own for. The app registers its handlers before it queues work. A task type that nothing is registered for fails as `UnknownTaskType`.
 - A task a handler queues through the backend runs at the priority of the task running on that thread, unless it asks for one (`priorityOfRunningTask`).
 - `onTaskComplete` callbacks are told of a task that ran, with its type, input and outputs, and a cancelled one as failed with the message `Cancelled`. A task cancelled while it waited in the queue is not reported to them, though the UI is told.
 
@@ -211,9 +211,8 @@ The native apps read two environment variables, and only in a test build: `ZIGGY
 
 ## Where things are
 
-- `packages/ziggy/core`: the core library (the C interface, dispatcher, task runner, origin check, host callback plumbing and test hooks), which an app imports as `@import("ziggy")`.
-- `packages/ziggy/task-queue`: the task queue and the helpers it is written with, which an app imports as `@import("task-queue")`.
-- `packages/ziggy/bridge`: the `window.ziggy` script and its types.
+- `packages/ziggy/core`: the core library (the C interface, dispatcher, task runner, origin check, host callback plumbing, test hooks, the task queue and the `window.ziggy` script), which an app imports as `@import("ziggy-core")`.
+- `packages/ziggy/ui`: the `ziggy-ui` package, the TypeScript types of `window.ziggy` and of the messages the core sends.
 - `packages/ziggy/native/<platform>`: the part of each native app that Ziggy provides: `linux`, `windows`, `macos`, `ios` and `android`.
 - `build.zig`: builds Ziggy and its tests, and holds the functions an app's own `build.zig` calls (`dependency`, `addAppCore`, `embedUi`, `addLinuxShell`, `addWindowsShell`, `addDirectoryTests`). See the [guide to integrating Ziggy](integrating-ziggy.md).
 

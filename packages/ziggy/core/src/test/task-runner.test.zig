@@ -1,7 +1,7 @@
 const std = @import("std");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 const helpers = @import("helpers.zig");
-const utils = @import("task-queue").utils;
+const utils = @import("ziggy-core").task_queue.utils;
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
     const message = try ziggy.json_util.stringify(std.testing.allocator, .{

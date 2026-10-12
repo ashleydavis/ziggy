@@ -37,7 +37,7 @@ A handler is a Zig function that takes the task's context and the data the UI qu
 
 ```zig
 const std = @import("std");
-const ziggy = @import("ziggy");
+const ziggy = @import("ziggy-core");
 
 const TaskContext = ziggy.task_runner.TaskContext;
 
@@ -162,6 +162,6 @@ A request the UI sends with `window.ziggy.invoke` is answered by a channel handl
 |---|---|
 | `packages/ziggy/core/src/lib/task-runner.zig` | The task runner, `TaskContext`, `TaskHandlerEntry`, `TaskPriority` and `TaskKind`. |
 | `packages/ziggy/core/src/lib/core.zig` | The `add-task` and `cancel-tasks` channels, and `TaskChannelEntry`. |
-| `packages/ziggy/task-queue` | The `task-queue` module the core implements its queue backend for. See [Task queue interfaces](architecture.md#task-queue-interfaces). |
+| `packages/ziggy/core/src/lib/task-queue` | The task queue the core implements its queue backend for. See [Task queue interfaces](architecture.md#task-queue-interfaces). |
 | `apps/ziggy-example/core/src/lib/hello-tasks.zig` | The example's task handlers. |
 | `apps/ziggy-example/ui/src/main.ts` | How the example's UI queues tasks and handles their events. |
