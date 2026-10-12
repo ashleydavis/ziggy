@@ -61,7 +61,7 @@ pub fn build(b: *std.Build) !void {
     // The console writing to the real stdout, which a unit test cannot see: a program writes through it and the build checks what it
     // printed.
     const console_stdout_module = b.createModule(.{
-        .root_source_file = b.path("packages/ziggy/task-queue/src/test/utils/fixtures/console-stdout.zig"),
+        .root_source_file = b.path("packages/ziggy/task-queue/src/test/fixtures/console-stdout.zig"),
         .target = target,
         .optimize = optimize,
     });
