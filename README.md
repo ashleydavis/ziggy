@@ -39,6 +39,7 @@ Nothing is published to npm or any other registry. An app uses Ziggy either from
 
 - [Integrating Ziggy](docs/integrating-ziggy.md): the lines an app adds to use Ziggy, from a local path or from a version tag, and how to move to a newer tag.
 - [Building your app](docs/building-your-app.md): starting a new app from the example, the parts of an app and the commands to set up, build, run and test it on each platform.
+- [Tasks](docs/tasks.md): how the task queue works, with a diagram, and how to write, register, queue, follow and cancel a task.
 - [Distributing your app](docs/distributing-your-app.md): packaging, signing and getting a build to testers and stores, on each platform.
 - [Releasing Ziggy](docs/releasing-ziggy.md): what the release workflow does on each push, and how a version of the package is released.
 - [Architecture](docs/architecture.md): how the parts fit, the message protocol, tasks, channels, host callbacks, menus and test hooks.

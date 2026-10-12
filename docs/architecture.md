@@ -99,7 +99,7 @@ A native app accepts messages only from the app's own bundled UI, blocks navigat
 
 ## Tasks
 
-The task runner runs handlers on a pool of threads inside the core. It provides task types, task messages, task context (`sendMessage`, `isCancelled`, `maxConcurrentChildTasks`, child tasks queued and awaited), priorities and cancellation by source. The UI queues work with `add-task`, cancels with `cancel-tasks` and receives `task-message` and `task-completed` events.
+The task runner runs handlers on a pool of threads inside the core. It provides task types, task messages, task context (`sendMessage`, `isCancelled`, `maxConcurrentChildTasks`, child tasks queued and awaited), priorities and cancellation by source. The UI queues work with `add-task`, cancels with `cancel-tasks` and receives `task-message` and `task-completed` events. See [Tasks](tasks.md) for how to write, queue and follow a task.
 
 - The native app passes the worker thread count and one child task limit, which applies to every parent task, to `ziggy_create`.
 - Children run on the same pool as their parent. A parent that waits for children gives up its place on a worker thread while it waits, so the pool cannot deadlock when every worker is held by a waiting parent.
