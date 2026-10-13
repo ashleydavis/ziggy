@@ -1,6 +1,6 @@
 # Packages
 
-Ziggy is in `packages/ziggy`, in three sides: the UI, the core and the native app. Each part is built in the language and by the build tool its platform needs.
+Ziggy is in `packages/ziggy`, in three sides: the UI, the core and the native app. Each part is built in the language and by the build tool its platform needs. Dev mode sits beside them: it runs the core for an ordinary browser while an app is developed, and is never part of an app that ships.
 
 | Side | Name | Subdirectory | Language | What it holds | How an app uses it |
 |---|---|---|---|---|---|
@@ -11,10 +11,11 @@ Ziggy is in `packages/ziggy`, in three sides: the UI, the core and the native ap
 | Native app, MacOS | `ZiggyNativeMacOS` | [`packages/ziggy/native/macos`](../packages/ziggy/native/macos) | Swift | The WKWebView host, as a Swift package | Linked by the app's Xcode project |
 | Native app, iOS | `ZiggyNativeIOS` | [`packages/ziggy/native/ios`](../packages/ziggy/native/ios) | Swift | The WKWebView host, as a Swift package | Linked by the app's Xcode project |
 | Native app, Android | `dev.ziggy.nativeapp`, Gradle `ziggy-native-android` | [`packages/ziggy/native/android`](../packages/ziggy/native/android) | Java, built by Gradle | The Android WebView host, as a Gradle library. Its native methods are implemented in the core. | A dependency of the app's Gradle project |
+| Dev mode | `ziggy-dev` | [`packages/ziggy/dev`](../packages/ziggy/dev) | Zig, with JavaScript (`dev-client.js`) | The dev host, which runs an app's core in front of the app's own dev server, and the supervisor that starts them and rebuilds the dev host as the app's Zig files change. For development only: no native app and no release build includes it. See its [README](../packages/ziggy/dev/README.md). | `addAppCore` adds it, and the app runs it with `bun run dev` (`zig build <name>-dev`) |
 
 Each native app hosts the system web view, draws the menu, handles shortcuts and developer tools, shows the file and folder dialogs and moves messages between the UI and the core.
 
-The test of `ziggy-inject.js` is in `ziggy-ui` (`packages/ziggy/ui/src/test/ziggy-inject.test.ts`), which reads the script from the core.
+The tests of `ziggy-inject.js` and of the dev host's `dev-client.js` are in `ziggy-ui` (`packages/ziggy/ui/src/test`), which reads each script from where it is.
 
 Two files at the root of the repository build these:
 

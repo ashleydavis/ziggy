@@ -4,17 +4,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the UI and Zig for everything else, using each platform's system web view. This repository holds Ziggy itself (`packages/ziggy`) and the Ziggy example (`apps/ziggy-example`), a small complete app built on it that a new app starts as a copy of. Use the terms "the UI", "the core", "the native app" and "the system web view" as the [glossary](README.md#glossary) defines them.
+Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the UI and Zig for everything else, using each platform's system web view. This repository holds Ziggy itself (`packages/ziggy`) and the Ziggy template (`apps/ziggy-template`), a small complete app built on it that a new app starts as a copy of. Use the terms "the UI", "the core", "the native app" and "the system web view" as the [glossary](README.md#glossary) defines them.
 
 - `packages/ziggy/core`: the core library every app links, `ziggy-core`, imported as `@import("ziggy-core")`, with the C interface (`core/src/lib/ziggy.h`), the task queue and the script every native app injects to create `window.ziggy`.
 - `packages/ziggy/ui`: the TypeScript types of `window.ziggy` and of the messages the core sends (the `ziggy-ui` package).
 - `packages/ziggy/native/<platform>`: the part of each native app that Ziggy provides.
+- `packages/ziggy/dev`: dev mode: the dev host, which runs the app's core in front of the app's own dev server, and the supervisor that starts them and rebuilds it. Never part of a native app or a release build.
 - `build.zig`: builds Ziggy, runs its tests and holds the functions an app's own `build.zig` calls. `Package.swift`: the MacOS and iOS native apps as one Swift package.
 - Ziggy's code never names the app and never imports its packages. The app uses Ziggy only through its interfaces.
 
 ## Platforms
 
-Ziggy and the Ziggy example are developed on Linux and delivered and tested on Linux, Windows, macOS, Android and iOS. Every test and smoke test must work on each platform it runs on.
+Ziggy and the Ziggy template are developed on Linux and delivered and tested on Linux, Windows, macOS, Android and iOS. Every test and smoke test must work on each platform it runs on.
 
 - Linux: native app in Zig, GTK 3 and WebKitGTK 4.1.
 - Windows: native app in Zig and WebView2. The scripts run under Git Bash.
@@ -51,17 +52,17 @@ Ziggy and the Ziggy example are developed on Linux and delivered and tested on L
 - Never say "you are right", "you're right" or any other agreement as a way to open a reply. Say what was wrong and what you will do about it. Never tell the human untested code can be committed now and tested later: say it is untested, and say what would test it.
 - Never stash code unless asked.
 - Never use `cd` to permanently change directories within the repo. Use it on a case-by-case and temporary basis as part of a command to run the command from a particular directory.
-- Never invoke shell scripts directly (e.g. `bash ./apps/ziggy-example/smoke-tests/run.sh android`). Use the `bun run` equivalent from `package.json` (e.g. `bun run test:ziggy-example:and`).
+- Never invoke shell scripts directly (e.g. `bash ./apps/ziggy-template/smoke-tests/run.sh android`). Use the `bun run` equivalent from `package.json` (e.g. `bun run test:ziggy-template:and`).
 - HIGH PRIORITY: `rm -r` is banned, in every form and every flag combination that includes it (`-r`, `-R`, `--recursive`, `-rf`, `-fr`), unless I ask for that exact deletion in the message you are acting on. This covers commands you run yourself, commands you ask me to run and any `rm -r` you write into a script, a test, a runner or a hook. A recursive delete takes everything under a path, and the path is often built from a variable: when that variable is empty, wrong or points somewhere shared, what goes is not what you meant to go. If you believe something has to be removed recursively, stop and say what and why, and wait for an answer. Removing a single file by name is not covered by this and is fine.
 - NEVER WAIT FOR ANOTHER WORKTREE'S TESTS TO FINISH BEFORE RUNNING YOUR OWN. Start the run you need when you need it. Do not watch for other runs, do not poll for them and never treat another worktree's activity as a reason to hold off. If two runs contend, that is a bug worth knowing about; a run you postponed tells nobody anything.
 - EVERY TEST IN THIS REPOSITORY MUST SURVIVE RUNNING BESIDE ANOTHER COPY OF ITSELF AND BESIDE EVERY OTHER SUITE, INCLUDING ONES STARTED FROM A DIFFERENT WORKTREE. I work in several worktrees at once and run tests in all of them at the same time. A test that only works when it is the only thing running is broken, whatever it does on its own.
-  - Nothing may claim a machine-wide resource by a fixed name. That means no hardcoded port, no fixed path under `/tmp` or anywhere else, no fixed lock or config path and no fixed device. Let the operating system choose a free port, and give each test a directory from `ziggy_test_temp_dir` (`apps/ziggy-example/scripts/lib/test-lib.sh`) rather than naming a directory yourself.
-  - EVERY PROCESS A TEST SUITE STARTS MUST HAVE ITS PID RECORDED AT THE MOMENT IT IS STARTED, so it can be cleaned up reliably at the end. Recording is the launcher's job, not the cleanup's. Start background processes with `launch_in_process_group` (`apps/ziggy-example/scripts/lib/process-control.sh`), which records each one in the file `ZIGGY_LAUNCHED_GROUPS` names, so the runner can report and stop any still running at the end. Never run a long-lived helper in the foreground, because a foreground child has no pid anything else can see.
-  - NEVER kill a process by matching its command line. `pkill -f`, `pkill`, `killall` and anything else that selects by name asks the kernel about every process on the machine, and the app's command line is identical whichever checkout launched it, so it kills the identical process belonging to another worktree's run. Kill the pids you started and their descendants, with `kill_process_tree` or `kill_process_group` from `apps/ziggy-example/scripts/lib/process-control.sh`.
+  - Nothing may claim a machine-wide resource by a fixed name. That means no hardcoded port, no fixed path under `/tmp` or anywhere else, no fixed lock or config path and no fixed device. Let the operating system choose a free port, and give each test a directory from `ziggy_test_temp_dir` (`apps/ziggy-template/scripts/lib/test-lib.sh`) rather than naming a directory yourself.
+  - EVERY PROCESS A TEST SUITE STARTS MUST HAVE ITS PID RECORDED AT THE MOMENT IT IS STARTED, so it can be cleaned up reliably at the end. Recording is the launcher's job, not the cleanup's. Start background processes with `launch_in_process_group` (`apps/ziggy-template/scripts/lib/process-control.sh`), which records each one in the file `ZIGGY_LAUNCHED_GROUPS` names, so the runner can report and stop any still running at the end. Never run a long-lived helper in the foreground, because a foreground child has no pid anything else can see.
+  - NEVER kill a process by matching its command line. `pkill -f`, `pkill`, `killall` and anything else that selects by name asks the kernel about every process on the machine, and the app's command line is identical whichever checkout launched it, so it kills the identical process belonging to another worktree's run. Kill the pids you started and their descendants, with `kill_process_tree` or `kill_process_group` from `apps/ziggy-template/scripts/lib/process-control.sh`.
   - Interference is not flakiness and must never be dismissed as it. A suite that passes alone and fails in company is telling you it contends on something shared. Running a second copy of the suite beside it is the cheapest way to surface a fixed port or a fixed path.
 - When creating a new worktree, never use `EnterWorktree` with a `name` parameter. Instead: (1) run `git branch --show-current` to get the current branch, (2) run `git worktree add -b <new-branch> .claude/worktrees/<name> <current-branch>` to create the worktree explicitly branching from the current branch, (3) then use `EnterWorktree` with the `path` parameter to enter it.
-- The `run:ziggy-example:<platform>` commands build the app before they launch it, so the running app is built from current source. A code change that does not show up is never caused by a stale build. Never tell me to rebuild and never blame a missing change on the build being out of date. Find the real cause.
-- The Android emulators belong to me. The Android suites (`test:ziggy-example:and`, `test:zig:android`) use the devices named in `ZIGGY_ANDROID_DEVICES` (adb serials, space separated), else every emulator and device adb has attached and ready, whichever project started it. Each run claims one under Ziggy's own per-device lock (`ziggy_android_device_lock_path` in `apps/ziggy-example/scripts/android-common.sh`) and waits for one to come free.
+- The `run:ziggy-template:<platform>` commands build the app before they launch it, so the running app is built from current source. A code change that does not show up is never caused by a stale build. Never tell me to rebuild and never blame a missing change on the build being out of date. Find the real cause.
+- The Android emulators belong to me. The Android suites (`test:ziggy-template:and`, `test:zig:android`) use the devices named in `ZIGGY_ANDROID_DEVICES` (adb serials, space separated), else every emulator and device adb has attached and ready, whichever project started it. Each run claims one under Ziggy's own per-device lock (`ziggy_android_device_lock_path` in `apps/ziggy-template/scripts/android-common.sh`) and waits for one to come free.
 - Never assume whether an Android emulator is attached. Run `adb devices` (from the Android SDK's `platform-tools`) at the point you need the answer and read it: a serial whose state is `device` is ready. I start and stop emulators whenever I like and do not announce it, so a reading taken earlier in the session is stale. This applies as much to saying an emulator is up as to saying it is down, and to anything that follows from either.
 - Never start, stop, restart or repair an emulator, never create or remove a network tap or bridge and never run sudo. When an emulator is broken or none is attached, say so and leave it to me.
 - Never say something was "intentionally done" unless I explicitly asked for that exact behaviour. State what the code does and own the mistake.
@@ -71,7 +72,7 @@ Ziggy and the Ziggy example are developed on Linux and delivered and tested on L
 - Expect the human to stage things. They often `git add` your work as they review it, and they commit whenever they choose, so the staging area and the working tree change under you without warning. Finding your edits staged, or finding files you never touched appear, disappear or move between staged and unstaged, means the human has been working. Use `git status` and `git diff HEAD` (or `git diff --cached`) rather than a bare `git diff`, which shows only unstaged changes. Do not conclude your edit failed or was lost because `git diff` came back empty, and do not "tidy it up" by unstaging, resetting, checking out or otherwise putting the Git state back how you remember it.
 - THIS REPOSITORY USES TYPESCRIPT, ZIG AND SHELL SCRIPT. Zig, declared through `mise.toml`, is the language for the core, the task queue and the Linux and Windows native apps. Swift (the macOS and iOS native apps) and Java with its Gradle build (the Android native app) are an exception because those platforms require them, along with the C headers of the core's C interface and the ones the Zig native apps import platform APIs through. None of that is licence to add more native code than the platform forces. Do not introduce another language. `python3`, perl, Ruby, Go and friends are banned outright, including as an undeclared dependency.
 - A SHELL SCRIPT CONTAINS SHELL. Do not embed another language inside one, in any form: not `python3 -c "..."`, not `bun -e "..."`, not a `node -e`, not a heredoc feeding an interpreter, not an awk program that is a program in its own right. Embedded code is a string as far as the shell is concerned: nothing type-checks it, nothing lints it, `bun run compile` never sees it and a syntax error in it surfaces only when that one code path runs. This holds however short the snippet is.
-- When a shell script needs something that looks beyond shell, find the shell answer first, because there usually is one: `stat` for a modification time, `cmp` for an exact file comparison, `uuidgen` for a UUID, `od` for a binary field, `jq` for anything JSON. Assume there is a shell answer until you have tried it and watched it fail. Only when there is no shell answer does it become a TypeScript helper: a `.ts` file with a comment block saying what it is for and a documented argument list. See `apps/ziggy-example/scripts/ios-device.ts` for an example.
+- When a shell script needs something that looks beyond shell, find the shell answer first, because there usually is one: `stat` for a modification time, `cmp` for an exact file comparison, `uuidgen` for a UUID, `od` for a binary field, `jq` for anything JSON. Assume there is a shell answer until you have tried it and watched it fail. Only when there is no shell answer does it become a TypeScript helper: a `.ts` file with a comment block saying what it is for and a documented argument list. See `apps/ziggy-template/scripts/ios-device.ts` for an example.
 - EVERY NEW SCRIPT COMES WITH A MARKDOWN FILE BESIDE IT, named after the script, covering what it is for, how it is invoked and what each argument means. Keep it current, and link to a fuller guide under `docs/` rather than repeating one.
 - DO NOT WRITE TESTS FOR SHELL SCRIPTS, and do not create `*.test.sh` files. Shell in this repository is the test harness itself, and the thing that proves a harness works is running the real suite it drives. If you believe a piece of shell cannot be trusted without a test, stop and ask, and wait for an answer.
 - TEST MARKER FILES ARE BANNED. Do not add a file whose only job is to tag a test directory so a runner treats that test differently. A marker records a judgement made once and nothing ever re-checks it. If a runner needs to know something about a test, it must read it from the test itself or work it out at the time.
@@ -95,21 +96,23 @@ Ziggy and the Ziggy example are developed on Linux and delivered and tested on L
 
 ### Run from repo root
 - `bun run compile` (alias `c`) - Type-check the TypeScript.
-- `bun run test` (alias `t`) - The TypeScript unit tests: `ziggy-ui` and the example's UI.
-- `bun run test:zig` - Every Zig test (`zig build test`): Ziggy's core, the task queue, the parts of the Linux and Windows native apps that need no platform and the example's core.
-- `bun run test:zig:android` / `bun run test:zig:ios` - The Zig unit tests of Ziggy's core and the example's core, run on an Android emulator or device, or on a booted iOS simulator.
+- `bun run test` (alias `t`) - The TypeScript unit tests: `ziggy-ui` and the template's UI.
+- `bun run test:zig` - Every Zig test (`zig build test`): Ziggy's core and its task queue, the parts of the Linux and Windows native apps that need no platform, the dev host and the template's core.
+- `bun run test:zig:android` / `bun run test:zig:ios` - The Zig unit tests of Ziggy's core and the template's core, run on an Android emulator or device, or on a booted iOS simulator.
 - `bun run test:android-shell` - The JUnit tests of the Android native app, on this machine's JVM. Needs no device.
-- `bun run compile:zig` - Builds the example's core, cross-builds it for every platform and compiles the Windows native app.
-- `bun run test:ziggy-example` - The example's smoke tests on this machine's desktop platform. `bun run test:ziggy-example -- <number|name>` runs one scenario.
-- `bun run test:ziggy-example:and` - The example's smoke tests on an attached Android emulator or device. Takes a scenario the same way.
-- `bun run test:ziggy-example:ios` - The example's smoke tests on the iOS simulator, or a connected iOS device (MacOS only). Takes a scenario the same way.
-- `bun run build:ziggy-example:<platform>` - Builds the UI and the app.
-- `bun run run:ziggy-example:<platform>` - Builds the app and launches it (an emulator, simulator or device for a phone).
-- `bun run sync:ziggy-example:<platform>` - Builds what the platform's native project packages and puts it where that project expects it.
-- `bun run open:ziggy-example:<platform>` - Syncs, then opens the native project in its editor.
-- `bun run package:ziggy-example:<platform>` - Packages the release app, without the test hooks, into `apps/ziggy-example/out/<platform>`.
-- `bun run distribute:ziggy-example:android` - Builds the Android app and uploads it to Firebase App Distribution.
-- `bun run clean:ziggy-example:<platform>` - Removes the platform's build output.
+- `bun run compile:zig` - Builds the template's core, cross-builds it for every platform and compiles the Windows native app.
+- `bun run test:ziggy-template` - The template's smoke tests on this machine's desktop platform. `bun run test:ziggy-template -- <number|name>` runs one scenario.
+- `bun run test:ziggy-template:and` - The template's smoke tests on an attached Android emulator or device. Takes a scenario the same way.
+- `bun run test:ziggy-template:ios` - The template's smoke tests on the iOS simulator, or a connected iOS device (MacOS only). Takes a scenario the same way.
+- `bun run test:ziggy-template:dev` - The template's smoke tests in dev mode: every scenario that needs no native app runs against the dev host in front of Vite, with the UI in a headless Chrome or Chromium, and the dev-only scenarios check hot reload through the supervisor and dropped files. Takes a scenario the same way.
+- `bun run dev:ziggy-template` - Runs the template in dev mode: Vite serves the UI in the default browser, with live reload, and the dev host runs the core, rebuilt as its Zig files change. From `apps/ziggy-template`, `zig build ziggy-template-dev -- --no-open` does the same without opening the browser.
+- `bun run build:ziggy-template:<platform>` - Builds the UI and the app.
+- `bun run run:ziggy-template:<platform>` - Builds the app and launches it (an emulator, simulator or device for a phone).
+- `bun run sync:ziggy-template:<platform>` - Builds what the platform's native project packages and puts it where that project expects it.
+- `bun run open:ziggy-template:<platform>` - Syncs, then opens the native project in its editor.
+- `bun run package:ziggy-template:<platform>` - Packages the release app, without the test hooks, into `apps/ziggy-template/out/<platform>`.
+- `bun run distribute:ziggy-template:android` - Builds the Android app and uploads it to Firebase App Distribution.
+- `bun run clean:ziggy-template:<platform>` - Removes the platform's build output.
 
 `<platform>` is `linux`, `windows`, `macos`, `android` or `ios`, and each runs on that platform (Windows under Git Bash). A change to the Android or iOS native app, or to the core, is not tested until the suites for that phone platform have run.
 
@@ -117,13 +120,14 @@ Ziggy and the Ziggy example are developed on Linux and delivered and tested on L
 
 - [README](README.md) - What Ziggy is, what is in the repository, getting started and the glossary
 - [Integrating Ziggy](docs/integrating-ziggy.md) - Using Ziggy from an app, from a local path or a version tag
-- [Building your app](docs/building-your-app.md) - Starting a new app from the example, its parts and the commands on each platform
+- [Building your app](docs/building-your-app.md) - Starting a new app from the template, its parts and the commands on each platform
+- [Claude Code commands](docs/claude-code-commands.md) - The slash commands for building an app on Ziggy, and how to install them
 - [Distributing your app](docs/distributing-your-app.md) - Packaging, signing and getting a build to testers and stores
 - [Releasing Ziggy](docs/releasing-ziggy.md) - The release workflow and how a version is released
 - [Architecture](docs/architecture.md) - How the parts fit, the message protocol, tasks, channels, host callbacks, menus and test hooks
 - [Ziggy package](packages/ziggy/README.md) - What is in `packages/ziggy`
-- [Ziggy example](apps/ziggy-example/README.md) - The example app, its commands and what each platform needs
-- [Smoke tests](apps/ziggy-example/smoke-tests/run.md) - How the example's smoke tests run, and every scenario
+- [Ziggy template](apps/ziggy-template/README.md) - The template app, its commands and what each platform needs
+- [Smoke tests](apps/ziggy-template/smoke-tests/run.md) - How the template's smoke tests run, and every scenario
 
 ## Code Style
 - **Types**: Use interfaces with PascalCase (`IStorage`) for types, explicit return types
@@ -144,7 +148,7 @@ Ziggy and the Ziggy example are developed on Linux and delivered and tested on L
 - Put `else` and `catch` blocks on a new line.
 - Tests go under the directory `src/test` in each package.
 - Use `test(` not `it(` in Jest test files.
-- UI code is a thin layer. Factor non-trivial UI logic out into a plain function under a `lib/` directory (as `apps/ziggy-example/ui/src/lib` does) and unit test the plain function. Do not extract or test trivial logic only to gain a test.
+- UI code is a thin layer. Factor non-trivial UI logic out into a plain function under a `lib/` directory (as `apps/ziggy-template/ui/src/lib` does) and unit test the plain function. Do not extract or test trivial logic only to gain a test.
 - You do not have to invent a new file to "get a test on it". When the logic belongs to something that already exists, put it there. When it belongs nowhere and is small enough to read in one go, leave it where it is with a comment saying why, and let the test that exercises the feature cover it.
 - Refrain from using the `any` type in normal code, although it's ok sometimes in test code.
 - Never use anonymous object types inline (e.g. `Promise<{ foo: number }>`). Always define a named interface instead, unless specifically asked to use an anonymous type.

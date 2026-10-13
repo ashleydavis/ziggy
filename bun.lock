@@ -5,8 +5,8 @@
     "": {
       "name": "ziggy",
     },
-    "apps/ziggy-example": {
-      "name": "ziggy-example",
+    "apps/ziggy-template": {
+      "name": "ziggy-template",
       "version": "1.0.0",
       "dependencies": {
         "ziggy-ui": "workspace:*",
@@ -752,7 +752,7 @@
 
     "yocto-queue": ["yocto-queue@0.1.0", "", {}, "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q=="],
 
-    "ziggy-example": ["ziggy-example@workspace:apps/ziggy-example"],
+    "ziggy-template": ["ziggy-template@workspace:apps/ziggy-template"],
 
     "ziggy-ui": ["ziggy-ui@workspace:packages/ziggy/ui"],
 

@@ -12,15 +12,15 @@ zig-out/
 .zig-cache/
 zig-pkg/
 
-# The WebView2 SDK and the WiX Toolset fetched by the Ziggy example's setup-windows script, and the build that its
+# The WebView2 SDK and the WiX Toolset fetched by the Ziggy template's setup-windows script, and the build that its
 # package-windows script packages
-apps/ziggy-example/webview2-sdk/
-apps/ziggy-example/wix/
-apps/ziggy-example/shells/windows/package/
+apps/ziggy-template/webview2-sdk/
+apps/ziggy-template/wix/
+apps/ziggy-template/shells/windows/package/
 
-# What the Ziggy example's package scripts produce
-apps/ziggy-example/out/
-apps/ziggy-example/release/
-apps/ziggy-example/dist-build.*
+# What the Ziggy template's package scripts produce
+apps/ziggy-template/out/
+apps/ziggy-template/release/
+apps/ziggy-template/dist-build.*
 packages/ziggy/native/android/build/
 packages/ziggy/native/android/.gradle/

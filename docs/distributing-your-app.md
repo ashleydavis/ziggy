@@ -1,12 +1,12 @@
 # Distributing your app
 
-How a Ziggy app is packaged, signed and put in front of testers and users on each platform. The Ziggy example's package scripts are the starting point: an app copied from the example has them, with its own name in place of the example's (see [Building your app](building-your-app.md)). Each script has a markdown file beside it with every argument.
+How a Ziggy app is packaged, signed and put in front of testers and users on each platform. The Ziggy template's package scripts are the starting point: an app copied from the template has them, with its own name in place of the template's (see [Building your app](building-your-app.md)). Each script has a markdown file beside it with every argument.
 
 Every package is built for release: optimized and without the test hooks. Scenario `8-release-has-no-hooks` of the smoke tests checks that a release build has no test control connection.
 
 ## Packaging
 
-`bun run package:<platform>` from the app's root (`bun run package:ziggy-example:<platform>` for the example in this repository) writes the packages for one platform into `out/<platform>`. Each runs on its own platform: Linux on Linux, Windows under Git Bash on Windows, MacOS and iOS on a Mac.
+`bun run package:<platform>` from the app's root (`bun run package:ziggy-template:<platform>` for the template in this repository) writes the packages for one platform into `out/<platform>`. Each runs on its own platform: Linux on Linux, Windows under Git Bash on Windows, MacOS and iOS on a Mac.
 
 | Platform | Packages | Signing |
 |---|---|---|
@@ -32,7 +32,7 @@ None of the packages is signed for a store. What each platform needs before a bu
 
 ### Android, through Firebase App Distribution
 
-Tester builds of an Android app go out through [Firebase App Distribution](https://firebase.google.com/docs/app-distribution). It takes an APK, emails the testers you have added and installs onto their phones through the Firebase App Tester app. There is no store listing and no review, so a tester has the build a couple of minutes after the upload finishes. It is free on Firebase's Spark plan. The example's `distribute-android.sh` (`bun run distribute:ziggy-example:android`) does the whole upload.
+Tester builds of an Android app go out through [Firebase App Distribution](https://firebase.google.com/docs/app-distribution). It takes an APK, emails the testers you have added and installs onto their phones through the Firebase App Tester app. There is no store listing and no review, so a tester has the build a couple of minutes after the upload finishes. It is free on Firebase's Spark plan. The template's `distribute-android.sh` (`bun run distribute:ziggy-template:android`) does the whole upload.
 
 One-time setup:
 
@@ -64,7 +64,7 @@ Archive the app signed for distribution, upload it to App Store Connect from Xco
 
 ### Desktop
 
-The desktop packages are files: put them where testers can download them. The release workflow of this repository does that for the example, publishing its packages as a GitHub release on every successful build of the default branch (see [Releasing Ziggy](releasing-ziggy.md)), and an app can do the same with its own workflow.
+The desktop packages are files: put them where testers can download them. The release workflow of this repository does that for the template, publishing its packages as a GitHub release on every successful build of the default branch (see [Releasing Ziggy](releasing-ziggy.md)), and an app can do the same with its own workflow.
 
 ## Getting a build to users
 

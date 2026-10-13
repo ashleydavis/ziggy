@@ -5,7 +5,7 @@ Ziggy's native app code for MacOS, as a Swift package (swift-tools-version 5.7, 
 - `CZiggy` is a system library target whose `ziggy.h` is a link to the core's own header (`packages/ziggy/core/src/lib/ziggy.h`).
 - `ZiggyNativeMacOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards UI messages to `ziggy_post_message`, delivers core messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the core.
 
-The static library with the core (`libziggy_example.a` for the example) is linked by the app project.
+The static library with the core (`libziggy_template.a` for the template) is linked by the app project.
 
 ## Using it
 

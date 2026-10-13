@@ -1,18 +1,18 @@
 # Releasing Ziggy
 
-Separate things happen to this repository: the release workflow builds, tests and publishes the Ziggy example on every push, and a version of the Ziggy package is released by cutting a version tag. The workflow has nothing to do with version tags, and a version tag does not start the workflow.
+Separate things happen to this repository: the release workflow builds, tests and publishes the Ziggy template on every push, and a version of the Ziggy package is released by cutting a version tag. The workflow has nothing to do with version tags, and a version tag does not start the workflow.
 
 ## The release workflow
 
 `.github/workflows/release.yml` runs on every push to every branch, on every pull request to `main` and by hand from the Actions tab. Its jobs:
 
-- **zig-build**: builds the example's core and cross-builds it for every platform, with and without the test hooks, and compiles the Windows native app, on Linux, MacOS and Windows (`bun run compile:zig`).
+- **zig-build**: builds the template's core and cross-builds it for every platform, with and without the test hooks, and compiles the Windows native app, on Linux, MacOS and Windows (`bun run compile:zig`).
 - **unit-tests**: on Linux, MacOS and Windows, the TypeScript unit tests (`bun run test`) and every Zig test (`zig build test`); on Android, the Android native app's JUnit tests (`bun run test:android-shell`) and the Zig tests run on an emulator; on iOS, the Zig tests run on a simulator.
-- **smoke-tests**: the example's smoke tests on Linux, Windows, MacOS, an Android emulator and an iOS simulator.
-- **package**: the example's packages for every platform, uploaded as artifacts of the run.
-- **publish**: only when every job above passed, and only for a push to the default branch: the GitHub release named "Ziggy example" is replaced by one holding this run's packages for every platform, with release notes listing the commits since the last version tag. A GitHub release is always attached to a git tag, so this one sits on the tag `example`, which the workflow deletes and makes again on the commit it built. `example` is not a version tag, and nothing should pin it.
+- **smoke-tests**: the template's smoke tests on Linux, Windows, MacOS, an Android emulator and an iOS simulator, and on Linux in dev mode too.
+- **package**: the template's packages for every platform, uploaded as artifacts of the run.
+- **publish**: only when every job above passed, and only for a push to the default branch: the GitHub release named "Ziggy template" is replaced by one holding this run's packages for every platform, with release notes listing the commits since the last version tag. A GitHub release is always attached to a git tag, so this one sits on the tag `template`, which the workflow deletes and makes again on the commit it built. `template` is not a version tag, and nothing should pin it.
 
-A run on another branch, or for a pull request, runs every build and test and publishes nothing. A run that fails anywhere publishes nothing, and the previous release of the example stays.
+A run on another branch, or for a pull request, runs every build and test and publishes nothing. A run that fails anywhere publishes nothing, and the previous release of the template stays.
 
 ### Reading a failed run
 

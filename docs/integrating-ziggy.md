@@ -2,12 +2,12 @@
 
 An app uses Ziggy in each kind of project it has: its Zig build (`build.zig.zon` and `build.zig`), its Xcode projects (MacOS and iOS), its Android Gradle project (`settings.gradle` and `app/build.gradle`) and its UI (`package.json`). Each can take Ziggy in one of two ways:
 
-- **From a local path**: a checkout of this repository on the same machine. This is how the Ziggy example uses it (the path is the root of this repository), and how an app works against a change to Ziggy that is not released yet.
+- **From a local path**: a checkout of this repository on the same machine. This is how the Ziggy template uses it (the path is the root of this repository), and how an app works against a change to Ziggy that is not released yet.
 - **From a version tag**: the git URL of this repository and a version tag, such as `v0.1.0`. This is how an app in another repository pins a released version. Nothing is published to a registry: every part is fetched from the repository at the tag.
 
 The examples below put the app beside a checkout of Ziggy (`../ziggy` from the app's root), and use `https://github.com/<owner>/ziggy` for the repository's URL and `v0.1.0` for the tag. Use the real path, URL and tag. Every part of one app must point at the same version of Ziggy.
 
-The lines for a version tag cannot be tried until the repository is published, and have not been tried yet. The lines for a local path are the ones the Ziggy example and the test app built from it use.
+The lines for a version tag cannot be tried until the repository is published, and have not been tried yet. The lines for a local path are the ones the Ziggy template and the test app built from it use.
 
 ## The Zig build
 
@@ -38,7 +38,7 @@ The dependency must be named `ziggy`, because Ziggy's build functions look it up
 
 ### build.zig
 
-An app's `build.zig` imports Ziggy's `build.zig` as `@import("ziggy")` and calls its `pub` functions. The example's [build.zig](../apps/ziggy-example/build.zig) is the whole of it:
+An app's `build.zig` imports Ziggy's `build.zig` as `@import("ziggy")` and calls its `pub` functions. This is what every app needs, and the template's [build.zig](../apps/ziggy-template/build.zig) adds the unit tests of its core:
 
 ```zig
 const std = @import("std");
@@ -47,13 +47,14 @@ const ziggy_build = @import("ziggy");
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const test_hooks = b.option(bool, "test-hooks", "Build the test hooks into the app (never for a release)") orelse false;
-    const compile_only = b.option(bool, "compile-only", "Compile the Windows shell without linking the WebView2 loader") orelse false;
+    const compile_only = b.option(bool, "compile-only", "Compile the Windows native app without linking the WebView2 loader") orelse false;
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Optimize mode (default: ReleaseSafe)") orelse .ReleaseSafe;
 
     // Ziggy built for this target, with the test hooks or without.
     const ziggy = ziggy_build.dependency(b, target, optimize, test_hooks);
 
-    // The app's core as a library (`my-app-core` step): static for the desktop and Apple shells, and shared for Android.
+    // The app's core as a library (`my-app-core` step): static for the desktop and Apple native apps, and shared for Android. It also
+    // adds the dev host for dev mode (`my-app-dev-host` and `my-app-dev` steps).
     const core = try ziggy_build.addAppCore(b, ziggy, .{
         .name = "my-app",
         .title = "My App",
@@ -62,7 +63,7 @@ pub fn build(b: *std.Build) !void {
         .imports = &.{},
     }, target, optimize);
 
-    // The Linux and Windows shells (`my-app-linux`, `my-app-windows` and `my-app-windows-check` steps).
+    // The Linux and Windows native apps (`my-app-linux`, `my-app-windows` and `my-app-windows-check` steps).
     const app: ziggy_build.IShellApp = .{
         .name = "my-app",
         .title = "My App",
@@ -81,18 +82,19 @@ What Ziggy's `build.zig` gives an app:
 - `dependency(b, target, optimize, test_hooks)`: Ziggy for the target, as `IZiggy`: the dependency itself, `module` (the core, which the app's code imports as `@import("ziggy-core")`). Ask twice for a build that needs both, such as an app built without the test hooks and its unit tests, which run with them.
 - `addAppCore(b, ziggy, app, target, optimize)`: builds the app's core as a library, installed by the `<name>-core` step with the app's built UI embedded in it as the `ui-files` import. For an Android target that is the shared library the Android native app loads, and for every other target a static library with `ziggy.h` beside it. It returns both libraries, so an app can link more into them (a system library, for one).
 - `addLinuxShell` and `addWindowsShell`: the app's Linux executable (`<name>-linux`, installed to `bin/<name>`) and Windows executable (`<name>-windows`), each with the UI embedded, and a step that compiles the Windows native app without linking it (`<name>-windows-check`), for a machine without Microsoft's toolchain.
+- Dev mode comes with `addAppCore`: `<name>-dev-host` builds the dev host, and `<name>-dev` runs the supervisor, which starts the app's dev server and the dev host in front of it and rebuilds the dev host as the Zig files change (see [Dev mode](#dev-mode-packagejson)). See the [dev host's README](../packages/ziggy/dev/README.md).
 - `embedUi`: the module that embeds a built UI, for a build that makes its own modules (an app's unit tests, for one).
-- `addDirectoryTests`: compiles every `*.test.zig` under a directory's `src/test` into one test program and runs it, which is how the example runs its core's tests.
+- `addDirectoryTests`: compiles every `*.test.zig` under a directory's `src/test` into one test program and runs it, which is how the template runs its core's tests.
 
 The app's own options (`test-hooks`, `optimize`, `compile-only`) are passed on to Ziggy, so `zig build my-app-core -Dtarget=aarch64-linux-android -Dtest-hooks=true` builds the core and Ziggy for that target with the test hooks.
 
 ## The Xcode projects (MacOS and iOS)
 
-From a local path: the project holds a folder reference to Ziggy's Swift package for that platform and links its product. Add `../ziggy/packages/ziggy/native/macos` (the MacOS project) or `../ziggy/packages/ziggy/native/ios` (the iOS project) to the project as a folder, which Xcode treats as a local package, then add the product `ZiggyNativeMacOS` or `ZiggyNativeIOS` to the app target's Frameworks, Libraries, and Embedded Content. The example's projects (`apps/ziggy-example/shells/macos` and `apps/ziggy-example/shells/ios`) do this with a relative path, which a copied project only has to adjust.
+From a local path: the project holds a folder reference to Ziggy's Swift package for that platform and links its product. Add `../ziggy/packages/ziggy/native/macos` (the MacOS project) or `../ziggy/packages/ziggy/native/ios` (the iOS project) to the project as a folder, which Xcode treats as a local package, then add the product `ZiggyNativeMacOS` or `ZiggyNativeIOS` to the app target's Frameworks, Libraries, and Embedded Content. The template's projects (`apps/ziggy-template/shells/macos` and `apps/ziggy-template/shells/ios`) do this with a relative path, which a copied project only has to adjust.
 
 From a version tag: File > Add Package Dependencies, the repository's URL (`https://github.com/<owner>/ziggy`), the rule Exact Version with the version of the tag without its `v` (Swift Package Manager reads `v0.1.0` as the version `0.1.0`) and the product `ZiggyNativeMacOS` or `ZiggyNativeIOS`. The package Xcode fetches is the `Package.swift` at the root of this repository, which holds both native apps.
 
-Either way the app's project also links the app's core library (`lib<name>.a`, built by the `<name>-core` step) and finds `ziggy.h` beside it, as the example's sync scripts and projects do.
+Either way the app's project also links the app's core library (`lib<name>.a`, built by the `<name>-core` step) and finds `ziggy.h` beside it, as the template's sync scripts and projects do.
 
 ## The Android Gradle project
 
@@ -145,9 +147,22 @@ From a version tag, the repository itself, whose root `package.json` points at `
 }
 ```
 
-Inside this repository the example uses `"ziggy-ui": "workspace:*"`, because `ziggy-ui` is a workspace of the same repository.
+Inside this repository the template uses `"ziggy-ui": "workspace:*"`, because `ziggy-ui` is a workspace of the same repository.
+
+### Dev mode (package.json)
+
+Ziggy works with whatever bundler the app uses, and the bundler's config has nothing of Ziggy's in it. Dev mode needs two scripts in the app's `package.json`:
+
+```json
+"dev": "zig build my-app-dev",
+"dev:ui": "vite"
+```
+
+`dev:ui` runs the bundler's dev server (`rsbuild dev` for Rsbuild), and the supervisor gives it `--port <port> --host 127.0.0.1`. See the [dev host's README](../packages/ziggy/dev/README.md).
 
 ## Moving to a newer version
+
+The `/ziggy:upgrade` Claude Code command follows these steps for an app (see [Claude Code commands](claude-code-commands.md)).
 
 1. Read the release notes of the new version and the changes to the guides, for anything an app has to change.
 2. In `build.zig.zon`, run `zig fetch --save=ziggy <the new tag's archive URL>`, which replaces the URL and the hash.

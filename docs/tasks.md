@@ -31,6 +31,8 @@ sequenceDiagram
 - The native app sets the number of worker threads and the limit on child tasks in flight when it creates the core (`ziggy_create`).
 - A task that is cancelled ends as failed, with the error message `Cancelled`.
 
+The `/ziggy:add-task` Claude Code command adds a task type to an app by following this guide (see [Claude Code commands](claude-code-commands.md)).
+
 ## Writing a handler
 
 A handler is a Zig function that takes the task's context and the data the UI queued it with, and returns the JSON text of its result, or null for none. Returning an error fails the task. The error message is the error's name, unless the app sets `describe_error` to a function that describes it.
@@ -70,7 +72,7 @@ What the context gives a handler:
 
 ## Registering a handler
 
-The app lists its task types in the `tasks` field of the app it hands to Ziggy, in `core/src/handlers.zig` in the example:
+The app lists its task types in the `tasks` field of the app it hands to Ziggy, in `core/src/handlers.zig` in the template:
 
 ```zig
 .tasks = &[_]ziggy.task_runner.TaskHandlerEntry{
@@ -125,7 +127,7 @@ window.ziggy.onMessage("task-completed", event => {
 });
 ```
 
-Every message a handler sends arrives as one `task-message` event. The example gives each message a `type` field (`"output"`, `"job-progress"`) and the UI decides what to do with it from that. Ziggy does not look inside a message.
+Every message a handler sends arrives as one `task-message` event. The template gives each message a `type` field (`"output"`, `"job-progress"`) and the UI decides what to do with it from that. Ziggy does not look inside a message.
 
 ## Cancelling
 
@@ -137,7 +139,7 @@ Cancelling a source cancels its queued and running tasks, children included. A r
 
 ## Child tasks
 
-A handler can split its work into child tasks with `queueChild` and wait for them with `awaitTask` or `awaitAllTasks`. The example's `hello-long` does this in `core/src/lib/hello-tasks.zig`.
+A handler can split its work into child tasks with `queueChild` and wait for them with `awaitTask` or `awaitAllTasks`. The template's `hello-long` does this in `core/src/lib/hello-tasks.zig`.
 
 - Children run on the same pool as their parent. A parent that waits gives up its worker thread while it waits, so the pool cannot deadlock when every thread is held by a waiting parent.
 - A child runs at the priority it asks for, and otherwise at its parent's.
@@ -145,7 +147,7 @@ A handler can split its work into child tasks with `queueChild` and wait for the
 
 ## A request answered by a task
 
-A request the UI sends with `window.ziggy.invoke` is answered by a channel handler on the thread that handles the UI's messages, so it must be quick. When the answer takes time, list the channel in the app's `task_channels` instead: the request is queued as a task of that type, with the request's data as its input, and the task's result is the reply. A task that fails or is cancelled gives an error reply. The example's file and folder pickers work this way, because they wait on a native dialog.
+A request the UI sends with `window.ziggy.invoke` is answered by a channel handler on the thread that handles the UI's messages, so it must be quick. When the answer takes time, list the channel in the app's `task_channels` instead: the request is queued as a task of that type, with the request's data as its input, and the task's result is the reply. A task that fails or is cancelled gives an error reply. The template's file and folder pickers work this way, because they wait on a native dialog.
 
 ```zig
 .task_channels = &[_]ziggy.core.TaskChannelEntry{
@@ -163,5 +165,5 @@ A request the UI sends with `window.ziggy.invoke` is answered by a channel handl
 | `packages/ziggy/core/src/lib/task-runner.zig` | The task runner, `TaskContext`, `TaskHandlerEntry`, `TaskPriority` and `TaskKind`. |
 | `packages/ziggy/core/src/lib/core.zig` | The `add-task` and `cancel-tasks` channels, and `TaskChannelEntry`. |
 | `packages/ziggy/core/src/lib/task-queue` | The task queue the core implements its queue backend for. See [Task queue interfaces](architecture.md#task-queue-interfaces). |
-| `apps/ziggy-example/core/src/lib/hello-tasks.zig` | The example's task handlers. |
-| `apps/ziggy-example/ui/src/main.ts` | How the example's UI queues tasks and handles their events. |
+| `apps/ziggy-template/core/src/lib/hello-tasks.zig` | The template's task handlers. |
+| `apps/ziggy-template/ui/src/main.ts` | How the template's UI queues tasks and handles their events. |

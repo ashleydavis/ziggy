@@ -1,0 +1,19 @@
+.{
+    .name = .ziggy_template,
+    .version = "1.0.0",
+    .fingerprint = 0x1055268cf5e31d9d,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        // Ziggy, from the repository this template lives in. An app outside it points at its own copy of Ziggy by path, or at a version
+        // tag of Ziggy's repository by URL and hash (see the guide to integrating Ziggy).
+        .ziggy = .{
+            .path = "../..",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "core",
+        "shells",
+    },
+}

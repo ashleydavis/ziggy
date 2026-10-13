@@ -23,7 +23,7 @@ pub fn build(b: *std.Build) !void {
     try configureCore(b, core, target, optimize, test_hooks);
 
     // The unit tests of Ziggy's core and its task queue, which run the core with the test hooks compiled in.
-    const test_step = b.step("test", "Run the unit tests of Ziggy (the core and the native apps) and of the Ziggy example");
+    const test_step = b.step("test", "Run the unit tests of Ziggy (the core, the native apps and the dev host) and of the Ziggy template");
     const test_core = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/core/src/index.zig"),
         .target = target,
@@ -64,6 +64,15 @@ pub fn build(b: *std.Build) !void {
         .name = "ziggy-native-linux",
         .root_module = linux_tests_module,
     })).step);
+    const dev_host_tests_module = b.createModule(.{
+        .root_source_file = b.path("packages/ziggy/dev/src/tests.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    test_step.dependOn(&b.addRunArtifact(b.addTest(.{
+        .name = "ziggy-dev",
+        .root_module = dev_host_tests_module,
+    })).step);
     const windows_tests_module = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/native/windows/src/tests.zig"),
         .target = b.graph.host,
@@ -74,17 +83,17 @@ pub fn build(b: *std.Build) !void {
         .root_module = windows_tests_module,
     })).step);
 
-    // The tests of the Ziggy example, which is a build of its own that takes Ziggy as a dependency, as every app does. Its core embeds
-    // its built UI, which its build reads when it starts, so the UI is built first and the example's build is then run as a program
+    // The tests of the Ziggy template, which is a build of its own that takes Ziggy as a dependency, as every app does. Its core embeds
+    // its built UI, which its build reads when it starts, so the UI is built first and the template's build is then run as a program
     // of its own.
-    const bundle_example_ui = b.addSystemCommand(&.{ "bun", "run", "bundle:ui" });
-    bundle_example_ui.setCwd(b.path("apps/ziggy-example"));
-    bundle_example_ui.has_side_effects = true;
-    const test_example = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test", "--summary", "all" });
-    test_example.setCwd(b.path("apps/ziggy-example"));
-    test_example.has_side_effects = true;
-    test_example.step.dependOn(&bundle_example_ui.step);
-    test_step.dependOn(&test_example.step);
+    const bundle_template_ui = b.addSystemCommand(&.{ "bun", "run", "bundle:ui" });
+    bundle_template_ui.setCwd(b.path("apps/ziggy-template"));
+    bundle_template_ui.has_side_effects = true;
+    const test_template = b.addSystemCommand(&.{ b.graph.zig_exe, "build", "test", "--summary", "all" });
+    test_template.setCwd(b.path("apps/ziggy-template"));
+    test_template.has_side_effects = true;
+    test_template.step.dependOn(&bundle_template_ui.step);
+    test_step.dependOn(&test_template.step);
 }
 
 //
@@ -150,7 +159,7 @@ pub fn dependency(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
 pub const IAppCore = struct {
     // The name of the app, which names its library (`lib<name with dashes as underscores>.a`) and its step (`<name>-core`).
     name: []const u8,
-    // The name the step's description uses for the app, such as "the Ziggy example".
+    // The name the step's description uses for the app, such as "the Ziggy template".
     title: []const u8,
     // The root source file of the app's core, relative to the app's build root.
     root_source_file: []const u8,
@@ -173,7 +182,8 @@ pub const IAppCoreLibraries = struct {
 //
 // Builds an app's core for the target, installed by the `<name>-core` step: a static library with ziggy.h installed beside it or,
 // for Android, a shared one. The platform shells that are not Zig (the Xcode projects and the Android project) are built by the app's
-// scripts, which ask this step for the libraries.
+// scripts, which ask this step for the libraries. It also adds the app's dev mode, the `<name>-dev` and `<name>-dev-host` steps (see
+// addDevMode), so an app gets dev mode with nothing more to do.
 //
 pub fn addAppCore(
     b: *std.Build,
@@ -187,7 +197,7 @@ pub fn addAppCore(
     std.mem.replaceScalar(u8, library_name, '-', '_');
     const static_library = b.addLibrary(.{
         .name = library_name,
-        .root_module = try createAppCoreModule(b, ziggy, app, target, optimize),
+        .root_module = try createAppCoreModule(b, ziggy, app, target, optimize, try embedUi(b, ziggy.module, "ziggy-core", app.ui_directory)),
         .linkage = .static,
     });
     // The Xcode linker is not Zig's, so the compiler runtime (for example ___zig_probe_stack) must travel inside the archive.
@@ -200,7 +210,7 @@ pub fn addAppCore(
     else {
         const library = b.addLibrary(.{
             .name = library_name,
-            .root_module = try createAppCoreModule(b, ziggy, app, target, optimize),
+            .root_module = try createAppCoreModule(b, ziggy, app, target, optimize, try embedUi(b, ziggy.module, "ziggy-core", app.ui_directory)),
             .linkage = .dynamic,
         });
         // Android 15 and later can run with 16 KiB memory pages, and a library is loaded only when its segments are aligned to the page
@@ -209,6 +219,7 @@ pub fn addAppCore(
         core_step.dependOn(&b.addInstallArtifact(library, .{}).step);
         shared_library = library;
     }
+    try addDevMode(b, app, target, optimize, ziggy);
     return .{
         .static_library = static_library,
         .shared_library = shared_library,
@@ -216,8 +227,8 @@ pub fn addAppCore(
 }
 
 //
-// Makes the root module of an app's core library: the app's root source file, importing Ziggy's core, the app's built UI and the
-// app's own modules.
+// Makes the root module of an app's core library: the app's root source file, importing Ziggy's core, the module of the app's UI
+// (its built UI, or none for the dev host) and the app's own modules.
 //
 fn createAppCoreModule(
     b: *std.Build,
@@ -225,6 +236,7 @@ fn createAppCoreModule(
     app: IAppCore,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
+    ui_files_module: *std.Build.Module,
 ) !*std.Build.Module {
     const module = b.createModule(.{
         .root_source_file = b.path(app.root_source_file),
@@ -233,7 +245,7 @@ fn createAppCoreModule(
         .link_libc = true,
     });
     module.addImport("ziggy-core", ziggy.module);
-    module.addImport("ui-files", try embedUi(b, ziggy.module, "ziggy-core", app.ui_directory));
+    module.addImport("ui-files", ui_files_module);
     for (app.imports) |import| {
         module.addImport(import.name, import.module);
     }
@@ -474,7 +486,7 @@ const linux_runtime_libraries = [_][]const u8{
 pub const IShellApp = struct {
     // The name of the app, which names its executable and its steps (`<name>-linux`, `<name>-windows`, `<name>-windows-check`).
     name: []const u8,
-    // The name the steps' descriptions use for the app, such as "the Ziggy example".
+    // The name the steps' descriptions use for the app, such as "the Ziggy template".
     title: []const u8,
     // The directory of the app relative to the app's build root ("." for the build root itself), under which its shells
     // (`shells/linux/src/main.zig`, `shells/windows/src/main.zig`) and the WebView2 SDK
@@ -680,4 +692,92 @@ pub fn addWindowsShell(
         },
         .pdb_dir = .disabled,
     }).step);
+}
+
+//
+// Adds an app's dev mode, for addAppCore. In dev mode the UI runs in an ordinary browser and the core runs in the dev host: Ziggy's
+// dev host linked with the app's core, which runs the core as a program of its own. The browser opens the dev host, which answers
+// /__ziggy itself, carries the page's messages to the core and forwards everything else to the app's own dev server, putting Ziggy's
+// scripts in each page on the way through. The `<name>-dev-host` step builds the dev host, installed to bin/<name>-dev-host. Its
+// core embeds no UI, because the dev server serves the UI, so dev mode needs no UI built. The `<name>-dev` step runs the supervisor,
+// which starts the app's dev server (its `dev:ui` package script), builds and starts the dev host, opens the browser and rebuilds and
+// restarts the dev host when a Zig file of the app or of Ziggy changes. Options after `--` go to the supervisor: `--no-open` leaves
+// the browser closed, `--port <port>` serves the app on that port and `--test-hooks` builds the dev host with the test hooks.
+// Nothing else links the dev host, so no native app and no release build includes it.
+//
+fn addDevMode(
+    b: *std.Build,
+    app: IAppCore,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    ziggy: IZiggy,
+) !void {
+    const host_name = b.fmt("{s}-dev-host", .{app.name});
+    const host_step = b.step(host_name, b.fmt("Build {s}'s dev host for dev mode, installed to bin/{s}", .{ app.title, host_name }));
+    const dev_step = b.step(b.fmt("{s}-dev", .{app.name}), b.fmt("Run {s} in dev mode: its dev server and dev host, in the browser, rebuilt as its files change", .{app.title}));
+
+    // The app's core with no UI embedded in it.
+    const no_ui = b.addWriteFiles();
+    const no_ui_module = b.createModule(.{
+        .root_source_file = no_ui.add("ui-files.zig", "const ziggy = @import(\"ziggy-core\");\n\npub const files = [_]ziggy.UiFile{};\n"),
+    });
+    no_ui_module.addImport("ziggy-core", ziggy.module);
+    const core_library = b.addLibrary(.{
+        .name = b.fmt("{s}-dev-host-core", .{app.name}),
+        .root_module = try createAppCoreModule(b, ziggy, app, target, optimize, no_ui_module),
+        .linkage = .static,
+    });
+
+    const translate_c = b.addTranslateC(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/ziggy.h"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    const dev_host_module = b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/dev/src/index.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    dev_host_module.addImport("c", translate_c.createModule());
+    const dev_app = b.addOptions();
+    dev_app.addOption([]const u8, "title", app.title);
+    const module = b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/dev/src/dev-host-main.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    module.addImport("ziggy-dev", dev_host_module);
+    module.addOptions("dev_app", dev_app);
+    module.linkLibrary(core_library);
+    const executable = b.addExecutable(.{
+        .name = host_name,
+        .root_module = module,
+    });
+    host_step.dependOn(&b.addInstallArtifact(executable, .{}).step);
+
+    // The supervisor runs on the machine the developer works on, whatever the target.
+    const supervisor = b.addExecutable(.{
+        .name = "ziggy-dev",
+        .root_module = b.createModule(.{
+            .root_source_file = ziggy.dependency.path("packages/ziggy/dev/src/supervisor-main.zig"),
+            .target = b.graph.host,
+            .optimize = optimize,
+        }),
+    });
+    const run_supervisor = b.addRunArtifact(supervisor);
+    run_supervisor.addArgs(&.{
+        "--zig",       b.graph.zig_exe,
+        "--app-dir",   b.pathFromRoot("."),
+        "--ziggy-dir", ziggy.dependency.builder.pathFromRoot("."),
+        "--host-step", host_name,
+        "--host-name", host_name,
+    });
+    if (b.args) |supervisor_args| {
+        run_supervisor.addArgs(supervisor_args);
+    }
+    run_supervisor.stdio = .inherit;
+    dev_step.dependOn(&run_supervisor.step);
 }
