@@ -299,6 +299,23 @@ fn quit(user_data: ?*anyopaque) callconv(.c) void {
 //
 fn osVersion(user_data: ?*anyopaque, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
     _ = user_data;
+    // Windows has no uname, so its version is asked of the kernel, as the Windows native app does.
+    if (builtin.os.tag == .windows) {
+        var windows_info = std.mem.zeroes(std.os.windows.RTL_OSVERSIONINFOW);
+        windows_info.dwOSVersionInfoSize = @sizeOf(std.os.windows.RTL_OSVERSIONINFOW);
+        if (std.os.windows.ntdll.RtlGetVersion(&windows_info) != .SUCCESS) {
+            return -1;
+        }
+        const windows_written = std.fmt.bufPrint(buffer[0..capacity], "\"Windows {d}.{d}.{d} {s}\"", .{
+            windows_info.dwMajorVersion,
+            windows_info.dwMinorVersion,
+            windows_info.dwBuildNumber,
+            @tagName(builtin.cpu.arch),
+        }) catch {
+            return -1;
+        };
+        return @intCast(windows_written.len);
+    }
     var info: std.c.utsname = undefined;
     if (std.c.uname(&info) != 0) {
         return -1;

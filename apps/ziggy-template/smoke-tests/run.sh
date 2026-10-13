@@ -103,6 +103,14 @@ while IFS= read -r scenario_dir; do
         else
             echo "FAILED: $scenario_name (exit $status). Its files are in $test_dir"
         fi
+        # A runner keeps none of the scenario's files, so the end of each log the app, its dev server and its browser wrote is
+        # printed here, where the run's own log keeps it.
+        for log_file in "$test_dir"/*.log; do
+            if [ -f "$log_file" ]; then
+                echo "--- the end of $(basename "$log_file"):"
+                tail -n 60 "$log_file"
+            fi
+        done
         failed=$((failed + 1))
         failed_names="$failed_names $scenario_name"
     fi
