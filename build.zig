@@ -389,7 +389,11 @@ pub fn addDirectoryTests(
         if (entry.kind != .file or !std.mem.endsWith(u8, entry.path, ".test.zig")) {
             continue;
         }
-        try test_root_source.appendSlice(b.allocator, b.fmt("    _ = @import(\"src/test/{s}\");\n", .{entry.path}));
+        // The walker gives the path with the system's separator, and a Windows backslash in a Zig string starts an escape, so the
+        // import is written with the forward slashes an import path takes on every system.
+        const import_path = try b.allocator.dupe(u8, entry.path);
+        std.mem.replaceScalar(u8, import_path, std.fs.path.sep, '/');
+        try test_root_source.appendSlice(b.allocator, b.fmt("    _ = @import(\"src/test/{s}\");\n", .{import_path}));
     }
     try test_root_source.appendSlice(b.allocator, "}\n");
     const test_module = b.createModule(.{

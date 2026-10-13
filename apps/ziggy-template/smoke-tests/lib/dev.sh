@@ -100,7 +100,7 @@ dev_start_vite() {
     local test_dir="$1"
     local log="$test_dir/vite.log"
     local pid pgid
-    read -r pid pgid < <(launch_in_process_group "$log" env CHOKIDAR_USEPOLLING=1 \
+    read -r pid pgid < <(launch_in_process_group "$log" env CHOKIDAR_USEPOLLING=1 NO_COLOR=1 \
         bash -c 'cd "$1" && exec bun run dev:ui --host 127.0.0.1' bash "$DEV_EXAMPLE_DIR") || return 1
     echo "$pgid" > "$test_dir/$DEV_VITE_PGID_FILE_NAME"
     local waited=0

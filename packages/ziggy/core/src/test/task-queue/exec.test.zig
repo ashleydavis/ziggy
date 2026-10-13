@@ -4,6 +4,11 @@ const utils = @import("ziggy-core").task_queue.utils;
 const exec = utils.exec.exec;
 
 test "exec runs the command in the shell and returns its output" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -21,6 +26,11 @@ test "exec runs the command in the shell and returns its output" {
 }
 
 test "exec fails with Node's message when the command exits with a non-zero code" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -36,6 +46,11 @@ test "exec fails with Node's message when the command exits with a non-zero code
 }
 
 test "exec passes process.env to the command" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var environ_map = std.process.Environ.Map.init(arena.allocator());
@@ -55,6 +70,11 @@ test "exec passes process.env to the command" {
 }
 
 test "execLogged returns the output of the command" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const result = try utils.exec.execLogged(arena.allocator(), std.testing.io, null, "echo", "echo hello", null);
@@ -96,6 +116,11 @@ test "execLogged reports a failed validation as a failure to execute the command
 }
 
 test "exec hands the quotes in the command to the shell untouched" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -112,6 +137,11 @@ test "exec hands the quotes in the command to the shell untouched" {
 }
 
 test "exec reads stdout and stderr together so a command filling stderr does not block" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -156,6 +186,11 @@ fn printFileCommand(allocator: std.mem.Allocator, filePath: []const u8, toStderr
 }
 
 test "exec takes up to maxBuffer (1 MiB) of output, as Bun's exec does" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -170,6 +205,11 @@ test "exec takes up to maxBuffer (1 MiB) of output, as Bun's exec does" {
 }
 
 test "exec fails with Bun's RangeError when the command writes more than maxBuffer to stdout or stderr" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -184,4 +224,16 @@ test "exec fails with Bun's RangeError when the command writes more than maxBuff
     try std.testing.expectError(error.Thrown, exec(allocator, io, null, try printFileCommand(allocator, filePath, true)));
     try std.testing.expectEqualStrings("RangeError", utils.errors.lastErrorName());
     try std.testing.expectEqualStrings("stderr maxBuffer length exceeded", utils.errors.lastErrorMessage());
+}
+
+test "exec fails naming the reason where the system does not let an app start a process" {
+    // Only iOS and its kind are covered: everywhere else starts the command, which the tests above check.
+    if (std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectError(error.Thrown, exec(arena.allocator(), std.testing.io, null, "echo hello"));
+    try std.testing.expectEqualStrings("Command failed: echo hello\nOperationUnsupported", utils.errors.lastErrorMessage());
 }

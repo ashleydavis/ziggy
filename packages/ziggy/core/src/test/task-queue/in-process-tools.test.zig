@@ -138,6 +138,11 @@ test "exec fails with the output when the runner's tool ends with a non-zero cod
 }
 
 test "exec leaves a command for another program to the shell even with a runner" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var runner = newRunner(0, "");
