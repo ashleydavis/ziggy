@@ -202,6 +202,27 @@ ziggy_platform_stop() {
     done
 }
 
+#
+# Prints a path the dev host reported in the form this shell writes paths in. The dev host reports a real path, with every
+# symbolic link resolved (macOS keeps the temporary folder under /var, a link to /private/var), and on Windows in Windows' own
+# form, which Git Bash's cygpath turns into its own. Usage: dev_shell_path <path>
+#
+dev_shell_path() {
+    if command -v cygpath > /dev/null 2>&1; then
+        cygpath -u "$1"
+    else
+        printf '%s\n' "$1"
+    fi
+}
+
+#
+# Prints a directory as the dev host reports it, in the form this shell writes paths in: with every symbolic link resolved.
+# Usage: dev_real_directory <directory>
+#
+dev_real_directory() {
+    (cd "$1" && pwd -P)
+}
+
 ziggy_platform_data_dir() {
     printf '%s\n' "$1/data"
 }

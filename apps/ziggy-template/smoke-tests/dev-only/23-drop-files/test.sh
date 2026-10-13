@@ -15,11 +15,18 @@ answer="$(control '{"command":"drop-file","dataId":"drop-zone","fileName":"two w
 if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
     fail "the drop-file command failed: $answer"
 fi
-dropped_dir="$(ziggy_platform_data_dir "$ZIGGY_TEST_DIR")/dropped/"
-wait_for_text drop-result "dropped: $dropped_dir"
+dropped_dir="$(dev_real_directory "$(ziggy_platform_data_dir "$ZIGGY_TEST_DIR")")/dropped/"
+wait_for_text drop-result "dropped: "
 
 dropped_path="$(text_of drop-result)"
-dropped_path="${dropped_path#*dropped: }"
+dropped_path="$(dev_shell_path "${dropped_path#*dropped: }")"
+case "$dropped_path" in
+    "$dropped_dir"*)
+        ;;
+    *)
+        fail "the dropped file's copy is not under $dropped_dir: $dropped_path"
+        ;;
+esac
 case "$dropped_path" in
     */"two words.txt")
         ;;

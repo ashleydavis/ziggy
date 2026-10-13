@@ -11,7 +11,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 # How long a build may take: the copy has a cache of its own, so the first build compiles the whole core.
 BUILD_TIMEOUT_SECONDS=600
 
-COPY_DIR="$(mktemp -d "$ZIGGY_SMOKE_APP_DIR/tmp/dev-hot-reload.XXXXXX")"
+# A fresh checkout has no tmp directory, and mktemp makes only the last part of the path.
+mkdir -p "$ZIGGY_SMOKE_APP_DIR/tmp" || fail "could not make $ZIGGY_SMOKE_APP_DIR/tmp"
+COPY_DIR="$(mktemp -d "$ZIGGY_SMOKE_APP_DIR/tmp/dev-hot-reload.XXXXXX")" || fail "could not make the directory for the copy of the template"
 
 remove_copy() {
     find "$COPY_DIR" -type f -delete
