@@ -87,7 +87,16 @@ dev_open_browser() {
 dev_close_browser() {
     local test_dir="$1"
     if [ -f "$test_dir/$DEV_BROWSER_PGID_FILE_NAME" ]; then
-        kill_process_group "$(cat "$test_dir/$DEV_BROWSER_PGID_FILE_NAME")" || true
+        local browser_pgid
+        browser_pgid="$(cat "$test_dir/$DEV_BROWSER_PGID_FILE_NAME")"
+        # On Windows the browser is a Windows program, and the processes it starts are not in the group Git Bash made for it, so
+        # signalling the group left them running with the profile locked, and the browser started again on the same profile could
+        # not open it. The whole tree is ended by the browser's Windows process id. The browser was started as the group's leader,
+        # so the group's id is its own id.
+        if [ -r "/proc/$browser_pgid/winpid" ]; then
+            taskkill //F //T //PID "$(cat "/proc/$browser_pgid/winpid")" > /dev/null || true
+        fi
+        kill_process_group "$browser_pgid" || true
         rm -f "$test_dir/$DEV_BROWSER_PGID_FILE_NAME"
     fi
 }

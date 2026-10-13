@@ -169,9 +169,7 @@ fn createCore(host: *DevHost, environ_map: *std.process.Environ.Map) !void {
     config.user_data = host;
     config.deliver = deliver;
     config.quit = quit;
-    if (builtin.os.tag != .windows) {
-        config.os_version = osVersion;
-    }
+    config.os_version = osVersion;
     if (builtin.os.tag == .linux) {
         config.pick_paths = pickPaths;
     }

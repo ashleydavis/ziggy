@@ -40,12 +40,15 @@ const Supervisor = struct {
     app_dir: std.Io.Dir,
     // Ziggy's own directory.
     ziggy_dir: std.Io.Dir,
-    // The prefix the dev host is installed to, under the app's zig-out.
+    // The directory under the app's zig-out that holds the dev host's port file, its data and the two prefixes it is installed to.
     prefix: []const u8,
     // The app's dev server, while it runs.
     ui_server: ?std.process.Child,
     // The port the app's dev server listens on.
     ui_port: u16,
+    // The prefix, of the two, that the running dev host was installed to. A build goes to the other one, because Windows refuses to
+    // replace the executable of a program that is running, and the running one keeps running when the build fails.
+    host_slot: u1,
     // The dev host, while it runs.
     host: ?std.process.Child,
     // The port the dev host listens on, kept across restarts so the page's address stays the same.
@@ -81,6 +84,7 @@ pub fn run(init: std.process.Init) !u8 {
         .prefix = try std.fs.path.join(allocator, &.{ options.app_dir, "zig-out", "dev" }),
         .ui_server = null,
         .ui_port = try freePort(io),
+        .host_slot = 0,
         .host = null,
         .port = options.port,
     };
@@ -88,10 +92,10 @@ pub fn run(init: std.process.Init) !u8 {
     defer stopHost(&supervisor);
 
     try startUiServer(&supervisor);
-    if (!try buildHost(&supervisor)) {
+    if (!try buildHost(&supervisor, supervisor.host_slot)) {
         return 1;
     }
-    try startHost(&supervisor);
+    try startHost(&supervisor, supervisor.host_slot);
     var url_buffer: [64]u8 = undefined;
     const url = try std.fmt.bufPrint(&url_buffer, "http://127.0.0.1:{d}/", .{supervisor.port});
     std.debug.print("ziggy dev: the app is at {s}. Saving a Zig file rebuilds and restarts the dev host. Ctrl+C stops.\n", .{url});
@@ -111,9 +115,11 @@ pub fn run(init: std.process.Init) !u8 {
         }
         signature = try settledSignature(&supervisor, new_signature);
         std.debug.print("ziggy dev: a Zig file changed\n", .{});
-        if (try buildHost(&supervisor)) {
+        const next_slot = 1 - supervisor.host_slot;
+        if (try buildHost(&supervisor, next_slot)) {
             stopHost(&supervisor);
-            try startHost(&supervisor);
+            supervisor.host_slot = next_slot;
+            try startHost(&supervisor, next_slot);
             std.debug.print("ziggy dev: the dev host restarted, and the page reloads when it reconnects\n", .{});
         }
         else {
@@ -188,13 +194,20 @@ fn stopUiServer(supervisor: *Supervisor) void {
 }
 
 //
-// Builds the dev host into the prefix, in the app's build root, saying every few seconds that it is still building. Says whether
+// The prefix of one of the two slots the dev host is installed to.
+//
+fn slotPrefix(supervisor: *Supervisor, slot: u1) ![]const u8 {
+    return std.fs.path.join(supervisor.allocator, &.{ supervisor.prefix, if (slot == 0) "host-a" else "host-b" });
+}
+
+//
+// Builds the dev host into the prefix of the slot, in the app's build root, saying every few seconds that it is still building. Says whether
 // it built.
 //
-fn buildHost(supervisor: *Supervisor) !bool {
+fn buildHost(supervisor: *Supervisor, slot: u1) !bool {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(supervisor.allocator);
-    try argv.appendSlice(supervisor.allocator, &.{ supervisor.options.zig, "build", supervisor.options.host_step, "-p", supervisor.prefix });
+    try argv.appendSlice(supervisor.allocator, &.{ supervisor.options.zig, "build", supervisor.options.host_step, "-p", try slotPrefix(supervisor, slot) });
     if (supervisor.options.test_hooks) {
         try argv.append(supervisor.allocator, "-Dtest-hooks=true");
     }
@@ -245,11 +258,11 @@ fn reportProgress(io: std.Io, finished: *std.atomic.Value(bool)) void {
 // Starts the dev host on the supervisor's port, or on one the operating system chooses the first time when none was asked for, in
 // front of the app's dev server, and waits until it says which port it listens on.
 //
-fn startHost(supervisor: *Supervisor) !void {
+fn startHost(supervisor: *Supervisor, slot: u1) !void {
     const io = supervisor.io;
     const allocator = supervisor.allocator;
     const executable_name = try std.fmt.allocPrint(allocator, "{s}{s}", .{ supervisor.options.host_name, builtin.target.exeFileExt() });
-    const executable = try std.fs.path.join(allocator, &.{ supervisor.prefix, "bin", executable_name });
+    const executable = try std.fs.path.join(allocator, &.{ try slotPrefix(supervisor, slot), "bin", executable_name });
     const port_file = try std.fs.path.join(allocator, &.{ supervisor.prefix, "port.txt" });
     const data_dir = try std.fs.path.join(allocator, &.{ supervisor.prefix, "data" });
     var port_text: [8]u8 = undefined;
