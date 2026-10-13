@@ -20,17 +20,16 @@ Open the run in the Actions tab. The summary shows which job failed and, for a j
 
 ## Releasing a version of the package
 
-An app pins Ziggy to a version tag (see [Integrating Ziggy](integrating-ziggy.md)). A version tag is `v` followed by the version, such as `v0.1.0`. To release one:
+An app pins Ziggy to a version tag (see [Integrating Ziggy](integrating-ziggy.md)). A version tag is `v` followed by the version, such as `v0.1.0`, and the tag alone carries the version: the `version` fields in `build.zig.zon`, `package.json` and `packages/ziggy/native/android/build.gradle` stay at `0.0.0` and are not changed for a release. To release one:
 
 1. Make sure the release workflow passed on the commit to be released.
-2. Set the version in the places that carry it, all to the same version: `version` in `build.zig.zon`, `version` in `package.json` and `version` in `packages/ziggy/native/android/build.gradle`. Commit that, push it and wait for the release workflow to pass on that commit.
-3. Tag the commit and push the tag:
+2. Tag the commit and push the tag:
 
    ```bash
    git tag v0.1.0
    git push origin v0.1.0
    ```
 
-4. Write what changed for apps since the last version, and what an app has to change, in a GitHub release on the tag, so an app moving to it knows.
+3. Write what changed for apps since the last version, and what an app has to change, in a GitHub release on the tag, so an app moving to it knows.
 
 A version tag is never moved or deleted once pushed: an app that pinned it, and the hash in its `build.zig.zon`, depend on it staying the same. A mistake is fixed by releasing the next version.

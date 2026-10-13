@@ -1,6 +1,6 @@
 {
   "name": "ziggy",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "description": "Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the user interface and Zig for everything else. One app runs on Linux, Windows, macOS, Android and iOS, using each platform's system web view.",
   "license": "MIT",

@@ -21,7 +21,7 @@ repositories {
 apply plugin: 'com.android.library'
 
 group = 'dev.ziggy'
-version = '0.1.0'
+version = '0.0.0'
 
 android {
     namespace "dev.ziggy.nativeapp"
