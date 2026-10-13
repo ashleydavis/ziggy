@@ -14,6 +14,9 @@ pub fn build(b: *std.Build) !void {
     const test_hooks = b.option(bool, "test-hooks", "Build the test hooks (the test control connection) into the app (never for a release)") orelse false;
     // Whether the Windows shell is compiled without linking WebView2's loader, to check it on a machine that cannot link.
     const compile_only = b.option(bool, "compile-only", "Compile the Windows shell without linking the WebView2 loader, to check it on a machine that cannot link") orelse false;
+    // Whether the desktop executables leave out their debug information. Only the release packages do: a dev or test build keeps it, so
+    // a panic there prints where it happened.
+    const strip = b.option(bool, "strip", "Leave the debug information out of the desktop executables (for a release)") orelse false;
     // ReleaseSafe by default: the tests keep the safety checks.
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Prioritize performance, safety, or binary size (default: ReleaseSafe)") orelse .ReleaseSafe;
 
@@ -29,12 +32,11 @@ pub fn build(b: *std.Build) !void {
         .name = "ziggy-template",
         .title = "the Ziggy template",
         .directory = ".",
-        .ui_directory = "dist",
         .linux_icon = null,
         .windows_resource = null,
     };
-    try ziggy_build.addLinuxShell(b, app, target, optimize, ziggy, core.static_library);
-    try ziggy_build.addWindowsShell(b, app, compile_only, target, optimize, ziggy, core.static_library);
+    try ziggy_build.addLinuxShell(b, app, strip, target, optimize, ziggy, core.static_library);
+    try ziggy_build.addWindowsShell(b, app, compile_only, strip, target, optimize, ziggy, core.static_library);
 
     // The unit tests of the template's core, which run it with Ziggy's test hooks compiled in.
     const test_ziggy = ziggy_build.dependency(b, target, optimize, true);

@@ -12,5 +12,5 @@ Invoke: `bash apps/ziggy-template/scripts/sync-android.sh [options]`
 What it does:
 
 1. Writes a libc file per architecture from the NDK's sysroot. Zig has no C library for Android, so `zig build --libc <file>` is given the NDK's headers and libraries (the ones for the app's minimum SDK level). The Zig core's JNI code is translated from the NDK's own `jni.h` with the include directories read from the same file.
-2. Builds `libziggy_template.so` per architecture with the `ziggy-template-core` step of the template's `build.zig` (`zig build ziggy-template-core -Dtarget=<arch>-linux-android`) and copies it to `jniLibs/<abi>/`. A library of an architecture not asked for is removed, by name.
+2. Builds `libziggy_template.so` per architecture with the `ziggy-template-core` step of the template's `build.zig` (`zig build ziggy-template-core -Dtarget=<arch>-linux-android`) and copies it to `jniLibs/<abi>/`. Every library an earlier sync left there is removed first, so an architecture not asked for, or a library under an app's earlier name, does not reach the APK.
 3. Builds the UI (`bun run bundle:ui`) before the library, because the library embeds it. The library is where the native app finds the UI, so nothing of the UI goes into the assets.

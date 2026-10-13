@@ -93,9 +93,9 @@ if [ ! -f "$ZIGGY_EXAMPLE_DIR/dist/index.html" ]; then
     exit 1
 fi
 
-# A library of another ABI left by an earlier sync is removed by name, so the APK holds only what was asked for.
+# Every library an earlier sync left is removed, whatever its ABI or its name (an app renamed since leaves one under its old name), so the APK holds only what was asked for.
 for arch in x86_64 arm64; do
-    rm -f "$generated_dir/jniLibs/$(ziggy_android_abi "$arch")/libziggy_template.so"
+    rm -f "$generated_dir/jniLibs/$(ziggy_android_abi "$arch")/"*.so
 done
 
 for arch in $arch_list; do

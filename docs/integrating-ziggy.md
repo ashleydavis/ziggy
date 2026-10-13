@@ -48,6 +48,7 @@ pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     const test_hooks = b.option(bool, "test-hooks", "Build the test hooks into the app (never for a release)") orelse false;
     const compile_only = b.option(bool, "compile-only", "Compile the Windows native app without linking the WebView2 loader") orelse false;
+    const strip = b.option(bool, "strip", "Leave the debug information out of the desktop executables (for a release)") orelse false;
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Optimize mode (default: ReleaseSafe)") orelse .ReleaseSafe;
 
     // Ziggy built for this target, with the test hooks or without.
@@ -68,12 +69,11 @@ pub fn build(b: *std.Build) !void {
         .name = "my-app",
         .title = "My App",
         .directory = ".",
-        .ui_directory = "dist",
         .linux_icon = null,
         .windows_resource = null,
     };
-    try ziggy_build.addLinuxShell(b, app, target, optimize, ziggy, core.static_library);
-    try ziggy_build.addWindowsShell(b, app, compile_only, target, optimize, ziggy, core.static_library);
+    try ziggy_build.addLinuxShell(b, app, strip, target, optimize, ziggy, core.static_library);
+    try ziggy_build.addWindowsShell(b, app, compile_only, strip, target, optimize, ziggy, core.static_library);
 }
 ```
 
@@ -81,7 +81,7 @@ What Ziggy's `build.zig` gives an app:
 
 - `dependency(b, target, optimize, test_hooks)`: Ziggy for the target, as `IZiggy`: the dependency itself, `module` (the core, which the app's code imports as `@import("ziggy-core")`). Ask twice for a build that needs both, such as an app built without the test hooks and its unit tests, which run with them.
 - `addAppCore(b, ziggy, app, target, optimize)`: builds the app's core as a library, installed by the `<name>-core` step with the app's built UI embedded in it as the `ui-files` import. For an Android target that is the shared library the Android native app loads, and for every other target a static library with `ziggy.h` beside it. It returns both libraries, so an app can link more into them (a system library, for one).
-- `addLinuxShell` and `addWindowsShell`: the app's Linux executable (`<name>-linux`, installed to `bin/<name>`) and Windows executable (`<name>-windows`), each with the UI embedded, and a step that compiles the Windows native app without linking it (`<name>-windows-check`), for a machine without Microsoft's toolchain.
+- `addLinuxShell` and `addWindowsShell`: the app's Linux executable (`<name>-linux`, installed to `bin/<name>`) and Windows executable (`<name>-windows`), each linking the app's core with its UI embedded, without debug information when `strip` is true (a release package), and a step that compiles the Windows native app without linking it (`<name>-windows-check`), for a machine without Microsoft's toolchain.
 - Dev mode comes with `addAppCore`: `<name>-dev-host` builds the dev host, and `<name>-dev` runs the supervisor, which starts the app's dev server and the dev host in front of it and rebuilds the dev host as the Zig files change (see [Dev mode](#dev-mode-packagejson)). See the [dev host's README](../packages/ziggy/dev/README.md).
 - `embedUi`: the module that embeds a built UI, for a build that makes its own modules (an app's unit tests, for one).
 - `addDirectoryTests`: compiles every `*.test.zig` under a directory's `src/test` into one test program and runs it, which is how the template runs its core's tests.
