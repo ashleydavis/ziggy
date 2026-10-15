@@ -33,7 +33,3 @@ An app pins Ziggy to a version tag. A version tag is `v` followed by the version
 3. Write what changed for apps since the last version, and what an app has to change, in a GitHub release on the tag, so an app moving to it knows.
 
 A version tag is never moved or deleted once pushed: an app that pinned it, and the hash in its `build.zig.zon`, depend on it staying the same. A mistake is fixed by releasing the next version.
-
-## See also
-
-- [Integrating Ziggy](integrating-ziggy.md): how an app pins Ziggy to a version tag and moves to a newer one.

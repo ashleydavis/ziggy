@@ -1,12 +1,12 @@
 //
 // Ziggy's dev host: an app's core run as a program of its own for dev mode, with the UI in an ordinary browser instead of the
 // system web view. It plays the part a native app plays, through the same C interface: it creates the core, carries messages
-// between the UI and the core over a WebSocket and answers the core's native host callbacks. It also stands in front of the app's own
-// dev server: the browser opens the dev host, which answers /__ziggy itself and forwards everything else to the dev server, putting
+// between the UI and the core over a WebSocket and implements the core's native host callbacks. It also stands in front of the app's own
+// dev server: the browser opens the dev host, which serves /__ziggy itself and forwards everything else to the dev server, putting
 // its dev script and the inject script at the start of each page on the way through, and passing the dev server's own WebSockets
 // through. The dev server needs nothing of Ziggy's.
 //
-// What only a native app can do (menus, screenshots, the app's own host requests) has no callback here, so the core answers each
+// What only a native app can do (menus, screenshots, the app's own host requests) has no callback here, so the core fails each
 // with HostCallbackMissing. File and folder dialogs are shown by the dev host itself on Linux, through zenity (see pickers.zig), and
 // are missing on the other platforms. A dropped file is handled too: the browser hands its contents over and the dev host saves a
 // copy, whose path is what the UI gets.
@@ -71,7 +71,7 @@ const DevHost = struct {
     waiting: std.ArrayList([]u8),
     // Set when the core has been destroyed, so nothing more is delivered.
     destroyed: std.atomic.Value(bool),
-    // Set when the app asked to quit, so the accepting loop ends.
+    // Set when the core calls the quit callback, so the accepting loop ends.
     stopping: std.atomic.Value(bool),
     // The port the dev host listens on.
     port: u16,
@@ -293,11 +293,11 @@ fn quit(user_data: ?*anyopaque) callconv(.c) void {
 }
 
 //
-// The native host callback that answers the operating system's version.
+// The native host callback that gives the operating system's version.
 //
 fn osVersion(user_data: ?*anyopaque, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
     _ = user_data;
-    // Windows has no uname, so its version is asked of the kernel, as the Windows native app does.
+    // Windows has no uname, so its version is read from the kernel, as the Windows native app does.
     if (builtin.os.tag == .windows) {
         var windows_info = std.mem.zeroes(std.os.windows.RTL_OSVERSIONINFOW);
         windows_info.dwOSVersionInfoSize = @sizeOf(std.os.windows.RTL_OSVERSIONINFOW);
@@ -399,7 +399,7 @@ fn serveConnection(host: *DevHost, stream: std.Io.net.Stream) void {
             else => {},
         }
         if (!own) {
-            // The dev server's answer ends with its connection, so this connection ends after it too.
+            // The dev server's response ends with its connection, so this connection ends after it too.
             forwardToDevServer(host, &request, &writer.interface) catch |err| {
                 std.debug.print("ziggy dev host: forwarding {s} to the app's dev server failed: {s}\n", .{ request.head.target, @errorName(err) });
             };
@@ -413,7 +413,7 @@ fn serveConnection(host: *DevHost, stream: std.Io.net.Stream) void {
 }
 
 //
-// Answers one ordinary request.
+// Serves one ordinary request.
 //
 fn answerRequest(host: *DevHost, request: *std.http.Server.Request) !void {
     const target = request.head.target;
@@ -454,7 +454,7 @@ fn answerRequest(host: *DevHost, request: *std.http.Server.Request) !void {
 }
 
 //
-// Answers with a script, which the browser is told never to keep, so a reload after a rebuild gets the new one.
+// Responds with a script, which the browser is told never to keep, so a reload after a rebuild gets the new one.
 //
 fn respondWithScript(request: *std.http.Server.Request, script: []const u8) !void {
     return request.respond(script, .{
@@ -502,7 +502,7 @@ fn redirectToIndex(host: *DevHost, request: *std.http.Server.Request) !void {
 }
 
 //
-// Saves the body of the request, the contents of one dropped file, as a copy under the data directory, and answers with the copy's
+// Saves the body of the request, the contents of one dropped file, as a copy under the data directory, and responds with the copy's
 // path. The name comes from the query's name parameter.
 //
 fn saveDroppedFile(host: *DevHost, request: *std.http.Server.Request) !void {
@@ -577,8 +577,8 @@ fn recordDrop(host: *DevHost, request: *std.http.Server.Request) !void {
 }
 
 //
-// Forwards one request to the app's dev server and writes its answer to the browser. A page gets Ziggy's scripts on the way through,
-// and anything else is passed on as it came. Answers the browser itself when the dev server cannot be reached.
+// Forwards one request to the app's dev server and writes its response to the browser. A page gets Ziggy's scripts on the way through,
+// and anything else is passed on as it came. Responds to the browser itself when the dev server cannot be reached.
 //
 fn forwardToDevServer(host: *DevHost, request: *std.http.Server.Request, client: *std.Io.Writer) !void {
     const io = host.io;
@@ -741,7 +741,7 @@ fn serveSocket(host: *DevHost, request: *std.http.Server.Request, key: []const u
 }
 
 //
-// What answering a ping needs: the socket to write the pong to, which only the holder of the host's socket mutex writes to.
+// What replying to a ping needs: the socket to write the pong to, which only the holder of the host's socket mutex writes to.
 //
 const PongContext = struct {
     // The dev host.
@@ -751,7 +751,7 @@ const PongContext = struct {
 };
 
 //
-// Answers a ping with a pong carrying its payload.
+// Replies to a ping with a pong carrying its payload.
 //
 fn answerPing(context: *anyopaque, payload: []const u8) anyerror!void {
     const pong: *PongContext = @ptrCast(@alignCast(context));

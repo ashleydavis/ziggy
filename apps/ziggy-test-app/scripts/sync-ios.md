@@ -8,6 +8,6 @@ Run it on a Mac: `bash apps/ziggy-test-app/scripts/sync-ios.sh`.
 
 - `--sdk <simulator|device>`: default: `simulator`. A device build is arm64 only.
 - `--arch <arm64|x86_64>`: default: this Mac's (the simulator runs the Mac's architecture).
-- `--native-dir <dir>`: default: `shells/ios/zig-out`. The library there is for one SDK and architecture, so sync again after changing either.
+- `--native-dir <dir>`: default: `native/ios/zig-out`. The library there is for one SDK and architecture, so sync again after changing either.
 - `--test-hooks`: build the library with the test control connection. Never use it for a release.
 - `--optimize <mode>`: default: `ReleaseSafe`.

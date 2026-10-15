@@ -195,7 +195,7 @@ pub const ZiggyQueueBackend = struct {
 
     //
     // Adds a task to the runner and returns its id (allocated with the allocator). The callbacks registered for the source are told
-    // before the task can start. A task a running task queues runs at the priority it asked for, or at the priority of the task that
+    // before the task can start. A task a running task queues runs at the priority passed for it, or at the priority of the task that
     // queued it, or at the default (background) when nothing queued it.
     //
     pub fn addTask(self: *ZiggyQueueBackend, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) ![]const u8 {
@@ -511,7 +511,7 @@ const ContextBridge = struct {
 };
 
 //
-// The runner's way to a handler registered with the task queue: it asks whether one is registered for a task type, and runs it.
+// The runner's way to a handler registered with the task queue: it checks whether one is registered for a task type, and runs it.
 //
 pub fn fallbackHandler(self: *ZiggyQueueBackend) task_runner.FallbackHandler {
     return .{

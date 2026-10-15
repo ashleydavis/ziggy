@@ -1,6 +1,6 @@
 # open-android.sh
 
-Syncs, then opens the Android project (`shells/android`) in Android Studio.
+Syncs, then opens the Android project (`native/android`) in Android Studio.
 
 Invoke: `bash apps/ziggy-test-app/scripts/open-android.sh`. No arguments.
 

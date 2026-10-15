@@ -33,7 +33,7 @@ test "task-stats counts the tasks that ended and the messages they sent, through
     try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":{\"tasksEnded\":0,\"messagesSent\":0}}");
     try addTask(core, "s1", "hello-short", "src", "null");
     try shell.expectMessageContaining("task-completed\",\"data\":{\"taskId\":\"s1\"");
-    // The observers are called after the UI is told, so the counts are asked for until they arrive.
+    // The observers are called after the UI is told, so the counts are read again until they arrive.
     var waited_ms: u32 = 0;
     while (shell.countContaining("\"tasksEnded\":1,\"messagesSent\":1") == 0) : (waited_ms += 10) {
         if (waited_ms > 20_000) {

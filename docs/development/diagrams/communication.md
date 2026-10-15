@@ -13,9 +13,9 @@ The diagram at the start of the architecture guide, "How the parts communicate":
 
 1. Edit `communication.mmd`:
    - A box is a line `Id["Name"]`. Keep the names short: the box shows the name only.
-   - An arrow is a line `From -->|"words"| To`. Keep its words short, a word or two, and merge arrows that run between the same two boxes the same way. The table under the diagram in the architecture guide holds the detail.
+   - An arrow is a line `From -->|"words"| To`. Keep its words short, a word or two, and merge arrows that run between the same two boxes the same way. The sections of the architecture guide hold the detail.
    - The languages of a box are its `label-under` line. A new box that needs one gets a new line, naming the box by its id.
    - Mermaid lays the boxes out by itself, left to right. It has no way to place a box by hand.
-2. Run `bun run diagrams` from the root of the repository. It needs Chrome or Chromium (`docs/dependencies.md`).
+2. Run `bun run diagrams` from the root of the repository. It needs Chrome or Chromium (`docs/development/developing-ziggy.md`).
 3. Look at the drawing: open `communication.svg` in a browser, or the architecture guide in an editor's preview.
-4. Update the table under the diagram in `docs/architecture.md` when an arrow or a box changed.
+4. Update the sections of `docs/development/architecture.md` that describe an arrow or a box that changed.

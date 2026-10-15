@@ -7,7 +7,7 @@
 #
 # It defines functions only and does nothing when sourced.
 #
-# Why a process group rather than a walk of the process tree. A tree walk asks the kernel "who are
+# Why a process group rather than a walk of the process tree. A tree walk looks up in the kernel "who are
 # this process's children", so it only works while the parent is still alive. The moment the parent
 # dies its children are reparented to init, pgrep -P finds nothing, and the walk reports an empty
 # tree while the survivors are sitting there holding memory. That is not an edge case: it is exactly
@@ -53,9 +53,9 @@ process_group_of() {
 # Returns success while at least one process is still in the given process group, and failure once
 # the group is empty (or when no group id was given).
 #
-# `kill -0` asks the kernel whether a signal could be delivered without delivering one, and the
-# negative pgid form asks that of a whole group, so it succeeds while any member lives. Nothing this
-# library launches can answer this after it has died: launch_in_process_group's job runs inside the
+# `kill -0` checks whether a signal could be delivered without delivering one, and the
+# negative pgid form checks that for a whole group, so it succeeds while any member lives. Nothing this
+# library launches can be checked this way after it has died: launch_in_process_group's job runs inside the
 # process substitution in the caller, so the app is reparented to init and reaped there rather than
 # left unwaited as a zombie in the test's own shell.
 # Usage: process_group_alive <pgid>
@@ -137,7 +137,7 @@ process_children() {
         return 0
     fi
 
-    # `ps -o` is POSIX and is what any Unix without pgrep would answer with. MSYS `ps` does not
+    # `ps -o` is POSIX and is what any Unix without pgrep would use. MSYS `ps` does not
     # understand it and writes a usage message, so an empty result here is not taken as "no children"
     # and falls through to the form MSYS does understand.
     local posix_output
@@ -156,8 +156,8 @@ process_children() {
 # The columns are found by their headings rather than by position, because the two `ps` commands this
 # has to read do not agree on either. MSYS prints `PID PPID PGID WINPID TTY UID STIME COMMAND`, and a
 # bare POSIX `ps` prints `PID TTY TIME CMD`, where the second column is a terminal and matching on it
-# would answer confidently with nonsense. Reading the headings means a table with no PPID column
-# yields nothing, which is the truthful answer to a question it cannot be asked.
+# would give confident nonsense. Reading the headings means a table with no PPID column
+# yields nothing, which is the truthful result when the table cannot say.
 # Usage: <ps output> | process_children_from_ps_table <pid>
 #
 process_children_from_ps_table() {
@@ -275,7 +275,7 @@ kill_process_group() {
 #
 # There is deliberately nothing here that selects a process by matching its command line.
 #
-# `pkill -f` and anything built on it asks the kernel about every process on the machine, and a
+# `pkill -f` and anything built on it matches against every process on the machine, and a
 # suite's CLI looks exactly like the CLI another worktree's run started a second ago, so it kills
 # that one too. It has already happened: one LAN share suite's exit trap SIGTERMed another suite's
 # sender mid-test, and the failure it produced named an innocent test and said nothing of the kill.
@@ -299,7 +299,7 @@ kill_process_group() {
 #
 # The probe is a real background job, because the question is what the kernel did and not what the
 # manual says. It is killed as soon as its group has been read, so it costs one process spawn rather
-# than the minute its sleep asks for, and it happens once for the life of the shell.
+# than the minute its sleep would take, and it happens once for the life of the shell.
 # Usage: process_control_verify_job_control
 #
 process_control_verify_job_control() {
@@ -418,7 +418,7 @@ launch_in_process_group() {
         return 1
     fi
 
-    # Recorded for the leak check, when a suite has asked for one by exporting the file to write to.
+    # Recorded for the leak check, when a suite has turned it on by exporting the file to write to.
     # This is what makes the check specific to what this suite started: it names the exact groups,
     # not a pattern that other suites' processes also match.
     if [ -n "${ZIGGY_LAUNCHED_GROUPS:-}" ]; then
@@ -431,7 +431,7 @@ launch_in_process_group() {
 #
 # Prints "<pid> <command line>", one per line, for everything still running that this suite started
 # through launch_in_process_group, and nothing at all when there is none. Prints nothing when no
-# suite asked to record launches.
+# suite turned on recording launches.
 #
 # Scoped to the recorded process groups rather than to anything matching this checkout's path.
 # Several suites can run at once from one checkout, and a path match would make each

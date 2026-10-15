@@ -30,7 +30,7 @@ pub const ChannelHandler = *const fn (core: *Core, arena: std.mem.Allocator, dat
 pub const ChannelEntry = struct {
     // The channel name the UI sends on.
     name: []const u8,
-    // The function that answers it.
+    // The function that handles it.
     handler: ChannelHandler,
 };
 
@@ -42,14 +42,14 @@ pub const AppHandlers = struct {
     channels: []const ChannelEntry,
     // The app's task types.
     tasks: []const task_runner.TaskHandlerEntry,
-    // The app's request channels that are answered by a task, so that a slow answer, such as a dialog waiting for the user, does
+    // The app's request channels that are handled by a task, so that a slow reply, such as a dialog waiting for the user, does
     // not hold up the thread that handles UI messages.
     task_channels: []const TaskChannelEntry,
     // The desktop menu as JSON: an array of menus, each {"label", "items"}, where an item is {"label", "action", "accelerator"}
     // or {"separator": true}, and may hold its own "items" for a submenu. "[]" for an app with no menu. Shells show it on
     // desktop only. See "Menus" in the architecture document.
     menu_json: []const u8,
-    // The files of the app's bundled UI, embedded in the app's library, for a shell that serves the UI by asking the core
+    // The files of the app's bundled UI, embedded in the app's library, for a shell that serves the UI by calling the core
     // for each file (the MacOS, iOS and Android shells). Empty for an app whose shell embeds the UI itself.
     ui_files: []const ui_files.UiFile,
     // Turns the error a channel handler returned into the text of the error reply, for an app whose code reports the reason for
@@ -72,7 +72,7 @@ pub const AppHandlers = struct {
 };
 
 //
-// An app's function for the query of the UI's address. The core calls it when the shell asks (the shell asks once the core exists,
+// An app's function for the query of the UI's address. The core calls it when the shell calls ziggy_ui_query (the shell calls it once the core exists,
 // before it loads the UI), with whether the test mode switch is on, which the app says in the query however it likes. It returns
 // the text after the question mark, such as `restApiUrl=...&testMode=1`, or an empty string for no query, allocated with the
 // allocator given, which is an arena that is released when the call returns. Ziggy passes the text through unread, so no shell
@@ -101,13 +101,13 @@ pub const AppState = struct {
 pub const ErrorDescriber = types.ErrorDescriber;
 
 //
-// A request channel answered by a task: the UI's request is queued as a task of this type, with the request's data as its input, and
+// A request channel handled by a task: the UI's request is queued as a task of this type, with the request's data as its input, and
 // the task's result is the reply. A task that fails or is cancelled gives an error reply.
 //
 pub const TaskChannelEntry = struct {
     // The channel name the UI sends on.
     name: []const u8,
-    // The task type that answers it.
+    // The task type that handles it.
     task_type: []const u8,
 };
 
@@ -154,13 +154,13 @@ pub const Core = struct {
     allocator: std.mem.Allocator,
     // The Io used for sleeping, waiting, files and sockets. It lives here so that its address is stable.
     threaded: std.Io.Threaded,
-    // The channels that can be answered, Ziggy's and the app's.
+    // The channels that have a handler, Ziggy's and the app's.
     channels: []ChannelEntry,
     // The task types that can run.
     tasks: []const task_runner.TaskHandlerEntry,
-    // The app's request channels that a task answers.
+    // The app's request channels that a task handles.
     task_channels: []const TaskChannelEntry,
-    // The number of requests answered by a task so far, which names the next one's task.
+    // The number of requests handled by a task so far, which names the next one's task.
     next_request_task: std.atomic.Value(u64),
     // The desktop menu as JSON, owned by the app.
     menu_json: []const u8,
@@ -317,7 +317,7 @@ pub const Core = struct {
     }
 
     //
-    // Asks the app for the query of the UI's address and returns the text after the question mark, empty when the app has none. The
+    // Calls the app's function for the query of the UI's address and returns the text after the question mark, empty when the app has none. The
     // text is owned by the core and stays valid until the next call or until the core is destroyed. The shell calls it once the core
     // exists, before it loads the UI.
     //
@@ -369,7 +369,7 @@ pub const Core = struct {
 
     //
     // Handles one message from the UI: parses it, routes it by channel and replies when it carries an id.
-    // A message that cannot be answered, because it has no usable id, is reported to the UI as a core-error event
+    // A message that cannot be replied to, because it has no usable id, is reported to the UI as a core-error event
     // and never dropped silently.
     //
     pub fn postMessage(self: *Core, message: []const u8) void {
@@ -420,8 +420,8 @@ pub const Core = struct {
     }
 
     //
-    // Answers a request with a task: queues the task and returns at once, and the reply is sent when the task ends. A request that
-    // has no id has nothing to answer, so it is an error.
+    // Handles a request with a task: queues the task and returns at once, and the reply is sent when the task ends. A request that
+    // has no id has nothing to reply to, so it is an error.
     //
     fn answerWithTask(self: *Core, arena: std.mem.Allocator, entry: TaskChannelEntry, request_id: ?std.json.Value, data: std.json.Value) void {
         const id = request_id orelse {
@@ -451,7 +451,7 @@ pub const Core = struct {
     }
 
     //
-    // Answers a request with an error reply, or, when there is nothing to reply to, sends a core-error event.
+    // Replies to a request with an error reply, or, when there is nothing to reply to, sends a core-error event.
     //
     fn reportError(self: *Core, arena: std.mem.Allocator, id: ?std.json.Value, error_name: []const u8) void {
         if (id) |id_value| {
@@ -508,7 +508,7 @@ fn emitFromRunner(user_data: ?*anyopaque, message: []const u8) void {
 }
 
 //
-// Answers get-platform: whether the platform is a desktop or a mobile one, and the operating system and architecture.
+// Handles get-platform: whether the platform is a desktop or a mobile one, and the operating system and architecture.
 //
 fn getPlatformHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = core;
@@ -525,7 +525,7 @@ fn getPlatformHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Valu
 }
 
 //
-// Answers add-task: queues the task the UI asked for.
+// Handles add-task: queues the task the UI's add-task message names.
 //
 fn addTaskHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     const task_type = json_util.getString(data, "taskType") orelse {
@@ -579,7 +579,7 @@ fn cancelTasksHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Valu
 }
 
 //
-// Answers test-result: hands the result the UI computed for a test control request to the connection waiting for it.
+// Handles test-result: hands the result the UI computed for a test control request to the connection waiting for it.
 //
 fn testResultHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     const control = core.control orelse {
@@ -595,7 +595,7 @@ fn testResultHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value
 }
 
 //
-// Answers test-ui-ready: tells the test control connection the UI has loaded.
+// Handles test-ui-ready: tells the test control connection the UI has loaded.
 //
 fn testUiReadyHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = data;
@@ -633,7 +633,7 @@ fn filesDroppedFromControl(user_data: ?*anyopaque, paths_json: []const u8) anyer
 }
 
 //
-// Answers the UI's request for the paths of the files in the last drop, as an array of strings (empty when nothing was dropped).
+// Handles the UI's request for the paths of the files in the last drop: returns them as an array of strings (empty when nothing was dropped).
 //
 fn getDroppedPathsHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = data;

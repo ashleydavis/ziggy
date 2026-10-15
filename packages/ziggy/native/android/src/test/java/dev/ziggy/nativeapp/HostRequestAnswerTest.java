@@ -5,7 +5,7 @@ import static org.junit.Assert.assertEquals;
 import java.nio.charset.StandardCharsets;
 import org.junit.Test;
 
-// Plain-JVM tests for how an answer to a host request crosses to the core: a status byte, then the answer or the reason as UTF-8.
+// Plain-JVM tests for how the result of a host request crosses to the core: a status byte, then the result or the reason as UTF-8.
 public final class HostRequestAnswerTest {
     @Test
     public void aSuccessIsMarkedAndCarriesTheAnswer() {

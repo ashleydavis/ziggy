@@ -17,10 +17,10 @@ extern "C" {
 typedef void (*ziggy_deliver_fn)(void *user_data, const char *message, size_t message_len);
 
 // Native host callback: writes the operating system's version, as a JSON string, into the buffer the core gives it, and
-// returns the number of bytes written, or a negative number when it cannot answer.
+// returns the number of bytes written, or a negative number when it cannot.
 typedef intptr_t (*ziggy_os_version_fn)(void *user_data, char *buffer, size_t capacity);
 
-// Native host callback: asks the shell to quit the application. Called only by the test control connection.
+// Native host callback: has the shell quit the application. Called only by the test control connection.
 typedef void (*ziggy_quit_fn)(void *user_data);
 
 // Native host callback: does a menu action as if the user had chosen its menu item, by the path the menu item takes in the shell,
@@ -41,13 +41,13 @@ typedef intptr_t (*ziggy_screenshot_fn)(void *user_data, const char *output_path
 typedef void (*ziggy_keep_alive_fn)(void *user_data, bool keep_running);
 
 // Native host callback: does one thing only the platform can do, named by method ("exportFile", "secureStoreGet", ...). The request is
-// the JSON text of the method's argument (NUL terminated), and the shell writes the JSON text of its answer into the buffer and returns
-// the number of bytes written. When it cannot do what was asked it writes the text of the reason and returns that number of bytes
+// the JSON text of the method's argument (NUL terminated), and the shell writes the JSON text of its result into the buffer and returns
+// the number of bytes written. When it cannot do what the method names it writes the text of the reason and returns that number of bytes
 // negated. The shell may show native interface and wait for the user, so the core calls it from a worker thread, never from the one that
 // handles UI messages, and it may take a long time.
 typedef intptr_t (*ziggy_host_request_fn)(void *user_data, const char *method, const char *request_json, char *buffer, size_t capacity);
 
-// What a shell is asked to show in ziggy_pick_paths_fn.
+// The kinds of dialog a shell shows in ziggy_pick_paths_fn.
 enum {
     // A dialog to choose one or more existing files to open.
     ZIGGY_PICK_OPEN_FILES = 0,
@@ -160,7 +160,7 @@ typedef struct ziggy_ui_file_result {
 
 // Finds a file of the app's bundled UI by the path of a request, which starts with a slash ("/" is the UI itself), and
 // writes it into the struct given. Returns false, leaving the struct unchanged, when the UI has no such file. Used by the
-// shells to serve the UI, by asking the core for each file.
+// shells to serve the UI, by calling it for each file.
 bool ziggy_ui_file(void *handle, const char *path, size_t path_len, ziggy_ui_file_result *result);
 
 // The script a shell injects into the UI before the UI's own scripts, which exposes window.ziggy (NUL terminated, valid for
@@ -172,7 +172,7 @@ const char *ziggy_inject_script(size_t *length);
 // Control elsewhere. Returns false, leaving the struct unchanged, when the text is not a shortcut.
 bool ziggy_parse_accelerator(const char *text, size_t text_len, ziggy_accelerator *result);
 
-// Records the files the user dropped on the window, replacing the last drop, so the UI can ask for each one's path with
+// Records the files the user dropped on the window, replacing the last drop, so the UI can get each one's path with
 // getPathForFile. The shell calls it when the drop happens, before the UI's own drop event. The paths are the JSON text of an array
 // of strings. Returns false, after logging why, when a path is not a readable file or the text is not such an array.
 bool ziggy_files_dropped(void *handle, const char *paths_json, size_t paths_len);

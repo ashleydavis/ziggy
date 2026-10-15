@@ -1,5 +1,5 @@
 //
-// The test app's file and folder pickers. They answer the pick-folder, pick-files and pick-file request channels: a
+// The test app's file and folder pickers. They handle the pick-folder, pick-files and pick-file request channels: a
 // cancelled dialog is a reply of null. Each runs as a task, because a dialog waits for the user and must not hold up the thread that handles UI
 // messages.
 //

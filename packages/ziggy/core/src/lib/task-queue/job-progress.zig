@@ -24,7 +24,7 @@ fn jobTagToJson(allocator: std.mem.Allocator, job: IJobTag) !std.json.Value {
 //
 // Reports a job's progress from inside a task handler.
 //
-// Does nothing when the task carries no job tag, which is how a task nobody asked to see stays out
+// Does nothing when the task carries no job tag, which is how a task without one stays out
 // of the interface without its handler having to know that. Automatic import is the case that
 // matters: it is the same handler as a manual import, and it runs for as long as the setting is on,
 // so a row for it would never go away.

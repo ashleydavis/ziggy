@@ -19,7 +19,7 @@ set -euo pipefail
 
 # The SDK package versions, kept in step with the app's shells/android/variables.gradle.
 # compileSdkVersion 35 -> platforms;android-35 and build-tools;35.0.0, which is also the build-tools
-# version the Android Gradle Plugin asks for. The NDK is variables.gradle's ndkVersion.
+# version the Android Gradle Plugin requires. The NDK is variables.gradle's ndkVersion.
 ANDROID_PLATFORM="platforms;android-35"
 ANDROID_BUILD_TOOLS="build-tools;35.0.0"
 ANDROID_NDK="ndk;25.1.8937393"

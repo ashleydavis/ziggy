@@ -19,7 +19,7 @@ const DEFAULT_TASK_PRIORITY = types.DEFAULT_TASK_PRIORITY;
 //
 // Works out what priority a task actually runs at.
 //
-// A priority the caller asked for always wins, which is what lets a long-running child (a whole
+// A priority the caller passes always wins, which is what lets a long-running child (a whole
 // database prefetch, say) opt back down to background even though the task that started it was
 // something the user was waiting on. Otherwise a task queued from inside a running task runs at its
 // parent's priority, so an import's hash and upload children can never overtake a tap. Anything

@@ -33,7 +33,7 @@ pub const TaskPriority = enum {
 };
 
 //
-// Works out what priority a child task runs at (resolveTaskPriority): one it asked for always wins, which is what lets a
+// Works out what priority a child task runs at (resolveTaskPriority): one passed for it always wins, which is what lets a
 // long-running child opt back down to background, and otherwise it runs at its parent's priority, so an import's children can
 // never overtake something the user is waiting on.
 //
@@ -46,7 +46,7 @@ pub fn resolveTaskPriority(requested: ?TaskPriority, parent_priority: TaskPriori
 
 //
 // Whether a task type keeps the app running when the app is not in the foreground. A task of a keep-alive type that is queued or
-// running makes the core ask the shell to keep the app running, until the last such task ends.
+// running makes the core call the shell's keep_alive callback to keep the app running, until the last such task ends.
 //
 pub const TaskKind = enum {
     // An ordinary task. The platform may stop it when the app is in the background.
@@ -108,13 +108,13 @@ pub const TaskRunnerOptions = struct {
 };
 
 //
-// Lets a test answer a native dialog without one being shown. The control connection of a test hooks build provides it.
+// Lets a test supply a native dialog's result without one being shown. The control connection of a test hooks build provides it.
 //
 pub const PickOverride = struct {
     // The provider's own pointer, passed back on every call.
     user_data: ?*anyopaque,
-    // Takes the answer a test has given for the next dialog, as the JSON text of an array of paths allocated with the
-    // allocator, or returns null when the test gave none. An answer answers one dialog.
+    // Takes the result a test has given for the next dialog, as the JSON text of an array of paths allocated with the
+    // allocator, or returns null when the test gave none. A result is used for one dialog.
     take: *const fn (user_data: ?*anyopaque, allocator: std.mem.Allocator) ?[]u8,
 };
 
@@ -186,7 +186,7 @@ const Task = struct {
     next_child: u32,
     // How the task ended, once it has.
     completion: ?Completion,
-    // For a task that answers a request from the UI: the JSON text of the request's id. When the task ends the core sends the
+    // For a task that handles a request from the UI: the JSON text of the request's id. When the task ends the core sends the
     // reply to that request, instead of the task-completed event. Owned.
     reply_id_json: ?[]u8,
 };
@@ -284,7 +284,7 @@ pub const TaskContext = struct {
     }
 
     //
-    // Queues a child task and returns its id. The child runs at the priority it asks for, or at this task's when it asks for none.
+    // Queues a child task and returns its id. The child runs at the priority passed, or at this task's when none is passed.
     // Waits, running other children of this task, while the limit on child tasks in flight is reached. Returns error.Cancelled
     // when this task has been cancelled.
     //
@@ -323,9 +323,9 @@ pub const TaskContext = struct {
     }
 
     //
-    // Asks the shell to do one thing only the platform can do, by name, with the JSON text of the argument, and returns what it answered
+    // Calls the shell's host request callback to do one thing only the platform can do, by name, with the JSON text of the argument, and returns what it gave
     // (see HostRequestFn). The shell may show native interface and wait for the user, so this must be called from a task. A platform
-    // with no such callback gives error.HostCallbackMissing, and one that cannot do what was asked gives an answer that did not
+    // with no such callback gives error.HostCallbackMissing, and one that cannot do what the method names gives a result that did not
     // succeed, with the reason in its text.
     //
     pub fn hostRequest(self: *TaskContext, method: []const u8, request_json: []const u8) !types.HostReply {
@@ -369,7 +369,7 @@ pub const TaskContext = struct {
     //
     // Shows a native file or folder dialog through the shell's native host callback, and returns what the user chose as the
     // JSON text of an array of path strings, empty when they cancelled. The dialog is shown on the shell's UI thread while this
-    // waits, so it must be called from a task. A test hooks build lets a test answer instead, and no dialog is shown.
+    // waits, so it must be called from a task. A test hooks build lets a test supply the result instead, and no dialog is shown.
     //
     pub fn pickPaths(self: *TaskContext, kind: types.PickKind, title: ?[]const u8, initial_name: ?[]const u8) ![]const u8 {
         if (self.runner.pick_override) |override| {
@@ -392,7 +392,7 @@ pub const TaskContext = struct {
 };
 
 //
-// What a task's host requester asks through: the shell's host request callback. An answer that did not succeed is an error with the shell's
+// What a task's host requester calls: the shell's host request callback. A result that did not succeed is an error with the shell's
 // reason in it.
 //
 pub const TaskHostRequester = struct {
@@ -400,7 +400,7 @@ pub const TaskHostRequester = struct {
     context: *TaskContext,
 
     //
-    // Asks the shell and returns its answer, allocated with the allocator. Everything it allocates is the caller's, so it may be
+    // Calls the shell and returns its result, allocated with the allocator. Everything it allocates is the caller's, so it may be
     // called from any thread of the task, which is why it does not use the task's arena.
     //
     fn request(ptr: *anyopaque, allocator: std.mem.Allocator, method: []const u8, request_json: []const u8) anyerror![]const u8 {
@@ -410,8 +410,8 @@ pub const TaskHostRequester = struct {
 };
 
 //
-// Asks the shell, through the host request callback of the configuration, to do one thing only the platform can do, and returns its
-// answer allocated with the allocator. Fails with the shell's reason when it could not do it, and when the configuration has no
+// Calls the host request callback of the configuration to have the shell do one thing only the platform can do, and returns its
+// result allocated with the allocator. Fails with the shell's reason when it could not do it, and when the configuration has no
 // callback. It is for code that has the configuration but no task, such as the startup of the core.
 //
 pub fn askShell(config: *const ZiggyConfig, allocator: std.mem.Allocator, method: []const u8, request_json: []const u8) anyerror![]const u8 {
@@ -462,7 +462,7 @@ pub const TaskRunner = struct {
     workers: std.ArrayList(std.Thread),
     // Set once shutdown has begun.
     shutting_down: bool,
-    // Answers dialogs for a test, when the test hooks provide it.
+    // Supplies dialogs' results for a test, when the test hooks provide it.
     pick_override: ?PickOverride,
     // Set once shutdown has begun, so that nothing more is sent to the shell.
     silent: std.atomic.Value(bool),
@@ -530,7 +530,7 @@ pub const TaskRunner = struct {
 
     //
     // Queues a top level task and returns at once. Two live tasks may share an id, and each reports its own completion. When
-    // reply_id_json is given, the task answers the UI request with that id: its end is reported as that request's reply, and no
+    // reply_id_json is given, the task handles the UI request with that id: its end is reported as that request's reply, and no
     // task-completed event is sent.
     //
     pub fn addTask(self: *TaskRunner, task_id: []const u8, task_type: []const u8, source: []const u8, data_json: []const u8, priority: TaskPriority, reply_id_json: ?[]const u8) !void {
@@ -1073,7 +1073,7 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Sends the reply to the UI request a task was answering: the task's result on success, or an error reply saying why not.
+    // Sends the reply to the UI request a task was handling: the task's result on success, or an error reply saying why not.
     //
     fn emitReply(self: *TaskRunner, reply_id_json: []const u8, completion: Completion) void {
         if (self.silent.load(.acquire)) {

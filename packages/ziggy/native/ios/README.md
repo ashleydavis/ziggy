@@ -33,19 +33,19 @@ The backend's `keep_alive` callback reaches `ZiggyBridge`, which takes a backgro
 
 ## File pickers
 
-`ZiggyPicker.swift` backs the backend's `pick_paths` callback. The backend calls it from a worker thread. The dialog is shown on the main thread and the worker waits on a `DispatchSemaphore`, so the main thread never blocks on it. The answer is a JSON array of paths, `[]` when the user cancelled. A failure (no window, a buffer too small, an unknown kind) prints to standard error and returns a negative number.
+`ZiggyPicker.swift` backs the backend's `pick_paths` callback. The backend calls it from a worker thread. The dialog is shown on the main thread and the worker waits on a `DispatchSemaphore`, so the main thread never blocks on it. The result is a JSON array of paths, `[]` when the user cancelled. A failure (no window, a buffer too small, an unknown kind) prints to standard error and returns a negative number.
 
-`UIDocumentPickerViewController` is presented over the web view's window, with the delegate's callbacks (including cancel) answering.
+`UIDocumentPickerViewController` is presented over the web view's window, with the delegate's callbacks (including cancel) giving the result.
 
 - Open files uses `forOpeningContentTypes: [.item], asCopy: true` with multiple selection. The paths are copies in the app's temporary directory, which the app can read and write freely until the system clears that directory. The originals are untouched.
-- Folder uses `forOpeningContentTypes: [.folder]`. The native app calls `startAccessingSecurityScopedResource` on the folder and keeps access for the rest of the process, so the folder's path and everything inside it can be listed, read and written. A path from an earlier run, or a path inside the folder used after the app restarts, is denied until the user picks the folder again, because keeping access across runs needs a bookmark.
-- Save: iOS has no dialog for choosing where to save a file, so the callback fails and the backend answers the message with an error message response.
+- Directory uses `forOpeningContentTypes: [.folder]`. The native app calls `startAccessingSecurityScopedResource` on the directory and keeps access for the rest of the process, so the directory's path and everything inside it can be listed, read and written. A path from an earlier run, or a path inside the directory used after the app restarts, is denied until the user picks the directory again, because keeping access across runs needs a bookmark.
+- Save: iOS has no dialog for choosing where to save a file, so the callback fails and the backend sends an error message response for the message.
 
 A loopback server the UI loads media from needs `NSAllowsLocalNetworking` in the app's `Info.plist`.
 
 ## The app's own native calls
 
-The app's own native calls are how the backend asks the app's own code for something only the platform can do (a permission prompt, the keychain, a share sheet), named by a method. The app gives `ZiggyBridge.setHostRequestHandler` an object that conforms to `ZiggyHostRequestHandler` before `start`. The backend calls it from a worker thread with the method name and the JSON text of its argument, and the handler returns the JSON text of the answer or throws `ZiggyHostRequestError` with a reason in words the user can act on. The handler may block, for instance on a permission dialog, because the backend's worker thread waits and the main thread does not. The native app knows no method names. With no handler set the backend has no `host_request` native call, and such a call fails with a message saying so.
+The app's own native calls are how the backend has the app's own code do something only the platform can do (a permission prompt, the keychain, a share sheet), named by a method. The app gives `ZiggyBridge.setHostRequestHandler` an object that conforms to `ZiggyHostRequestHandler` before `start`. The backend calls it from a worker thread with the method name and the JSON text of its argument, and the handler returns the JSON text of the result or throws `ZiggyHostRequestError` with a reason in words the user can act on. The handler may block, for instance on a permission dialog, because the backend's worker thread waits and the main thread does not. The native app knows no method names. With no handler set the backend has no `host_request` native call, and such a call fails with a message saying so.
 
 ## Starting work from the app
 

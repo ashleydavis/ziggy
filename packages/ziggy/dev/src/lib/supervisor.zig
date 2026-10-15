@@ -1,11 +1,11 @@
 //
 // The supervisor of Ziggy's dev mode, which an app's `<name>-dev` build step runs. It starts the app's own dev server (the app's
 // `dev:ui` package script, given a port and the loopback address), builds the dev host and starts it in front of the dev server,
-// and then opens the browser at the dev host, once both are ready. The browser talks only to the dev host, which answers
+// and then opens the browser at the dev host, once both are ready. The browser talks only to the dev host, which serves
 // /__ziggy itself and forwards everything else to the dev server, so the app's dev server needs nothing of Ziggy's.
 //
 // From then on it watches the Zig files of the app and of Ziggy. A change rebuilds the dev host and restarts it on the same port,
-// and the page reloads by itself once the new one answers. A build that fails is reported and the dev host that is running keeps
+// and the page reloads by itself once the new one responds. A build that fails is reported and the dev host that is running keeps
 // running, until the next change. A change to the UI is the dev server's to see and reload.
 //
 // It stops when the dev host stops, which is when the app quits, and stops the dev server with it. Ctrl+C stops all of them,
@@ -255,7 +255,7 @@ fn reportProgress(io: std.Io, finished: *std.atomic.Value(bool)) void {
 }
 
 //
-// Starts the dev host on the supervisor's port, or on one the operating system chooses the first time when none was asked for, in
+// Starts the dev host on the supervisor's port, or on one the operating system chooses the first time when none was given, in
 // front of the app's dev server, and waits until it says which port it listens on.
 //
 fn startHost(supervisor: *Supervisor, slot: u1) !void {
@@ -336,7 +336,7 @@ fn waitUntilListening(io: std.Io, port: u16) !void {
 }
 
 //
-// Waits for the dev host that stopped answering to end and returns its exit code.
+// Waits for the dev host that stopped responding to end and returns its exit code.
 //
 fn hostExitCode(supervisor: *Supervisor) !u8 {
     var host = supervisor.host orelse {

@@ -1,5 +1,5 @@
 //
-// Native file and folder pickers. The core asks for one from a worker thread. The dialog is shown on the main thread and the
+// Native file and folder pickers. The core calls the pick_paths callback from a worker thread. The dialog is shown on the main thread and the
 // worker waits for the user, so the main thread is never blocked. On MacOS these are NSOpenPanel and NSSavePanel.
 //
 

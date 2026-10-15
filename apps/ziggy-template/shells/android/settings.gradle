@@ -1,7 +1,7 @@
 // The Ziggy template's Android project: the app, and Ziggy's Android shell, which is a Gradle build of its own that this one
 // includes. Gradle builds the shell from the Ziggy checkout and puts it in place of the dependency `dev.ziggy:ziggy-native-android`
-// that app/build.gradle declares. See the guide to integrating Ziggy for the lines that take the shell from a version tag of Ziggy's
-// repository instead.
+// that app/build.gradle declares. An app that takes Ziggy from a version tag declares Ziggy's repository in a `sourceControl` block
+// instead.
 rootProject.name = 'ziggy-template-android'
 
 include ':app'

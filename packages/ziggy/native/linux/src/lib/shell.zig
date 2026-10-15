@@ -13,14 +13,14 @@ const geometry_lib = @import("geometry.zig");
 const render_device = @import("render-device.zig");
 const host_reply = @import("host-reply");
 
-// The URL scheme the bundled UI is served under. WebKitGTK asks the shell for each file instead of reading a directory.
+// The URL scheme the bundled UI is served under. WebKitGTK calls the shell's scheme handler for each file instead of reading a directory.
 const app_scheme = "ziggy-app";
 
 // The URL prefix of the bundled UI, with a trailing slash. It is what the core allows the web view to navigate to.
 const app_url_prefix = app_scheme ++ "://app/";
 
 //
-// What a host request handler can ask of the shell.
+// What a host request handler can call on the shell.
 //
 pub const Host = struct {
     // The shell the request came to.
@@ -36,7 +36,7 @@ pub const Host = struct {
 };
 
 //
-// Answers one host request. Gives the JSON text of the answer, null when the app does not know the method, or an error, whose name is
+// Handles one host request. Gives the JSON text of the result, null when the app does not know the method, or an error, whose name is
 // the reason the request failed. Called from a worker thread.
 //
 pub const HostRequestFn = *const fn (host: Host, method: []const u8, request_json: []const u8) anyerror!?[]const u8;
@@ -45,7 +45,7 @@ pub const HostRequestFn = *const fn (host: Host, method: []const u8, request_jso
 // What an app tells the shell about itself.
 //
 pub const AppConfig = struct {
-    // Answers the requests only the platform can do, by method name, or null when the app has none.
+    // Handles the requests only the platform can do, by method name, or null when the app has none.
     host_request: ?HostRequestFn,
     // The application id, which also names the app's private data directory.
     app_id: [:0]const u8,
@@ -71,7 +71,7 @@ const PendingMessage = struct {
 // Everything one running shell owns. It lives on the stack of run and every callback is given its address.
 //
 const Shell = struct {
-    // What the app asked for.
+    // The configuration the app passed in.
     app_config: AppConfig,
     // The GTK application.
     application: *c.GtkApplication,
@@ -184,8 +184,8 @@ fn turnSandboxOffWhenItCannotStart() !void {
 }
 
 //
-// Answers a web view request for one of the bundled UI's files, from the files the core holds. A path that is not one of
-// them is answered with a not found error. The UI is loaded only once the core exists.
+// Serves a web view request for one of the bundled UI's files, from the files the core holds. A path that is not one of
+// them gets a not found error. The UI is loaded only once the core exists.
 //
 fn onUriSchemeRequest(request: *c.WebKitURISchemeRequest, user_data: c.gpointer) callconv(.c) void {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -365,7 +365,7 @@ fn onDecidePolicy(web_view: *c.WebKitWebView, decision: *c.WebKitPolicyDecision,
 }
 
 //
-// Records the files of a drop on the web view with the core, so the UI can ask for their paths. WebKitGTK gives the UI no files and
+// Records the files of a drop on the web view with the core, so the UI can get their paths. WebKitGTK gives the UI no files and
 // hides the file addresses, so the paths can only be read here. This handler runs before WebKit's own, which is the default handler of
 // the signal and runs last, so the paths are recorded before the UI's drop is handled. Anything dropped that is not a file is ignored.
 //
@@ -452,7 +452,7 @@ fn discardPending(shell: *Shell) void {
 }
 
 //
-// The core's deliver callback. It runs on any thread: it queues the message and asks the main thread to deliver it.
+// The core's deliver callback. It runs on any thread: it queues the message and adds an idle callback (g_idle_add) that delivers it on the main thread.
 //
 fn deliver(user_data: ?*anyopaque, message: [*c]const u8, message_len: usize) callconv(.c) void {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -490,7 +490,7 @@ fn drainQueue(user_data: ?*anyopaque) callconv(.c) c.gboolean {
 }
 
 //
-// The native host callback that answers the operating system's version.
+// The native host callback that gives the operating system's version.
 //
 fn osVersion(user_data: ?*anyopaque, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
     _ = user_data;
@@ -514,7 +514,7 @@ fn osVersion(user_data: ?*anyopaque, buffer: [*c]u8, capacity: usize) callconv(.
 }
 
 //
-// The native host callback that does one thing only the platform can do, by handing it to the app's handler. Writes the answer into
+// The native host callback that does one thing only the platform can do, by handing it to the app's handler. Writes the result into
 // the core's buffer and returns its length, or writes the reason and returns its length negated.
 //
 fn hostRequest(user_data: ?*anyopaque, method: [*c]const u8, request_json: [*c]const u8, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
@@ -569,7 +569,7 @@ fn releaseAwakeOnMainThread(user_data: ?*anyopaque) callconv(.c) c.gboolean {
 }
 
 //
-// The native host callback that quits the application, asked for by the test control connection. It can be called from any
+// The native host callback that quits the application, called by the test control connection. It can be called from any
 // thread, so the quit happens on the main thread.
 //
 fn quit(user_data: ?*anyopaque) callconv(.c) void {
@@ -797,7 +797,7 @@ fn onInspectorClosed(inspector: *c.WebKitWebInspector, user_data: ?*anyopaque) c
 }
 
 //
-// One request for a native dialog, made on a worker thread and answered on the main thread. It lives on the worker's stack
+// One request for a native dialog, made on a worker thread and carried out on the main thread. It lives on the worker's stack
 // for as long as the worker waits.
 //
 const PickRequest = struct {
@@ -809,21 +809,21 @@ const PickRequest = struct {
     title: ?[*:0]const u8,
     // The suggested file name for a save, or null.
     initial_name: ?[*:0]const u8,
-    // Where the answer goes.
+    // Where the result goes.
     buffer: [*]u8,
     // The size of that buffer.
     capacity: usize,
-    // The number of bytes written to the buffer, or a negative number when the dialog could not be shown or the answer did not fit.
+    // The number of bytes written to the buffer, or a negative number when the dialog could not be shown or the result did not fit.
     result: isize,
     // The Io the worker waits with.
     io: std.Io,
-    // Set when the main thread has answered.
+    // Set when the main thread has finished with the request.
     answered: std.Io.Event,
 };
 
 //
-// The native host callback that shows a file or folder dialog. It runs on a worker thread: it asks the main thread to show the
-// dialog and waits for the answer, so the window stays responsive while the dialog is up.
+// The native host callback that shows a file or folder dialog. It runs on a worker thread: it adds an idle callback (g_idle_add) that shows
+// the dialog on the main thread and waits for the result, so the window stays responsive while the dialog is up.
 //
 fn pickPaths(user_data: ?*anyopaque, kind: i32, title: ?[*:0]const u8, initial_name: ?[*:0]const u8, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -858,7 +858,7 @@ fn showPickDialog(user_data: ?*anyopaque) callconv(.c) c.gboolean {
 }
 
 //
-// Shows the dialog and returns the number of bytes of the answer written to the request's buffer.
+// Shows the dialog and returns the number of bytes of the result written to the request's buffer.
 //
 fn runPickDialog(request: *PickRequest) !isize {
     const action: c_int = switch (request.kind) {
@@ -901,7 +901,7 @@ fn runPickDialog(request: *PickRequest) !isize {
 }
 
 //
-// Copies the answer into the request's buffer, or fails when it does not fit, and returns its length.
+// Copies the result into the request's buffer, or fails when it does not fit, and returns its length.
 //
 fn copyAnswer(request: *PickRequest, json: []const u8) !isize {
     if (json.len > request.capacity) {
@@ -934,7 +934,7 @@ fn menuAction(user_data: ?*anyopaque, action: [*c]const u8) callconv(.c) void {
 }
 
 //
-// Does a menu action asked for from another thread, run on the main thread, and frees the request.
+// Does a menu action queued from another thread, run on the main thread, and frees the request.
 //
 fn runMenuAction(user_data: ?*anyopaque) callconv(.c) c.gboolean {
     const request: *MenuActionRequest = @ptrCast(@alignCast(user_data.?));
@@ -947,7 +947,7 @@ fn runMenuAction(user_data: ?*anyopaque) callconv(.c) c.gboolean {
 }
 
 //
-// One request for a picture of the window, made on the thread of the test control connection and answered on the main thread. It
+// One request for a picture of the window, made on the thread of the test control connection and carried out on the main thread. It
 // lives on that thread's stack for as long as it waits.
 //
 const ScreenshotRequest = struct {
@@ -963,13 +963,13 @@ const ScreenshotRequest = struct {
     result: isize,
     // The Io the waiting thread waits with.
     io: std.Io,
-    // Set when the main thread has answered.
+    // Set when the main thread has finished with the request.
     answered: std.Io.Event,
 };
 
 //
-// The native host callback that writes a PNG of the window to a file. It runs on the thread of the test control connection: it asks
-// the main thread to take the picture with the web view's own snapshot function and waits until the file is written.
+// The native host callback that writes a PNG of the window to a file. It runs on the thread of the test control connection: it adds an
+// idle callback (g_idle_add) that has the main thread take the picture with the web view's own snapshot function and waits until the file is written.
 //
 fn screenshot(user_data: ?*anyopaque, output_path: [*c]const u8, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -989,7 +989,7 @@ fn screenshot(user_data: ?*anyopaque, output_path: [*c]const u8, buffer: [*c]u8,
 }
 
 //
-// Runs on the main thread: asks the web view for a snapshot of what its window shows.
+// Runs on the main thread: takes a snapshot of what the web view's window shows.
 //
 fn startScreenshot(user_data: ?*anyopaque) callconv(.c) c.gboolean {
     const request: *ScreenshotRequest = @ptrCast(@alignCast(user_data.?));
@@ -1002,7 +1002,7 @@ fn startScreenshot(user_data: ?*anyopaque) callconv(.c) c.gboolean {
 }
 
 //
-// Runs on the main thread when the web view has made the snapshot: writes it as a PNG and answers the waiting thread.
+// Runs on the main thread when the web view has made the snapshot: writes it as a PNG and wakes the waiting thread.
 //
 fn onSnapshot(source: c.gpointer, result: *c.GAsyncResult, user_data: c.gpointer) callconv(.c) void {
     const request: *ScreenshotRequest = @ptrCast(@alignCast(user_data.?));
@@ -1025,7 +1025,7 @@ fn onSnapshot(source: c.gpointer, result: *c.GAsyncResult, user_data: c.gpointer
 }
 
 //
-// Answers the waiting thread that the picture could not be taken, with the reason written into its buffer. A reason too long for the
+// Tells the waiting thread that the picture could not be taken, with the reason written into its buffer. A reason too long for the
 // buffer is cut to fit.
 //
 fn finishScreenshot(request: *ScreenshotRequest, comptime format: []const u8, arguments: anytype) void {

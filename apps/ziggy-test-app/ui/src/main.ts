@@ -79,10 +79,10 @@ interface IMenuActionEvent {
 
 
 //
-// A command from the test control connection, with the id the answer must carry.
+// A command from the test control connection, with the id the reply must carry.
 //
 interface ITestCommandEvent {
-    // Identifies the command so its answer reaches the right waiting connection.
+    // Identifies the command so its reply reaches the right waiting connection.
     requestId: number;
 
     // The command to perform.
@@ -284,7 +284,7 @@ function startPickers(): void {
 
 
 //
-// Loads the test app image and video from the media server on the loopback port, and asks it for a range of bytes with a
+// Loads the test app image and video from the media server on the loopback port, and fetches a range of bytes with a
 // request from the UI's script, which the browser lets through only because the server allows the UI's origin. The
 // status shows what each of the three did.
 //
@@ -326,7 +326,7 @@ function startMedia(): void {
 }
 
 //
-// Files dropped on the drop zone, written the way a UI written for Electron would: for each File of the drop it asks
+// Files dropped on the drop zone, written the way a UI written for Electron would: for each File of the drop it calls
 // window.ziggy.getPathForFile for the real path. A drop anywhere else does nothing, rather than the web view navigating to the file.
 //
 function startDrop(): void {
@@ -428,7 +428,7 @@ function listenForEvents(): void {
 }
 
 //
-// Does what a menu item asks that the shell did not do itself. A task action presses the same button the UI shows.
+// Carries out a menu item's action that the shell did not do itself. A task action presses the same button the UI shows.
 //
 function listenForMenuActions(): void {
     window.ziggy.onMessage<IMenuActionEvent>("menu-action", event => {
@@ -447,7 +447,7 @@ function listenForMenuActions(): void {
 }
 
 //
-// Answers the commands the test control connection forwards. It does nothing unless the shell started the UI in test
+// Handles the commands the test control connection forwards. It does nothing unless the shell started the UI in test
 // mode, which it does only in a test hooks build, and it tells the backend when it is listening so that no command is sent
 // before it can be heard.
 //

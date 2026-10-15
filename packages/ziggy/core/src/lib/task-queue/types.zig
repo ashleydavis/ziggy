@@ -51,7 +51,7 @@ pub const ITaskContext = struct {
     maxConcurrentChildTasks: u32,
 
     //
-    // Asks the program hosting the app (the phone's shell) for what only it can do, such as the device keychain and photo library.
+    // Has the program hosting the app (the phone's shell) do what only it can do, such as the device keychain and photo library.
     // Null where there is no such program, which is every desktop and the command line.
     //
     hostRequester: ?utils.host_requester.IHostRequester,
@@ -135,7 +135,7 @@ pub const TaskPriority = enum {
 };
 
 //
-// The priority a task runs at when nothing asked for one, and it is not a child of a running task.
+// The priority a task runs at when none was passed, and it is not a child of a running task.
 //
 pub const DEFAULT_TASK_PRIORITY = TaskPriority.Background;
 
@@ -418,7 +418,7 @@ pub const IJobProgressMessage = struct {
     //
     // There is deliberately no completion fraction. Most jobs here scan or stream and cannot know
     // one, the interface shows a spinner rather than a bar, and a job made of several tasks has no
-    // single answer to give anyway.
+    // single value to give anyway.
     //
     progressMessage: ?[]const u8 = null,
 };

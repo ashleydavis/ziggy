@@ -61,7 +61,7 @@ pub fn exportApi(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // ziggy_check_url: asks the core what to do with an address the web view is about to load.
+        // ziggy_check_url: has the core decide what to do with an address the web view is about to load.
         //
         fn checkUrl(handle: ?*core_module.Core, url_ptr: [*]const u8, url_len: usize) callconv(.c) i32 {
             const core = handle orelse {

@@ -6,7 +6,7 @@ import PackageDescription
 // it fetches from a git URL. An app that takes Ziggy from a version tag adds this repository as a package and links the product for
 // its platform: ZiggyNativeMacOS for a MacOS app, ZiggyNativeIOS for an iOS app. An app that takes Ziggy from a checkout adds
 // packages/ziggy/native/macos or packages/ziggy/native/ios as a local package instead; those hold the same sources. The Zig static
-// library (the app's core) is linked by the app's project, not by this package. See docs/integrating-ziggy.md.
+// library (the app's core) is linked by the app's project, not by this package.
 let package = Package(
     name: "Ziggy",
     platforms: [

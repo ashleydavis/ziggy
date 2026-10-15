@@ -57,10 +57,10 @@ public final class ZiggyShell implements ZiggyHost {
     private static final String EXTRA_TEST_PORT_FILE = "ziggy.testPortFile";
 
     // The prefix every address of the app's own UI starts with. The UI is embedded in the app's native library and each file is
-    // answered from there in shouldInterceptRequest. The host name is under .invalid, which can never be looked up.
+    // served from there in shouldInterceptRequest. The host name is under .invalid, which can never be looked up.
     private static final String APP_URL_PREFIX = "https://ziggy-app.invalid/";
 
-    // The values of ziggy_check_url's answer.
+    // The values ziggy_check_url returns.
     private static final int URL_ALLOW = 0;
     private static final int URL_OPEN_EXTERNALLY = 1;
 
@@ -91,13 +91,13 @@ public final class ZiggyShell implements ZiggyHost {
     // Guards the keep-alive state below.
     private final Object keepAliveMutex = new Object();
 
-    // Whether the core last asked for the app to be kept running.
+    // Whether the core's last keep-alive call was true.
     private boolean keepAliveWanted;
 
-    // Whether the system refused the last start of the keep-alive service, so the shell asks again when the activity resumes.
+    // Whether the system refused the last start of the keep-alive service, so the shell starts it again when the activity resumes.
     private boolean keepAliveRefused;
 
-    // Answers the core's host requests, or null when the app gave none.
+    // Handles the core's host requests, or null when the app gave none.
     private volatile HostRequestHandler hostRequestHandler;
 
     // The request codes of the three pickers, which are the activity's to tell apart in onActivityResult. They are the
@@ -116,11 +116,11 @@ public final class ZiggyShell implements ZiggyHost {
     // The request code of the picker on screen.
     private volatile int pendingPickRequestCode;
 
-    // Whether the activity that last answered finished with RESULT_OK, which an activity that returns no data (a system confirmation)
-    // answers with. Written by onActivityResult before it releases the waiting thread.
+    // Whether the activity that last returned finished with RESULT_OK, which an activity that returns no data (a system confirmation)
+    // returns. Written by onActivityResult before it releases the waiting thread.
     private volatile boolean lastActivityResultOk;
 
-    // What a picker answers when it is dismissed with no choice, or the shell is being destroyed under it.
+    // What a picker returns when it is dismissed with no choice, or the shell is being destroyed under it.
     private static final Intent NOTHING_PICKED = new Intent();
 
     public ZiggyShell(Activity activity, WebView webView, String nativeLibraryName, int workerThreads, int maxConcurrentChildTasks) {
@@ -164,7 +164,7 @@ public final class ZiggyShell implements ZiggyHost {
     // Destroys the core once. After it returns nothing more is delivered to the UI. Call it from onDestroy.
     public void destroy() {
         destroyed = true;
-        // Destroying the core waits for its worker threads, and one may be waiting on a picker that will now never answer.
+        // Destroying the core waits for its worker threads, and one may be waiting on a picker that will now never return.
         BlockingQueue<Intent> waiting = pendingPick;
         if (waiting != null) {
             waiting.offer(NOTHING_PICKED);
@@ -240,8 +240,8 @@ public final class ZiggyShell implements ZiggyHost {
         });
     }
 
-    // Answers a request to the app's own UI from the files embedded in the core library: the file's bytes with its content
-    // type, or a 404 when the UI has no such file. Anything asked after the core is destroyed is refused.
+    // Serves a request to the app's own UI from the files embedded in the core library: the file's bytes with its content
+    // type, or a 404 when the UI has no such file. Any request after the core is destroyed is refused.
     private WebResourceResponse uiResponse(String url) {
         String path = url.substring(APP_URL_PREFIX.length());
         int pathEnd = path.length();
@@ -279,7 +279,7 @@ public final class ZiggyShell implements ZiggyHost {
         return new WebResourceResponse(mimeType, encoding, 200, "OK", Collections.<String, String>emptyMap(), new ByteArrayInputStream(content));
     }
 
-    // Asks the core what to do with an address. Anything asked after the core is destroyed is refused.
+    // Has the core decide what to do with an address. Any address checked after the core is destroyed is refused.
     private int checkUrl(String url) {
         coreLock.readLock().lock();
         try {
@@ -340,7 +340,7 @@ public final class ZiggyShell implements ZiggyHost {
     // Starts or stops the foreground service that keeps the process running while the core has tasks the app must be kept running
     // for. Starting happens when the task is queued, which is while the app is in the foreground, as Android requires. From Android 12
     // an app that is not in the foreground yet is refused, and it can be refused as the app launches, before the system counts it as
-    // foreground. The refusal is logged, and the start is asked for again when the activity resumes (see onResume).
+    // foreground. The refusal is logged, and the service is started again when the activity resumes (see onResume).
     @Override
     public void keepAlive(boolean keepRunning) {
         synchronized (keepAliveMutex) {
@@ -352,9 +352,9 @@ public final class ZiggyShell implements ZiggyHost {
                 if (neverStarted) {
                     return;
                 }
-                // The service is asked to end itself rather than stopped from here, because a stop that reaches it before it has
-                // answered its own start with startForeground crashes the app, and a task that ends at once makes that race likely.
-                // When the system refuses the request (the app is in the background), no start is waiting for an answer, so the
+                // The service is sent an Intent to end itself rather than stopped from here, because a stop that reaches it before it has
+                // called startForeground for its own start crashes the app, and a task that ends at once makes that race likely.
+                // When the system refuses the request (the app is in the background), no start is waiting for startForeground, so the
                 // service is stopped directly.
                 intent.putExtra(ZiggyKeepAliveService.EXTRA_STOP, true);
                 try {
@@ -391,8 +391,8 @@ public final class ZiggyShell implements ZiggyHost {
         }
     }
 
-    // Gives the shell the object that answers the core's host requests. Call it before start. Without one, every host request is
-    // answered as a failure that says so.
+    // Gives the shell the object that handles the core's host requests. Call it before start. Without one, every host request
+    // fails with a reason that says so.
     public void setHostRequestHandler(HostRequestHandler handler) {
         hostRequestHandler = handler;
     }
@@ -580,7 +580,7 @@ public final class ZiggyShell implements ZiggyHost {
     }
 
     // Turns a picker's result into the JSON array the core expects. Chosen documents to open are copied into the app's cache
-    // directory and answered as file system paths. A folder or a save location is answered as the Uri string, which is not a
+    // directory and returned as file system paths. A directory or a save location is returned as the Uri string, which is not a
     // file system path.
     private String resultToJson(int kind, Intent result) throws IOException {
         JSONArray paths = new JSONArray();

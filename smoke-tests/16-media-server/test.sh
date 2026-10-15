@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# The UI loads an image and a video from the loopback media server that is part of the test app's backend, and asks it for a
-# range of bytes with a script request, which the web view allows only when the server answers with the UI's origin allowed.
+# The UI loads an image and a video from the loopback media server that is part of the test app's backend, and fetches a
+# range of bytes with a script request, which the web view allows only when the server's response allows the UI's origin.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 

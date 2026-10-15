@@ -1,6 +1,6 @@
 # render-diagrams.sh
 
-Draws every Mermaid diagram under `docs/diagrams` (each `.mmd` file) into the SVG beside it, with a white background, then runs `add-diagram-labels.ts` on it to add the `label-under` lines Mermaid cannot place itself.
+Draws every Mermaid diagram under `docs/development/diagrams` (each `.mmd` file) into the SVG beside it, with a white background, then runs `add-diagram-labels.ts` on it to add the `label-under` lines Mermaid cannot place itself.
 
 Run it from the root of the repository as `bun run diagrams`. No arguments.
 
@@ -17,4 +17,4 @@ It puts each label in the box's own group, just under the box, and makes the dra
 
 ## See also
 
-- [communication.md](../docs/diagrams/communication.md): the diagram this draws, and how to change it.
+- [communication.md](../docs/development/diagrams/communication.md): the diagram this draws, and how to change it.

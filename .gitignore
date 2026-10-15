@@ -30,3 +30,4 @@ apps/ziggy-template/dist-build.*
 apps/ziggy-test-app/dist-build.*
 packages/ziggy/native/android/build/
 packages/ziggy/native/android/.gradle/
+.claude/settings.local.json

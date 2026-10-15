@@ -5,7 +5,7 @@ const template = @import("ziggy-test-app-backend");
 const FakeShell = ziggy.fake_shell.FakeShell;
 
 //
-// Creates a backend whose shell answers dialogs with the fake shell's callback, which reports what it was asked as its answer.
+// Creates a backend whose shell handles dialogs with the fake shell's callback, which returns the arguments it was called with as its result.
 //
 fn createCore(shell: *FakeShell) !*ziggy.core.Core {
     return try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), template.app);

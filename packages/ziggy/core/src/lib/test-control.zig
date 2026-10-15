@@ -3,9 +3,9 @@
 // commands to the running app over a loopback connection.
 //
 // A script connects to the port found in the port file and sends one line per command: a JSON object with a "command"
-// field. The core forwards the command to the UI as a test-command event, the UI performs it and answers on the
-// test-result channel, and the answer is written back as one line. A line that is not a command is answered with an
-// error.
+// field. The core forwards the command to the UI as a test-command event, the UI performs it and replies on the
+// test-result channel, and the reply is written back as one line. A line that is not a command gets an
+// error as its reply.
 //
 
 const std = @import("std");
@@ -14,7 +14,7 @@ const types = @import("types.zig");
 const json_util = @import("json-util.zig");
 
 //
-// How long the UI has to answer a command, in milliseconds.
+// How long the UI has to reply to a command, in milliseconds.
 //
 const answer_timeout_ms: i64 = 30_000;
 
@@ -54,7 +54,7 @@ pub const TestControl = struct {
     // Runs the connection tasks. The core's Io is single threaded and ignores cancel requests, and cancelling is the only way
     // to end a read that is waiting on a connection: on Windows shutting the socket down does not wake the read.
     connection_threaded: std.Io.Threaded,
-    // Held while a command is with the UI, so only one is waiting for an answer at a time.
+    // Held while a command is with the UI, so only one is waiting for a reply at a time.
     command_mutex: std.Io.Mutex,
     // The thread that accepts connections.
     thread: std.Thread,
@@ -64,9 +64,9 @@ pub const TestControl = struct {
     mutex: std.Io.Mutex,
     // The number of the next command.
     next_request: u64,
-    // The number of the command waiting for an answer, or null.
+    // The number of the command waiting for a reply, or null.
     waiting_request: ?u64,
-    // The answer to the waiting command, as JSON text.
+    // The reply to the waiting command, as JSON text.
     answer: ?[]u8,
     // Set when the UI has said it is listening for test commands.
     ui_ready: std.atomic.Value(bool),
@@ -160,10 +160,10 @@ pub const TestControl = struct {
     }
 
     //
-    // Called when the UI answers a command on the test-result channel.
+    // Called when the UI replies to a command on the test-result channel.
     //
     //
-    // Called by a task that is about to show a native dialog: takes the answer a test gave for it, copied with the allocator, or
+    // Called by a task that is about to show a native dialog: takes the result a test gave for it, copied with the allocator, or
     // returns null when the test gave none, and the dialog is shown.
     //
     pub fn takePickAnswer(user_data: ?*anyopaque, allocator: std.mem.Allocator) ?[]u8 {
@@ -279,8 +279,8 @@ pub const TestControl = struct {
     }
 
     //
-    // Runs one command, a line holding a JSON object with a "command" field, and returns the answer line, allocated with
-    // the allocator. A line that is not such an object is answered with an InvalidCommand error and nothing is run.
+    // Runs one command, a line holding a JSON object with a "command" field, and returns the reply line, allocated with
+    // the allocator. A line that is not such an object gets an InvalidCommand error as its reply and nothing is run.
     //
     fn handleLine(self: *TestControl, line: []const u8) ![]u8 {
         const command_json = line;
@@ -349,8 +349,8 @@ pub const TestControl = struct {
                     .@"error" = @errorName(err),
                 });
             };
-            // A drop that names a "dataId" is also a drop on that element of the UI, so the UI is asked to drop the same files on it
-            // and its answer is the answer.
+            // A drop that names a "dataId" is also a drop on that element of the UI, so the command is also sent to the UI, which drops
+            // the same files on it, and its reply is the reply.
             if (command.object.get("dataId") != null) {
                 try self.waitForUi();
                 return try self.askUi(arena, command_json);
@@ -358,8 +358,8 @@ pub const TestControl = struct {
             return try self.allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "pick-answer")) {
-            // Says what the next native dialog returns, so a test can use the pickers without a dialog being shown. The answer is
-            // the command's "paths", an array of strings, and answers one dialog.
+            // Says what the next native dialog returns, so a test can use the pickers without a dialog being shown. The result is
+            // the command's "paths", an array of strings, and is used for one dialog.
             const paths = command.object.get("paths") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
@@ -385,7 +385,7 @@ pub const TestControl = struct {
     }
 
     //
-    // Sends a command to the UI and waits for its answer.
+    // Sends a command to the UI and waits for its reply.
     //
     fn askUi(self: *TestControl, arena: std.mem.Allocator, command_json: []const u8) ![]u8 {
         self.command_mutex.lockUncancelable(self.io);

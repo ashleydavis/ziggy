@@ -5,7 +5,7 @@
 //
 // A message from the core arrives as the JSON text the native apps hand window.__ziggyReceive, and is handed to it the same way.
 //
-// When the connection closes, the dev host has stopped, most often to be rebuilt. The page waits until it answers again and then
+// When the connection closes, the dev host has stopped, most often to be rebuilt. The page waits until it responds again and then
 // reloads, because the core it was talking to is gone and a new one has started.
 //
 // A browser gives a page no dropped file's path. The inject script hands a drop's files to WebView2's
@@ -69,7 +69,7 @@
         sendWaiting();
     }
 
-    // Sends each file to the dev host and then records the drop. Rejects, naming the file and the dev server's answer, when any
+    // Sends each file to the dev host and then records the drop. Rejects, naming the file and the dev host's response, when any
     // step fails.
     function recordDrop(files) {
         var paths = [];

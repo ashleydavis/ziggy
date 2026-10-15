@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# The test control connection answers a line that is not a command with an error, never runs it, and keeps working.
+# The test control connection replies to a line that is not a command with an error, never runs it, and keeps working.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 

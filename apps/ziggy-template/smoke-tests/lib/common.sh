@@ -83,7 +83,7 @@ open_control_connection() {
 }
 
 #
-# Sends one command line on the control connection and prints the answer line. Usage: control <json>
+# Sends one command line on the control connection and prints the reply line. Usage: control <json>
 #
 control() {
     printf '%s\n' "$1" >&3 || fail "could not write to the control connection"
@@ -108,7 +108,7 @@ control() {
 }
 
 #
-# Waits until the UI answers commands, which means it has loaded and the bridge works.
+# Waits until the UI replies to commands, which means it has loaded and the bridge works.
 #
 wait_for_ready() {
     local waited=0

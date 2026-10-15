@@ -27,9 +27,9 @@ The native app draws the backend's menu (`ziggy_menu_json`) as the application's
 
 The iOS native app shows no menu: the menu code is compiled for macOS only.
 
-## File and folder pickers
+## File and directory pickers
 
-The pick-files, pick-folder and pick-file messages open `NSOpenPanel` (files, or a folder) and `NSSavePanel` through the package's `pick_paths` callback, on the main thread with `runModal`. Cancelling gives no paths. Not compiled or run. See the package README.
+The pick-files, pick-folder and pick-file messages open `NSOpenPanel` (files, or a directory) and `NSSavePanel` through the package's `pick_paths` callback, on the main thread with `runModal`. Cancelling gives no paths. Not compiled or run. See the package README.
 
 ## Choosing a menu item from a test
 

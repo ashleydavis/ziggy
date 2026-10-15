@@ -1,6 +1,6 @@
 //
 // The app's bundled UI, held in the executable on the platforms that embed it. The app's build embeds every file of
-// its built UI and hands the shell a list of them, and the shell answers the web view's requests from that list, so
+// its built UI and hands the shell a list of them, and the shell serves the web view's requests from that list, so
 // the UI needs no files beside the executable.
 //
 

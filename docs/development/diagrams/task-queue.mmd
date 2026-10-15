@@ -1,0 +1,14 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#000000", "primaryBorderColor": "#000000", "lineColor": "#000000", "textColor": "#000000", "edgeLabelBackground": "#ffffff"}}}%%
+flowchart LR
+%% How the UI queues tasks and hears back from them. The native app carries every message and event, as in message-bridge.svg,
+%% and is left out. Drawn into task-queue.svg by `bun run diagrams`; see task-queue.md.
+%% Each "label-under" line puts a line of small grey text under a box, which Mermaid itself cannot place:
+%% label-under: Queue = In the core library
+%% label-under: Workers = Run the task handlers
+    UI["UI"]
+    Queue["Task queue"]
+    Workers["Worker threads"]
+
+    UI -->|"add-task, cancel-tasks"| Queue
+    Queue -->|"next task"| Workers
+    Workers -->|"task events"| UI

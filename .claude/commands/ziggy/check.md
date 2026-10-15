@@ -4,7 +4,7 @@ description: Run every check a Ziggy app has that this machine can run (type che
 
 # Check a Ziggy app
 
-Run the app's checks from its folder, one after another, cheapest first. Read the app's `package.json` scripts first: the names below are the ones the Ziggy template has, and an app may have renamed or added some.
+Run the app's checks from its directory, one after another, cheapest first. Read the app's `package.json` scripts first: the names below are the ones the Ziggy template has, and an app may have renamed or added some.
 
 1. `bun run compile`: type checks the UI.
 2. `bun run test`: the UI's unit tests.

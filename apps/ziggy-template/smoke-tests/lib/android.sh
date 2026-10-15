@@ -183,7 +183,7 @@ ziggy_platform_start() {
         waited=$((waited + 1))
     done
 
-    # Port 0 asks adb for any free host port, and it prints the one it chose, so two runs never pick the same one.
+    # Port 0 has adb pick any free host port, and it prints the one it chose, so two runs never pick the same one.
     local host_port
     host_port="$(ziggy_adb forward tcp:0 "tcp:$device_port" | tr -d '\r\n')" || return 1
     echo "$host_port" > "$test_dir/forward-port.txt"

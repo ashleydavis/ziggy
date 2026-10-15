@@ -2,24 +2,24 @@ package dev.ziggy.nativeapp;
 
 import java.nio.charset.StandardCharsets;
 
-// How a host request's answer crosses to the core: UTF-8 bytes whose first byte says whether the request succeeded (1) or failed (0),
-// followed by the JSON text of the answer or the text of the reason. The core's JNI code reads the first byte and passes the rest on.
+// How a host request's result crosses to the core: UTF-8 bytes whose first byte says whether the request succeeded (1) or failed (0),
+// followed by the JSON text of the result or the text of the reason. The core's JNI code reads the first byte and passes the rest on.
 public final class HostRequestAnswer {
-    // The first byte of an answer to a request that succeeded.
+    // The first byte of the result of a request that succeeded.
     public static final byte SUCCEEDED = 1;
 
-    // The first byte of an answer to a request that failed.
+    // The first byte of the result of a request that failed.
     public static final byte FAILED = 0;
 
     private HostRequestAnswer() {
     }
 
-    // The answer to a request that succeeded, with the JSON text of what it gave.
+    // The result of a request that succeeded, with the JSON text of what it gave.
     public static byte[] succeeded(String answerJson) {
         return encode(SUCCEEDED, answerJson);
     }
 
-    // The answer to a request that failed, with the reason.
+    // The result of a request that failed, with the reason.
     public static byte[] failed(String reason) {
         return encode(FAILED, reason);
     }

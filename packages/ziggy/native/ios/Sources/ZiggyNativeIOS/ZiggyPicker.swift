@@ -1,5 +1,5 @@
 //
-// Native file and folder pickers. The core asks for one from a worker thread. The dialog is shown on the main thread and the
+// Native file and folder pickers. The core calls the pick_paths callback from a worker thread. The dialog is shown on the main thread and the
 // worker waits for the user, so the main thread is never blocked. The dialogs are UIDocumentPickerViewController, which can open
 // files and choose a folder but has no dialog for choosing where to save.
 //
@@ -104,7 +104,7 @@ enum ZiggyPicker {
     }
 }
 
-// Receives a document picker's answer. The picker holds its delegate weakly, so this keeps itself alive until it has answered.
+// Receives a document picker's result. The picker holds its delegate weakly, so this keeps itself alive until it has the result.
 final class ZiggyPickerDelegate: NSObject, UIDocumentPickerDelegate {
     // Whether the picker chose a folder, whose access must be started, rather than copies of files.
     private let isFolder: Bool
@@ -112,7 +112,7 @@ final class ZiggyPickerDelegate: NSObject, UIDocumentPickerDelegate {
     // Reports the outcome.
     private let completion: (ZiggyPickOutcome) -> Void
 
-    // Set to this object while the picker is showing, and cleared after it answers.
+    // Set to this object while the picker is showing, and cleared after it gives its result.
     var keepAlive: ZiggyPickerDelegate?
 
     // Creates the delegate for one picker.
@@ -139,7 +139,7 @@ final class ZiggyPickerDelegate: NSObject, UIDocumentPickerDelegate {
         completion(.chosen(urls.map { $0.path }))
     }
 
-    // The user cancelled, which is a normal answer of no paths.
+    // The user cancelled, which is a normal result of no paths.
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
         keepAlive = nil
         completion(.chosen([]))

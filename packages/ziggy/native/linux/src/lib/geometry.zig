@@ -5,7 +5,7 @@
 const std = @import("std");
 
 //
-// What the -geometry option asked for.
+// What the -geometry option sets.
 //
 pub const Geometry = struct {
     // The window width in pixels.

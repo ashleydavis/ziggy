@@ -3,7 +3,7 @@
 # The dev mode platform library of the Ziggy test app's smoke tests. See common.sh for what it implements.
 #
 # In dev mode the app is two programs: the test app's own dev server (Vite, run as the test app's dev:ui script runs it) and the dev
-# host in front of it, which runs the test app's backend, answers /__ziggy and forwards everything else to Vite. The UI runs in a
+# host in front of it, which runs the test app's backend, serves /__ziggy and forwards everything else to Vite. The UI runs in a
 # headless Chrome or Chromium opened at the dev host's /__ziggy/start, which sends it on to the UI with the query the backend makes,
 # as a native app loads it. Both are started directly here, the dev host built with or without the test hooks, so no supervisor
 # runs: the supervisor is covered by the dev-only scenarios. The browser is $ZIGGY_DEV_BROWSER when that is set, or the first of

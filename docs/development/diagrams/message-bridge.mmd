@@ -1,0 +1,16 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#000000", "primaryBorderColor": "#000000", "lineColor": "#000000", "textColor": "#000000", "edgeLabelBackground": "#ffffff"}}}%%
+flowchart LR
+%% How a message and its message response travel between the UI and the backend. Drawn into message-bridge.svg by
+%% `bun run diagrams`; see message-bridge.md.
+%% Each "label-under" line puts a line of small grey text under a box, which Mermaid itself cannot place:
+%% label-under: UI = window.ziggy
+%% label-under: Native = Injects window.ziggy
+%% label-under: Backend = ziggy.h
+    UI["UI"]
+    Native["Native app"]
+    Backend["Backend"]
+
+    UI -->|"message"| Native
+    Native -->|"message"| Backend
+    Backend -->|"response"| Native
+    Native -->|"response"| UI

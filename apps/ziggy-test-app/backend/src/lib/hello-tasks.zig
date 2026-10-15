@@ -112,7 +112,7 @@ pub fn helloLongHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
         try context.io().sleep(.fromMilliseconds(step_ms), .awake);
         elapsed += step_ms;
     }
-    // A task that is asked for more children than it had steps to start them in starts the rest now.
+    // A task whose input sets more children than it had steps to start them in starts the rest now.
     while (@as(i64, @intCast(child_ids.items.len)) < children) {
         const child_id = try context.queueChild("hello-child", .{
             .index = child_ids.items.len,
@@ -162,7 +162,7 @@ pub fn helloFailHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
 }
 
 //
-// Asks the shell, through the native host callback, for the operating system's version and returns it.
+// Calls the shell's os_version native host callback for the operating system's version and returns it.
 //
 pub fn osVersionHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;

@@ -6,5 +6,5 @@ Run it on a Mac: `bash apps/ziggy-test-app/scripts/clean-ios.sh`.
 
 ## Arguments
 
-- `--native-dir <dir>`: default: `shells/ios/zig-out`.
-- `--build-dir <dir>`: default: `shells/ios/zig-out/xcode`.
+- `--native-dir <dir>`: default: `native/ios/zig-out`.
+- `--build-dir <dir>`: default: `native/ios/zig-out/xcode`.

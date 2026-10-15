@@ -12,17 +12,17 @@ pub const DeliverFn = *const fn (user_data: ?*anyopaque, message_ptr: [*]const u
 
 //
 // A native host callback that writes the operating system's version string, as JSON (a JSON string), into the buffer
-// the core gives it, and returns the number of bytes written, or a negative number when it cannot answer.
+// the core gives it, and returns the number of bytes written, or a negative number when it cannot.
 //
 pub const OsVersionFn = *const fn (user_data: ?*anyopaque, buffer: [*]u8, capacity: usize) callconv(.c) isize;
 
 //
-// Asks the shell to quit the application. Called only by the test control connection.
+// Has the shell quit the application. Called only by the test control connection.
 //
 pub const QuitFn = *const fn (user_data: ?*anyopaque) callconv(.c) void;
 
 //
-// What a shell is asked to show.
+// The kind of dialog a shell shows.
 //
 pub const PickKind = enum(i32) {
     // A dialog to choose one or more existing files to open.
@@ -69,20 +69,20 @@ pub const PickPathsFn = *const fn (user_data: ?*anyopaque, kind: i32, title: ?[*
 
 //
 // A native host callback that does one thing only the platform can do, named by `method` ("exportFile", "secureStoreGet", ...). The
-// request is the JSON text of the method's argument (NUL terminated), and the shell writes the JSON text of its answer into the
-// buffer and returns the number of bytes written. When it cannot do what was asked it writes the text of the reason, in words the user
+// request is the JSON text of the method's argument (NUL terminated), and the shell writes the JSON text of its result into the
+// buffer and returns the number of bytes written. When it cannot do what the method names it writes the text of the reason, in words the user
 // can act on, and returns that number of bytes negated. The shell may show native interface and wait for the user, so the core calls
 // it from a worker thread, never from the one that handles UI messages, and it may take a long time.
 //
 pub const HostRequestFn = *const fn (user_data: ?*anyopaque, method: [*:0]const u8, request_json: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize;
 
 //
-// What a shell answered a host request with.
+// What a shell returned for a host request.
 //
 pub const HostReply = struct {
-    // Whether the shell did what was asked.
+    // Whether the shell did what the method names.
     succeeded: bool,
-    // The JSON text of the answer when it succeeded, and the text of the reason when it did not.
+    // The JSON text of the result when it succeeded, and the text of the reason when it did not.
     text: []const u8,
 };
 
@@ -177,7 +177,7 @@ pub const ErrorDescriber = *const fn (err: anyerror) ?[]const u8;
 
 //
 // How a task ended, as reported to the app's observer: the task's type and input as well as its outcome, which the UI's
-// task-completed event does not carry on its own account (the UI knows what it asked for).
+// task-completed event does not carry on its own account (the UI knows what task it queued).
 //
 pub const TaskEnd = struct {
     // The id of the task.

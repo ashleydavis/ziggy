@@ -5,7 +5,7 @@ The template's Android project: one activity (`MainActivity`) that hosts a web v
 What is packaged:
 
 - The Zig core library `libziggy_template.so` per architecture (`arm64-v8a` and `x86_64`), with the JNI entry points in Zig.
-- The built UI and the script that exposes `window.ziggy`, both embedded in `libziggy_template.so`. The native app answers every request to `https://ziggy-app.invalid/` from the UI, so the APK has no UI files and no assets of its own.
+- The built UI and the script that exposes `window.ziggy`, both embedded in `libziggy_template.so`. The native app serves every request to `ziggy-app://app/` from the UI, so the APK has no UI files and no assets of its own.
 
 All of it is generated into `app/build/ziggy` by `scripts/sync-android.sh`; see `scripts/*-android.md` for the setup, sync, build, run, open, package and clean scripts.
 
@@ -13,4 +13,4 @@ The debug build has the INTERNET permission (in `app/src/debug`), because a test
 
 Smoke tests: `bun run test:smoke:and`, on any attached emulator or device, claimed under Ziggy's per-device lock.
 
-The template's file and folder pickers (`pick-files`, `pick-folder`, `pick-file`) use the system document pickers through Ziggy's Android native app, which describes them: opened files are copied into the app's cache directory and answered as file system paths, while a chosen folder or a save location is answered as a `content://` Uri, which is not a file system path. `MainActivity` forwards `onActivityResult` to the native app.
+The template's file and directory pickers (`pick-files`, `pick-folder`, `pick-file`) use the system document pickers through Ziggy's Android native app, which describes them: opened files are copied into the app's cache directory and returned as file system paths, while a chosen directory or a save location is returned as a `content://` Uri, which is not a file system path. `MainActivity` forwards `onActivityResult` to the native app.

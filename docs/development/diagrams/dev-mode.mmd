@@ -1,0 +1,16 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#000000", "primaryBorderColor": "#000000", "lineColor": "#000000", "textColor": "#000000", "edgeLabelBackground": "#ffffff"}}}%%
+flowchart LR
+%% How the parts of an app communicate in dev mode. Drawn into dev-mode.svg by `bun run diagrams`; see dev-mode.md.
+%% Each "label-under" line puts a line of small grey text under a box, which Mermaid itself cannot place:
+%% label-under: UI = In an ordinary browser
+%% label-under: DevBackend = Zig
+%% label-under: DevServer = The app's bundler
+    UI["UI"]
+    DevBackend["Dev backend"]
+    OS["OS"]
+    DevServer["Dev server"]
+
+    UI -->|"message"| DevBackend
+    DevBackend -->|"response, page"| UI
+    DevBackend -->|"OS call"| OS
+    DevBackend <-->|"page"| DevServer

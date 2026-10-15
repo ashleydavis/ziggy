@@ -14,7 +14,7 @@ interface IFakeSocket {
 }
 
 //
-// A stand-in for an answer to fetch.
+// A stand-in for a response to fetch.
 //
 interface IFakeResponse {
     ok: boolean;
@@ -46,7 +46,7 @@ interface IFakeWindow {
 const script = fs.readFileSync(path.join(__dirname, "../../../dev/src/lib/dev-client.js"), "utf8");
 
 //
-// A window for the script, with every request it makes answered by the function given, and the socket and listeners it creates.
+// A window for the script, with every request it makes handled by the function given, and the socket and listeners it creates.
 //
 function makeWindow(answer: (request: IFakeRequest) => IFakeResponse) {
     const sockets: IFakeSocket[] = [];

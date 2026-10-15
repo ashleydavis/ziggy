@@ -1,11 +1,11 @@
 //
-// The pure parts of the file and folder dialogs: what a kind of dialog asks for, and the answer's JSON.
+// The pure parts of the file and folder dialogs: the options of each kind of dialog, and the result's JSON.
 //
 
 const std = @import("std");
 
 //
-// What the core asks the shell to show. The numbers are the ZIGGY_PICK_ values in ziggy.h, which the shell checks.
+// The kind of dialog the core passes to the shell. The numbers are the ZIGGY_PICK_ values in ziggy.h, which the shell checks.
 //
 pub const PickKind = enum(i32) {
     // Choose one or more existing files.
@@ -35,17 +35,17 @@ pub const option_allow_multiselect: u32 = 0x200;
 pub const option_pick_folders: u32 = 0x20;
 
 //
-// The dialog option bit that limits the answer to items in the file system, so each has a path.
+// The dialog option bit that limits the result to items in the file system, so each has a path.
 //
 pub const option_force_file_system: u32 = 0x40;
 
 //
-// The dialog option bit that fails the answer when the folder it is in does not exist.
+// The dialog option bit that fails the result when the directory it is in does not exist.
 //
 pub const option_path_must_exist: u32 = 0x800;
 
 //
-// The dialog option bit that fails the answer when the file does not exist.
+// The dialog option bit that fails the result when the file does not exist.
 //
 pub const option_file_must_exist: u32 = 0x1000;
 
@@ -78,7 +78,7 @@ pub fn defaultTitle(kind: PickKind) []const u8 {
 
 //
 // Returns the JSON array of the chosen paths, such as ["C:\\a.txt"], with every string escaped. No paths is "[]", which is
-// what a cancelled dialog answers. The caller owns the result.
+// what a cancelled dialog returns. The caller owns the result.
 //
 pub fn pathsJson(allocator: std.mem.Allocator, paths: []const []const u8) ![]u8 {
     return std.json.Stringify.valueAlloc(allocator, paths, .{});

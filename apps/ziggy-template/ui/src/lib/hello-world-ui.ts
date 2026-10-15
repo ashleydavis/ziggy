@@ -5,7 +5,7 @@
 //
 
 //
-// What the backend answers the hello-world message with.
+// The backend's message response to the hello-world message.
 //
 export interface IHelloWorldResponse {
     // The greeting the backend made for the name the UI sent.
@@ -13,7 +13,7 @@ export interface IHelloWorldResponse {
 }
 
 //
-// The line the app shows for the backend's answer to the hello-world message.
+// The line the app shows for the backend's message response to the hello-world message.
 //
 export function greetingLine(response: IHelloWorldResponse): string {
     return `The backend says: ${response.greeting}`;

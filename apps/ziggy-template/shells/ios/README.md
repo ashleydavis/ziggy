@@ -16,6 +16,6 @@ The project links `libziggy_template.a` from the directory in the `ZIGGY_NATIVE_
 - Make sure an iOS simulator exists (`xcrun simctl list devices available`). Set `ZIGGY_IOS_SIMULATOR` to pick one.
 - Run `bun run run:ios`.
 
-## File and folder pickers
+## File and directory pickers
 
-The pick-files and pick-folder messages open a `UIDocumentPickerViewController`. Files are opened as copies in the app's temporary directory. A picked folder is accessed through a security scoped resource that the native app starts and never stops, so it is usable until the process ends and denied again after a restart until the user picks it again. The pick-file (save) message always fails with an error, because iOS has no dialog for choosing where to save. Not compiled or run. See the package README.
+The pick-files and pick-folder messages open a `UIDocumentPickerViewController`. Files are opened as copies in the app's temporary directory. A picked directory is accessed through a security scoped resource that the native app starts and never stops, so it is usable until the process ends and denied again after a restart until the user picks it again. The pick-file (save) message always fails with an error, because iOS has no dialog for choosing where to save. Not compiled or run. See the package README.

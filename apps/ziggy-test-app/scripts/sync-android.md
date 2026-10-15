@@ -1,6 +1,6 @@
 # sync-android.sh
 
-Builds what the Android app packages and puts it where Gradle expects it, under `shells/android/app/build/ziggy`. Gradle never runs `zig`: this script does, and the Gradle build fails with a message naming this script when its output is missing.
+Builds what the Android app packages and puts it where Gradle expects it, under `native/android/app/build/ziggy`. Gradle never runs `zig`: this script does, and the Gradle build fails with a message naming this script when its output is missing.
 
 Invoke: `bash apps/ziggy-test-app/scripts/sync-android.sh [options]`
 
@@ -12,5 +12,5 @@ Invoke: `bash apps/ziggy-test-app/scripts/sync-android.sh [options]`
 What it does:
 
 1. Writes a libc file per architecture from the NDK's sysroot. Zig has no C library for Android, so `zig build --libc <file>` is given the NDK's headers and libraries (the ones for the app's minimum SDK level). The JNI code of Ziggy's core library is translated from the NDK's own `jni.h` with the include directories read from the same file.
-2. Builds `libziggy_test_app.so` per architecture with the `ziggy-test-app-backend` step of the test app's `build.zig` (`zig build ziggy-test-app-backend -Dtarget=<arch>-linux-android`) and copies it to `jniLibs/<abi>/`. Every library an earlier sync left there is removed first, so an architecture not asked for, or a library under an app's earlier name, does not reach the APK.
+2. Builds `libziggy_test_app.so` per architecture with the `ziggy-test-app-backend` step of the test app's `build.zig` (`zig build ziggy-test-app-backend -Dtarget=<arch>-linux-android`) and copies it to `jniLibs/<abi>/`. Every library an earlier sync left there is removed first, so an architecture `--arch` does not name, or a library under an app's earlier name, does not reach the APK.
 3. Builds the UI (`bun run bundle:ui`) before the library, because the library embeds it. The library is where the native app finds the UI, so nothing of the UI goes into the assets.

@@ -10,7 +10,7 @@ const c = @import("gtk.zig");
 
 const GbmDevice = opaque {};
 
-// EGL_PLATFORM_GBM_KHR, the platform eglGetPlatformDisplay is asked for when the display is a GBM device.
+// EGL_PLATFORM_GBM_KHR, the platform passed to eglGetPlatformDisplay when the display is a GBM device.
 const EGL_PLATFORM_GBM_KHR: c_uint = 0x31D7;
 
 extern fn gbm_create_device(fd: c_int) ?*GbmDevice;

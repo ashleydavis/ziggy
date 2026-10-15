@@ -6,5 +6,5 @@ Run it on a Mac: `bash apps/ziggy-template/scripts/clean-macos.sh`.
 
 ## Arguments
 
-- `--native-dir <dir>`: default: `shells/macos/zig-out`.
-- `--build-dir <dir>`: Xcode's derived data directory. Default: `shells/macos/zig-out/xcode`.
+- `--native-dir <dir>`: default: `native/macos/zig-out`.
+- `--build-dir <dir>`: Xcode's derived data directory. Default: `native/macos/zig-out/xcode`.

@@ -4,7 +4,7 @@ const android_libc = @import("build/android-libc.zig");
 //
 // Builds Ziggy and registers its tests. As a dependency of an app's build it gives the app the
 // module "ziggy-core" (the core, with its task queue, which the app's code imports as @import("ziggy-core")), built for the target,
-// optimize mode and test hooks the app asks for. The functions below that are `pub` are what an app's build.zig calls to build its
+// optimize mode and test hooks the app passes in. The functions below that are `pub` are what an app's build.zig calls to build its
 // core library and its Linux and Windows native apps; it reaches them with @import("ziggy") in its build.zig.
 //
 pub fn build(b: *std.Build) !void {
@@ -140,8 +140,8 @@ pub const IZiggy = struct {
 
 //
 // Gets Ziggy for an app's build, from the dependency named "ziggy" in the app's build.zig.zon, built for the target and optimize mode,
-// with the test hooks or without. A build that needs both (an app with test hooks off and its unit tests, which run with them on) asks
-// twice.
+// with the test hooks or without. A build that needs both (an app with test hooks off and its unit tests, which run with them on) calls
+// it twice.
 //
 pub fn dependency(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, test_hooks: bool) IZiggy {
     const ziggy_dependency = b.dependency("ziggy", .{
@@ -184,7 +184,7 @@ pub const IAppBackendLibraries = struct {
 //
 // Builds an app's backend for the target, installed by the `<name>-backend` step: a static library with ziggy.h installed beside it or,
 // for Android, a shared one. The platform shells that are not Zig (the Xcode projects and the Android project) are built by the app's
-// scripts, which ask this step for the libraries. It also adds the app's dev mode, the `<name>-dev` and `<name>-dev-host` steps (see
+// scripts, which run this step to build the libraries. It also adds the app's dev mode, the `<name>-dev` and `<name>-dev-host` steps (see
 // addDevMode), so an app gets dev mode with nothing more to do.
 //
 pub fn addAppBackend(
@@ -684,7 +684,7 @@ pub fn addWindowsShell(
 
 //
 // Adds an app's dev mode, for addAppBackend. In dev mode the UI runs in an ordinary browser and the core runs in the dev host: Ziggy's
-// dev host linked with the app's backend, which runs the core as a program of its own. The browser opens the dev host, which answers
+// dev host linked with the app's backend, which runs the core as a program of its own. The browser opens the dev host, which serves
 // /__ziggy itself, carries the page's messages to the core and forwards everything else to the app's own dev server, putting Ziggy's
 // scripts in each page on the way through. The `<name>-dev-host` step builds the dev host, installed to bin/<name>-dev-host. Its
 // core embeds no UI, because the dev server serves the UI, so dev mode needs no UI built. The `<name>-dev` step runs the supervisor,

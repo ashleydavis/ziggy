@@ -1,6 +1,6 @@
 //
 // A stand-in for a shell, for the unit tests of an app built on Ziggy. It records every message the core delivers and
-// answers the native host callbacks. Nothing in a shipped app uses it, so it is never compiled into one.
+// implements the native host callbacks. Nothing in a shipped app uses it, so it is never compiled into one.
 //
 
 const std = @import("std");
@@ -8,7 +8,7 @@ const types = @import("types.zig");
 const host_reply = @import("host-reply.zig");
 
 //
-// A stand-in for a shell. It records every message the core delivers, and can answer the native host callbacks.
+// A stand-in for a shell. It records every message the core delivers, and implements the native host callbacks.
 //
 pub const FakeShell = struct {
     // Allocates the recorded messages.
@@ -21,7 +21,7 @@ pub const FakeShell = struct {
     messages: std.ArrayList([]u8),
     // The menu actions chosen through the menu_action callback, one per line.
     chosen_actions: std.ArrayList(u8),
-    // The paths the screenshot callback was asked to write, one per line.
+    // The paths the screenshot callback was given to write, one per line.
     screenshot_paths: std.ArrayList(u8),
     // What the keep_alive callback was told, in order: true to keep the app running, false to stop.
     keep_alive_calls: std.ArrayList(bool),
@@ -74,8 +74,8 @@ pub const FakeShell = struct {
     }
 
     //
-    // The host request callback: answers a method with the method and the request it was given, as JSON, so a test can see what the
-    // core sent. A method named "fail" cannot be done, and answers with a reason.
+    // The host request callback: returns the method and the request it was given, as JSON, so a test can see what the
+    // core sent. A method named "fail" cannot be done, and returns a reason.
     //
     pub fn hostRequest(user_data: ?*anyopaque, method: [*:0]const u8, request_json: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
         _ = user_data;
@@ -91,7 +91,7 @@ pub const FakeShell = struct {
     }
 
     //
-    // The dialog callback: answers with one fixed path for a folder, one fixed file name for a save and two files for an open, and
+    // The dialog callback: returns one fixed path for a directory, one fixed file name for a save and two files for an open, and
     // records the title and the initial name it was given so a test can check them.
     //
     pub fn pickPaths(user_data: ?*anyopaque, kind: i32, title: ?[*:0]const u8, initial_name: ?[*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
@@ -107,7 +107,7 @@ pub const FakeShell = struct {
     }
 
     //
-    // A dialog callback for a user who cancels: it answers with no paths.
+    // A dialog callback for a user who cancels: it returns no paths.
     //
     pub fn pickNothing(user_data: ?*anyopaque, kind: i32, title: ?[*:0]const u8, initial_name: ?[*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
         _ = user_data;
@@ -134,8 +134,8 @@ pub const FakeShell = struct {
     }
 
     //
-    // The screenshot callback: records the path it was asked to write. A path ending in "refused.png" cannot be written, and
-    // answers with a reason.
+    // The screenshot callback: records the path it was given to write. A path ending in "refused.png" cannot be written, and
+    // returns a reason.
     //
     pub fn screenshot(user_data: ?*anyopaque, output_path: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
         const self: *FakeShell = @ptrCast(@alignCast(user_data.?));
@@ -156,7 +156,7 @@ pub const FakeShell = struct {
     }
 
     //
-    // The keep-alive callback: records what the core asked.
+    // The keep-alive callback: records what the core passed.
     //
     pub fn keepAlive(user_data: ?*anyopaque, keep_running: bool) callconv(.c) void {
         const self: *FakeShell = @ptrCast(@alignCast(user_data.?));

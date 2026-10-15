@@ -2,7 +2,7 @@ import type { IJsonObject } from "ziggy-ui";
 
 //
 // The commands the test control connection forwards to the UI, performed on the UI's DOM by data-id. The UI
-// answers each with a result. These exist only so the smoke tests can drive the real app, and the backend sends them only in
+// replies to each with a result. These exist only so the smoke tests can drive the real app, and the backend sends them only in
 // a test hooks build.
 //
 
@@ -27,10 +27,10 @@ export interface ITestCommand {
 }
 
 //
-// What the UI answers a command with.
+// What the UI replies to a command with.
 //
 export interface ITestResult {
-    // Whether the command did what it was asked.
+    // Whether the command succeeded.
     ok: boolean;
 
     // The value or text read, for the get commands.

@@ -1,10 +1,10 @@
 ---
-description: Start a new Ziggy app in the current folder, copied from the Ziggy template of the latest release, renamed and pinned to that release, with its tests run.
+description: Start a new Ziggy app in the current directory, copied from the Ziggy template of the latest release, renamed and pinned to that release, with its tests run.
 ---
 
 # Start a new Ziggy app
 
-Make a new app from the Ziggy template in the current folder, following Ziggy's guide [Building your app](https://github.com/ashleydavis/ziggy/blob/main/docs/building-your-app.md), section "Starting a new app from the template", which pins the app to Ziggy's latest release with the lines [Integrating Ziggy](https://github.com/ashleydavis/ziggy/blob/main/docs/integrating-ziggy.md) gives for a version tag. Read both before doing anything: they are the authority, and this command only says how to carry them out. The [Vite example](https://github.com/ashleydavis/ziggy-example-vite) is an app made this way: when a step is unclear, do what it did.
+Make a new app from the Ziggy template in the current directory, following Ziggy's guide [Building your app](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/building-your-app.md), section "Starting a new app from the template", which pins the app to Ziggy's latest release. Read it before doing anything: it is the authority, and this command only says how to carry them out. The [Vite example](https://github.com/ashleydavis/ziggy-example-vite) is an app made this way: when a step is unclear, do what it did.
 
 ## Find the latest release
 
@@ -22,10 +22,10 @@ Ask the human for these, in one message, and wait for the answers. Suggest value
 
 ## Make the app
 
-1. Check the current folder is empty apart from hidden files. If it is not, stop and say what is in it.
+1. Check the current directory is empty apart from hidden files. If it is not, stop and say what is in it.
 2. Download the template and Ziggy's `mise.toml` of that release and install the tools, as step 2 of the guide says.
 3. Pin every part to the release, as step 3 of the guide says. Use the same form of each line the Vite example uses.
-4. Rename the app, every form the guide lists, using the answers above. Rename the folders and files that carry a name too: the `.xcodeproj` folders, the source folders beside them, the schemes and the Android Java package's folder. When done, search the whole app, case-insensitively, for `ziggy-template`, `ziggy_template`, `ZiggyTemplate`, `dev.ziggy.template` and "Ziggy template", and fix anything left. Anything that names Ziggy itself (`ziggy-core`, `ziggy-ui`, `ZiggyNativeMacOS`, `dev.ziggy.nativeapp` and the like) stays as it is.
+4. Rename the app, every form the guide lists, using the answers above. Rename the directories and files that carry a name too: the `.xcodeproj` directories, the source directories beside them, the schemes and the Android Java package's directory. When done, search the whole app, case-insensitively, for `ziggy-template`, `ziggy_template`, `ZiggyTemplate`, `dev.ziggy.template` and "Ziggy template", and fix anything left. Anything that names Ziggy itself (`ziggy-core`, `ziggy-ui`, `ZiggyNativeMacOS`, `dev.ziggy.nativeapp` and the like) stays as it is.
 5. Make new GUIDs for `scripts/package-windows.wxs` with `uuidgen`: the `UpgradeCode` and every `Component`'s `Guid`.
 6. Run `zig build`. It fails and prints the new fingerprint. Put it in `build.zig.zon` as `.fingerprint` and run `zig build` again.
 7. Run `bun install`.

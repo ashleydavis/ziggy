@@ -1,7 +1,7 @@
 //
 // Reads the messages a browser sends on a WebSocket (RFC 6455). A browser splits a large message into frames, a first frame and
 // continuation frames, which the standard library's reader refuses, so the frames are joined here. Control frames may arrive
-// between the frames of a message: a ping is handed to the caller's handler to answer and the read carries on, a pong is skipped,
+// between the frames of a message: a ping is handed to the caller's handler to reply to and the read carries on, a pong is skipped,
 // and a close ends the read.
 //
 
@@ -20,12 +20,12 @@ pub const Message = union(enum) {
 };
 
 //
-// Answers a ping with a pong carrying its payload. Called during a read, with the payload, which is valid only for the call.
+// Replies to a ping with a pong carrying its payload. Called during a read, with the payload, which is valid only for the call.
 //
 pub const PingHandler = struct {
     // What the handler is given back.
     context: *anyopaque,
-    // Answers the ping.
+    // Replies to the ping.
     answer: *const fn (context: *anyopaque, payload: []const u8) anyerror!void,
 };
 

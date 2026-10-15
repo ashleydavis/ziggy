@@ -3,7 +3,7 @@ const utils = @import("ziggy-core").task_queue.utils;
 const in_process_tools = utils.in_process_tools;
 const exec = utils.exec.exec;
 
-// Records the last call a test runner was given and answers with the output and exit code the test set.
+// Records the last call a test runner was given and returns the output and exit code the test set.
 const RecordingRunner = struct {
     // The tool the last call named.
     tool: []const u8,
@@ -14,13 +14,13 @@ const RecordingRunner = struct {
     // How many calls were made.
     calls: u32,
 
-    // The exit code to answer with.
+    // The exit code to return.
     exit_code: i32,
 
     // The tool the runner does not handle, or empty when it handles all three.
     refused_tool: []const u8,
 
-    // The output to answer with.
+    // The output to return.
     output: []const u8,
 
     fn handles(context: ?*anyopaque, tool: []const u8) bool {

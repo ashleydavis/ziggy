@@ -18,7 +18,7 @@ pub const Kind = enum(i32) {
 };
 
 //
-// The kind of dialog the core asked for, or null for a number ziggy.h does not give.
+// The kind of dialog the core passed, or null for a number ziggy.h does not give.
 //
 pub fn kindFromInt(value: i32) ?Kind {
     return std.enums.fromInt(Kind, value);

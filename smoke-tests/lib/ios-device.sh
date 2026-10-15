@@ -29,7 +29,7 @@ ziggy_ios_device_port_file() {
     printf 'Library/ziggy-control-port-%s.txt\n' "$(basename "$1")"
 }
 
-# Seconds a scenario waits for the device to be free, and for lldb to answer.
+# Seconds a scenario waits for the device to be free, and for lldb to respond.
 IOS_DEVICE_CLAIM_TIMEOUT_SECONDS=1800
 IOS_DEVICE_LLDB_TIMEOUT_SECONDS=120
 

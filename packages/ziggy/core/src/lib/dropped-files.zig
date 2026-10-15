@@ -1,6 +1,6 @@
 //
 // The files the user last dropped on the window, as the shell reported them. A UI cannot learn the path of a dropped file: a web
-// view gives it no File with a path (WebKitGTK gives no File at all), so the UI asks the core for the paths of the last drop.
+// view gives it no File with a path (WebKitGTK gives no File at all), so the UI sends the core a get-dropped-paths message for the paths of the last drop.
 //
 
 const std = @import("std");

@@ -38,7 +38,7 @@ const assets = [_]Asset{
 };
 
 //
-// A range of bytes of a file, both ends included, as a Range header asks for.
+// A range of bytes of a file, both ends included, as a Range header gives it.
 //
 pub const ByteRange = struct {
     // The first byte.
@@ -48,7 +48,7 @@ pub const ByteRange = struct {
 };
 
 //
-// Reads the value of a Range header against a file of the given size. Returns null when the header does not ask for bytes,
+// Reads the value of a Range header against a file of the given size. Returns null when the header does not name a byte range,
 // which means the whole file, and error.Unsatisfiable when the range lies outside the file.
 //
 pub fn parseRange(header: []const u8, size: usize) error{Unsatisfiable}!?ByteRange {
@@ -175,7 +175,7 @@ fn watchForCancel(context: *TaskContext, stopping: *std.atomic.Value(bool), port
 }
 
 //
-// Reads one request from the connection, answers it and closes the connection.
+// Reads one request from the connection, sends the response and closes the connection.
 //
 fn serveConnection(stream: std.Io.net.Stream) void {
     var threaded: std.Io.Threaded = .init_single_threaded;

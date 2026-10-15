@@ -211,8 +211,8 @@ fn deliverCallback(user_data: ?*anyopaque, message_ptr: [*]const u8, message_len
 }
 
 //
-// The native host callback that answers the operating system's version, by asking ZiggyHost.osVersionJson for the JSON
-// text. Returns the number of bytes written, or a negative number when Java cannot answer or the answer does not fit.
+// The native host callback that gives the operating system's version, by calling ZiggyHost.osVersionJson for the JSON
+// text. Returns the number of bytes written, or a negative number when Java returns nothing or the result does not fit.
 //
 fn osVersionCallback(user_data: ?*anyopaque, buffer: [*]u8, capacity: usize) callconv(.c) isize {
     const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
@@ -332,9 +332,9 @@ fn keepAliveCallback(user_data: ?*anyopaque, keep_running: bool) callconv(.c) vo
 
 //
 // The native host callback that shows a file or folder picker, by calling ZiggyHost.pickPathsJson, which waits for the user.
-// The core calls it from a worker thread, so waiting here holds up only that worker. The answer comes back as a byte
+// The core calls it from a worker thread, so waiting here holds up only that worker. The result comes back as a byte
 // array of UTF-8 JSON, which is copied into the buffer. Returns the number of bytes written, or a negative number when the
-// picker could not be shown (Java returns null and has logged why) or the answer does not fit.
+// picker could not be shown (Java returns null and has logged why) or the result does not fit.
 //
 fn pickPathsCallback(user_data: ?*anyopaque, kind: i32, title: ?[*:0]const u8, initial_name: ?[*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
     const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
@@ -407,8 +407,8 @@ fn newJavaBytes(env: *c.JNIEnv, bytes: []const u8) c.jbyteArray {
 
 //
 // The native host callback that does one thing only the app's own code can do, by calling ZiggyHost.hostRequest, which may wait for
-// the user. The core calls it from a worker thread with no lock held. The method and the request cross as UTF-8 bytes, and Java answers
-// with a status byte (1 when it did what was asked, 0 when it could not) followed by the answer or the reason. Every way the call can
+// the user. The core calls it from a worker thread with no lock held. The method and the request cross as UTF-8 bytes, and Java returns
+// a status byte (1 when it did what the method names, 0 when it could not) followed by the result or the reason. Every way the call can
 // fail is returned as a failure with a reason, so the core reports it to the UI.
 //
 fn hostRequestCallback(user_data: ?*anyopaque, method: [*:0]const u8, request_json: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
@@ -650,7 +650,7 @@ pub fn exportJni(comptime app: core_module.AppHandlers) void {
         }
 
         //
-        // Asks the core what to do with an address the web view is about to load.
+        // Has the core decide what to do with an address the web view is about to load.
         //
         fn checkUrl(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, url: c.jbyteArray) callconv(.c) c.jint {
             _ = class;

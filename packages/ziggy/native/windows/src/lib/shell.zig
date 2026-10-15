@@ -19,7 +19,7 @@ const pickers_lib = @import("pickers.zig");
 
 //
 // The URL prefix the bundled UI is served under, with a trailing slash. The host name is under .invalid, which can never
-// be looked up, so a request to it can only ever be answered by the shell. It is what the core allows the web view to navigate to.
+// be looked up, so a request to it can only ever be served by the shell. It is what the core allows the web view to navigate to.
 const app_url_prefix = "https://ziggy-app.invalid/";
 
 //
@@ -44,19 +44,19 @@ pub const AppConfig = struct {
 const WM_ZIGGY_DELIVER: c.UINT = c.WM_APP + 1;
 
 //
-// The window message a worker thread posts to the UI thread to ask it to show a file or folder dialog. Its lparam is the
+// The window message a worker thread posts to the UI thread to have it show a file or directory dialog. Its lparam is the
 // address of the request.
 //
 const WM_ZIGGY_PICK: c.UINT = c.WM_APP + 2;
 
 //
-// The window message the test control connection's thread posts to ask the UI thread to do a menu action. Its lparam is the
+// The window message the test control connection's thread posts to have the UI thread do a menu action. Its lparam is the
 // address of the action text, which the UI thread frees.
 //
 const WM_ZIGGY_MENU: c.UINT = c.WM_APP + 3;
 
 //
-// The window message the test control connection's thread posts to ask the UI thread to capture a picture of the window. Its lparam
+// The window message the test control connection's thread posts to have the UI thread capture a picture of the window. Its lparam
 // is the address of the request.
 //
 const WM_ZIGGY_SCREENSHOT: c.UINT = c.WM_APP + 4;
@@ -85,7 +85,7 @@ fn ComHandler(comptime Interface: type, comptime interface_id: c.IID) type {
         shell: *Shell,
 
         //
-        // COM asks whether the object has an interface: it has IUnknown and the handler interface.
+        // COM calls this to check whether the object has an interface: it has IUnknown and the handler interface.
         //
         fn queryInterface(this: [*c]Interface, requested: [*c]const c.IID, result: [*c]?*anyopaque) callconv(.c) c.HRESULT {
             if (result == null) {
@@ -210,7 +210,7 @@ const MenuAction = struct {
 // Everything one running shell owns. It lives on the stack of run and every callback is given its address.
 //
 const Shell = struct {
-    // What the app asked for.
+    // The configuration the app passed in.
     app_config: AppConfig,
     // The command line, for the geometry option.
     args: []const [:0]const u8,
@@ -250,7 +250,7 @@ const Shell = struct {
     navigation_handler: NavigationHandler,
     // Receives every request to open a new window.
     new_window_handler: NewWindowHandler,
-    // Receives every request to the bundled UI, which is answered from the files the core holds.
+    // Receives every request to the bundled UI, which is served from the files the core holds.
     resource_handler: ResourceHandler,
     // The WebView2 environment, which makes the responses to those requests. Null until it exists.
     environment: ?*c.ICoreWebView2Environment,
@@ -268,9 +268,9 @@ const Shell = struct {
     saved_placement: c.WINDOWPLACEMENT,
     // Receives the keys pressed inside the web view before the UI sees them.
     accelerator_handler: AcceleratorHandler,
-    // Receives the selected text a copy asked the UI for.
+    // Receives the selected text the copy's script read from the UI.
     copy_handler: ScriptExecutedHandler,
-    // Receives the selected text a cut asked the UI for.
+    // Receives the selected text the cut's script read from the UI.
     cut_handler: ScriptExecutedHandler,
     // Receives the end of a paste, which is a DevTools protocol call.
     paste_handler: DevToolsCallHandler,
@@ -751,7 +751,7 @@ fn discardPending(shell: *Shell, allocator: std.mem.Allocator) void {
 }
 
 //
-// The core's deliver callback. It runs on any thread: it queues the message and asks the UI thread to deliver it.
+// The core's deliver callback. It runs on any thread: it queues the message and posts WM_ZIGGY_DELIVER so the UI thread delivers it.
 //
 fn deliver(user_data: ?*anyopaque, message: [*c]const u8, message_len: usize) callconv(.c) void {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -796,7 +796,7 @@ fn drainQueue(shell: *Shell) void {
 }
 
 //
-// The native host callback that answers the operating system's version.
+// The native host callback that gives the operating system's version.
 //
 fn osVersion(user_data: ?*anyopaque, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
     _ = user_data;
@@ -817,7 +817,7 @@ fn osVersion(user_data: ?*anyopaque, buffer: [*c]u8, capacity: usize) callconv(.
 }
 
 //
-// The native host callback that quits the application, asked for by the test control connection. It can be called from any
+// The native host callback that quits the application, called by the test control connection. It can be called from any
 // thread, so it posts a close to the UI thread, which closes the window the same way the user closing it does.
 //
 fn quit(user_data: ?*anyopaque) callconv(.c) void {
@@ -849,7 +849,7 @@ fn takeAddress(wide: [*c]c.WCHAR) []u8 {
 }
 
 //
-// Asks the core what to do with an address. An address is blocked once the core is gone.
+// Has the core decide what to do with an address. An address is blocked once the core is gone.
 //
 fn checkAddress(shell: *Shell, address: []const u8) i32 {
     const core = shell.core orelse {
@@ -1173,7 +1173,7 @@ fn runAction(shell: *Shell, action: []const u8) void {
 
 //
 // Brings the window to the front, restoring it first when it is minimized, because a second copy of the app was started. Windows
-// may refuse to give the foreground to a process that has no input to answer, in which case the taskbar button flashes instead.
+// may refuse to give the foreground to a process that has received no input, in which case the taskbar button flashes instead.
 //
 fn focusWindow(shell: *Shell) void {
     if (c.IsIconic(shell.window) != 0) {
@@ -1201,7 +1201,7 @@ const DevToolsSearch = struct {
 //
 // Opens the developer tools, or closes them when they are open. WebView2 can open its developer tools window but has no call
 // to close it, so the window is looked for among the visible top level windows of the web view's browser process, by the
-// title WebView2 gives it, and asked to close. Looking every time, rather than remembering, keeps the toggle right when the
+// title WebView2 gives it, and sent WM_CLOSE. Looking every time, rather than remembering, keeps the toggle right when the
 // user closes the window themselves.
 //
 fn toggleDevTools(web_view: *c.ICoreWebView2) void {
@@ -1279,7 +1279,7 @@ fn runScript(web_view: *c.ICoreWebView2, script: []const u8, handler: *c.ICoreWe
 
 //
 // Copies the selected text to the clipboard. document.execCommand('copy') and ('cut') are refused to a script, which has no
-// user gesture, so the shell asks the UI for the selected text and puts it on the clipboard itself.
+// user gesture, so the shell reads the selected text with a script it runs in the UI and puts it on the clipboard itself.
 //
 fn copySelection(web_view: *c.ICoreWebView2, handler: *c.ICoreWebView2ExecuteScriptCompletedHandler) void {
     runScript(web_view, actions_lib.selection_script, handler);
@@ -1441,8 +1441,8 @@ fn releaseScreenshotRequest(request: *ScreenshotRequest) void {
 }
 
 //
-// The native host callback that writes a PNG of the window to a file. It runs on the thread of the test control connection, so it asks
-// the UI thread to capture the window with WebView2's CapturePreview and waits there. Returns 0 when the file was written, or the
+// The native host callback that writes a PNG of the window to a file. It runs on the thread of the test control connection, so it posts
+// a window message that has the UI thread capture the window with WebView2's CapturePreview and waits there. Returns 0 when the file was written, or the
 // number of bytes of the reason written into the buffer, negated.
 //
 fn screenshot(user_data: ?*anyopaque, output_path: [*c]const u8, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
@@ -1691,10 +1691,10 @@ fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler,
 }
 
 //
-// A request for a file or folder dialog, passed from the worker thread that wants the answer to the UI thread that shows the
+// A request for a file or folder dialog, passed from the worker thread that wants the result to the UI thread that shows the
 // dialog. It lives on the heap and is shared by those two threads, each holding a reference, because the worker gives up
 // waiting when the shell is closing and the UI thread may still be inside the dialog. The UI thread never touches the
-// worker's buffer: it leaves the answer here and the worker copies it out.
+// worker's buffer: it leaves the result here and the worker copies it out.
 //
 const PickRequest = struct {
     // Which dialog to show.
@@ -1732,8 +1732,8 @@ fn releasePickRequest(request: *PickRequest) void {
 
 //
 // The native host callback that shows a file or folder dialog and writes the chosen paths as a JSON array into the buffer. It
-// runs on a worker thread, so it asks the UI thread to show the dialog and waits there for the answer. Returns the number of
-// bytes written, or -1 and a message on standard error when the dialog could not be shown or the answer does not fit.
+// runs on a worker thread, so it posts a window message that has the UI thread show the dialog, and waits there for the result. Returns the number of
+// bytes written, or -1 and a message on standard error when the dialog could not be shown or the result does not fit.
 //
 fn pickPaths(user_data: ?*anyopaque, kind: i32, title: [*c]const u8, initial_name: [*c]const u8, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -1804,8 +1804,8 @@ fn pickPaths(user_data: ?*anyopaque, kind: i32, title: [*c]const u8, initial_nam
 }
 
 //
-// Runs on the UI thread: shows the dialog a worker asked for, which runs its own message loop, so the window and the web view
-// keep working while it is open, and leaves the answer in the request.
+// Runs on the UI thread: shows the dialog a worker posted, which runs its own message loop, so the window and the web view
+// keep working while it is open, and leaves the result in the request.
 //
 fn handlePickRequest(shell: *Shell, request: *PickRequest) void {
     defer releasePickRequest(request);
@@ -1904,7 +1904,7 @@ fn itemPath(allocator: std.mem.Allocator, item: *c.IShellItem) ![]u8 {
 }
 
 //
-// WebView2 has created its environment: asks it for the controller of the window.
+// WebView2 has created its environment: creates the controller of the window with it.
 //
 fn environmentInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler, error_code: c.HRESULT, environment: [*c]c.ICoreWebView2Environment) callconv(.c) c.HRESULT {
     const shell = EnvironmentHandler.fromInterface(this).shell;
@@ -2068,9 +2068,9 @@ fn memoryStream(content: []const u8) *c.IStream {
 }
 
 //
-// Answers a request to the bundled UI from the files the core holds, with a header that allows any origin to read the
-// file (the UI script is a module loaded with the crossorigin attribute). A path that is not one of them is
-// answered with a 404.
+// Serves a request to the bundled UI from the files the core holds, with a header that allows any origin to read the
+// file (the UI script is a module loaded with the crossorigin attribute). A path that is not one of them gets
+// a 404.
 //
 fn resourceInvoke(this: [*c]c.ICoreWebView2WebResourceRequestedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2WebResourceRequestedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;

@@ -1,7 +1,7 @@
 //
-// What the dev host makes of the requests it forwards to the app's own dev server, and of the answers that come back. The dev
-// host stands in front of the dev server: the browser opens the dev host, which answers /__ziggy itself and forwards everything
-// else. It asks the dev server for each answer whole and uncompressed, on a connection that closes after it, so an answer ends where
+// What the dev host makes of the requests it forwards to the app's own dev server, and of the responses that come back. The dev
+// host stands in front of the dev server: the browser opens the dev host, which serves /__ziggy itself and forwards everything
+// else. It requests each response from the dev server whole and uncompressed, on a connection that closes after it, so a response ends where
 // the connection does, and it puts Ziggy's scripts into a page on the way back.
 //
 
@@ -12,8 +12,8 @@ const std = @import("std");
 pub const dev_scripts = "<script src=\"/__ziggy/dev.js\"></script><script src=\"/__ziggy/inject.js\"></script>";
 
 //
-// The request to send the dev server for a request the browser sent: the same request line and headers, except that it asks for an
-// uncompressed answer on a connection that closes after it, and gives the body's length when it has one. The head given is the
+// The request to send the dev server for a request the browser sent: the same request line and headers, except that it sets accept-encoding: identity for an
+// uncompressed response on a connection that closes after it, and gives the body's length when it has one. The head given is the
 // browser's, as received, ending in a blank line. The caller owns the result.
 //
 pub fn upstreamRequestHead(allocator: std.mem.Allocator, head: []const u8, body_length: ?usize) ![]u8 {
@@ -61,10 +61,10 @@ fn isReplacedRequestHeader(name: []const u8) bool {
 }
 
 //
-// What the head of the dev server's answer says about its body.
+// What the head of the dev server's response says about its body.
 //
 pub const ResponseHead = struct {
-    // Whether the answer is an HTML page, which gets Ziggy's scripts.
+    // Whether the response is an HTML page, which gets Ziggy's scripts.
     html: bool,
     // The body's length, when the head gives one.
     content_length: ?usize,
@@ -73,7 +73,7 @@ pub const ResponseHead = struct {
 };
 
 //
-// Reads what matters about the body from the head of an answer, as received, ending in a blank line.
+// Reads what matters about the body from the head of a response, as received, ending in a blank line.
 //
 pub fn parseResponseHead(head: []const u8) !ResponseHead {
     var result = ResponseHead{

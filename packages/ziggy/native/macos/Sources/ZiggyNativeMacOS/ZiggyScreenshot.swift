@@ -1,5 +1,5 @@
 //
-// Screenshots for the test control connection. The core asks for one from the thread of the control connection. The snapshot is
+// Screenshots for the test control connection. The core calls the screenshot callback from the thread of the control connection. The snapshot is
 // taken on the main thread, with the web view's own takeSnapshot, and the connection's thread waits for the file to be written.
 //
 

@@ -11,8 +11,8 @@ import WebKit
 import CZiggy
 import AppKit
 
-// Answers the web view's requests for the bundled UI from the files embedded in the core library, which it asks for each
-// file with ziggy_ui_file. The UI's address is ziggy-app://app/, and the core is given to the handler once it exists.
+// Serves the web view's requests for the bundled UI from the files embedded in the core library, calling ziggy_ui_file for
+// each file. The UI's address is ziggy-app://app/, and the core is given to the handler once it exists.
 // It runs on the main thread, as does everything that sets or clears the core.
 final class ZiggyUiSchemeHandler: NSObject, WKURLSchemeHandler {
     // The core's handle, from start until shutdown. Null means the UI cannot be served.
@@ -84,7 +84,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // Set by shutdown. Read and written on the main thread only, so nothing is delivered to the UI after it is set.
     private var destroyed: Bool
 
-    // Answers the web view's requests for the bundled UI, from the core.
+    // Serves the web view's requests for the bundled UI, from the core.
     private let uiHandler = ZiggyUiSchemeHandler()
 
     // The scheme and address of the bundled UI. The files are embedded in the core library, not in the app bundle.
@@ -166,7 +166,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Runs on the main thread: records the files of a drop with the core, so the UI can ask for the path of each one it is given.
+    // Runs on the main thread: records the files of a drop with the core, so the UI can get the path of each one it is given.
     private func filesDropped(_ paths: [String]) {
         guard let handle = core else {
             return
@@ -325,7 +325,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     }
 
 
-    // Ends the app. Only the core's test control connection asks for this.
+    // Ends the app. Only the core's test control connection calls this.
     private func quit() {
         NSApplication.shared.terminate(nil)
     }
@@ -411,7 +411,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         ZiggyBridge.fail("the web content process terminated")
     }
 
-    // Asks the core what to do with an address. An external link is opened in the system browser here. Returns true when
+    // Has the core decide what to do with an address. An external link is opened in the system browser here. Returns true when
     // the web view may load the address, which is only for the app's own UI in an existing frame.
     private func shouldLoad(_ url: URL?, isNewWindow: Bool) -> Bool {
         guard let handle = core else {

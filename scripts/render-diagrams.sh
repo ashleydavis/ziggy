@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-# Draws every Mermaid diagram under docs/diagrams (each .mmd file) into the SVG beside it, then adds the labels Mermaid cannot place
+# Draws every Mermaid diagram under docs/development/diagrams (each .mmd file) into the SVG beside it, then adds the labels Mermaid cannot place
 # itself. See render-diagrams.md.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-DIAGRAMS_DIR="$REPO_DIR/docs/diagrams"
+DIAGRAMS_DIR="$REPO_DIR/docs/development/diagrams"
 
 # The Mermaid command line tool draws in a headless Chrome or Chromium. It uses the one PUPPETEER_EXECUTABLE_PATH names, else the
 # first on PATH.

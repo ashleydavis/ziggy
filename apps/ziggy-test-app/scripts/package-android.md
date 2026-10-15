@@ -6,7 +6,7 @@ Invoke: `bash apps/ziggy-test-app/scripts/package-android.sh [--arch "<list>"] [
 
 - `--arch "<list>"`: `x86_64` and `arm64`, space separated, or `all`. The default is both.
 - `--version-name <name>`: the version the APK reports, and the name in its file name. The default is the version in `apps/ziggy-test-app/package.json`.
-- `--version-code <number>`: the whole number Android uses to tell a newer build from an older one, which has to go up with every build that replaces another on a phone. The default is 1.
+- `--version-code <number>`: the whole number Android uses to tell a newer build from an older one, which has to go up with every build that replaces another on a mobile device. The default is 1.
 - `--output-dir <dir>`: where the APKs go. The default is `apps/ziggy-test-app/out/android`.
 
 The artifacts are named `ziggy-test-app-<version>-android-<arch>.apk`, with the version from `package.json`.

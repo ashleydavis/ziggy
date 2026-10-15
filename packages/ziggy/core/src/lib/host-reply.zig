@@ -1,12 +1,12 @@
 //
-// How a shell hands the core the answer to a host request (see HostRequestFn): the text goes into the buffer the core gave, and the
+// How a shell hands the core the result of a host request (see HostRequestFn): the text goes into the buffer the core gave, and the
 // number returned is its length, negated when the request failed and the text is the reason.
 //
 
 const std = @import("std");
 
 //
-// Writes the answer to a host request into the core's buffer and returns what the callback returns. An answer that succeeded but is
+// Writes the result of a host request into the core's buffer and returns what the callback returns. A result that succeeded but is
 // longer than the buffer cannot be handed over, so it is reported as a failure that names the request, and a reason longer than the
 // buffer is cut to fit.
 //

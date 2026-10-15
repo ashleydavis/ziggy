@@ -3,18 +3,18 @@ const ziggy = @import("ziggy-core");
 const helpers = @import("helpers.zig");
 
 //
-// One client conversation with the control connection, run on its own thread because the answer waits for the UI.
+// One client conversation with the control connection, run on its own thread because the reply waits for the UI.
 //
 const Client = struct {
-    // Where the answer goes.
+    // Where the reply goes.
     allocator: std.mem.Allocator,
     // The port to connect to.
     port: u16,
     // The line to send, without the newline.
     line: []const u8,
-    // The line the connection answered with.
+    // The line the connection replied with.
     answer: ?[]u8,
-    // Whether the connection was closed without an answer.
+    // Whether the connection was closed without a reply.
     closed_without_answer: bool,
 
     fn run(self: *Client) void {
@@ -552,7 +552,7 @@ test "the screenshot command on a shell with no screenshot callback says what is
 }
 
 //
-// Sends one line to the control connection of a core and returns its answer, allocated with the testing allocator.
+// Sends one line to the control connection of a core and returns its reply, allocated with the testing allocator.
 //
 fn answerFor(core: *ziggy.core.Core, line: []const u8) ![]u8 {
     var client = Client{

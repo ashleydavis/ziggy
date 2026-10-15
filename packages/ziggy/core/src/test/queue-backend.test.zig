@@ -380,7 +380,7 @@ fn toolRunnerHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Va
 }
 
 //
-// A tool runner for a test that only looks at which tools it is asked about: it handles magick and is never asked to run anything.
+// A tool runner for a test that only looks at which tools it is checked for: it handles magick and is never called to run anything.
 //
 fn handlesMagickOnly(context: ?*anyopaque, tool: []const u8) bool {
     _ = context;

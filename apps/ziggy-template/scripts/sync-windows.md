@@ -7,7 +7,7 @@ Run it as `bun run sync:windows -- [options]`, under Git Bash on Windows: linkin
 Options:
 
 - `--arch <x64>`: the architecture to build for. Default `x64`. `arm64` is refused, see `package-windows.md`.
-- `--prefix <dir>`: the install prefix. Default `apps/ziggy-template/shells/windows/zig-out`.
+- `--prefix <dir>`: the install prefix. Default `apps/ziggy-template/native/windows/zig-out`.
 - `--optimize <Debug|ReleaseSafe|ReleaseFast|ReleaseSmall>`: the Zig optimize mode. Default `ReleaseSafe`.
 - `--strip`: leaves the debug information out of the executable, which is what a release package wants.
 - `--test-hooks`: builds the test control connection in. Never use it for something that ships.

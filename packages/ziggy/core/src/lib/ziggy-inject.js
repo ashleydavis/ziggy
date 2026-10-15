@@ -69,8 +69,8 @@
     // Dropped files. A web view does not give the UI the real paths of the files dropped on it: WebKitGTK lists file addresses as a
     // type of the drop and gives no way to read them, and no File objects, and the others give Files that have no path readable by the
     // UI. The shell reads the paths natively and records them with the core. This catches every drop of files before the UI does,
-    // asks the core for the paths of the last drop, and fires the drop again holding one File per path, which it makes itself and
-    // remembers the path of. getPathForFile then answers from that memory, as Electron's does, so a UI written for Electron runs
+    // sends the core a get-dropped-paths message for the paths of the last drop, and fires the drop again holding one File per path, which it makes itself and
+    // remembers the path of. getPathForFile then returns the path from that memory, as Electron's does, so a UI written for Electron runs
     // unchanged. The Files are empty: a UI that wants a dropped file's contents reads the path. WebView2 hands the shell the Files
     // themselves, so there the shell reads their paths first. A drop of something else, such as a link, is left alone.
     var redispatchedDrops = new WeakSet();
@@ -102,7 +102,7 @@
                 window.chrome.webview.postMessageWithAdditionalObjects("ziggy-file", files);
             }
             catch (error) {
-                // WebView2 takes only Files that came from a drop. The core is still asked, and answers with the last drop it was told of.
+                // WebView2 takes only Files that came from a drop. The get-dropped-paths message is still sent, and the core's message response holds the last drop it was told of.
                 console.warn("Ziggy: WebView2 would not hand the shell these files, so their paths are not known from the files themselves.", error);
             }
         }

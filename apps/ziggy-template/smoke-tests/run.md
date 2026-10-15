@@ -1,11 +1,11 @@
 # run.sh
 
-Runs the app's smoke tests for one platform: each folder here that holds a `test.sh` starts the real app and checks what it shows. Invoked by the `package.json` scripts `test:smoke`, `test:smoke:and` and `test:smoke:ios`, never directly. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
+Runs the app's smoke tests for one platform: each directory here that holds a `test.sh` starts the real app and checks what it shows. Invoked by the `package.json` scripts `test:smoke`, `test:smoke:and` and `test:smoke:ios`, never directly. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
 
 ## Arguments
 
 - `<platform>`: `linux`, `windows`, `macos`, `android` or `ios` (a connected iPhone or iPad when there is one, see `lib/ios-device.sh`, otherwise a simulator). Each has a library in `lib/<platform>.sh` that builds the app, starts it and stops it.
-- `[scenario]`: optional folder name, to run one smoke test.
+- `[scenario]`: optional directory name, to run one smoke test.
 
 ## Behaviour
 
@@ -13,9 +13,9 @@ Builds the app for the platform with the test hooks, then runs each `test.sh`, o
 
 ## Smoke tests
 
-- `hello-world-app`: hello world example. The backend's answer to the hello-world message appears, and the hello-world task's output appears once its button is pressed. Change it into your own smoke test, or delete it.
+- `hello-world-app`: hello world example. The backend's message response to the hello-world message appears, and the hello-world task's output appears once its button is pressed. Change it into your own smoke test, or delete it.
 
-To add one, make a folder here with a `test.sh` that sources `../lib/common.sh`.
+To add one, make a directory here with a `test.sh` that sources `../lib/common.sh`.
 
 ## Building on Android
 

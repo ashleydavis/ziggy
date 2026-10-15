@@ -35,11 +35,11 @@ The native app performs quit, close-window, reload, toggle-devtools, toggle-full
 
 Developer tools are on in every build. The `developerExtrasEnabled` preference gives Inspect Element, and `isInspectable` is set under `#if swift(>=5.8)` and `#available(macOS 13.3, *)`, because Xcode 14.2's SDK lacks it. Toggle Developer Tools calls the private WebKit interface `-[WKWebView _inspector]` (`isVisible`, `show`, `hide`), reached by selector name, because no public call opens the inspector programmatically on these SDKs. A missing selector prints a message to standard error.
 
-## File and folder pickers
+## File and directory pickers
 
-`ZiggyPicker.swift` backs the backend's `pick_paths` callback. The backend calls it from a worker thread. The dialog is shown on the main thread and the worker waits on a `DispatchSemaphore`, so the main thread never blocks on it. The answer is a JSON array of paths, `[]` when the user cancelled. A failure (no window, a buffer too small, an unknown kind) prints to standard error and returns a negative number.
+`ZiggyPicker.swift` backs the backend's `pick_paths` callback. The backend calls it from a worker thread. The dialog is shown on the main thread and the worker waits on a `DispatchSemaphore`, so the main thread never blocks on it. The result is a JSON array of paths, `[]` when the user cancelled. A failure (no window, a buffer too small, an unknown kind) prints to standard error and returns a negative number.
 
-`NSOpenPanel` serves files (multiple selection, no folders) and a folder, and `NSSavePanel` with `nameFieldStringValue` set to the suggested name serves save. The title is both the panel's title and its message. It runs with `runModal` on the main thread, so a quit asked for while a panel is open waits until the panel closes.
+`NSOpenPanel` serves files (multiple selection, no directories) and a directory, and `NSSavePanel` with `nameFieldStringValue` set to the suggested name serves save. The title is both the panel's title and its message. It runs with `runModal` on the main thread, so a quit that arrives while a panel is open waits until the panel closes.
 
 ## Dropped files
 

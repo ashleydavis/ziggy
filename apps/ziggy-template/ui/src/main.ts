@@ -14,10 +14,10 @@ interface IOutputMessage {
 }
 
 //
-// A command from the test control connection, with the id the answer must carry.
+// A command from the test control connection, with the id the reply must carry.
 //
 interface ITestCommandEvent {
-    // Identifies the command so its answer reaches the right waiting connection.
+    // Identifies the command so its reply reaches the right waiting connection.
     requestId: number;
 
     // The command to perform.
@@ -36,7 +36,7 @@ function element(dataId: string): HTMLElement {
 }
 
 //
-// Sends the backend the hello-world message and shows its answer.
+// Sends the backend the hello-world message and shows its message response.
 //
 async function sayHello(): Promise<void> {
     const response = await window.ziggy.invoke<IHelloWorldResponse>("hello-world", {
@@ -69,7 +69,7 @@ function listenForTheTask(): void {
 }
 
 //
-// Answers the commands the test control connection forwards, which the smoke tests send. It does nothing unless the native app
+// Handles the commands the test control connection forwards, which the smoke tests send. It does nothing unless the native app
 // started the UI in test mode, which it does only in a build with the test hooks, and it tells the backend when it is listening so
 // that no command is sent before it can be heard.
 //

@@ -1,6 +1,6 @@
 # open-macos
 
-Runs `sync-macos.sh`, then opens `shells/macos/ZiggyTestApp.xcodeproj` in Xcode, so a build from Xcode finds the library and the UI.
+Runs `sync-macos.sh`, then opens `native/macos/ZiggyTestApp.xcodeproj` in Xcode, so a build from Xcode finds the library and the UI.
 
 Run it on a Mac: `bash apps/ziggy-test-app/scripts/open-macos.sh`.
 

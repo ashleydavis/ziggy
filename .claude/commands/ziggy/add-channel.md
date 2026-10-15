@@ -6,12 +6,12 @@ description: Add a message the UI can send to a Ziggy app's backend and get a me
 
 The human says what message the UI needs to send the backend and what message response comes back. If they have not, ask, and wait for the answer.
 
-Read Ziggy's guide [Channels](https://github.com/ashleydavis/ziggy/blob/main/docs/channels.md), the "Protocol" section of [Ziggy architecture](https://github.com/ashleydavis/ziggy/blob/main/docs/architecture.md#protocol) and the app's own `backend/src/handlers.zig` and its handlers under `backend/src/lib` (in the template, `backend/src/lib/hello-world-backend.zig`) before writing anything. Write the new code the way those are written.
+Read Ziggy's guide [Channels](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/channels.md), including its "Ziggy's own channels" section, and the app's own `backend/src/handlers.zig` and its handlers under `backend/src/lib` (in the template, `backend/src/lib/hello-world-backend.zig`) before writing anything. Write the new code the way those are written.
 
 ## Decide whether it is a channel
 
 - Prefer an existing channel. A named action sent through one channel that takes the action's name is better than a channel per action.
-- Anything that takes long (reading many files, hashing, network) is a task, not a channel, because a channel's handler runs on the thread that handles every UI message. Use `/ziggy:add-task` for that, or a channel that queues a task (the guide's "A message answered by a task").
+- Anything that takes long (reading many files, hashing, network) is a task, not a channel, because a channel's handler runs on the thread that handles every UI message. Use `/ziggy:add-task` for that, or a channel that queues a task (the guide's "A message handled by a task").
 
 ## Add it
 
@@ -21,4 +21,4 @@ Read Ziggy's guide [Channels](https://github.com/ashleydavis/ziggy/blob/main/doc
 4. Call it from the UI with `window.ziggy.invoke("<channel>", data)`. Keep any logic beyond the call in a plain function under `ui/src/lib`, with unit tests.
 5. Run `/ziggy:check`.
 
-A handler that fails returns a Zig error, and the UI gets an error message response naming it. Never answer a failure with a success value.
+A handler that fails returns a Zig error, and the UI gets an error message response naming it. Never return a success value for a failure.

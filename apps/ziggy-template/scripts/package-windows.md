@@ -1,6 +1,6 @@
 # package-windows.sh
 
-Builds a ReleaseSafe app and packages it twice, unsigned: a zip and an MSI installer. Both go in `apps/ziggy-template/out/windows/` (gitignored) and are named `ziggy-template-<version>-windows-<arch>.zip` and `.msi`, with the version read from `apps/ziggy-template/package.json`. The build they are made from is installed in `apps/ziggy-template/shells/windows/package/<arch>/`, along with the installer's WiX object file.
+Builds a ReleaseSafe app and packages it twice, unsigned: a zip and an MSI installer. Both go in `apps/ziggy-template/out/windows/` (gitignored) and are named `ziggy-template-<version>-windows-<arch>.zip` and `.msi`, with the version read from `apps/ziggy-template/package.json`. The build they are made from is installed in `apps/ziggy-template/native/windows/package/<arch>/`, along with the installer's WiX object file.
 
 Run it as `bash apps/ziggy-template/scripts/package-windows.sh [arch]`.
 

@@ -108,7 +108,7 @@ pub const VirtualTimeIo = struct {
 };
 
 //
-// What a timeout asks for.
+// The kind of wait a timeout needs.
 //
 const Wait = union(enum) {
     // The timeout is not a wait on the monotonic clock, or has no end: it is done as the real Io does it.
@@ -130,7 +130,7 @@ fn virtualTimeOf(userdata: ?*anyopaque) *VirtualTimeIo {
 }
 
 //
-// Works out what a timeout asks for.
+// Works out the kind of wait a timeout needs.
 //
 fn waitOf(virtual_time: *VirtualTimeIo, timeout: std.Io.Timeout) Wait {
     var nanoseconds: i64 = undefined;

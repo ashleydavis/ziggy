@@ -3,7 +3,7 @@ name: Release
 # Builds and tests Ziggy and the Ziggy template on every platform, packages the template for every platform, and, when every one of
 # those passed on the default branch, publishes the packaged template apps as the GitHub release named "Ziggy template", replacing
 # the one before. It runs on every push and has nothing to do with Ziggy's version tags: a version of the package is released by
-# pushing a version tag (see docs/releasing-ziggy.md). A GitHub release is always attached to a git tag, so the published template
+# pushing a version tag (see docs/development/releasing-ziggy.md). A GitHub release is always attached to a git tag, so the published template
 # sits on the tag `template`, which this workflow moves to the commit it built and which is never a version tag. A run that fails
 # anywhere publishes nothing.
 

@@ -5,7 +5,7 @@ Shared by the `*-android.sh` scripts, and by the Android library of Ziggy's own 
 It resolves a JDK 17 and the Android SDK by sourcing `lib/android-env.sh` (which exits with a message when either is missing), and defines:
 
 - `ziggy_android_require_commands <command...>`: fails unless each command is on the PATH.
-- `ziggy_android_ndk_version`: the NDK version the app's Android project pins in `shells/android/variables.gradle`, so the Zig library is linked against the NDK Gradle builds with.
+- `ziggy_android_ndk_version`: the NDK version the app's Android project pins in `native/android/variables.gradle`, so the Zig library is linked against the NDK Gradle builds with.
 - `ziggy_android_min_sdk`: the minimum SDK level, from the same `variables.gradle`.
 - `ziggy_android_gradle <arguments...>`: runs the app's Android project's Gradle wrapper.
 - `ziggy_android_version`: the version in the app's `package.json`.
