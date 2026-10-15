@@ -39,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    // Destroys the core before the process ends.
+    // Destroys the backend before the process ends.
     func applicationWillTerminate(_ notification: Notification) {
         bridge?.shutdown()
     }

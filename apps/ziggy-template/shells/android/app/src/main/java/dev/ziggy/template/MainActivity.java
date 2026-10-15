@@ -6,8 +6,8 @@ import android.os.Bundle;
 import android.webkit.WebView;
 import dev.ziggy.nativeapp.ZiggyShell;
 
-// The Ziggy template's one screen: a web view run by Ziggy's shell. What is the template's own is the name of its core library
-// and the mobile limits on the core's threads.
+// The Ziggy template's one screen: a web view run by Ziggy's shell. What is the template's own is the name of its backend library
+// and the mobile limits on the backend's threads.
 public final class MainActivity extends Activity {
     private ZiggyShell shell;
 
@@ -18,6 +18,12 @@ public final class MainActivity extends Activity {
         setContentView(webView);
         shell = new ZiggyShell(this, webView, "ziggy_template", 5, 2);
         shell.start();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        shell.onResume();
     }
 
     @Override

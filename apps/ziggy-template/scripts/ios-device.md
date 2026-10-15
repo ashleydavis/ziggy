@@ -1,6 +1,6 @@
 # ios-device
 
-Drives a connected iOS device for `run-ios.sh` and for the Ziggy template's iOS smoke tests when a device is connected (`bun run test:ziggy-template:ios`, platform library `smoke-tests/lib/ios-device.sh`). Xcode 14 has no command for running an app on a device, so it uses native-run's device library, the one Capacitor's `cap run ios` deploys with. It runs under Node (pinned in `mise.toml`), because Bun's sockets cannot carry the TLS session native-run starts on a device service.
+Drives a connected iOS device for `run-ios.sh` and for the Ziggy template's iOS smoke tests when a device is connected (`bun run test:smoke:ios`, platform library `smoke-tests/lib/ios-device.sh`). Xcode 14 has no command for running an app on a device, so it uses native-run's device library, the one Capacitor's `cap run ios` deploys with. It runs under Node (pinned in `mise.toml`), because Bun's sockets cannot carry the TLS session native-run starts on a device service.
 
 ## Usage
 

@@ -1,6 +1,6 @@
 # Tasks
 
-A task is work the core runs on its own pool of worker threads, away from the thread that handles the UI's messages. Anything slow (reading files, hashing, talking to the network, waiting on the user in a native dialog) is a task. A task can report progress while it runs, queue child tasks and be cancelled. See the [glossary](../README.md#glossary) for "the UI", "the core" and "the native app".
+A task is work the backend runs on its own pool of worker threads, away from the thread that handles the UI's messages. Anything slow (reading files, hashing, talking to the network, waiting on the user in a native dialog) is a task. A task can report progress while it runs, queue child tasks and be cancelled. See the [glossary](glossary.md) for "the UI", "the backend" and "the native app".
 
 ## How it works
 
@@ -8,13 +8,13 @@ A task is work the core runs on its own pool of worker threads, away from the th
 sequenceDiagram
     participant UI
     participant NativeApp as Native app
-    participant Core as Core (channel handler)
+    participant Backend as Backend (channel handler)
     participant Runner as Task runner
     participant Worker as Worker thread
 
     UI->>NativeApp: window.ziggy.send("add-task", { taskId, taskType, source, data, priority })
-    NativeApp->>Core: the message
-    Core->>Runner: addTask
+    NativeApp->>Backend: the message
+    Backend->>Runner: addTask
     Note over Runner: The task waits in the queue.<br/>Interactive tasks go to the head,<br/>background tasks to the end.
     Runner->>Worker: runs the handler when a thread is free
     loop While the handler runs
@@ -28,10 +28,10 @@ sequenceDiagram
 
 - The UI makes up the task's id and names a source. The source groups tasks so they can be cancelled together.
 - There is one queue. An interactive task goes at the head of it and a background task at the end. A task with no priority runs as background.
-- The native app sets the number of worker threads and the limit on child tasks in flight when it creates the core (`ziggy_create`).
+- The native app sets the number of worker threads and the limit on child tasks in flight when it creates the backend (`ziggy_create`).
 - A task that is cancelled ends as failed, with the error message `Cancelled`.
 
-The `/ziggy:add-task` Claude Code command adds a task type to an app by following this guide (see [Claude Code commands](claude-code-commands.md)).
+The `/ziggy:add-task` Claude Code command adds a task type to an app by following this guide.
 
 ## Writing a handler
 
@@ -43,13 +43,13 @@ const ziggy = @import("ziggy-core");
 
 const TaskContext = ziggy.task_runner.TaskContext;
 
-pub fn helloShortHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
+pub fn helloWorldTaskHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
     try context.sendMessage(.{
         .type = "output",
-        .text = "hello from a short task",
+        .text = "Hello world from a task",
     });
-    return try context.arena.dupe(u8, "\"short task done\"");
+    return try context.arena.dupe(u8, "\"hello world task done\"");
 }
 ```
 
@@ -67,29 +67,29 @@ What the context gives a handler:
 | `awaitAllTasks()` | Waits for every child of this task. |
 | `runChild(allocator, type, data, priority)` | Runs one child to its end and frees it, for a task that runs children one after another for as long as it lives. |
 | `io()` | The `std.Io` for sleeping and file access. |
-| `config()` | The configuration the native app gave the core, including its host callbacks and the app's data directory. |
+| `config()` | The configuration the native app gave the backend, including its native calls and the app's data directory. |
 | `appState()` | The app's own state, when it keeps any. |
+| `taskId()`, `taskType()` and `source()` | The task's id, its task type (for a handler that serves several) and the source it was queued under. |
+| `maxConcurrentChildTasks()` | The limit on this task's child tasks in flight. |
+| `hostRequest(method, request_json)` | Asks the native app to do one thing only the platform can do, by name, and returns its answer. A platform with no `host_request` native call gives `error.HostCallbackMissing`. |
+| `hostRequester(storage)` | Hands this task's native calls to code that does not know about tasks, or null when the native app has no `host_request` native call. |
+| `pickPaths(kind, title, initial_name)` | Shows a native file or folder dialog and returns the JSON text of the paths chosen, an empty array when the user cancelled. In a test hooks build a test can answer instead. |
 
 ## Registering a handler
 
-The app lists its task types in the `tasks` field of the app it hands to Ziggy, in `core/src/handlers.zig` in the template:
+The app lists its task types in the `tasks` field of the app it hands to Ziggy, in `backend/src/handlers.zig` in the template:
 
 ```zig
 .tasks = &[_]ziggy.task_runner.TaskHandlerEntry{
     .{
-        .name = "hello-short",
-        .handler = hello_tasks.helloShortHandler,
-    },
-    .{
-        .name = "background-keep-alive",
-        .handler = hello_tasks.backgroundCountHandler,
-        .kind = .keep_alive,
+        .name = "hello-world-task",
+        .handler = hello_world_backend.helloWorldTaskHandler,
     },
 },
 ```
 
 - `name` is the task type the UI queues it under.
-- `kind` is `.normal` by default. A `.keep_alive` task keeps the app running on a phone while it is in the background. See [Keep-alive tasks](architecture.md#keep-alive-tasks).
+- `kind` is `.normal` by default. A `.keep_alive` task keeps the app running on a phone while it is in the background.
 - A task type that nothing is registered for fails as `UnknownTaskType`.
 
 ## Queuing a task from the UI
@@ -139,15 +139,15 @@ Cancelling a source cancels its queued and running tasks, children included. A r
 
 ## Child tasks
 
-A handler can split its work into child tasks with `queueChild` and wait for them with `awaitTask` or `awaitAllTasks`. The template's `hello-long` does this in `core/src/lib/hello-tasks.zig`.
+A handler can split its work into child tasks with `queueChild` and wait for them with `awaitTask` or `awaitAllTasks`. Ziggy's test app does this in `hello-long`, in `apps/ziggy-test-app/backend/src/lib/hello-tasks.zig`.
 
 - Children run on the same pool as their parent. A parent that waits gives up its worker thread while it waits, so the pool cannot deadlock when every thread is held by a waiting parent.
 - A child runs at the priority it asks for, and otherwise at its parent's.
 - A failed child makes `awaitTask` return its failure to the parent.
 
-## A request answered by a task
+## A message answered by a task
 
-A request the UI sends with `window.ziggy.invoke` is answered by a channel handler on the thread that handles the UI's messages, so it must be quick. When the answer takes time, list the channel in the app's `task_channels` instead: the request is queued as a task of that type, with the request's data as its input, and the task's result is the reply. A task that fails or is cancelled gives an error reply. The template's file and folder pickers work this way, because they wait on a native dialog.
+A message the UI sends with `window.ziggy.invoke` is answered by a channel handler on the thread that handles the UI's messages, so it must be quick. When the answer takes time, list the channel in the app's `task_channels` instead: the message is queued as a task of that type, with the message's data as its input, and the task's result is the message response. A task that fails or is cancelled gives an error message response. The template's file and folder pickers work this way, because they wait on a native dialog.
 
 ```zig
 .task_channels = &[_]ziggy.core.TaskChannelEntry{
@@ -164,6 +164,13 @@ A request the UI sends with `window.ziggy.invoke` is answered by a channel handl
 |---|---|
 | `packages/ziggy/core/src/lib/task-runner.zig` | The task runner, `TaskContext`, `TaskHandlerEntry`, `TaskPriority` and `TaskKind`. |
 | `packages/ziggy/core/src/lib/core.zig` | The `add-task` and `cancel-tasks` channels, and `TaskChannelEntry`. |
-| `packages/ziggy/core/src/lib/task-queue` | The task queue the core implements its queue backend for. See [Task queue interfaces](architecture.md#task-queue-interfaces). |
-| `apps/ziggy-template/core/src/lib/hello-tasks.zig` | The template's task handlers. |
+| `packages/ziggy/core/src/lib/task-queue` | The task queue that Ziggy's core library implements its queue backend for. |
+| `apps/ziggy-template/backend/src/lib/hello-world-backend.zig` | The template's hello world task. |
+| `apps/ziggy-test-app/backend/src/lib/hello-tasks.zig` | The test app's task handlers: long tasks, child tasks, cancelling, failing and keep-alive. |
 | `apps/ziggy-template/ui/src/main.ts` | How the template's UI queues tasks and handles their events. |
+
+## See also
+
+- [Claude Code commands](claude-code-commands.md): `/ziggy:add-task` and the other slash commands.
+- [Keep-alive tasks](architecture.md#keep-alive-tasks): how a keep-alive task keeps a phone app running in the background.
+- [Task queue interfaces](architecture.md#task-queue-interfaces): the interfaces the queue backend of Ziggy's core library implements.

@@ -1,0 +1,42 @@
+//
+// Hello world example: change it into your own tests, or delete it.
+//
+// Each test starts the app's backend with a fake native app, sends it what the UI would send and checks what comes back.
+//
+
+const std = @import("std");
+const ziggy = @import("ziggy-core");
+const app = @import("ziggy-template-backend");
+
+const FakeShell = ziggy.fake_shell.FakeShell;
+
+test "the hello-world message is answered with a greeting for the name it sent" {
+    var shell: FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
+    defer core.destroy();
+    core.postMessage("{\"id\":1,\"channel\":\"hello-world\",\"data\":{\"name\":\"world\"}}");
+    try shell.expectMessageContaining("\"greeting\":\"Hello world, from Zig on");
+}
+
+test "a hello-world message with no name is answered with an error" {
+    var shell: FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
+    defer core.destroy();
+    core.postMessage("{\"id\":1,\"channel\":\"hello-world\",\"data\":{}}");
+    try shell.expectMessageContaining("\"error\":\"MissingName\"");
+}
+
+test "the hello-world task sends its output and completes" {
+    var shell: FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
+    defer core.destroy();
+    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"hello-world-task\",\"source\":\"hello\",\"data\":null}}");
+    try shell.expectMessageContaining("\"text\":\"Hello world from a task\"");
+    try shell.expectMessageContaining("\"status\":\"succeeded\",\"outputs\":\"hello world task done\"");
+}

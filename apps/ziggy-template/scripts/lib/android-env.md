@@ -7,4 +7,8 @@ Sourced, never run: `source "<app>/scripts/lib/android-env.sh"`. It exits with a
 - The JDK: an existing `JAVA_HOME` when it is a JDK 17, else `ZIGGY_JDK17_HOME`, else the usual install locations on Linux and macOS. A JDK 17 specifically, because the Android Gradle plugin fails on JDK 21.
 - The SDK: `ANDROID_HOME`, else `ANDROID_SDK_ROOT`, else `$HOME/Android/Sdk` (Linux) or `$HOME/Library/Android/sdk` (macOS).
 
-[install-android-sdk.sh](../install-android-sdk.md) installs both.
+`install-android-sdk.sh` installs both.
+
+## See also
+
+- [install-android-sdk.sh](../install-android-sdk.md): installs the Android SDK and the JDK 17.

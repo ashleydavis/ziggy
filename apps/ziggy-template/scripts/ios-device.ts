@@ -1,5 +1,5 @@
 //
-// Drives a connected iOS device for the Ziggy template's device smoke tests, through native-run's device library (the
+// Drives a connected iOS device for run-ios.sh and for the template's device smoke tests, through native-run's device library (the
 // library Capacitor's `cap run ios` deploys with), so nothing beyond Xcode 14 and the repository's own packages is needed.
 //
 // It runs under Node rather than Bun because Bun's sockets cannot carry the TLS session native-run starts on a device

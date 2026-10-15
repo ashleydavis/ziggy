@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Runs the Ziggy template's smoke test scenarios for one platform. Invoked by the root package.json scripts, never directly.
+# Runs the Ziggy template's smoke test scenarios for one platform. Invoked by the package.json scripts, never directly.
 # See run.md.
 
 set -u
@@ -8,19 +8,19 @@ set -u
 SMOKE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APP_DIR="$(cd "$SMOKE_DIR/.." && pwd)"
 
-source "$APP_DIR/scripts/lib/test-lib.sh"
-source "$APP_DIR/scripts/lib/test-timeout.sh"
-source "$APP_DIR/scripts/lib/process-control.sh"
+source "$SMOKE_DIR/lib/test-lib.sh"
+source "$SMOKE_DIR/lib/test-timeout.sh"
+source "$SMOKE_DIR/lib/process-control.sh"
 
 
 PLATFORM="${1:-}"
 SCENARIO_FILTER="${2:-}"
 
 case "$PLATFORM" in
-    linux|windows|macos|android|ios|dev)
+    linux|windows|macos|android|ios)
         ;;
     *)
-        echo "Usage: run.sh <linux|windows|macos|android|ios|dev> [scenario number or name]" >&2
+        echo "Usage: run.sh <linux|windows|macos|android|ios> [scenario name]" >&2
         exit 2
         ;;
 esac
@@ -59,23 +59,14 @@ if ! ziggy_platform_prepare "$RUN_DIR"; then
     exit 1
 fi
 #
-# Prints the scenario directories this platform runs, one per line, in numeric order: the ones every platform runs, on a
-# desktop platform the ones about desktop features such as the menu, and in dev mode the ones about dev mode.
+# Prints the scenario directories, one per line, in name order: every folder here that holds a test.sh.
 #
 list_scenarios() {
-    {
-        ls -d "$SMOKE_DIR"/[0-9]*
-        case "$PLATFORM" in
-            linux|windows|macos)
-                ls -d "$SMOKE_DIR"/desktop-only/[0-9]*
-                ;;
-            dev)
-                ls -d "$SMOKE_DIR"/dev-only/[0-9]*
-                ;;
-        esac
-    } | while IFS= read -r directory; do
-        printf '%s\t%s\n' "$(basename "$directory")" "$directory"
-    done | sort -V | cut -f2
+    ls -d "$SMOKE_DIR"/*/ | sed 's#/$##' | while IFS= read -r directory; do
+        if [ -f "$directory/test.sh" ]; then
+            printf '%s\n' "$directory"
+        fi
+    done | sort
 }
 
 

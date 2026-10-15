@@ -1,0 +1,23 @@
+# Glossary
+
+- **The app**: everything you build and ship with Ziggy: the UI, the backend and the native app together.
+- **The UI**: the app's HTML, CSS and JavaScript/TypeScript, which runs in the system web view. The native menus and file dialogs are not part of it.
+- **The backend**: the app's own Zig code, which does the app's work behind the UI: it answers the UI's messages and runs tasks. It is the same code on every platform and never touches a window. In an app it lives in `backend/`, and it is built together with Ziggy's core library into the one library the native app loads.
+- **Ziggy's core library**: the part of Ziggy every backend is built on (`packages/ziggy/core` in Ziggy's repository, imported as `ziggy-core`): the routing of messages to handlers, the task runner and the C interface the native app calls. An app takes it from a Ziggy release and never changes it.
+- **The native app**: the part of the app written separately for each platform. It opens the window, hosts the system web view, draws the menus and file dialogs and passes messages, message responses and events between the UI and the backend. Ziggy provides most of it: Zig on Linux and Windows, Swift on macOS and iOS, Java on Android. In an app it lives in `shells/`.
+- **The system web view**: the browser engine each platform provides for showing web content: WebKitGTK on Linux, WebView2 on Windows, the Android WebView and WKWebView on macOS and iOS.
+- **Dev mode**: running an app while it is developed, with its UI in an ordinary browser served by its bundler's dev server, with live reload, and its backend in the dev host, rebuilt as its Zig files change. No native app and no release build includes it.
+- **Handle**: the value `ziggy_create` returns to stand for one running backend. The native app passes it back on every call.
+- **Message**: a JSON object the UI sends to the backend on a channel. It is passed inside the app, through the native app, and is not an HTTP request.
+- **Message response**: the JSON object the backend sends back to the UI for a message, or the error the message ended with.
+- **Channel**: the name of a kind of message or event, such as `add-task`. Ziggy's core library routes each message to the handler registered for its channel.
+- **Event**: a JSON object the backend sends to the UI on a channel without being asked, such as `task-completed`. It is not a message response and expects nothing back.
+- **Dispatcher**: the part of Ziggy's core library that reads a message and passes it to the handler for its channel.
+- **Handler**: the Zig function that runs for a channel or a task type.
+- **Task**: work that runs on a worker thread and reports back by messages. Its **task type** names the handler that runs it.
+- **Task context**: what a running task is given to work with: `sendMessage` to report, `isCancelled` to check whether it should stop and the means to queue child tasks and wait for them.
+- **Source**: a label a task is queued under. Cancelling a source cancels every task queued under it.
+- **Native call**: a call from the backend to the native app, for something only the native app can do, such as showing a file dialog. The backend waits for its answer. Ziggy has its own (a file or folder dialog, the operating system's version, quitting, keeping a phone app running), and an app adds its own by name. In the code they are the function pointers of `ziggy_config`, and an app's own go through `host_request`.
+- **OS call**: a call from the native app or the backend straight to the operating system, such as reading a file or opening a window.
+- **Loopback**: the address `127.0.0.1`, reachable only from the same machine.
+- **UI thread**: the one thread of a native app that is allowed to touch the window and the web view.

@@ -1,8 +1,8 @@
 # android-common.sh
 
-Shared by the `*-android.sh` scripts and by the smoke test platform library (`smoke-tests/lib/android.sh`). It is sourced, never run and has no arguments.
+Shared by the `*-android.sh` scripts and by the smoke tests' Android library (`smoke-tests/lib/android.sh`). It is sourced, never run and has no arguments.
 
-It resolves a JDK 17 and the Android SDK by sourcing [lib/android-env.sh](lib/android-env.md) (which exits with a message when either is missing), and defines:
+It resolves a JDK 17 and the Android SDK by sourcing `lib/android-env.sh` (which exits with a message when either is missing), and defines:
 
 - `ziggy_android_require_commands <command...>`: fails unless each command is on the PATH.
 - `ziggy_android_ndk_version`: the NDK version the app's Android project pins in `shells/android/variables.gradle`, so the Zig library is linked against the NDK Gradle builds with.
@@ -13,3 +13,7 @@ It resolves a JDK 17 and the Android SDK by sourcing [lib/android-env.sh](lib/an
 - `ziggy_android_write_libc_file <x86_64|arm64> <file> <sdk level>`: writes the libc file Zig is given for an Android target, from the NDK's sysroot.
 - `ziggy_android_device_lock_path <serial>`: the lock file a run holds while it uses an emulator or device, Ziggy's own, so two runs never install over each other on one device.
 - `ziggy_android_attached_devices`: every emulator and device adb sees that is ready, whichever project started it.
+
+## See also
+
+- [lib/android-env.sh](lib/android-env.md): how the JDK 17 and the Android SDK are found.

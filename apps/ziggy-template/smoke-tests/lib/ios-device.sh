@@ -11,7 +11,7 @@
 # inside it while it is paused.
 #
 # iOS starts an app in the root directory whatever working directory debugserver is given, so the run moves the app into
-# its data container, by calling chdir in it before the core is created, and gives the port file as a path relative to it.
+# its data container, by calling chdir in it before the backend is created, and gives the port file as a path relative to it.
 #
 # A device runs one copy of the app at a time, so a scenario claims the device under a lock for as long as it runs.
 
@@ -247,7 +247,7 @@ ziggy_platform_start() {
     ziggy_ios_device_lldb "process handle SIGPIPE --notify false --pass true --stop false"
 
     # The process stops at its first instruction, before Foundation is loaded, when lldb could not evaluate a Foundation
-    # call. It is run on to where the shell creates the core, by which point Foundation is loaded, and Foundation's
+    # call. It is run on to where the shell creates the backend, by which point Foundation is loaded, and Foundation's
     # declarations are imported there, so the expressions that read files compile with their real method signatures.
     local stops_before
     stops_before="$(ziggy_ios_device_lldb_count "$test_dir" 'stop reason = breakpoint')"
@@ -387,7 +387,7 @@ ziggy_platform_is_running() {
     [ -s "$test_dir/launch.json" ] && ! ziggy_ios_device_exited "$test_dir"
 }
 
-# The Zig static library carries the core, so it is what scenario 8 searches.
+# The Zig static library carries the backend, so it is what scenario 8 searches.
 ziggy_platform_artifact_files() {
     local kind="$1"
     printf '%s\n' "$ZIGGY_SMOKE_RUN_DIR/$kind-native/lib/libziggy_template.a"

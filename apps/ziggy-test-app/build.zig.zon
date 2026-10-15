@@ -1,0 +1,19 @@
+.{
+    .name = .ziggy_test_app,
+    .version = "1.0.0",
+    .fingerprint = 0x3726950723b837dd,
+    .minimum_zig_version = "0.16.0",
+    .dependencies = .{
+        // Ziggy, from the repository this test app lives in. An app outside it points at its own copy of Ziggy by path, or at a version
+        // tag of Ziggy's repository by URL and hash (see the guide to integrating Ziggy).
+        .ziggy = .{
+            .path = "../..",
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "backend",
+        "shells",
+    },
+}

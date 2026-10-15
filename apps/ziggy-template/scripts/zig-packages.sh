@@ -7,21 +7,21 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# The template's core embeds the built UI, so the UI is built before anything here.
+# The template's backend embeds the built UI, so the UI is built before anything here.
 (cd "$EXAMPLE_DIR" && bun run bundle:ui)
 
 ACTION="${1:-}"
 case "$ACTION" in
     build)
-        (cd "$EXAMPLE_DIR" && zig build ziggy-template-core)
+        (cd "$EXAMPLE_DIR" && zig build ziggy-template-backend)
         ;;
     cross)
-        # The template's core library for every platform that is not this one, with and without the test hooks. The
+        # The template's backend library for every platform that is not this one, with and without the test hooks. The
         # Apple targets carry the oldest OS version each is meant to run on.
         for target in aarch64-macos.11.0 x86_64-macos.11.0 aarch64-ios.14.0 aarch64-ios.14.0-simulator x86_64-ios.14.0-simulator x86_64-windows-gnu aarch64-windows-gnu x86_64-linux-gnu aarch64-linux-gnu; do
             for hooks in false true; do
                 echo "Cross-building the template core for $target (test hooks: $hooks)"
-                (cd "$EXAMPLE_DIR" && zig build ziggy-template-core -Dtarget="$target" -Dtest-hooks="$hooks" -p "core/zig-out/cross/$target-$hooks")
+                (cd "$EXAMPLE_DIR" && zig build ziggy-template-backend -Dtarget="$target" -Dtest-hooks="$hooks" -p "backend/zig-out/cross/$target-$hooks")
             done
         done
         # The Windows shell, which needs the WebView2 SDK, fetched once and then reused. It is only compiled here, not linked: the

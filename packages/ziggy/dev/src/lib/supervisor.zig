@@ -353,7 +353,7 @@ fn hostExitCode(supervisor: *Supervisor) !u8 {
 
 //
 // Opens the page in the desktop's default browser. A failure is reported and the supervisor carries on, because the address it
-// printed can be opened by hand.
+// printed can be opened in a browser.
 //
 fn openBrowser(supervisor: *Supervisor, url: []const u8) void {
     const argv: []const []const u8 = switch (builtin.os.tag) {

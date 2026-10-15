@@ -1,72 +1,49 @@
 # Ziggy template
 
-A small complete app built on Ziggy, kept as the reference for building an app on it and as the template a new app is copied from. It has a UI (TypeScript and HTML, which runs in the system web view; see [the definition](../../README.md#glossary)), a Zig core with its own channel handlers and task handlers, a native app for each platform and smoke tests. It takes Ziggy as a dependency exactly as an app in another repository does, and nothing in Ziggy knows about it. See [Ziggy architecture](../../docs/architecture.md) for how the parts fit, and [Building your app](../../docs/building-your-app.md) for starting a new app from it.
+The template a new app on Ziggy is copied from. It has a UI (TypeScript and HTML, which runs in the system web view), a Zig backend with its own channel handlers and task handlers, a native app for each platform, and its tests. It takes Ziggy as a dependency exactly as an app in another repository does, and nothing in Ziggy knows about it. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
 
-## What it shows
+## Hello world
 
-- The UI asks the Zig core a question (`ping`) and shows the answer.
-- Tasks: a short task, a long task that queues child tasks and waits for them, several long tasks at once, cancelling by source and a task that fails. Output text, `job-progress` messages and every `task-message` and `task-completed` event appear in the UI.
-- The edges of the bridge: a multi-megabyte payload, text with quotes, newlines and non-ASCII characters, an error reply and a file written and read in the app's private data directory.
-- A native host callback: the UI asks for the operating system's version, a task calls the native app's callback and the answer comes back to the UI.
-- File and folder pickers: three buttons ask the core for the native dialogs (`pick-files`, `pick-folder`, `pick-file`), and the UI shows the paths chosen. A phone has no save dialog, so that button gives an error on iOS.
-- A loopback HTTP server in the core (the template's own code, not Ziggy's) that serves an example image and video to the UI, which loads them and asks for a range of bytes.
-- Keep-alive tasks: a background task type registered as keep-alive that goes on running when the app is sent to the background (a phone), and a normal one that does not.
-- UI storage: `localStorage` and IndexedDB values the UI writes and reads back after the app is started again.
-- Dropped files: a drop zone that shows the real path of a dropped file, from `window.ziggy.getPathForFile`.
-- A desktop menu defined once in Zig and drawn natively, with keyboard shortcuts that work anywhere in the window, and developer tools (Ctrl+Shift+I, or Cmd+Shift+I on a Mac) that open from it. A phone shows no menu.
+The template is the smallest complete app: a hello world for each kind of code an app has, each with its test. Change each one into your own code and tests, or delete it.
+
+| Kind | Code | Test |
+|---|---|---|
+| UI | `ui/src/lib/hello-world-ui.ts`, used by `ui/src/main.ts` | `ui/src/test/hello-world-ui.test.ts` (`bun run test`) |
+| Backend: a message handler and a task | `backend/src/lib/hello-world-backend.zig`, registered in `backend/src/handlers.zig` | `backend/src/test/hello-world-backend.test.zig` (`bun run test:zig`) |
+| The whole app | The app | `smoke-tests/hello-world-app/test.sh` (`bun run test:smoke`) |
+
+The page shows the backend's answer to the `hello-world` message, and a button starts the `hello-world-task` task and shows what it sends. The desktop menu is defined once in Zig (`backend/src/lib/menu.zig`) and drawn natively; a phone shows no menu.
 
 ## Where things are
 
-Everything here is the template's own. Ziggy, the package it is built on, is in `packages/ziggy` at the root of this repository.
+Everything here is the template's own. Ziggy, the package it is built on, is in `packages/ziggy` of Ziggy's repository.
 
-- `build.zig` and `build.zig.zon`: the template's Zig build. It takes Ziggy as the dependency `ziggy` by the path `../..`, and builds the core (`ziggy-template-core`), the Linux and Windows native apps (`ziggy-template-linux`, `ziggy-template-windows`) and the core's unit tests (`test`) with Ziggy's build functions.
-- `ui/`: the UI. `ui/index.html` is the UI and `ui/src/lib` holds the plain functions that have unit tests. `vite.config.ts` is its build, which writes `dist` with relative paths and a classic script so it loads from an address of the app's own in every web view. `dist` is embedded in the app's own code on every platform (the Linux and Windows executables, and the core library that the MacOS, iOS and Android apps contain), so no platform has a folder of UI files (see the [architecture guide](../../docs/architecture.md#the-bundled-ui)).
-- `core/`: the template's Zig library, which adds its channel handlers and task handlers to Ziggy's core.
-- `shells/<platform>/`: the template's native project for each platform: its name, window, icon and the app's core and UI packaged together. Each one builds on the part Ziggy provides for that platform, in `packages/ziggy/native/<platform>`: the Linux and Windows native apps through the Zig build, the Xcode projects through a local Swift package and the Android project through an included Gradle build.
-- `scripts`: the build, run, packaging and setup scripts, and the shell libraries the scripts and smoke tests share (`scripts/lib`), each with a markdown file beside it.
-- `smoke-tests`: the smoke test scenarios and a library for each platform. See `smoke-tests/run.md`.
+- `build.zig` and `build.zig.zon`: the template's Zig build. It takes Ziggy as the dependency `ziggy` by the path `../..`, and builds the backend (`ziggy-template-backend`), the Linux and Windows native apps (`ziggy-template-linux`, `ziggy-template-windows`) and the backend's unit tests (`test`) with Ziggy's build functions.
+- `ui/`: the UI. `ui/index.html` is the UI and `ui/src/lib` holds the plain functions that have unit tests. `vite.config.ts` is its build, which writes `dist` with relative paths and a classic script so it loads from an address of the app's own in every web view. `dist` is embedded in the app's own code on every platform (the Linux and Windows executables, and the backend library that the MacOS, iOS and Android apps contain), so no platform has a folder of UI files.
+- `backend/`: the template's Zig library, which adds its channel handlers and task handlers to Ziggy's core library.
+- `shells/<platform>/`: the template's native project for each platform: its name, window, icon and the app's backend and UI packaged together. Each one builds on the part Ziggy provides for that platform, in `packages/ziggy/native/<platform>` of Ziggy's repository: the Linux and Windows native apps through the Zig build, the Xcode projects through a local Swift package and the Android project through an included Gradle build.
+- `scripts`: the build, run, packaging and setup scripts, and the shell libraries the scripts share (`scripts/lib`), each with a markdown file beside it.
+- `smoke-tests`: the smoke tests, with a library for each platform that builds, starts and stops the app. See `smoke-tests/run.md`.
 
 ## Commands
 
-From the root of this repository, `<platform>` being `linux`, `windows`, `macos`, `android` or `ios`. Each platform's commands run on that platform (MacOS and iOS need a Mac with Xcode 14.2, and Windows runs them under Git Bash). The same commands without the `ziggy-template` part (`bun run build:<platform>`, `bun run test:smoke`) run from this folder.
-
-| Command | What it does |
-|---|---|
-| `bun run build:ziggy-template:<platform>` | Builds the UI and the app. |
-| `bun run run:ziggy-template:<platform>` | Builds the app and launches it (an emulator, simulator or device for a phone). |
-| `bun run open:ziggy-template:<platform>` | Syncs, then opens the native project in its editor. |
-| `bun run package:ziggy-template:<platform>` | Packages the app for distribution, without the test hooks, into `out/<platform>`. |
-| `bun run distribute:ziggy-template:android` | Builds the Android app and uploads it to Firebase App Distribution for the tester group. See `scripts/distribute-android.md`. |
-| `bun run clean:ziggy-template:<platform>` | Removes the platform's build output. |
-| `bun run test:ziggy-template` | The smoke tests on the host operating system. |
-| `bun run test:ziggy-template:and` | The smoke tests on an attached Android emulator or device. |
-| `bun run test:ziggy-template:ios` | The smoke tests on the iOS simulator. |
-| `bun run test:ziggy-template:dev` | The smoke tests in dev mode, in a headless Chrome or Chromium. |
-| `bun run dev:ziggy-template` | Runs the template in dev mode: Vite (the `dev:ui` script) serves the UI, the dev host runs the core in front of it, rebuilt as its Zig files change, and the default browser opens the dev host, with live reload. See the [dev host's README](../../packages/ziggy/dev/README.md). |
-
-`bun run --filter=ziggy-template test` runs the UI's unit tests, `bun run --filter=ziggy-template test:zig` the core's and `bun run --filter=ziggy-template test:zig:android` (or `:ios`) the core's on an emulator or simulator.
-
-`bun run package:ziggy-template:<platform>` builds the release app, without the test hooks, and writes unsigned packages. Each platform's script doc says where they go and what they need:
-
-| Platform | Packages | Script doc |
-|---|---|---|
-| `linux` | zip, `.deb` | `scripts/package-linux.md` |
-| `windows` | zip, `.msi` installer | `scripts/package-windows.md` |
-| `macos` | `.dmg`, zip | `scripts/package-macos.md` |
-| `ios` | `.xcarchive`, `.ipa` | `scripts/package-ios.md` |
-| `android` | `.apk` per architecture | `scripts/package-android.md` |
+The commands are in Ziggy's [Commands](https://github.com/ashleydavis/ziggy/blob/main/docs/commands.md).
 
 ## What each platform needs
 
-- **Linux:** the GTK 3 and WebKitGTK 4.1 runtime libraries (`libgtk-3-0`, `libwebkit2gtk-4.1-0`) and the GStreamer plugins WebKitGTK plays video with (`gstreamer1.0-plugins-good`, `gstreamer1.0-libav`) to build and run, with no development packages, `zip` and `dpkg-deb` to package and `xvfb`, `xwininfo` and `jq` for the smoke tests. If the web view's sandbox cannot start on your system the app says so and runs without it. See `scripts/run-linux.md`.
-- **Windows:** the scripts are bash scripts and run under Git Bash. The tools `mise install` puts in place (`bun`, `zig`, `jq`) must be on PATH: add `%LOCALAPPDATA%\mise\shims` to PATH, or activate mise in your shell. Then run `bun run --filter=ziggy-template setup` once. Building needs Microsoft's C++ toolchain and the Windows SDK (Visual Studio or its Build Tools, the "Desktop development with C++" workload), because the WebView2 loader is linked into the exe from the SDK's static library and that library is built with it, and packaging needs the WiX Toolset. Setup downloads the pinned WebView2 SDK and a pinned WiX Toolset, which need no administrator approval, and installs the C++ toolchain and the Windows SDK through `winget` when they are missing, which does. See `scripts/setup-windows.md`.
-- **MacOS and iOS:** a Mac with macOS 12.7.6 or newer and Xcode 14.2 or newer.
-- **Android:** `bun run --filter=ziggy-template setup`, which installs the Android SDK, the NDK `shells/android/variables.gradle` pins and a JDK 17 where they are missing (`scripts/install-android-sdk.md`). The smoke tests use any attached emulator or device.
+What each platform needs installed, what each dependency is and why it is needed, is in Ziggy's [Dependencies](https://github.com/ashleydavis/ziggy/blob/main/docs/dependencies.md). Run `bun run setup` once on each machine to install what it can.
 
 ## Test hooks
 
-The smoke tests drive the real app through the test hooks listed in "Test hooks" in the architecture guide. They are compiled in only by the `test-hooks` build option, which the smoke test runner sets and the `package` commands never do. Scenario `8-release-has-no-hooks` checks the release build has none.
+The smoke tests drive the real app through the test hooks listed in "Test hooks" in the architecture guide: `backend/src/lib/ui-query.zig` tells the UI it is in test mode, and `ui/src/lib/test-commands.ts` answers the commands the smoke tests send. They are compiled in only by the `test-hooks` build option, which the smoke test runner sets and the `package` commands never do.
 
 ## CI
 
-The repository's release workflow (`.github/workflows/release.yml`) builds, tests and packages the template on Linux, Windows, MacOS, iOS and Android on every push, and publishes the packages when every job passed on the default branch. See [Releasing Ziggy](../../docs/releasing-ziggy.md).
+The repository's release workflow (`.github/workflows/release.yml`) builds and packages the template and runs its unit tests on Linux, Windows, MacOS, iOS and Android on every push, and publishes the packages when every job passed on the default branch.
+
+## See also
+
+- [Ziggy's repository](https://github.com/ashleydavis/ziggy): the package the template is built on.
+- [Ziggy architecture](https://github.com/ashleydavis/ziggy/blob/main/docs/architecture.md): how the parts fit, including [the bundled UI](https://github.com/ashleydavis/ziggy/blob/main/docs/architecture.md#the-bundled-ui) and the test hooks.
+- [Building your app](https://github.com/ashleydavis/ziggy/blob/main/docs/building-your-app.md): starting a new app from the template.
+- [Releasing Ziggy](https://github.com/ashleydavis/ziggy/blob/main/docs/releasing-ziggy.md): the release workflow.

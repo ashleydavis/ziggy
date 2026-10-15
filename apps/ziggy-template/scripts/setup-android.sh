@@ -4,11 +4,14 @@
 
 set -euo pipefail
 
-source "$(dirname "${BASH_SOURCE[0]}")/android-common.sh"
+scripts_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# The install runs first, because android-common.sh stops when the JDK 17 or the Android SDK it installs is missing.
+bash "$scripts_dir/install-android-sdk.sh" --install
+
+source "$scripts_dir/android-common.sh"
 
 ziggy_android_require_commands zig bun jq unzip
-
-bash "$ZIGGY_ANDROID_SCRIPTS_DIR/install-android-sdk.sh" --install
 
 ndk_dir="$ANDROID_HOME/ndk/$(ziggy_android_ndk_version)"
 if [ ! -d "$ndk_dir" ]; then

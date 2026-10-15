@@ -5,7 +5,7 @@ test "build outputs, caches, dependencies and hidden directories are left out of
     for ([_][]const u8{ "zig-out", ".zig-cache", "node_modules", ".git", "dist", "dist-build.a1B2c3", "tmp", "build" }) |name| {
         try std.testing.expect(watch.isSkippedDirectory(name));
     }
-    for ([_][]const u8{ "core", "ui", "src", "lib" }) |name| {
+    for ([_][]const u8{ "backend", "ui", "src", "lib" }) |name| {
         try std.testing.expect(!watch.isSkippedDirectory(name));
     }
 }

@@ -15,7 +15,7 @@ if ! windows_msvc_toolchain_installed; then
     if ! command -v winget > /dev/null 2>&1; then
         echo "winget is not on PATH, and setup needs it to install Microsoft's C++ toolchain and the Windows SDK. Install" >&2
         echo "\"App Installer\" from the Microsoft Store, or install Visual Studio 2022 Build Tools with the \"Desktop development" >&2
-        echo "with C++\" workload by hand." >&2
+        echo "with C++\" workload yourself." >&2
         exit 1
     fi
     echo "Installing Visual Studio 2022 Build Tools with the C++ workload and the Windows SDK. Windows asks for administrator approval."

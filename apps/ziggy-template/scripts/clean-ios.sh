@@ -7,7 +7,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/apple-common.sh"
 
-apple_require_ios
+apple_require_macos
 apple_require_xcode
 NATIVE_DIR="$APPLE_EXAMPLE_DIR/shells/ios/zig-out"
 BUILD_DIR="$APPLE_EXAMPLE_DIR/shells/ios/zig-out/xcode"

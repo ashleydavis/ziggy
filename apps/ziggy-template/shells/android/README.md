@@ -11,6 +11,6 @@ All of it is generated into `app/build/ziggy` by `scripts/sync-android.sh`; see 
 
 The debug build has the INTERNET permission (in `app/src/debug`), because a test hooks build opens its control connection on the loopback address and Android refuses an app any socket without it. The release build has no such permission.
 
-Smoke tests: `bash apps/ziggy-template/smoke-tests/run.sh android`, on any attached emulator or device, claimed under Ziggy's per-device lock.
+Smoke tests: `bun run test:smoke:and`, on any attached emulator or device, claimed under Ziggy's per-device lock.
 
 The template's file and folder pickers (`pick-files`, `pick-folder`, `pick-file`) use the system document pickers through Ziggy's Android native app, which describes them: opened files are copied into the app's cache directory and answered as file system paths, while a chosen folder or a save location is answered as a `content://` Uri, which is not a file system path. `MainActivity` forwards `onActivityResult` to the native app.

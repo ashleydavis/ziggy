@@ -36,7 +36,7 @@
 set -u
 
 SCENARIO_NAME="$(basename "$(dirname "${BASH_SOURCE[1]}")")"
-source "$ZIGGY_SMOKE_APP_DIR/scripts/lib/process-control.sh"
+source "$ZIGGY_SMOKE_DIR/lib/process-control.sh"
 source "$ZIGGY_SMOKE_DIR/lib/$ZIGGY_SMOKE_PLATFORM.sh"
 
 
@@ -61,18 +61,6 @@ trap stop_app_on_exit EXIT
 #
 start_test_app() {
     ziggy_platform_start "$ZIGGY_TEST_DIR" test || fail "the app did not start"
-    open_control_connection
-    wait_for_ready
-}
-
-#
-# Stops the app and starts it again on the data it kept, then opens the control connection to the new run. A scenario uses it to
-# check what survives a restart.
-#
-restart_test_app() {
-    exec 3>&-
-    ziggy_platform_stop "$ZIGGY_TEST_DIR" keep-device || fail "the app did not stop cleanly before it was started again"
-    ziggy_platform_start "$ZIGGY_TEST_DIR" test keep-data || fail "the app did not start again"
     open_control_connection
     wait_for_ready
 }
@@ -160,17 +148,6 @@ text_of() {
 }
 
 #
-# Sets the value of the input with the data-id. Usage: type_into <data-id> <text>
-#
-type_into() {
-    local answer
-    answer="$(control "{\"command\":\"type\",\"dataId\":\"$1\",\"text\":\"$2\"}")"
-    if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
-        fail "type into $1 failed: $answer"
-    fi
-}
-
-#
 # Waits until the text of the element contains the text, and fails with what it did show when it never does.
 # Usage: wait_for_text <data-id> <text> [seconds]
 #
@@ -193,59 +170,6 @@ wait_for_text() {
     fail "$data_id never showed \"$wanted\". It showed: $shown"
 }
 
-#
-# Fails when the text of the element contains the text. Usage: expect_text_absent <data-id> <text>
-#
-expect_text_absent() {
-    local shown
-    shown="$(text_of "$1")"
-    case "$shown" in
-        *"$2"*)
-            fail "$1 shows \"$2\" and should not. It showed: $shown"
-            ;;
-    esac
-}
-
-#
-# Prints how many times the text appears in the element's text. Usage: count_in <data-id> <text>
-#
-count_in() {
-    local shown
-    shown="$(text_of "$1")"
-    printf '%s' "$shown" | grep -o -F -- "$2" | wc -l | tr -d ' '
-}
-
-#
-# Waits until the element's text is empty. Usage: wait_for_empty <data-id> [seconds]
-#
-wait_for_empty() {
-    local data_id="$1"
-    local seconds="${2:-$WAIT_TIMEOUT_SECONDS}"
-    local waited=0
-    local shown=""
-    while [ "$waited" -lt "$seconds" ]; do
-        shown="$(text_of "$data_id")"
-        if [ -z "$shown" ]; then
-            return 0
-        fi
-        sleep 1
-        waited=$((waited + 1))
-    done
-    fail "$data_id never became empty. It showed: $shown"
-}
-
-
-#
-# Says what the next native file or folder dialog returns, so a scenario can use a picker without a dialog being shown. The
-# answer answers one dialog. Usage: answer_next_dialog <JSON array of paths>
-#
-answer_next_dialog() {
-    local answer
-    answer="$(control "{\"command\":\"pick-answer\",\"paths\":$1}")"
-    if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
-        fail "the answer for the next dialog was not accepted: $answer"
-    fi
-}
 
 #
 # Chooses a menu item as a user would, through the shell, so the shell's own actions really happen and any other action reaches the
@@ -267,96 +191,3 @@ viewport_size() {
     control '{"command":"viewport"}' | jq -r '.value'
 }
 
-#
-# Waits until the UI's area is a size other than the one given, and prints the new size. Fails when it never is.
-# Usage: wait_for_viewport_other_than <size>
-#
-wait_for_viewport_other_than() {
-    local waited=0
-    local now
-    while [ "$waited" -lt 30 ]; do
-        now="$(viewport_size)"
-        if [ "$now" != "$1" ]; then
-            printf '%s\n' "$now"
-            return 0
-        fi
-        sleep 1
-        waited=$((waited + 1))
-    done
-    fail "the UI's area stayed $1"
-}
-
-#
-# Waits until the UI's area is the size given. Fails when it never is. Usage: wait_for_viewport <size>
-#
-wait_for_viewport() {
-    local waited=0
-    while [ "$waited" -lt 30 ]; do
-        if [ "$(viewport_size)" = "$1" ]; then
-            return 0
-        fi
-        sleep 1
-        waited=$((waited + 1))
-    done
-    fail "the UI's area never went back to $1. It is $(viewport_size)"
-}
-
-#
-# Types text into an element the way typing does, so the browser can undo it. Usage: insert_text <data-id> <text>
-#
-insert_text() {
-    local answer
-    answer="$(control "{\"command\":\"insert\",\"dataId\":\"$1\",\"text\":\"$2\"}")"
-    if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
-        fail "insert into $1 failed: $answer"
-    fi
-}
-
-#
-# Waits until the value of the input or text area is the text given. Fails when it never is. Usage: wait_for_value <data-id> <text>
-#
-wait_for_value() {
-    local waited=0
-    local shown=""
-    while [ "$waited" -lt 30 ]; do
-        shown="$(control "{\"command\":\"get-value\",\"dataId\":\"$1\"}" | jq -r '.value')"
-        if [ "$shown" = "$2" ]; then
-            return 0
-        fi
-        sleep 1
-        waited=$((waited + 1))
-    done
-    fail "$1 never held \"$2\". It held: $shown"
-}
-
-#
-# Prints the number in a file the app keeps in its data directory (a count a background task writes), or 0 when there is no such
-# file yet. Usage: data_file_number <file name>
-#
-data_file_number() {
-    local data_dir
-    data_dir="$(ziggy_platform_data_dir "$ZIGGY_TEST_DIR")" || fail "could not read the app's data directory"
-    if [ -f "$data_dir/$1" ]; then
-        tr -d '\n' < "$data_dir/$1"
-    else
-        echo 0
-    fi
-}
-
-#
-# Waits until the number in a data file is at least the given value, and prints it. Usage: wait_for_data_file_number <file> <value>
-#
-wait_for_data_file_number() {
-    local waited=0
-    local number
-    while [ "$waited" -lt "$WAIT_TIMEOUT_SECONDS" ]; do
-        number="$(data_file_number "$1")"
-        if [ "$number" -ge "$2" ]; then
-            printf '%s\n' "$number"
-            return 0
-        fi
-        sleep 1
-        waited=$((waited + 1))
-    done
-    fail "$1 never reached $2. It holds $number"
-}

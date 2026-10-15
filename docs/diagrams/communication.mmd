@@ -1,0 +1,18 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#ffffff", "primaryTextColor": "#000000", "primaryBorderColor": "#000000", "lineColor": "#000000", "textColor": "#000000", "edgeLabelBackground": "#ffffff"}}}%%
+flowchart LR
+%% How the parts of a running app communicate. Drawn into communication.svg by `bun run diagrams`; see communication.md.
+%% Each "label-under" line puts a line of small grey text under a box, which Mermaid itself cannot place:
+%% label-under: UI = TypeScript, JavaScript, HTML, CSS
+%% label-under: Native = Zig, Swift, Java
+%% label-under: Backend = Zig
+    UI["UI"]
+    Native["Native app"]
+    Backend["Backend"]
+    OS["OS"]
+
+    UI -->|"message"| Native
+    Native -->|"message"| Backend
+    Backend -->|"response, native call"| Native
+    Native -->|"response"| UI
+    Native -->|"OS call"| OS
+    Backend -->|"OS call"| OS

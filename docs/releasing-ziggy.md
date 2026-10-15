@@ -4,11 +4,11 @@ Separate things happen to this repository: the release workflow builds, tests an
 
 ## The release workflow
 
-`.github/workflows/release.yml` runs on every push to every branch, on every pull request to `main` and by hand from the Actions tab. Its jobs:
+`.github/workflows/release.yml` runs on every push to every branch, on every pull request to `main` and when started from the Actions tab. Its jobs:
 
-- **zig-build**: builds the template's core and cross-builds it for every platform, with and without the test hooks, and compiles the Windows native app, on Linux, MacOS and Windows (`bun run compile:zig`).
+- **zig-build**: builds the backend of the template and of the test app and cross-builds them for every platform, with and without the test hooks, and compiles the Windows native app, on Linux (`bun run compile:zig`).
 - **unit-tests**: on Linux, MacOS and Windows, the TypeScript unit tests (`bun run test`) and every Zig test (`zig build test`); on Android, the Android native app's JUnit tests (`bun run test:android-shell`) and the Zig tests run on an emulator; on iOS, the Zig tests run on a simulator.
-- **smoke-tests**: the template's smoke tests on Linux, Windows, MacOS, an Android emulator and an iOS simulator, and on Linux in dev mode too.
+- **smoke-tests**: Ziggy's smoke tests, which drive the test app, on Linux, Windows, MacOS, an Android emulator and an iOS simulator, and on Linux in dev mode too.
 - **package**: the template's packages for every platform, uploaded as artifacts of the run.
 - **publish**: only when every job above passed, and only for a push to the default branch: the GitHub release named "Ziggy template" is replaced by one holding this run's packages for every platform, with release notes listing the commits since the last version tag. A GitHub release is always attached to a git tag, so this one sits on the tag `template`, which the workflow deletes and makes again on the commit it built. `template` is not a version tag, and nothing should pin it.
 
@@ -20,7 +20,7 @@ Open the run in the Actions tab. The summary shows which job failed and, for a j
 
 ## Releasing a version of the package
 
-An app pins Ziggy to a version tag (see [Integrating Ziggy](integrating-ziggy.md)). A version tag is `v` followed by the version, such as `v0.1.0`, and the tag alone carries the version: the `version` fields in `build.zig.zon`, `package.json` and `packages/ziggy/native/android/build.gradle` stay at `0.0.0` and are not changed for a release. To release one:
+An app pins Ziggy to a version tag. A version tag is `v` followed by the version, such as `v0.1.0`, and the tag alone carries the version: the `version` fields in `build.zig.zon`, `package.json` and `packages/ziggy/native/android/build.gradle` stay at `0.0.0` and are not changed for a release. To release one:
 
 1. Make sure the release workflow passed on the commit to be released.
 2. Tag the commit and push the tag:
@@ -33,3 +33,7 @@ An app pins Ziggy to a version tag (see [Integrating Ziggy](integrating-ziggy.md
 3. Write what changed for apps since the last version, and what an app has to change, in a GitHub release on the tag, so an app moving to it knows.
 
 A version tag is never moved or deleted once pushed: an app that pinned it, and the hash in its `build.zig.zon`, depend on it staying the same. A mistake is fixed by releasing the next version.
+
+## See also
+
+- [Integrating Ziggy](integrating-ziggy.md): how an app pins Ziggy to a version tag and moves to a newer one.

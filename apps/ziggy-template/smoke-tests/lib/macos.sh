@@ -87,7 +87,7 @@ ziggy_platform_is_running() {
     process_group_alive "$(cat "$test_dir/$MACOS_PGID_FILE_NAME")"
 }
 
-# The Zig static library carries the core, so it is what scenario 8 searches. The app's executable is not searched,
+# The Zig static library carries the backend, so it is what scenario 8 searches. The app's executable is not searched,
 # because the linker may drop code the app never reaches.
 ziggy_platform_artifact_files() {
     local kind="$1"

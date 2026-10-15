@@ -8,9 +8,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# The Firebase project the Photosphere apps are in, from the Firebase console under Project settings > General. It is an
-# identifier and not a secret.
-FIREBASE_PROJECT="photosphere-84761"
+# The app's own Firebase project, from the Firebase console under Project settings > General, set in FIREBASE_PROJECT or passed
+# with --project. It is an identifier and not a secret.
+FIREBASE_PROJECT="${FIREBASE_PROJECT:-}"
 
 # The template's Android package name, which is how its Firebase app is found, and the name that app is given when it has to
 # be created.
@@ -41,6 +41,11 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+if [ -z "$FIREBASE_PROJECT" ] && [ "$BUILD_ONLY" != "true" ]; then
+    echo "ERROR: no Firebase project is named. Pass --project <id> or set FIREBASE_PROJECT to the app's own project." >&2
+    exit 1
+fi
+
 # Checked before the build rather than after it, so a missing tool costs a second instead of a full build.
 for tool in jq; do
     if ! command -v "$tool" > /dev/null 2>&1; then
@@ -58,7 +63,7 @@ fi
 # been uploaded.
 RELEASE_NOTES="$(bash "$SCRIPT_DIR/release-notes.sh" --limit 20)"
 
-# The version name says which build a tester is on, as the Photosphere tester builds do. The version code is a whole number
+# The version name says which build a tester is on. The version code is a whole number
 # that only goes up, which Android needs to treat a new build as an update: minutes since the epoch always increases.
 APP_VERSION="$(jq -r '.version' "$EXAMPLE_DIR/package.json")-dev.$(date -u +%Y%m%d%H%M%S)"
 VERSION_CODE=$(( $(date +%s) / 60 ))

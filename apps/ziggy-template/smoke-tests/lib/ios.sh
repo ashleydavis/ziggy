@@ -108,7 +108,7 @@ ziggy_platform_is_running() {
     kill -0 "$(cat "$test_dir/$IOS_PID_FILE_NAME")" 2>/dev/null
 }
 
-# The Zig static library carries the core, so it is what scenario 8 searches.
+# The Zig static library carries the backend, so it is what scenario 8 searches.
 ziggy_platform_artifact_files() {
     local kind="$1"
     printf '%s\n' "$ZIGGY_SMOKE_RUN_DIR/$kind-native/lib/libziggy_template.a"

@@ -34,6 +34,14 @@ export interface ITaskMessageEvent<TMessage> {
 }
 
 //
+// Why a task failed, inside its result.
+//
+export interface ITaskError {
+    // The text of the error: the Zig error's name, the text the app's describe_error gave, or "Cancelled".
+    message: string;
+}
+
+//
 // The result of a task inside a task-completed event.
 //
 export interface ITaskResult {
@@ -45,6 +53,9 @@ export interface ITaskResult {
 
     // Why it failed, when it did.
     errorMessage?: string;
+
+    // The same text as errorMessage, as an object, when it failed.
+    error?: ITaskError;
 
     // What it returned, when it succeeded with a result.
     outputs?: IJsonValue;

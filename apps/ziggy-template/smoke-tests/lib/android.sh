@@ -219,7 +219,7 @@ ziggy_platform_data_dir() {
 
 #
 # Whether the app is running, which on Android means its activity exists. Quitting finishes the activity, whose onDestroy
-# destroys the core and so stops every thread and task the core started. Android then keeps the emptied process cached for
+# destroys the backend and so stops every thread and task the backend started. Android then keeps the emptied process cached for
 # a later launch, so a process that is still listed is not a sign the app is still running.
 #
 ziggy_platform_is_running() {

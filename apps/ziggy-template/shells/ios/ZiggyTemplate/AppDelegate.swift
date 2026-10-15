@@ -25,7 +25,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         return true
     }
 
-    // Destroys the core before the process ends.
+    // Destroys the backend before the process ends.
     func applicationWillTerminate(_ application: UIApplication) {
         viewController?.bridge?.shutdown()
     }
