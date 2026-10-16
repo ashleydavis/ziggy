@@ -140,11 +140,12 @@ Every tracked markdown doc in the repo outside `docs/plans/`. Regenerate the lis
 
 ## Ziggy test app
 
-`apps/ziggy-test-app` carries its own copy of each template doc above. Check whether each one should differ from the template's copy, or should exist at all.
+`apps/ziggy-test-app` keeps only the docs that differ from the template's copy by more than the app's name.
 
 - [ ] [apps/ziggy-test-app/README.md](../apps/ziggy-test-app/README.md)
-- [ ] [native/android/README.md](../apps/ziggy-test-app/native/android/README.md)
-- [ ] [native/ios/README.md](../apps/ziggy-test-app/native/ios/README.md)
-- [ ] [native/macos/README.md](../apps/ziggy-test-app/native/macos/README.md)
-- [ ] [native/windows/README.md](../apps/ziggy-test-app/native/windows/README.md)
-- [ ] Script docs under [apps/ziggy-test-app/scripts/](../apps/ziggy-test-app/scripts/), compared with the template's: `diff -r apps/ziggy-template/scripts apps/ziggy-test-app/scripts`
+- [ ] [shells/android/README.md](../apps/ziggy-test-app/shells/android/README.md)
+- [ ] [scripts/android-common.md](../apps/ziggy-test-app/scripts/android-common.md)
+- [ ] [scripts/distribute-android.md](../apps/ziggy-test-app/scripts/distribute-android.md)
+- [ ] [scripts/ios-device.md](../apps/ziggy-test-app/scripts/ios-device.md)
+- [ ] [scripts/package-linux.md](../apps/ziggy-test-app/scripts/package-linux.md)
+- [ ] [scripts/release-notes.md](../apps/ziggy-test-app/scripts/release-notes.md)
