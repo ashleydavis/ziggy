@@ -468,6 +468,8 @@ pub const TaskRunner = struct {
     silent: std.atomic.Value(bool),
     // The number of top level keep-alive tasks that are queued or running. Guarded by the mutex.
     keep_alive_count: u32,
+    // Whether the app has asked, through holdKeepAlive, for the app to be kept running with or without a task. Guarded by the mutex.
+    keep_alive_held: bool,
     // The app's state, which the core sets once the app has made it, for the task handlers to reach through their context. Null until
     // then and for an app with none.
     app_state: ?*anyopaque,
@@ -493,6 +495,7 @@ pub const TaskRunner = struct {
             .pick_override = null,
             .silent = .init(false),
             .keep_alive_count = 0,
+            .keep_alive_held = false,
             .app_state = null,
         };
         errdefer self.stop();
@@ -549,11 +552,28 @@ pub const TaskRunner = struct {
         try self.enqueue(task);
         if (task.keep_alive) {
             self.keep_alive_count += 1;
-            if (self.keep_alive_count == 1) {
+            if (self.keep_alive_count == 1 and !self.keep_alive_held) {
                 self.callKeepAlive(true);
             }
         }
         self.changed.broadcast(self.io);
+    }
+
+    //
+    // Holds the app running with or without a task (true), or lets it go (false). The shell is told to keep the app running when the
+    // hold or the first keep-alive task begins, and to stop when the hold and the last keep-alive task have both ended. Holding when
+    // already held, or letting go when not held, changes nothing.
+    //
+    pub fn holdKeepAlive(self: *TaskRunner, keep_running: bool) void {
+        self.lock();
+        defer self.unlock();
+        if (self.keep_alive_held == keep_running) {
+            return;
+        }
+        self.keep_alive_held = keep_running;
+        if (self.keep_alive_count == 0) {
+            self.callKeepAlive(keep_running);
+        }
     }
 
     //
@@ -923,7 +943,7 @@ pub const TaskRunner = struct {
             }
             if (task.keep_alive) {
                 self.keep_alive_count -= 1;
-                if (self.keep_alive_count == 0) {
+                if (self.keep_alive_count == 0 and !self.keep_alive_held) {
                     self.callKeepAlive(false);
                 }
             }

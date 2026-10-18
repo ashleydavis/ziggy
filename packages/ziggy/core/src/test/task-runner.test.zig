@@ -475,6 +475,32 @@ test "several keep-alive tasks ask once, and the shell is told to stop only when
     try std.testing.expectEqualSlices(bool, &[_]bool{ true, false }, done);
 }
 
+test "a hold keeps the app running with no task, and the shell is told to stop only when the hold and the last keep-alive task have both ended" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try helpers.createCore(&shell, 3, 2);
+    defer core.destroy();
+    core.runner.holdKeepAlive(true);
+    const held = try keepAliveCalls(&shell, 1);
+    defer std.testing.allocator.free(held);
+    try std.testing.expectEqualSlices(bool, &[_]bool{true}, held);
+    try addTask(core, "k1", "keep-sleep", "s1", "{\"ms\":20}", "background");
+    try expectCompleted(&shell, "k1", "succeeded");
+    core.runner.holdKeepAlive(true);
+    try addTask(core, "k2", "keep-sleep", "s2", "{\"ms\":100000}", "background");
+    core.runner.holdKeepAlive(false);
+    const while_task_runs = try keepAliveCalls(&shell, 1);
+    defer std.testing.allocator.free(while_task_runs);
+    try std.testing.expectEqualSlices(bool, &[_]bool{true}, while_task_runs);
+    try cancelSource(core, "s2");
+    try expectCompleted(&shell, "k2", "cancelled");
+    core.runner.holdKeepAlive(false);
+    const done = try keepAliveCalls(&shell, 2);
+    defer std.testing.allocator.free(done);
+    try std.testing.expectEqualSlices(bool, &[_]bool{ true, false }, done);
+}
+
 test "a normal task never asks the shell to keep the app running" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
