@@ -4,7 +4,7 @@ This guide is for building an app on Ziggy. If try Ziggy quickly, start with the
 
 To create your own Ziggy app with an AI coding agent, such as Claude Code, start the agent in the empty directory the app will go in and tell it:
 
-> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/blob/main/docs/agent-quick-start.md
+> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md
 
 Otherwise follow [Building your app](user-guide/building-your-app.md).
 

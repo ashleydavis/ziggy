@@ -17,8 +17,9 @@ Before you start, install [mise](https://mise.jdx.dev), then what your platform 
 
 The quickest way is to have an AI coding agent, such as Claude Code, do these steps for you. It asks for the app's names as it goes. Start the agent in the empty directory the app will go in and tell it:
 
-> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/blob/main/docs/agent-quick-start.md
-Without the command:
+> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md
+
+To do it yourself:
 
 1. Find Ziggy's latest release, the highest version tag of its repository. The tag is the last part of the line this prints (`refs/tags/<tag>`):
 

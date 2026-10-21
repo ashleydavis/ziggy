@@ -2,17 +2,25 @@
 
 This page is for an AI coding agent, such as Claude Code, asked to start a new Ziggy app. To use it, start the agent in the empty directory the app will go in and tell it:
 
-> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/blob/main/docs/agent-quick-start.md
+> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md
 
 The rest of this page is the agent's instructions.
 
 ## Instructions
 
-Make a new app from the Ziggy template in the current directory, following the guide [Building your app](user-guide/building-your-app.md), section "Starting a new app from the template", which pins the app to Ziggy's latest release. Read it before doing anything: it is the authority, and this page only says how to carry it out. The [Vite example](https://github.com/ashleydavis/ziggy-example-vite) is an app made this way: when a step is unclear, do what it did.
+Make a new app from the Ziggy template in the current directory, pinned to Ziggy's latest release, following the guide "Building your app", section "Starting a new app from the template". The [Vite example](https://github.com/ashleydavis/ziggy-example-vite) is an app made this way: when a step is unclear, do what it did.
 
 ### Find the latest release
 
-Find Ziggy's latest release, as step 1 of the guide says. If there is none, stop and say so. Tell the human which release the app will be pinned to.
+Find Ziggy's latest release, its highest version tag. The tag is the last part of the line this prints (`refs/tags/<tag>`):
+
+```bash
+git ls-remote --tags --refs --sort=-version:refname https://github.com/ashleydavis/ziggy 'v*' | head -n 1
+```
+
+If there is none, stop and say so. Tell the human which release the app will be pinned to.
+
+Then read the guide of that release, `https://github.com/ashleydavis/ziggy/blob/<tag>/docs/user-guide/building-your-app.md`, before doing anything else. It is the authority, and this page only says how to carry it out. Read every other Ziggy doc at the same tag, never from `main`, so the steps match the template you copy.
 
 ### Ask for the names
 
