@@ -10,4 +10,4 @@ source "$SCRIPT_DIR/lib/apple-common.sh"
 apple_require_macos
 apple_require_xcode
 bash "$SCRIPT_DIR/sync-ios.sh" "$@"
-open "$APPLE_EXAMPLE_DIR/shells/ios/ZiggyTestApp.xcodeproj"
+open "$APPLE_EXAMPLE_DIR/native/ios/ZiggyTestApp.xcodeproj"

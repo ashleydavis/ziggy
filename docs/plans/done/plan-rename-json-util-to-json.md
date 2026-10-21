@@ -43,7 +43,7 @@ Ziggy's core library exports its JSON helpers as `json_util` (`pub const json_ut
    - Replaced: the examples (and Photosphere) no longer pin Ziggy to a tag. Their `build.zig.zon` takes Ziggy from the sibling checkout by relative path (`../ziggy`), so no release is needed. On the human's instruction nothing was tagged, committed or pushed, and the examples were changed and tested against the local Ziggy instead.
 
 - [x] 8. **Move each example to the new release.** After the human says which tag has the rename, in each of `ziggy-example-vite` and `ziggy-example-rsbuild` (separate repositories, checked out beside this one):
-   - Update the Ziggy pin to the new tag everywhere the example pins it: `build.zig.zon` (run `mise exec -- zig fetch --save=ziggy "git+https://github.com/ashleydavis/ziggy.git#<tag>"` so the hash is updated too), `package.json`, the Xcode projects and `shells/android/app/build.gradle`.
+   - Update the Ziggy pin to the new tag everywhere the example pins it: `build.zig.zon` (run `mise exec -- zig fetch --save=ziggy "git+https://github.com/ashleydavis/ziggy.git#<tag>"` so the hash is updated too), `package.json`, the Xcode projects and `native/android/app/build.gradle`.
    - In `backend/src/lib/hello-world-backend.zig`, change `ziggy.json_util.` to `ziggy.json.`, and change any other `json_util` that `git grep -n json_util` finds.
    - Carry over any other change the template made between the old tag and the new one, as `/ziggy:upgrade` does.
    - Run each example's full test set: `bun run compile`, `bun run test`, `bun run compile:zig`, `bun run test:zig`, `bun run test:smoke`, and `bun run test:smoke:and` when an emulator is attached.

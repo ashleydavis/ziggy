@@ -7,7 +7,7 @@
 # program to create (Ubuntu's default restriction on user namespaces is one). The sandbox is switched off for these test
 # processes only, through the environment WebKitGTK documents for it.
 
-LINUX_SHELL_DIR="$ZIGGY_SMOKE_APP_DIR/shells/linux"
+LINUX_SHELL_DIR="$ZIGGY_SMOKE_APP_DIR/native/linux"
 LINUX_EXAMPLE_DIR="$ZIGGY_SMOKE_APP_DIR"
 
 # The file the app's process group is recorded in, per scenario.

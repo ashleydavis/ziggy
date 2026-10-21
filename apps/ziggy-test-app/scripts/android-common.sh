@@ -4,7 +4,7 @@
 
 ZIGGY_ANDROID_SCRIPTS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ZIGGY_EXAMPLE_DIR="$(cd "$ZIGGY_ANDROID_SCRIPTS_DIR/.." && pwd)"
-ZIGGY_ANDROID_PROJECT_DIR="$ZIGGY_EXAMPLE_DIR/shells/android"
+ZIGGY_ANDROID_PROJECT_DIR="$ZIGGY_EXAMPLE_DIR/native/android"
 ZIGGY_ANDROID_APP_ID="dev.ziggy.testapp"
 
 # Resolves JAVA_HOME (a JDK 17) and ANDROID_HOME. It exits with a message

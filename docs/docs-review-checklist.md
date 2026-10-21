@@ -143,7 +143,7 @@ Every tracked markdown doc in the repo outside `docs/plans/`. Regenerate the lis
 `apps/ziggy-test-app` keeps only the docs that differ from the template's copy by more than the app's name.
 
 - [ ] [apps/ziggy-test-app/README.md](../apps/ziggy-test-app/README.md)
-- [ ] [shells/android/README.md](../apps/ziggy-test-app/shells/android/README.md)
+- [ ] [native/android/README.md](../apps/ziggy-test-app/native/android/README.md)
 - [ ] [scripts/android-common.md](../apps/ziggy-test-app/scripts/android-common.md)
 - [ ] [scripts/distribute-android.md](../apps/ziggy-test-app/scripts/distribute-android.md)
 - [ ] [scripts/ios-device.md](../apps/ziggy-test-app/scripts/ios-device.md)

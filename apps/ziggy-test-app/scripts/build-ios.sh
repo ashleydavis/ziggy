@@ -11,8 +11,8 @@ apple_require_macos
 apple_require_xcode
 SDK="simulator"
 ARCH="$(apple_host_arch)"
-NATIVE_DIR="$APPLE_EXAMPLE_DIR/shells/ios/zig-out"
-BUILD_DIR="$APPLE_EXAMPLE_DIR/shells/ios/zig-out/xcode"
+NATIVE_DIR="$APPLE_EXAMPLE_DIR/native/ios/zig-out"
+BUILD_DIR="$APPLE_EXAMPLE_DIR/native/ios/zig-out/xcode"
 CONFIGURATION="Debug"
 TEST_HOOKS="no"
 OPTIMIZE="ReleaseSafe"
@@ -90,7 +90,7 @@ else
 fi
 
 xcodebuild \
-    -project "$APPLE_EXAMPLE_DIR/shells/ios/ZiggyTestApp.xcodeproj" \
+    -project "$APPLE_EXAMPLE_DIR/native/ios/ZiggyTestApp.xcodeproj" \
     -scheme ZiggyTestApp \
     -configuration "$CONFIGURATION" \
     -sdk "$XCODE_SDK" \

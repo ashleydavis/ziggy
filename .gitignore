@@ -18,8 +18,8 @@ apps/ziggy-template/webview2-sdk/
 apps/ziggy-test-app/webview2-sdk/
 apps/ziggy-template/wix/
 apps/ziggy-test-app/wix/
-apps/ziggy-template/shells/windows/package/
-apps/ziggy-test-app/shells/windows/package/
+apps/ziggy-template/native/windows/package/
+apps/ziggy-test-app/native/windows/package/
 
 # What the package scripts of the Ziggy template and of the test app produce
 apps/ziggy-template/out/

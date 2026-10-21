@@ -494,7 +494,7 @@ pub const IShellApp = struct {
     // The name the steps' descriptions use for the app, such as "the Ziggy template".
     title: []const u8,
     // The directory of the app relative to the app's build root ("." for the build root itself), under which its shells
-    // (`shells/linux/src/main.zig`, `shells/windows/src/main.zig`) and the WebView2 SDK
+    // (`native/linux/src/main.zig`, `native/windows/src/main.zig`) and the WebView2 SDK
     // (`webview2-sdk`) are.
     directory: []const u8,
     // The PNG file of the app's window icon on Linux, which the shell's `app-icon` import gives to the app's main file, or null for none.
@@ -557,7 +557,7 @@ pub fn addLinuxShell(
     }
 
     const module = b.createModule(.{
-        .root_source_file = b.path(appPath(b, app.directory, "shells/linux/src/main.zig")),
+        .root_source_file = b.path(appPath(b, app.directory, "native/linux/src/main.zig")),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -645,7 +645,7 @@ pub fn addWindowsShell(
     }
 
     const module = b.createModule(.{
-        .root_source_file = b.path(appPath(b, app.directory, "shells/windows/src/main.zig")),
+        .root_source_file = b.path(appPath(b, app.directory, "native/windows/src/main.zig")),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
@@ -674,7 +674,7 @@ pub fn addWindowsShell(
     // The core library is not linked into the object: a COFF object cannot hold the library's objects, and the check has no link to
     // resolve.
     const check_module = b.createModule(.{
-        .root_source_file = b.path(appPath(b, app.directory, "shells/windows/src/main.zig")),
+        .root_source_file = b.path(appPath(b, app.directory, "native/windows/src/main.zig")),
         .target = target,
         .optimize = optimize,
         .link_libc = true,

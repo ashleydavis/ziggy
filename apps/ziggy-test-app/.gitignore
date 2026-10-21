@@ -12,4 +12,4 @@ zig-pkg/
 out/
 webview2-sdk/
 wix/
-shells/windows/package/
+native/windows/package/

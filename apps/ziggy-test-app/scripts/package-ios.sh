@@ -11,7 +11,7 @@ apple_require_macos
 apple_require_xcode
 apple_require_tool ditto jq rsync
 OUTPUT_DIR="$APPLE_EXAMPLE_DIR/out/ios"
-BUILD_DIR="$APPLE_EXAMPLE_DIR/shells/ios/zig-out/package"
+BUILD_DIR="$APPLE_EXAMPLE_DIR/native/ios/zig-out/package"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -31,7 +31,7 @@ mkdir -p "$OUTPUT_DIR" "$BUILD_DIR"
 
 bash "$SCRIPT_DIR/sync-ios.sh" --sdk device --arch arm64 --native-dir "$BUILD_DIR/native"
 xcodebuild archive \
-    -project "$APPLE_EXAMPLE_DIR/shells/ios/ZiggyTestApp.xcodeproj" \
+    -project "$APPLE_EXAMPLE_DIR/native/ios/ZiggyTestApp.xcodeproj" \
     -scheme ZiggyTestApp \
     -configuration Release \
     -sdk iphoneos \
