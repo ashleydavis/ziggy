@@ -1,0 +1,231 @@
+name: CI
+
+# The checks every change gets, all on Linux: the TypeScript compile, the TypeScript unit tests, the cross-build of the Zig code
+# for every platform and the Zig unit tests. The smoke tests, the packages and the GitHub releases are in each platform's own
+# release workflow.
+
+env:
+  BUN_VERSION: "1.3.14"
+  NODE_VERSION: "24.15.0"
+
+on:
+  push:
+    branches:
+      - "**"
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  typescript-compile:
+    # Compiles the TypeScript, which is the only check of its types: the unit tests run it without checking them.
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Compile TypeScript
+        timeout-minutes: 12
+        run: bun run compile
+
+  typescript-unit-tests:
+    # The TypeScript unit tests (the app's UI).
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Run the TypeScript unit tests
+        timeout-minutes: 12
+        shell: bash
+        run: bun run test
+
+  zig-build:
+    # Cross-builds the app's backend for every platform, with and without the test hooks, and compiles the Windows native app. Zig
+    # cross-builds from any machine, so this runs once, on Linux.
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-
+
+      # Every save is the restored cache plus what the job built, so without this the cache only grows.
+      - name: Start fresh Zig build caches when the restored ones have grown too big
+        shell: bash
+        run: |
+          for cache_dir in .; do
+              if [ -d "$cache_dir/.zig-cache" ]; then
+                  megabytes="$(du -sm "$cache_dir/.zig-cache" | cut -f1)"
+                  echo "Restored Zig build cache of $cache_dir: ${megabytes} MB"
+                  if [ "$megabytes" -ge 5120 ]; then
+                      mv "$cache_dir/.zig-cache" "$RUNNER_TEMP/stale-zig-cache-$(basename "$cache_dir")"
+                      echo "Moved it aside to start a fresh one"
+                  fi
+              fi
+          done
+
+      - name: Build and cross-build the Zig code
+        shell: bash
+        run: bun run compile:zig
+
+      # Always, so a job that fails part way still leaves what it compiled.
+      - name: Save the Zig build caches
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .zig-cache
+          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}
+
+  zig-unit-tests:
+    # The Zig unit tests of the app's backend (`zig build test`), on the runner.
+    timeout-minutes: 50
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      # The Linux native app links GTK and WebKitGTK by their runtime library files, and its build stops with "error:
+      # RuntimeLibraryMissing" when they are not installed.
+      - name: Install the web view's runtime libraries (Linux)
+        uses: ./.github/actions/install-apt-packages
+        with:
+          packages: libgtk-3-0 libwebkit2gtk-4.1-0
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      # Zig skips any compile step whose inputs are unchanged and already in .zig-cache. The key changes with any Zig source, and
+      # the newest earlier cache is restored when there is no exact match, so only the binaries a change touches are compiled
+      # again. The name is its own, so the release workflows' build caches, whose keys have zig-build- in them, are never restored
+      # here.
+      - name: Cache Zig's build cache
+        uses: actions/cache@v4
+        with:
+          path: .zig-cache
+          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-test-build-baseline-${{ hashFiles('mise.toml', '**/*.zig', '**/build.zig.zon') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-test-build-baseline-
+
+      # The same tests `bun run test:zig` runs, which bundles the UI first because the backend's tests embed it. They are built for
+      # any x86-64 CPU: built for the runner's own, which differs from run to run, every compile step would miss the build cache
+      # restored above.
+      - name: Run the Zig unit tests
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          bun run bundle:ui
+          zig build test -Dcpu=baseline --summary all --test-timeout 20m

@@ -15,9 +15,28 @@ Before you start, install [mise](https://mise.jdx.dev), then what your platform 
 - **Windows:** the scripts that set up, build, run, test and package your app are bash scripts, so install [Git for Windows](https://gitforwindows.org) for its Git Bash shell, add `%LOCALAPPDATA%\mise\shims` to PATH and run every command in Git Bash.
 - **macOS:** install Xcode.
 
-The quickest way is to have an AI coding agent, such as Claude Code, do these steps for you. It asks for the app's names as it goes. Start the agent in the empty directory the app will go in and tell it:
+The quickest way is to have an AI coding agent, such as Claude Code, do these steps for you. It asks for the app's names as it goes.
 
-> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md
+1. Create a directory for your app called `my-app` and go into it:
+
+   ```bash
+   mkdir my-app
+   cd my-app
+   ```
+
+2. Start Claude Code (or the agent of your choice) there:
+
+   ```bash
+   claude
+   ```
+
+3. Tell it:
+
+   > Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md
+
+   Making the app takes a while: the agent installs Zig, Bun, Node and jq with mise (the common way to install the exact versions of the tools a project uses) and installs the app's Bun and Zig dependencies (Ziggy among them).
+
+4. When the agent is done, [build and test your new app](#building-and-testing-your-new-app).
 
 To do it yourself:
 
@@ -72,7 +91,7 @@ To do it yourself:
    - `ZiggyTemplate`, the Xcode projects' name: the `.xcodeproj` directories, the source directories beside them, the schemes in `xcshareddata/xcschemes`, the product names and the Apple scripts that open or build them.
    - "Ziggy template", the name a user sees: window titles, the menu, `Info.plist`, `AndroidManifest.xml`, the Windows installer and the docs.
    - The Windows installer's GUIDs in `scripts/package-windows.wxs` (the `UpgradeCode` and each `Component`'s `Guid`): make new ones with `uuidgen`, or Windows treats the new app as an upgrade of the template.
-5. Run `bun install`, then the unit tests and the smoke tests. They pass unchanged in a copy that is renamed and pinned to a release.
+5. Run `bun install`, then [build and test your new app](#building-and-testing-your-new-app).
 6. Make the app a git repository and commit it. The template's `.gitignore` keeps what builds and tests write out of it:
 
    ```bash
@@ -80,6 +99,47 @@ To do it yourself:
    git add .
    git commit -m "Started the app from the Ziggy template <tag>"
    ```
+
+### Building and testing your new app
+
+Run these in your app's directory, one after another. Every test passes unchanged in a new app, so a failure means a step of making it went wrong.
+
+```bash
+bun run compile
+bun run test
+bun run test:zig
+bun run test:smoke
+```
+
+- `bun run compile` type-checks the UI.
+- `bun run test` runs the UI's unit tests.
+- `bun run test:zig` builds the backend and runs its unit tests.
+- `bun run test:smoke` builds your app and runs its smoke tests in a hidden window on this machine's desktop platform.
+
+Then run your app and see its window, with the command for your platform:
+
+```bash
+bun run run:linux
+bun run run:windows
+bun run run:macos
+```
+
+### Putting your app on GitHub
+
+Your app comes with GitHub Actions workflows (see [the parts of an app](#the-parts-of-an-app)) that test it and publish a release for each platform once it is on GitHub.
+
+1. Create an empty repository for it at https://github.com/new: give it your app's name and leave "Add a README file", ".gitignore" and "license" unset, because your app already has its own files. Then push your app to it, using the address GitHub shows on the new repository's page:
+
+   ```bash
+   git remote add origin git@github.com:<your-account>/my-app.git
+   git push -u origin HEAD
+   ```
+
+2. Watch the workflows run: open your repository on GitHub and click the **Actions** tab. Each push starts `CI`, which runs the type check, the unit tests and the build for every platform, and a `Release <platform>` workflow for each platform, which runs the smoke tests and packages your app for that platform. Click a run to see its jobs and their logs. A green tick means it passed, a red cross that it failed.
+
+3. When a platform's workflow has passed on your default branch, its packages are in a GitHub release named after your app and the platform, on the tag `release-<platform>`. Find them on your repository's page under **Releases** in the right-hand column, or at `https://github.com/<your-account>/my-app/releases`. Each release lists the packages to download under **Assets**.
+
+   Each push to the default branch replaces those releases with new ones. [Distributing your app](distributing-your-app.md) covers signing and getting your app to testers and stores.
 
 Then change what the app does: its UI, its backend's message handlers and task handlers, its menu, its icon and its native projects.
 
@@ -102,6 +162,7 @@ The `/ziggy:upgrade` Claude Code command follows these steps for an app.
 - **The native apps** (`native/<platform>/`): the app's native project for each platform, built on the part Ziggy provides for that platform: its name, window, icon, permissions and anything only the operating system can do. The Linux and Windows native apps are Zig, built by `build.zig`. The MacOS and iOS native apps are Xcode projects, the Android native app a Gradle project, each built by the app's scripts after the backend library is built for that platform. The Android project must use the same version of the Android Gradle plugin as Ziggy's Android native app (see `packages/ziggy/native/android/build.gradle`), because Gradle does not allow two versions of it in one build, and its `minSdkVersion` must be at least Ziggy's.
 - **The scripts** (`scripts/`): set up, sync, build, run, open, package, distribute and clean, for each platform, each with a markdown file beside it, and the shell libraries they share in `scripts/lib`.
 - **The tests**: the UI's unit tests in `ui/src/test`, the backend's in `backend/src/test` and the smoke tests in `smoke-tests`, which start the real app, built with the test hooks, and check what it shows. The template has a hello world of each.
+- **The workflows** (`.github/workflows`): GitHub Actions workflows that run once the app is pushed to GitHub. `ci.yml` runs on every push: the type check, the UI's and the backend's unit tests and the build of the backend for every platform. Each platform has a `release-<platform>.yml` that, on every push, runs the smoke tests and packages the app for that platform (`release-macos-x64.yml` only packages it). When those pass on the default branch, it publishes the packages as a GitHub release on the tag `release-<platform>`, replacing the one before.
 
 ## The menu and the window icon
 

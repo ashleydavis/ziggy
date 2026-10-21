@@ -1,0 +1,209 @@
+name: Release iOS
+
+# Smoke tests the Ziggy template on an iOS simulator, packages it for iOS and, when both passed on the default branch, publishes
+# the package as the GitHub release named "Ziggy template iOS", replacing the one before. It runs on every push. The app is never
+# version tagged, but a GitHub release is always attached to a git tag, so the release sits on the tag `release-ios`, which
+# this workflow moves to the commit it built. A run that fails anywhere publishes nothing. The unit tests and the cross-build
+# are in the CI workflow.
+
+env:
+  BUN_VERSION: "1.3.14"
+  NODE_VERSION: "24.15.0"
+  # Each platform has a workflow of its own, so a failure on one shows at a glance and holds up no other platform's release.
+  # Its GitHub release sits on the tag release-<RELEASE_PLATFORM>.
+  RELEASE_PLATFORM: "ios"
+  RELEASE_PLATFORM_NAME: "iOS"
+
+on:
+  push:
+    branches:
+      - "**"
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  app-smoke-tests:
+    # The app's smoke tests on an iOS simulator.
+    timeout-minutes: 75
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-
+
+      # run.sh picks the first available iPhone simulator and boots it, and builds and installs the app with xcodebuild.
+      - name: Run the smoke tests on a simulator (iOS)
+        timeout-minutes: 60
+        run: bun run test:smoke:ios
+
+      # Saved under this platform's own key so package-release, which builds the same release app, finds the Zig part already
+      # built. Always, so a job that fails part way still leaves what it compiled.
+      - name: Save the Zig build caches
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .zig-cache
+          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}-smoke-ios
+
+  package-release:
+    # The app packaged for iOS by its own package script, uploaded as an artifact of the run. The archive is built without
+    # signing, and only its .ipa is uploaded, because an .xcarchive is a folder. It runs after the smoke tests and starts from
+    # the Zig build cache they saved, so the Zig part of the release build is not compiled a second time.
+    needs: app-smoke-tests
+    timeout-minutes: 60
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}-smoke-ios
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-
+
+      - name: Package
+        shell: bash
+        run: bun run package:ios
+
+      - name: Upload the packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ziggy-template-ios
+          path: out/ios/*.ipa
+          if-no-files-found: error
+          retention-days: 2
+
+  create-release:
+    # Publishes the package, only when the smoke tests and the packaging passed, and only for a push to the default branch,
+    # so a run on another branch or a pull request tests everything and publishes nothing. This platform's release and its tag
+    # are deleted and made again on the commit this run built.
+    if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
+    needs: [app-smoke-tests, package-release]
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download the packages
+        uses: actions/download-artifact@v4
+        with:
+          name: ziggy-template-ios
+          path: artifacts
+
+      # Every platform's release tag moves to the commit its workflow built, so release-notes.sh would count from whichever of
+      # them sorts first and report almost nothing. They are deleted from this checkout only, before the notes are made.
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          git tag --list 'release-*' | xargs -r git tag -d > /dev/null
+          RELEASE_NOTES=$(bash ./scripts/release-notes.sh)
+          echo "RELEASE_NOTES<<EOF" >> $GITHUB_OUTPUT
+          echo "$RELEASE_NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "Generated release notes:"
+          echo "$RELEASE_NOTES"
+
+      - name: Delete the previous release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "release-${RELEASE_PLATFORM}" > /dev/null 2>&1; then
+              gh release delete "release-${RELEASE_PLATFORM}" --yes --cleanup-tag
+          fi
+
+      - name: Publish the app
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: release-${{ env.RELEASE_PLATFORM }}
+          target_commitish: ${{ github.sha }}
+          name: Ziggy template ${{ env.RELEASE_PLATFORM_NAME }}
+          draft: false
+          prerelease: true
+          files: |
+            ./artifacts/*.ipa
+          body: |
+            The Ziggy template, smoke tested and packaged for ${{ env.RELEASE_PLATFORM_NAME }} from commit ${{ github.sha }}.
+
+            ## Commits
+            ${{ steps.release-notes.outputs.RELEASE_NOTES }}
+
+            ## Downloads
+            - **iOS**: the unsigned `.ipa`, which has to be signed before it installs on a device

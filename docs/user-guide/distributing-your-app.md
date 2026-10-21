@@ -64,7 +64,7 @@ Archive the app signed for distribution, upload it to App Store Connect from Xco
 
 ### Desktop
 
-The desktop packages are files: put them where testers can download them. The release workflow of this repository does that for the template, publishing its packages as a GitHub release on every successful build of the default branch, and an app can do the same with its own workflow.
+The desktop packages are files: put them where testers can download them. An app's release workflows (`.github/workflows/release-<platform>.yml`, which come with the template) do that once it is on GitHub, publishing each platform's packages as a GitHub release on every successful build of the default branch.
 
 ## Getting a build to users
 
