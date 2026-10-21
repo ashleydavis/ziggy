@@ -36,7 +36,53 @@ The quickest way is to have an AI coding agent, such as Claude Code, do these st
 
    Making the app takes a while: the agent installs Zig, Bun, Node and jq with mise (the common way to install the exact versions of the tools a project uses) and installs the app's Bun and Zig dependencies (Ziggy among them).
 
-4. When the agent is done, [build and test your new app](#building-and-testing-your-new-app).
+4. When the agent is done, type-check, test and build your new app, one command after another. On Windows, run `bun run setup` first, once per machine: it downloads the WebView2 SDK and installs Microsoft's C++ build tools.
+
+   ```bash
+   bun run compile     # Type-checks the UI.
+   bun run test        # Runs the UI's unit tests.
+   bun run test:zig    # Builds the backend and runs its unit tests.
+   bun run test:smoke  # Builds your app and runs its smoke tests in a hidden window.
+   ```
+
+   Every test passes unchanged in a new app, so a failure means a step of making it went wrong. Then run it and see its window, with the command for your platform:
+
+   ```bash
+   bun run linux    # Builds and runs your app on Linux.
+   bun run windows  # Builds and runs your app on Windows.
+   bun run macos    # Builds and runs your app on macOS.
+   ```
+
+   To build without running, or to run what you last built without building it again:
+
+   ```bash
+   bun run build:linux                       # Builds your app on Linux.
+   ./native/linux/zig-out/bin/my-app         # Runs the Linux build.
+
+   bun run build:windows                     # Builds your app on Windows.
+   ./native/windows/zig-out/my-app/my-app.exe  # Runs the Windows build.
+
+   bun run build:macos                       # Builds your app on macOS.
+   open native/macos/zig-out/xcode/Build/Products/Debug/MyApp.app  # Runs the macOS build.
+   ```
+
+   On Linux or a Mac you can also build, run and test it on Android. Setup installs the Android SDK, NDK and a JDK 17. It does not make an emulator: start one (Android Studio's Device Manager makes and starts them) or plug in a phone with USB debugging on before you run or test:
+
+   ```bash
+   bun run setup           # Installs the Android tools. Once per machine.
+   bun run build:android   # Builds your app for Android.
+   bun run android     # Builds your app, installs it on the emulator or phone and starts it.
+   bun run test:smoke:and  # Runs the smoke tests on the emulator or phone.
+   ```
+
+   On a Mac you can also build, run and test it on iOS. Setup checks Xcode and its iOS simulator, and the run and tests start a simulator themselves:
+
+   ```bash
+   bun run setup           # Checks Xcode and its iOS simulator. Once per machine.
+   bun run build:ios       # Builds your app for iOS.
+   bun run ios         # Builds your app and runs it on an iOS simulator.
+   bun run test:smoke:ios  # Runs the smoke tests on a connected iPhone or iPad, otherwise on an iOS simulator.
+   ```
 
 To do it yourself:
 
@@ -119,9 +165,9 @@ bun run test:smoke
 Then run your app and see its window, with the command for your platform:
 
 ```bash
-bun run run:linux
-bun run run:windows
-bun run run:macos
+bun run linux
+bun run windows
+bun run macos
 ```
 
 ### Putting your app on GitHub

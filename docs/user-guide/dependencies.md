@@ -60,7 +60,7 @@ Android builds on Linux or a Mac.
 | Android NDK | The compilers and C libraries for Android | Zig links the backend against its C library | Setup installs the version `native/android/variables.gradle` pins |
 | Gradle and the Android Gradle plugin | Android's build tool and its Android support | Builds the Android native app | Downloaded by the Gradle wrapper, at the versions `native/android/gradle/wrapper/gradle-wrapper.properties` and `native/android/build.gradle` pin. The app must use the same plugin version as Ziggy's Android native app |
 | curl and unzip | Tools that download and unpack files | Setup downloads and unpacks the Android SDK with them | System packages |
-| An emulator or a device | | Runs the app (`bun run run:android`) and its smoke tests | Yours to start or attach |
+| An emulator or a device | | Runs the app (`bun run android`) and its smoke tests | Yours to start or attach |
 
 ## Distributing
 

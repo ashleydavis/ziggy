@@ -20,7 +20,7 @@ Open the run in the Actions tab. The summary shows which job failed and, for a j
 
 ## Releasing a version of the package
 
-An app pins Ziggy to a version tag. A version tag is `v` followed by the version, such as `v0.1.0`, and the tag alone carries the version: the `version` fields in `build.zig.zon`, `package.json` and `packages/ziggy/native/android/build.gradle` stay at `0.0.0` and are not changed for a release. To release one:
+An app pins Ziggy to a version tag. A version tag is `v` followed by the version, such as `v0.1.0`, and the tag alone carries the version: the `version` fields in `build.zig.zon`, `package.json` and `packages/ziggy/native/android/build.gradle` stay at `0.0.0` and are not changed for a release. The `/release` Claude Code command follows these steps. To release one:
 
 1. Make sure the release workflow passed on the commit to be released.
 2. Tag the commit and push the tag:

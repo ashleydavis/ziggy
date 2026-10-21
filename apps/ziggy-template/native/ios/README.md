@@ -14,7 +14,7 @@ The project links `libziggy_template.a` from the directory in the `ZIGGY_NATIVE_
 
 - Install Xcode 14.2 and `jq`, and run `mise install` and `bun install` in the repository. `scripts/setup-ios.sh` checks the tools.
 - Make sure an iOS simulator exists (`xcrun simctl list devices available`). Set `ZIGGY_IOS_SIMULATOR` to pick one.
-- Run `bun run run:ios`.
+- Run `bun run ios`.
 
 ## File and directory pickers
 

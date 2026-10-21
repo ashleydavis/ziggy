@@ -55,9 +55,9 @@ For desktop builds you need nothing else, If you want to run it on Android or iO
 Run the command for your platform:
 
 ```bash
-bun run run:linux
-bun run run:windows
-bun run run:macos
+bun run linux
+bun run windows
+bun run macos
 ```
 
 This builds the app and opens its window:
@@ -198,7 +198,7 @@ pub const app = ziggy.core.App(.{
 
 ### Try a change
 
-Change the name in `ui/src/main.ts` or the greeting in `helloWorldHandler` and run the same `bun run run:<platform>` again to see it change.
+Change the name in `ui/src/main.ts` or the greeting in `helloWorldHandler` and run the same `bun run <platform>` again to see it change.
 
 ## Next
 

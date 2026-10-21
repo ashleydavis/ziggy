@@ -24,7 +24,9 @@ Then read the guide of that release, `https://github.com/ashleydavis/ziggy/blob/
 
 ### Ask for the names
 
-Start by telling the human "I just need to know some details about your app...". Then ask for these one at a time, in this order: ask one question, wait for the answer, then ask the next. From the second question on, suggest a value worked out from the app's name, so they can accept it.
+Start by telling the human "I just need to know some details about your app...", and that they can answer "use the defaults" to any question to skip the rest. Then ask for these one at a time, in this order: ask one question, wait for the answer, then ask the next. Every question offers its default, so they can accept it.
+
+The defaults: the app's name is the current directory's name (`my-app`) and the others are worked out from it (`My App`, `com.example.myapp`, `MyApp`), with Vite as the bundler. When the human answers "use the defaults", use the default for that question and every one after it, ask nothing more and tell them the values you are using.
 
 - The app's name, lowercase with dashes (`my-photo-app`). The backend library's name is this with each `-` as `_`.
 - The name a user sees (`My Photo App`).
@@ -53,4 +55,40 @@ Do not build the app or run its tests, apart from the `zig build` in step 6 that
 
 Once the app is made, make the app a git repository and commit it, as step 6 of the guide says. Run `git status` before committing: the template's `.gitignore` keeps what builds and tests write out of the repository, so only the app's own files should be listed.
 
-Then tell the human the next steps in a few lines: build and test the app with the commands in the guide's "Building and testing your new app" (`bun run compile`, `bun run test`, `bun run test:zig` and `bun run test:smoke`), run it with `bun run run:<platform>` for their platform, put it on GitHub, watch its CI and release workflows run and find each platform's release when they are done, as the guide's "Putting your app on GitHub" says, on GitHub's web pages (do not create the repository or push it yourself), `bun run dev` to work on the UI in a browser, and the Claude Code commands the app came with, `/ziggy:add-message` and `/ziggy:add-task`, to give the backend work to do.
+Do not create the GitHub repository or push the app yourself. Then tell the human the next steps with this message, with `<platform>` set to their platform (`linux`, `windows` or `macos`). Every command goes in a code block on a line of its own, with a comment saying what it does, so the human can copy it:
+
+````markdown
+## Next steps
+
+Build and test your app:
+
+```bash
+bun run compile     # Type-checks the UI.
+bun run test        # Runs the UI's unit tests.
+bun run test:zig    # Builds the backend and runs its unit tests.
+bun run test:smoke  # Builds your app and runs its smoke tests in a hidden window.
+```
+
+Run it:
+
+```bash
+bun run <platform>  # Builds and runs your app.
+```
+
+Work on the UI in a browser, with it reloading as you save:
+
+```bash
+bun run dev
+```
+
+Put it on GitHub: create an empty repository at https://github.com/new, then push to it with the address GitHub shows:
+
+```bash
+git remote add origin git@github.com:<your-account>/<app name>.git
+git push -u origin HEAD
+```
+
+Then watch the CI and release workflows in the repository's **Actions** tab and find each platform's packages under **Releases**.
+
+Give the backend work to do with the Claude Code commands your app came with: `/ziggy:add-message` and `/ziggy:add-task`.
+````

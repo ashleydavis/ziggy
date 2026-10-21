@@ -13,7 +13,7 @@ Run from the app's directory. Every app made from the template has them, and so 
 | `bun run bundle:ui` | Builds the UI into `dist`, which every platform embeds. |
 | `bun run sync:<platform>` | Builds what the platform's native project packages and puts it where that project expects it. |
 | `bun run build:<platform>` | Builds the UI and the app. |
-| `bun run run:<platform>` | Builds the app and runs it (on an attached emulator or device for Android, on a simulator for iOS). |
+| `bun run <platform>` | Builds the app and runs it (on an attached emulator or device for Android, on a simulator for iOS). |
 | `bun run open:<platform>` | Syncs, then opens the native project in its editor (Xcode, Android Studio). |
 | `bun run package:<platform>` | Packages the release app, without the test hooks, into `out/<platform>`. |
 | `bun run distribute:android` | Builds the Android app and uploads it to Firebase App Distribution for the tester group. See `scripts/distribute-android.md`. |
