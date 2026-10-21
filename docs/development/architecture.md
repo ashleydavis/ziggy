@@ -39,7 +39,14 @@ Ziggy provides native code for each platform and hosts your UI in a system web v
 
 ## The bundled UI
 
-The web UI is bundled and embedded in the app and served through the native app to the system web view, from `ziggy-app://app/` rather than from files on disk.
+The web UI is bundled and embedded in the app and served through the native app to the system web view rather than from files on disk. Each native app serves it from an address its web view treats as a secure context in which `fetch` of the UI's own files works, so the address depends on the web view:
+
+- **Linux, macOS and iOS** (WebKitGTK and WKWebView): `ziggy-app://app/`, a scheme the native app registers with the web view. These web views do not let an app serve `http` or `https` addresses itself, so a scheme of its own is the only choice.
+- **Windows and Android** (WebView2 and the Android web view): `https://ziggy-app.invalid/`, a host under `.invalid`, which can never be looked up, whose requests the native app answers itself. The Android web view cannot make a scheme of an app's own a secure context or let `fetch` load from it, so a UI served from `ziggy-app://` there would lose `crypto.subtle`, `crypto.randomUUID`, the clipboard and `fetch` of its own files. WebView2 could register `ziggy-app`, but that needs an environment options object the SDK provides only in C++, so Windows uses the same address as Android.
+
+A UI must not depend on which address it is served from. A Content-Security-Policy in an app's UI names both origins, `ziggy-app://app` and `https://ziggy-app.invalid`.
+
+The smoke test scenario `24-ui-address` checks on every platform that the UI is served from that platform's address, that the page is a secure context and that `localStorage`, IndexedDB, and `fetch` and `XMLHttpRequest` of the UI's own files work there.
 
 ## The message bridge
 

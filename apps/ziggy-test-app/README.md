@@ -12,6 +12,7 @@ The app Ziggy's own tests drive: it has a feature for each part of Ziggy, and no
 - A loopback HTTP server in the backend (the test app's own code, not Ziggy's) that serves an example image and video to the UI, which loads them and fetches a range of bytes with a `Range` header.
 - Keep-alive tasks: a background task type registered as keep-alive that goes on running when the app is sent to the background (a mobile device), and a normal one that does not.
 - UI storage: `localStorage` and IndexedDB values the UI writes and reads back after the app is started again.
+- The UI's address: the address and origin the UI is served from, whether it is a secure context and whether `localStorage`, IndexedDB, and `fetch` and `XMLHttpRequest` of the UI's own files work there.
 - Dropped files: a drop zone that shows the real path of a dropped file, from `window.ziggy.getPathForFile`.
 - A desktop menu defined once in Zig and drawn natively, with keyboard shortcuts that work anywhere in the window, and developer tools (Ctrl+Shift+I, or Cmd+Shift+I on a Mac) that open from it. A mobile device shows no menu.
 

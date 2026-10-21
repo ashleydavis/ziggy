@@ -400,6 +400,63 @@ function startStorage(): void {
     });
 }
 
+//
+// Runs a check and gives what it found, or "failed: " and the error when it throws.
+//
+async function describeCheck(check: () => Promise<string>): Promise<string> {
+    try {
+        return await check();
+    }
+    catch (error) {
+        return `failed: ${(error as Error).message}`;
+    }
+}
+
+//
+// Loads one of the UI's own files with XMLHttpRequest and gives its status and text.
+//
+function loadWithXhr(url: string): Promise<{ status: number; text: string }> {
+    return new Promise((resolve, reject) => {
+        const request = new XMLHttpRequest();
+        request.open("GET", url);
+        request.addEventListener("load", () => resolve({ status: request.status, text: request.responseText }));
+        request.addEventListener("error", () => reject(new Error(`XMLHttpRequest of ${url} failed`)));
+        request.send();
+    });
+}
+
+//
+// Shows the address the UI is served from and what the web view gives that address: a secure context, localStorage,
+// IndexedDB, and fetch and XMLHttpRequest of the UI's own files.
+//
+function startAddressCheck(): void {
+    element("address-check").addEventListener("click", async () => {
+        element("address-status").textContent = "checking";
+        element("address-href").textContent = `href: ${window.location.href}`;
+        element("address-origin").textContent = `origin: ${window.location.origin}`;
+        element("address-secure").textContent = `secure context: ${window.isSecureContext}`;
+        element("address-local-storage").textContent = `localStorage: ${await describeCheck(async () => {
+            localStorage.setItem("ziggy-test-app-address", storedValue);
+            return localStorage.getItem("ziggy-test-app-address") === storedValue ? "kept" : "lost";
+        })}`;
+        element("address-indexeddb").textContent = `indexedDB: ${await describeCheck(async () => {
+            await useStore("readwrite", store => store.put(storedValue, "ziggy-test-app-address"));
+            const read = await useStore<string | undefined>("readonly", store => store.get("ziggy-test-app-address"));
+            return read === storedValue ? "kept" : "lost";
+        })}`;
+        element("address-fetch").textContent = `fetch: ${await describeCheck(async () => {
+            const response = await fetch("index.html");
+            const text = await response.text();
+            return `${response.status} ${text.includes("Ziggy test app") ? "has the UI" : "not the UI"}`;
+        })}`;
+        element("address-xhr").textContent = `xhr: ${await describeCheck(async () => {
+            const { status, text } = await loadWithXhr("index.html");
+            return `${status} ${text.includes("Ziggy test app") ? "has the UI" : "not the UI"}`;
+        })}`;
+        element("address-status").textContent = "checked";
+    });
+}
+
 function listenForEvents(): void {
     window.ziggy.onMessage<ITaskMessageEvent<IOutputMessage | IJobProgressMessage | IMediaServerMessage>>("task-message", event => {
         appendTo("event-log", `task-message ${event.taskId} ${JSON.stringify(event.message)}`);
@@ -491,6 +548,7 @@ startAppFacilities();
 startPickers();
 startMedia();
 startStorage();
+startAddressCheck();
 startDrop();
 showReply().catch(error => {
     element("reply").textContent = `The Zig core did not answer: ${(error as Error).message}`;

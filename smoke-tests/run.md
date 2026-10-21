@@ -28,6 +28,10 @@ Builds the test app twice for the platform, once with the test hooks and once wi
 - `18-keep-alive-survives-leaving`: on a mobile device, a keep-alive background task goes on counting in a file in the data directory when the app is sent to the background, and on Android the foreground service is running. On a desktop, closing the window quits the app even with a keep-alive task running, and the scenario checks the app ends.
 - `21-app-facilities`: the parts of Ziggy an app's own backend code uses beyond channels and tasks: an error the app describes in a sentence, a task that reads its id, type, source, child limit and the app's state from its context, a task that runs children one after another and stops when cancelled, a task queued and a task cancelled from the app's code, an event the app sends to the UI, the counts the app keeps by observing tasks end and send messages and the UI removing its listeners for an event.
 
+The scenarios in `native-only` run in a native app on every platform and not in dev mode, where the UI comes from the dev server:
+
+- `24-ui-address`: the UI is served from the platform's address (`ziggy-app://app/` on Linux, macOS and iOS, `https://ziggy-app.invalid/` on Windows and Android), the page is a secure context, and `localStorage`, IndexedDB, and `fetch` and `XMLHttpRequest` of the UI's own files work there.
+
 The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mobile device, because the menu is a desktop feature. They choose menu items through the control connection's `menu` command, which calls the native app's own function for the item, the one a click runs, so the native app's actions really happen:
 
 - `11-menu-ui-actions`: About, and the items that start and cancel tasks, do what their buttons do.
@@ -42,7 +46,7 @@ The scenarios in `dev-only` run in dev mode only:
 
 - `23-drop-files`: a file dropped on the page reaches the UI with the path of the copy the dev backend saved, holding the file's contents, and only one copy is made.
 
-In dev mode the other scenarios run against the dev backend in front of Vite, and the ones that need something only a native app has (a window, the menu) are the `desktop-only` ones, which dev mode does not run. `18-keep-alive-survives-leaving` closes the page there, and the dev backend goes on running the task.
+In dev mode the other scenarios run against the dev backend in front of Vite, and the ones that need something only a native app has (the address it serves the UI from, a window, the menu) are the `native-only` and `desktop-only` ones, which dev mode does not run. `18-keep-alive-survives-leaving` closes the page there, and the dev backend goes on running the task.
 
 Toggle Full Screen is not smoke tested. The Linux suite runs on a virtual display with no window manager, and nothing honours a request for full screen there, so there is nothing to see change.
 

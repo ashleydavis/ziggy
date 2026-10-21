@@ -5,7 +5,7 @@ The template's Android project: one activity (`MainActivity`) that hosts a web v
 What is packaged:
 
 - The Zig core library `libziggy_template.so` per architecture (`arm64-v8a` and `x86_64`), with the JNI entry points in Zig.
-- The built UI and the script that exposes `window.ziggy`, both embedded in `libziggy_template.so`. The native app serves every request to `ziggy-app://app/` from the UI, so the APK has no UI files and no assets of its own.
+- The built UI and the script that exposes `window.ziggy`, both embedded in `libziggy_template.so`. The native app serves every request to `https://ziggy-app.invalid/` (a host name that can never be looked up) from the UI, so the APK has no UI files and no assets of its own.
 
 All of it is generated into `app/build/ziggy` by `scripts/sync-android.sh`; see `scripts/*-android.md` for the setup, sync, build, run, open, package and clean scripts.
 
