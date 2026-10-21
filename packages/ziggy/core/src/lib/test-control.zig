@@ -11,7 +11,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const types = @import("types.zig");
-const json_util = @import("json-util.zig");
+const json = @import("json.zig");
 
 //
 // How long the UI has to reply to a command, in milliseconds.
@@ -258,7 +258,7 @@ pub const TestControl = struct {
                 return;
             };
             const answer = self.handleLine(line) catch |err| blk: {
-                const text = json_util.stringify(self.allocator, .{
+                const text = json.stringify(self.allocator, .{
                     .@"error" = @errorName(err),
                 }) catch {
                     return;
@@ -290,7 +290,7 @@ pub const TestControl = struct {
         const command = std.json.parseFromSliceLeaky(std.json.Value, arena, command_json, .{}) catch {
             return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
         };
-        const name = json_util.getString(command, "command") orelse {
+        const name = json.getString(command, "command") orelse {
             return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
         };
         if (std.mem.eql(u8, name, "quit")) {
@@ -303,7 +303,7 @@ pub const TestControl = struct {
         if (std.mem.eql(u8, name, "menu")) {
             // Chooses a menu item as a user would, through the shell, so the shell's own actions really happen. Reloading unloads the
             // UI, which is not listening again until it says so, so commands wait for that.
-            const action = json_util.getString(command, "action") orelse {
+            const action = json.getString(command, "action") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
             const choose = self.config.menu_action orelse {
@@ -320,7 +320,7 @@ pub const TestControl = struct {
         if (std.mem.eql(u8, name, "screenshot")) {
             // Writes a PNG of the app's window to the command's "outputPath" through the shell, which captures what is on screen.
             // The UI must be showing first, or the picture would be of a window with nothing in it.
-            const output_path = json_util.getString(command, "outputPath") orelse {
+            const output_path = json.getString(command, "outputPath") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
             const capture = self.config.screenshot orelse {
@@ -331,7 +331,7 @@ pub const TestControl = struct {
             var reason: [512]u8 = undefined;
             const result = capture(self.config.user_data, path_text.ptr, &reason, reason.len);
             if (result < 0) {
-                return try json_util.stringify(self.allocator, .{
+                return try json.stringify(self.allocator, .{
                     .@"error" = reason[0..@intCast(-result)],
                 });
             }
@@ -343,9 +343,9 @@ pub const TestControl = struct {
             const paths = command.object.get("paths") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
-            const paths_json = try json_util.stringify(arena, paths);
+            const paths_json = try json.stringify(arena, paths);
             self.files_dropped(self.deliver_user_data, paths_json) catch |err| {
-                return try json_util.stringify(self.allocator, .{
+                return try json.stringify(self.allocator, .{
                     .@"error" = @errorName(err),
                 });
             };
@@ -371,7 +371,7 @@ pub const TestControl = struct {
                     return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
                 }
             }
-            const answer = try json_util.stringify(self.allocator, paths);
+            const answer = try json.stringify(self.allocator, paths);
             self.mutex.lockUncancelable(self.io);
             defer self.mutex.unlock(self.io);
             if (self.pick_answer) |old| {
@@ -399,11 +399,11 @@ pub const TestControl = struct {
             self.answer = null;
         }
         self.mutex.unlock(self.io);
-        const event = try json_util.stringify(arena, .{
+        const event = try json.stringify(arena, .{
             .channel = "test-command",
             .data = .{
                 .requestId = request,
-                .command = json_util.Raw{ .text = command_json },
+                .command = json.Raw{ .text = command_json },
             },
         });
         self.deliver(self.deliver_user_data, event);

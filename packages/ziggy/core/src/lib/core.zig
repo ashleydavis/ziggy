@@ -7,7 +7,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const build_options = @import("build_options");
 const types = @import("types.zig");
-const json_util = @import("json-util.zig");
+const json = @import("json.zig");
 const task_runner = @import("task-runner.zig");
 const queue_backend = @import("queue-backend.zig");
 const task_queue = @import("task-queue.zig");
@@ -385,7 +385,7 @@ pub const Core = struct {
             return;
         }
         const request_id: ?std.json.Value = parsed.object.get("id");
-        const channel = json_util.getString(parsed, "channel") orelse {
+        const channel = json.getString(parsed, "channel") orelse {
             self.reportError(arena, request_id, "MissingChannel");
             return;
         };
@@ -428,8 +428,8 @@ pub const Core = struct {
             self.reportError(arena, null, "RequestHasNoId");
             return;
         };
-        const id_json = json_util.stringify(arena, id) catch @panic("out of memory building a request");
-        const data_json = json_util.stringify(arena, data) catch @panic("out of memory building a request");
+        const id_json = json.stringify(arena, id) catch @panic("out of memory building a request");
+        const data_json = json.stringify(arena, data) catch @panic("out of memory building a request");
         const task_id = std.fmt.allocPrint(arena, "request-{d}", .{self.next_request_task.fetchAdd(1, .monotonic)}) catch @panic("out of memory building a request");
         self.runner.addTask(task_id, entry.task_type, "request", data_json, .interactive, id_json) catch |err| {
             self.reportError(arena, id, @errorName(err));
@@ -440,10 +440,10 @@ pub const Core = struct {
     // Sends the successful reply to a request.
     //
     fn sendReply(self: *Core, arena: std.mem.Allocator, id: std.json.Value, reply_data: []const u8) !void {
-        const reply = try json_util.stringify(arena, .{
+        const reply = try json.stringify(arena, .{
             .id = id,
             .ok = true,
-            .data = json_util.Raw{
+            .data = json.Raw{
                 .text = reply_data,
             },
         });
@@ -455,7 +455,7 @@ pub const Core = struct {
     //
     fn reportError(self: *Core, arena: std.mem.Allocator, id: ?std.json.Value, error_name: []const u8) void {
         if (id) |id_value| {
-            const reply = json_util.stringify(arena, .{
+            const reply = json.stringify(arena, .{
                 .id = id_value,
                 .ok = false,
                 .@"error" = error_name,
@@ -465,7 +465,7 @@ pub const Core = struct {
             self.deliver(reply);
             return;
         }
-        const event = json_util.stringify(arena, .{
+        const event = json.stringify(arena, .{
             .channel = "core-error",
             .data = .{
                 .@"error" = error_name,
@@ -517,7 +517,7 @@ fn getPlatformHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Valu
         .ios => "mobile",
         else => if (builtin.abi.isAndroid()) "mobile" else "desktop",
     };
-    return try json_util.stringify(arena, .{
+    return try json.stringify(arena, .{
         .platformKind = platform_kind,
         .os = @tagName(builtin.os.tag),
         .arch = @tagName(builtin.cpu.arch),
@@ -528,13 +528,13 @@ fn getPlatformHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Valu
 // Handles add-task: queues the task the UI's add-task message names.
 //
 fn addTaskHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
-    const task_type = json_util.getString(data, "taskType") orelse {
+    const task_type = json.getString(data, "taskType") orelse {
         return error.MissingTaskType;
     };
-    const task_id = json_util.getString(data, "taskId") orelse {
+    const task_id = json.getString(data, "taskId") orelse {
         return error.MissingTaskId;
     };
-    const source = json_util.getString(data, "source") orelse {
+    const source = json.getString(data, "source") orelse {
         return error.MissingSource;
     };
     const priority_field: std.json.Value = if (data.object.get("priority")) |field| field else .null;
@@ -544,7 +544,7 @@ fn addTaskHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) a
         else => return error.UnknownPriority,
     };
     const task_data: std.json.Value = if (data.object.get("data")) |value| value else .null;
-    const data_json = try json_util.stringify(arena, task_data);
+    const data_json = try json.stringify(arena, task_data);
     try core.runner.addTask(task_id, task_type, source, data_json, priority, null);
     return try arena.dupe(u8, "{}");
 }
@@ -585,11 +585,11 @@ fn testResultHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value
     const control = core.control orelse {
         return error.TestControlNotRunning;
     };
-    const request = json_util.getInteger(data, "requestId") orelse {
+    const request = json.getInteger(data, "requestId") orelse {
         return error.MissingRequestId;
     };
     const result: std.json.Value = if (data.object.get("result")) |value| value else .null;
-    const result_json = try json_util.stringify(arena, result);
+    const result_json = try json.stringify(arena, result);
     try control.setAnswer(@intCast(request), result_json);
     return try arena.dupe(u8, "{}");
 }
@@ -611,10 +611,10 @@ fn testUiReadyHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Valu
 // UI as a menu-action event, which is how the UI learns of every action the shell did not do itself.
 //
 fn menuActionHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
-    const action = json_util.getString(data, "action") orelse {
+    const action = json.getString(data, "action") orelse {
         return error.MissingAction;
     };
-    const event = try json_util.stringify(arena, .{
+    const event = try json.stringify(arena, .{
         .channel = "menu-action",
         .data = .{
             .action = action,

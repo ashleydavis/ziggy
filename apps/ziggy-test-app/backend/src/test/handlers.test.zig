@@ -11,13 +11,13 @@ fn createCore(shell: *FakeShell, data_dir: [*:0]const u8) !*ziggy.core.Core {
 }
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, data: []const u8) !void {
-    const message = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const message = try ziggy.json.stringify(std.testing.allocator, .{
         .channel = "add-task",
         .data = .{
             .taskId = id,
             .taskType = task_type,
             .source = "src",
-            .data = ziggy.json_util.Raw{ .text = data },
+            .data = ziggy.json.Raw{ .text = data },
             .priority = "background",
         },
     });
@@ -57,7 +57,7 @@ test "payload-stats reports the length and checksum of a multi-megabyte payload"
     const payload = try std.testing.allocator.alloc(u8, 5 * 1024 * 1024);
     defer std.testing.allocator.free(payload);
     @memset(payload, 'x');
-    const message = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const message = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 1,
         .channel = "payload-stats",
         .data = .{

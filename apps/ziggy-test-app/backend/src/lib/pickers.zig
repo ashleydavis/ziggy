@@ -8,7 +8,7 @@ const std = @import("std");
 const ziggy = @import("ziggy-core");
 
 const TaskContext = ziggy.task_runner.TaskContext;
-const json_util = ziggy.json_util;
+const json = ziggy.json;
 
 //
 // Shows a dialog and returns the first path chosen as a JSON string, or null when the user cancelled.
@@ -19,7 +19,7 @@ fn firstPath(context: *TaskContext, kind: ziggy.types.PickKind, title: ?[]const 
     if (paths != .array or paths.array.items.len == 0) {
         return try context.arena.dupe(u8, "null");
     }
-    return try json_util.stringify(context.arena, paths.array.items[0]);
+    return try json.stringify(context.arena, paths.array.items[0]);
 }
 
 //
@@ -27,7 +27,7 @@ fn firstPath(context: *TaskContext, kind: ziggy.types.PickKind, title: ?[]const 
 // folder's path, or null.
 //
 pub fn pickFolderHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const title = json_util.getString(data, "title") orelse "Select Folder";
+    const title = json.getString(data, "title") orelse "Select Folder";
     return try firstPath(context, .folder, title, null);
 }
 

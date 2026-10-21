@@ -11,7 +11,7 @@ const ziggy = @import("ziggy-core");
 //
 pub fn pingHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = core;
-    return try ziggy.json_util.stringify(arena, .{
+    return try ziggy.json.stringify(arena, .{
         .zigVersion = builtin.zig_version_string,
         .os = @tagName(builtin.os.tag),
         .arch = @tagName(builtin.cpu.arch),
@@ -25,10 +25,10 @@ pub fn pingHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.j
 //
 pub fn payloadStatsHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = core;
-    const text = ziggy.json_util.getString(data, "text") orelse {
+    const text = ziggy.json.getString(data, "text") orelse {
         return error.MissingText;
     };
-    return try ziggy.json_util.stringify(arena, .{
+    return try ziggy.json.stringify(arena, .{
         .length = text.len,
         .crc32 = std.hash.Crc32.hash(text),
         .text = text[0..@min(text.len, 64)],
@@ -40,7 +40,7 @@ pub fn payloadStatsHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, dat
 // A data directory that does not exist is an error.
 //
 pub fn fileRoundtripHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
-    const text = ziggy.json_util.getString(data, "text") orelse {
+    const text = ziggy.json.getString(data, "text") orelse {
         return error.MissingText;
     };
     const path = try std.fs.path.join(arena, &.{ core.data_dir, "ziggy-test-app-roundtrip.txt" });
@@ -52,7 +52,7 @@ pub fn fileRoundtripHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, da
         .data = text,
     });
     const read_back = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 * 1024 * 1024));
-    return try ziggy.json_util.stringify(arena, .{
+    return try ziggy.json.stringify(arena, .{
         .path = path,
         .text = read_back,
     });

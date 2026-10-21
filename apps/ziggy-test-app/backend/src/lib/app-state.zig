@@ -9,7 +9,7 @@ const ziggy = @import("ziggy-core");
 
 const Core = ziggy.core.Core;
 const TaskContext = ziggy.task_runner.TaskContext;
-const json_util = ziggy.json_util;
+const json = ziggy.json;
 
 //
 // The test app's state: counts of what the backend has told it about tasks.
@@ -140,7 +140,7 @@ pub fn onTaskMessage(core: *Core, sent: ziggy.types.TaskSentMessage) void {
 //
 pub fn taskStatsHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = data;
-    return try json_util.stringify(arena, readStats(fromCore(core)));
+    return try json.stringify(arena, readStats(fromCore(core)));
 }
 
 //
@@ -169,25 +169,25 @@ pub fn describeError(err: anyerror) ?[]const u8 {
 // did. The reply is the id of the task.
 //
 pub fn queueFromAppHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
-    const source = json_util.getString(data, "source") orelse {
+    const source = json.getString(data, "source") orelse {
         return error.MissingSource;
     };
     const task_id = try std.fmt.allocPrint(arena, "from-app-{s}", .{source});
     try core.runner.addTask(task_id, "hello-short", source, "null", .background, null);
-    core.deliver(try json_util.stringify(arena, .{
+    core.deliver(try json.stringify(arena, .{
         .channel = "app-event",
         .data = .{
             .queued = task_id,
         },
     }));
-    return try json_util.stringify(arena, task_id);
+    return try json.stringify(arena, task_id);
 }
 
 //
 // Cancels, from the app's own code, the tasks queued under the source given in "source".
 //
 pub fn cancelFromAppHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
-    const source = json_util.getString(data, "source") orelse {
+    const source = json.getString(data, "source") orelse {
         return error.MissingSource;
     };
     core.runner.cancelSource(source);
@@ -201,7 +201,7 @@ pub fn cancelFromAppHandler(core: *Core, arena: std.mem.Allocator, data: std.jso
 pub fn describeSelfHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
     const state: *ExampleState = @ptrCast(@alignCast(context.appState().?));
-    return try json_util.stringify(context.arena, .{
+    return try json.stringify(context.arena, .{
         .taskId = context.taskId(),
         .taskType = context.taskType(),
         .source = context.source(),
@@ -215,7 +215,7 @@ pub fn describeSelfHandler(context: *TaskContext, data: std.json.Value) anyerror
 // saying in an output message how many it ran. Replies with how many ran and how each ended.
 //
 pub fn runInTurnHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const children = json_util.getInteger(data, "children") orelse 0;
+    const children = json.getInteger(data, "children") orelse 0;
     var statuses: std.ArrayList([]const u8) = .empty;
     var index: i64 = 0;
     while (index < children and !context.isCancelled()) : (index += 1) {
@@ -235,7 +235,7 @@ pub fn runInTurnHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
         });
         return error.Cancelled;
     }
-    return try json_util.stringify(context.arena, .{
+    return try json.stringify(context.arena, .{
         .ran = statuses.items.len,
         .statuses = statuses.items,
     });

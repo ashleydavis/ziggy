@@ -6,7 +6,7 @@ const std = @import("std");
 const ziggy = @import("ziggy-core");
 
 const TaskContext = ziggy.task_runner.TaskContext;
-const json_util = ziggy.json_util;
+const json = ziggy.json;
 
 //
 // How the test app names a job in its job-progress messages, read from the "job" field of a task's data.
@@ -30,16 +30,16 @@ fn readJobTag(data: std.json.Value) ?JobTag {
     const job = data.object.get("job") orelse {
         return null;
     };
-    const id = json_util.getString(job, "id") orelse {
+    const id = json.getString(job, "id") orelse {
         return null;
     };
-    const name = json_util.getString(job, "name") orelse {
+    const name = json.getString(job, "name") orelse {
         return null;
     };
     return .{
         .id = id,
         .name = name,
-        .cancelSource = json_util.getString(job, "cancelSource"),
+        .cancelSource = json.getString(job, "cancelSource"),
     };
 }
 
@@ -88,9 +88,9 @@ pub fn helloShortHandler(context: *TaskContext, data: std.json.Value) anyerror!?
 // child limit at a time, then waits for them all and reports each one's completion in its own output.
 //
 pub fn helloLongHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const duration_ms = json_util.getInteger(data, "durationMs") orelse 1000;
-    const step_ms = json_util.getInteger(data, "stepMs") orelse 50;
-    const children = json_util.getInteger(data, "children") orelse 0;
+    const duration_ms = json.getInteger(data, "durationMs") orelse 1000;
+    const step_ms = json.getInteger(data, "stepMs") orelse 50;
+    const children = json.getInteger(data, "children") orelse 0;
     const job = readJobTag(data);
     const started_at = nowMilliseconds(context);
     var child_ids: std.ArrayList([]const u8) = .empty;
@@ -127,7 +127,7 @@ pub fn helloLongHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
     }
     try context.checkCancelled();
     try sendJobProgress(context, job, started_at, "long task finished");
-    return try json_util.stringify(context.arena, .{
+    return try json.stringify(context.arena, .{
         .steps = step,
         .children = child_ids.items.len,
     });
@@ -138,7 +138,7 @@ pub fn helloLongHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
 //
 pub fn helloChildHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     const started_at = nowMilliseconds(context);
-    const index = json_util.getInteger(data, "index") orelse 0;
+    const index = json.getInteger(data, "index") orelse 0;
     const line = try std.fmt.allocPrint(context.arena, "child {d} running", .{index});
     try sendOutput(context, line);
     try sendJobProgress(context, readJobTag(data), started_at, line);
@@ -147,7 +147,7 @@ pub fn helloChildHandler(context: *TaskContext, data: std.json.Value) anyerror!?
         try context.checkCancelled();
         try context.io().sleep(.fromMilliseconds(10), .awake);
     }
-    return try json_util.stringify(context.arena, .{
+    return try json.stringify(context.arena, .{
         .index = index,
     });
 }
@@ -186,8 +186,8 @@ pub fn osVersionHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
 // a normal one.
 //
 pub fn backgroundCountHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const duration_ms = json_util.getInteger(data, "durationMs") orelse 20000;
-    const file_name = json_util.getString(data, "file") orelse {
+    const duration_ms = json.getInteger(data, "durationMs") orelse 20000;
+    const file_name = json.getString(data, "file") orelse {
         return error.MissingFile;
     };
     const path = try std.fs.path.join(context.arena, &.{ std.mem.span(context.config().data_dir), file_name });
@@ -204,7 +204,7 @@ pub fn backgroundCountHandler(context: *TaskContext, data: std.json.Value) anyer
         try context.io().sleep(.fromMilliseconds(100), .awake);
         elapsed += 100;
     }
-    return try json_util.stringify(context.arena, .{
+    return try json.stringify(context.arena, .{
         .steps = step,
     });
 }

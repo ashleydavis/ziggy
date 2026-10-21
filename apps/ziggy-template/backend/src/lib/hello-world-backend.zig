@@ -16,10 +16,10 @@ const TaskContext = ziggy.task_runner.TaskContext;
 //
 pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = core;
-    const name = ziggy.json_util.getString(data, "name") orelse {
+    const name = ziggy.json.getString(data, "name") orelse {
         return error.MissingName;
     };
-    return try ziggy.json_util.stringify(arena, .{
+    return try ziggy.json.stringify(arena, .{
         .greeting = try std.fmt.allocPrint(arena, "Hello {s}, from Zig on {s}", .{
             name,
             @tagName(builtin.os.tag),

@@ -10,14 +10,14 @@ fn checkItems(items: std.json.Value, seen_accelerators: *std.ArrayList([]const u
         if (item.object.get("separator") != null) {
             continue;
         }
-        const label = ziggy.json_util.getString(item, "label") orelse return error.ItemHasNoLabel;
+        const label = ziggy.json.getString(item, "label") orelse return error.ItemHasNoLabel;
         try std.testing.expect(label.len > 0);
         if (item.object.get("items")) |children| {
             try checkItems(children, seen_accelerators);
             continue;
         }
-        try std.testing.expect(ziggy.json_util.getString(item, "action") != null);
-        if (ziggy.json_util.getString(item, "accelerator")) |text| {
+        try std.testing.expect(ziggy.json.getString(item, "action") != null);
+        if (ziggy.json.getString(item, "accelerator")) |text| {
             _ = try ziggy.accelerator.parse(text);
             for (seen_accelerators.items) |seen| {
                 try std.testing.expect(!std.mem.eql(u8, seen, text));
@@ -35,7 +35,7 @@ test "the menu is valid JSON of menus with labelled items, each with an action a
     var seen: std.ArrayList([]const u8) = .empty;
     defer seen.deinit(std.testing.allocator);
     for (parsed.value.array.items) |menu| {
-        try std.testing.expect(ziggy.json_util.getString(menu, "label") != null);
+        try std.testing.expect(ziggy.json.getString(menu, "label") != null);
         try checkItems(menu.object.get("items").?, &seen);
     }
 }
@@ -54,7 +54,7 @@ test "the actions that are not the shells' own are the UI's, and none is spelled
     var ui_actions: usize = 0;
     for (parsed.value.array.items) |menu| {
         for (menu.object.get("items").?.array.items) |item| {
-            const action = ziggy.json_util.getString(item, "action") orelse continue;
+            const action = ziggy.json.getString(item, "action") orelse continue;
             var is_shell_action = false;
             for (shell_actions) |shell_action| {
                 if (std.mem.eql(u8, shell_action, action)) {

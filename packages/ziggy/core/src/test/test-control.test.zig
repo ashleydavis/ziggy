@@ -385,7 +385,7 @@ test "the drop command records a drop the way the shell does, so the UI can ask 
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
     // The path is written as a JSON string, so a Windows path's backslashes are escaped.
-    const line = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const line = try ziggy.json.stringify(std.testing.allocator, .{
         .command = "drop",
         .paths = &[_][]const u8{path},
     });
@@ -402,7 +402,7 @@ test "the drop command records a drop the way the shell does, so the UI can ask 
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
     core.postMessage("{\"id\":31,\"channel\":\"get-dropped-paths\",\"data\":null}");
-    const expected = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const expected = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 31,
         .ok = true,
         .data = &[_][]const u8{path},
@@ -427,7 +427,7 @@ test "a drop that names an element is also sent to the UI, and the UI's answer i
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    const line = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const line = try ziggy.json.stringify(std.testing.allocator, .{
         .command = "drop",
         .dataId = "zone",
         .paths = &[_][]const u8{path},
@@ -448,7 +448,7 @@ test "a drop that names an element is also sent to the UI, and the UI's answer i
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"dropped\":true}", client.answer.?);
     core.postMessage("{\"id\":32,\"channel\":\"get-dropped-paths\",\"data\":null}");
-    const expected = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const expected = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 32,
         .ok = true,
         .data = &[_][]const u8{path},

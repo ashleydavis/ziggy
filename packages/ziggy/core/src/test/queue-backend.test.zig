@@ -81,7 +81,7 @@ fn queueThroughBackendTask(context: *ziggy.task_runner.TaskContext, data: std.js
     _ = data;
     const backend = try getQueueBackend();
     const child_id = try backend.addTask(context.arena, context.io(), "priority-report", .null, "backend-source", null, null);
-    return try ziggy.json_util.stringify(context.arena, child_id);
+    return try ziggy.json.stringify(context.arena, child_id);
 }
 
 //
@@ -90,7 +90,7 @@ fn queueThroughBackendTask(context: *ziggy.task_runner.TaskContext, data: std.js
 fn priorityReportTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
     const priority = context.runner.priorityOfRunningTask() orelse return error.NoRunningTask;
-    return try ziggy.json_util.stringify(context.arena, @tagName(priority));
+    return try ziggy.json.stringify(context.arena, @tagName(priority));
 }
 
 const backend_tasks = [_]ziggy.task_runner.TaskHandlerEntry{
@@ -105,13 +105,13 @@ fn createCore(shell: *helpers.FakeShell, worker_threads: u32) !*ziggy.core.Core 
 }
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
-    const message = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const message = try ziggy.json.stringify(std.testing.allocator, .{
         .channel = "add-task",
         .data = .{
             .taskId = id,
             .taskType = task_type,
             .source = source,
-            .data = ziggy.json_util.Raw{ .text = data },
+            .data = ziggy.json.Raw{ .text = data },
             .priority = priority,
         },
     });

@@ -47,8 +47,8 @@ fn failTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[
 }
 
 fn sleepTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const milliseconds = ziggy.json_util.getInteger(data, "ms") orelse 0;
-    const name = ziggy.json_util.getString(data, "name") orelse "sleep";
+    const milliseconds = ziggy.json.getInteger(data, "ms") orelse 0;
+    const name = ziggy.json.getString(data, "name") orelse "sleep";
     try context.sendMessage(.{ .start = name });
     try sleepOrCancel(context, milliseconds);
     try context.sendMessage(.{ .end = name });
@@ -56,9 +56,9 @@ fn sleepTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?
 }
 
 fn parentTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const children = ziggy.json_util.getInteger(data, "children") orelse 0;
-    const child_ms = ziggy.json_util.getInteger(data, "childMs") orelse 5;
-    const parent_name = ziggy.json_util.getString(data, "name") orelse "parent";
+    const children = ziggy.json.getInteger(data, "children") orelse 0;
+    const child_ms = ziggy.json.getInteger(data, "childMs") orelse 5;
+    const parent_name = ziggy.json.getString(data, "name") orelse "parent";
     var index: i64 = 0;
     while (index < children) : (index += 1) {
         _ = try context.queueChild("child", .{ .name = parent_name, .ms = child_ms }, null);
@@ -74,9 +74,9 @@ fn awaitOneTask(context: *task_runner.TaskContext, data: std.json.Value) anyerro
     const second = try context.queueChild("fail", .{}, null);
     const first_completion = try context.awaitTask(first);
     const second_completion = try context.awaitTask(second);
-    return try ziggy.json_util.stringify(context.arena, .{
+    return try ziggy.json.stringify(context.arena, .{
         .first = @tagName(first_completion.status),
-        .firstResult = ziggy.json_util.Raw{ .text = first_completion.result_json orelse "null" },
+        .firstResult = ziggy.json.Raw{ .text = first_completion.result_json orelse "null" },
         .second = @tagName(second_completion.status),
         .secondError = second_completion.error_message orelse "",
     });
@@ -90,13 +90,13 @@ fn runChildrenInTurnTask(context: *task_runner.TaskContext, data: std.json.Value
     const first = try context.runChild(allocator, "child-result", .{}, null);
     const second = try context.runChild(allocator, "fail", .{}, null);
     const third = try context.runChild(allocator, "child-result", .{}, null);
-    return try ziggy.json_util.stringify(context.arena, .{
+    return try ziggy.json.stringify(context.arena, .{
         .first = @tagName(first.status),
-        .firstResult = ziggy.json_util.Raw{ .text = first.result_json orelse "null" },
+        .firstResult = ziggy.json.Raw{ .text = first.result_json orelse "null" },
         .second = @tagName(second.status),
         .secondError = second.error_message orelse "",
         .third = @tagName(third.status),
-        .thirdResult = ziggy.json_util.Raw{ .text = third.result_json orelse "null" },
+        .thirdResult = ziggy.json.Raw{ .text = third.result_json orelse "null" },
     });
 }
 
@@ -106,8 +106,8 @@ fn childResultTask(context: *task_runner.TaskContext, data: std.json.Value) anye
 }
 
 fn childTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const milliseconds = ziggy.json_util.getInteger(data, "ms") orelse 0;
-    const name = ziggy.json_util.getString(data, "name") orelse "child";
+    const milliseconds = ziggy.json.getInteger(data, "ms") orelse 0;
+    const name = ziggy.json.getString(data, "name") orelse "child";
     try context.sendMessage(.{ .childStart = name });
     try sleepOrCancel(context, milliseconds);
     try context.sendMessage(.{ .childEnd = name });
@@ -124,7 +124,7 @@ fn blockedParentTask(context: *task_runner.TaskContext, data: std.json.Value) an
 }
 
 fn flooderTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const count = ziggy.json_util.getInteger(data, "count") orelse 0;
+    const count = ziggy.json.getInteger(data, "count") orelse 0;
     var index: i64 = 0;
     while (index < count) : (index += 1) {
         try context.sendMessage(.{ .seq = index });
@@ -165,7 +165,7 @@ fn pickSaveTask(context: *task_runner.TaskContext, data: std.json.Value) anyerro
 
 fn echoChannel(core: *core_module.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
     _ = core;
-    return try ziggy.json_util.stringify(arena, data);
+    return try ziggy.json.stringify(arena, data);
 }
 
 fn failChannel(core: *core_module.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {

@@ -8,7 +8,7 @@
 
 const std = @import("std");
 const types = @import("types.zig");
-const json_util = @import("json-util.zig");
+const json = @import("json.zig");
 const utils = @import("task-queue.zig").utils;
 
 const Completion = types.Completion;
@@ -272,15 +272,15 @@ pub const TaskContext = struct {
     // Sends any value std.json can serialise to the UI as the message of a task-message event.
     //
     pub fn sendMessage(self: *TaskContext, message: anytype) !void {
-        const json = try json_util.stringify(self.arena, message);
-        try self.sendRawMessage(json);
+        const message_json = try json.stringify(self.arena, message);
+        try self.sendRawMessage(message_json);
     }
 
     //
     // Sends JSON text to the UI as the message of a task-message event.
     //
-    pub fn sendRawMessage(self: *TaskContext, json: []const u8) !void {
-        try self.runner.emitTaskMessage(self.task, json);
+    pub fn sendRawMessage(self: *TaskContext, message_json: []const u8) !void {
+        try self.runner.emitTaskMessage(self.task, message_json);
     }
 
     //
@@ -289,7 +289,7 @@ pub const TaskContext = struct {
     // when this task has been cancelled.
     //
     pub fn queueChild(self: *TaskContext, task_type: []const u8, data: anytype, priority: ?TaskPriority) ![]const u8 {
-        const data_json = try json_util.stringify(self.arena, data);
+        const data_json = try json.stringify(self.arena, data);
         const child_id = try self.runner.queueChild(self.task, task_type, data_json, priority);
         return try self.arena.dupe(u8, child_id);
     }
@@ -309,7 +309,7 @@ pub const TaskContext = struct {
     // for as long as it lives. Returns error.Cancelled when this task has been cancelled.
     //
     pub fn runChild(self: *TaskContext, allocator: std.mem.Allocator, task_type: []const u8, data: anytype, priority: ?TaskPriority) !Completion {
-        const data_json = try json_util.stringify(allocator, data);
+        const data_json = try json.stringify(allocator, data);
         const child_id = try self.runner.queueChild(self.task, task_type, data_json, priority);
         defer self.runner.releaseChild(self.task, child_id);
         return try self.runner.awaitTask(self.task, child_id, allocator);
@@ -1070,12 +1070,12 @@ pub const TaskRunner = struct {
         if (self.silent.load(.acquire)) {
             return;
         }
-        const event = try json_util.stringify(self.allocator, .{
+        const event = try json.stringify(self.allocator, .{
             .channel = "task-message",
             .data = .{
                 .taskId = task.id,
                 .source = task.source,
-                .message = json_util.Raw{
+                .message = json.Raw{
                     .text = message_json,
                 },
             },
@@ -1099,12 +1099,12 @@ pub const TaskRunner = struct {
         if (self.silent.load(.acquire)) {
             return;
         }
-        const event = json_util.stringify(self.allocator, .{
-            .id = json_util.Raw{
+        const event = json.stringify(self.allocator, .{
+            .id = json.Raw{
                 .text = reply_id_json,
             },
             .ok = completion.status == .succeeded,
-            .data = if (completion.status == .succeeded) json_util.Raw{
+            .data = if (completion.status == .succeeded) json.Raw{
                 .text = completion.result_json orelse "null",
             } else null,
             .@"error" = switch (completion.status) {
@@ -1131,7 +1131,7 @@ pub const TaskRunner = struct {
             .cancelled => "Cancelled",
             .failed => completion.error_message orelse "Failed",
         };
-        const event = json_util.stringify(self.allocator, .{
+        const event = json.stringify(self.allocator, .{
             .channel = "task-completed",
             .data = .{
                 .taskId = task.id,
@@ -1142,11 +1142,11 @@ pub const TaskRunner = struct {
                         .message = text,
                     } else null,
                     .errorMessage = error_message,
-                    .outputs = if (completion.result_json) |text| json_util.Raw{
+                    .outputs = if (completion.result_json) |text| json.Raw{
                         .text = text,
                     } else null,
                     .type = task.task_type,
-                    .inputs = json_util.Raw{
+                    .inputs = json.Raw{
                         .text = task.data_json,
                     },
                 },

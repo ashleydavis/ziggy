@@ -4,13 +4,13 @@ const helpers = @import("helpers.zig");
 const utils = @import("ziggy-core").task_queue.utils;
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
-    const message = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const message = try ziggy.json.stringify(std.testing.allocator, .{
         .channel = "add-task",
         .data = .{
             .taskId = id,
             .taskType = task_type,
             .source = source,
-            .data = ziggy.json_util.Raw{ .text = data },
+            .data = ziggy.json.Raw{ .text = data },
             .priority = priority,
         },
     });
@@ -19,7 +19,7 @@ fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source
 }
 
 fn cancelSource(core: *ziggy.core.Core, source: []const u8) !void {
-    const message = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const message = try ziggy.json.stringify(std.testing.allocator, .{
         .channel = "cancel-tasks",
         .data = source,
     });
@@ -529,10 +529,10 @@ test "a keep-alive parent keeps the app running until its children are done and 
 }
 
 fn hostRequestTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const method = ziggy.json_util.getString(data, "method").?;
+    const method = ziggy.json.getString(data, "method").?;
     const reply = try context.hostRequest(method, "{\"key\":\"value\"}");
     if (!reply.succeeded) {
-        return try ziggy.json_util.stringify(context.arena, .{
+        return try ziggy.json.stringify(context.arena, .{
             .failedBecause = reply.text,
         });
     }

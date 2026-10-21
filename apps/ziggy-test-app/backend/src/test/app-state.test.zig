@@ -9,13 +9,13 @@ fn createCore(shell: *FakeShell) !*ziggy.core.Core {
 }
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8) !void {
-    const message = try ziggy.json_util.stringify(std.testing.allocator, .{
+    const message = try ziggy.json.stringify(std.testing.allocator, .{
         .channel = "add-task",
         .data = .{
             .taskId = id,
             .taskType = task_type,
             .source = source,
-            .data = ziggy.json_util.Raw{ .text = data },
+            .data = ziggy.json.Raw{ .text = data },
             .priority = "background",
         },
     });
