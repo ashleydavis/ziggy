@@ -18,6 +18,7 @@ const system_messages = @import("system-messages.zig");
 const app_lib = @import("app.zig");
 const handlers_lib = @import("handlers.zig");
 const message_registry = @import("message-registry.zig");
+const menu_lib = @import("menu.zig");
 
 const ZiggyConfig = types.ZiggyConfig;
 
@@ -90,10 +91,12 @@ pub const RegisteredApp = struct {
     messages: []const handlers_lib.MessageEntry,
     // The app's task types.
     tasks: []const task_runner.TaskHandlerEntry,
-    // The desktop menu as JSON: an array of menus, each {"label", "items"}, where an item is {"label", "action", "accelerator"}
-    // or {"separator": true}, and may hold its own "items" for a submenu. "[]" for an app with no menu. Shells show it on
-    // desktop only. See "Menus" in the architecture document.
+    // The desktop menu as JSON, which App makes from the app's `.menu` (see menuJson in menu.zig). "[]" for an app with no menu.
+    // Shells show it on desktop only. See "Menus" in the architecture document.
     menu_json: []const u8,
+    // What the core does for each menu item a native app posts as menu-action, by the item's name, which App makes from the app's
+    // `.menu` (see menuTargets in menu.zig).
+    menu_targets: menu_lib.MenuTargets,
     // The files of the app's bundled UI, embedded in the app's library, for a shell that serves the UI by calling the core
     // for each file (the MacOS, iOS and Android shells). Empty for an app whose shell embeds the UI itself.
     ui_files: []const ui_files.UiFile,
@@ -163,6 +166,8 @@ pub const Core = struct {
     next_request_task: std.atomic.Value(u64),
     // The desktop menu as JSON, owned by the app.
     menu_json: []const u8,
+    // What the core does for each menu item a native app posts, by the item's name, owned by the app.
+    menu_targets: menu_lib.MenuTargets,
     // The files of the app's bundled UI, owned by the app.
     ui_files: []const ui_files.UiFile,
     // Gives the text of an error reply, or null to use the error's name. Owned by the app.
@@ -232,6 +237,7 @@ pub const Core = struct {
         }
         core.next_request_task = .init(0);
         core.menu_json = app.menu_json;
+        core.menu_targets = app.menu_targets;
         core.ui_files = app.ui_files;
         core.describe_error = app.describe_error;
         core.state_hooks = app.state;

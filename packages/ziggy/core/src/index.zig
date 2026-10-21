@@ -14,6 +14,7 @@ pub const test_control = @import("lib/test-control.zig");
 pub const host_reply = @import("lib/host-reply.zig");
 pub const fake_shell = @import("lib/fake-shell.zig");
 pub const accelerator = @import("lib/accelerator.zig");
+pub const menu = @import("lib/menu.zig");
 pub const inject_script = @import("lib/inject-script.zig");
 pub const ui_files = @import("lib/ui-files.zig");
 pub const dropped_files = @import("lib/dropped-files.zig");

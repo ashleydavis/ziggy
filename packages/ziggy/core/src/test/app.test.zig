@@ -145,7 +145,7 @@ test "App makes the task table from the task types, each with its handler and ki
                 .kind = .keep_alive,
             },
         },
-        .menu_json = "[]",
+        .menu = &.{},
         .ui_files = &[_]ziggy.ui_files.UiFile{},
     });
     try std.testing.expectEqual(@as(usize, 2), registered.tasks.len);
@@ -278,7 +278,7 @@ const answering_app = registered: {
             .@"later-without-reply" = laterWithoutReplyHandler,
         },
         .tasks = .{},
-        .menu_json = "[]",
+        .menu = &.{},
         .ui_files = &[_]ziggy.ui_files.UiFile{},
         .state = ziggy.core.AppState{
             .create = createLaterState,

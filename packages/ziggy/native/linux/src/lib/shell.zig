@@ -702,8 +702,8 @@ fn onMenuItemActivate(menu_item: *c.GtkWidget, user_data: ?*anyopaque) callconv(
 }
 
 //
-// Does a menu action. The actions every shell does itself are done here, and any other is the app's, which goes to the core to
-// be handed to the UI.
+// Does a menu action. The actions every shell does itself are done here. Any other is the app's: it goes to the core, which
+// runs the app's item.
 //
 fn performAction(shell: *Shell, action: []const u8) !void {
     const web_view = shell.web_view.?;

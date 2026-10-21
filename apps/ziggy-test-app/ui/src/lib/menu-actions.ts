@@ -1,6 +1,6 @@
 //
-// What the UI does for each action of the test app's menu that the shells hand it. The shells do the rest themselves
-// (quit, reload, developer tools, zoom, full screen and the editing commands).
+// What the UI does for each item of the test app's menu that runs in the UI, which reaches it as a menu event. The native apps
+// do the standard items themselves (quit, reload, developer tools, zoom, full screen and the editing commands).
 //
 
 //

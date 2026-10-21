@@ -428,7 +428,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Tells the core that an app-owned menu item was chosen, as the menu-action message the UI's own code also gets.
+    // Tells the core that an app-owned menu item was chosen, as the menu-action message. The core runs the app's item.
     func postMenuAction(_ action: String) {
         let message: [String: Any] = [
             "kind": "system",

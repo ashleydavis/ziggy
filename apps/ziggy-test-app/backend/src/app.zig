@@ -53,7 +53,7 @@ pub const app = ziggy.core.App(.{
     .on_task_end = app_state.onTaskEnd,
     .on_task_message = app_state.onTaskMessage,
     .describe_error = app_state.describeError,
-    .menu_json = menu.menu_json,
+    .menu = menu.menu,
     .ui_files = &ui.files,
     .ui_query = ui_query.uiQuery,
 });

@@ -79,11 +79,14 @@ export interface ITaskCompletedEvent {
 }
 
 //
-// What a menu-action event carries: a menu item that is the app's own was chosen.
+// The app event the onEvent listeners receive when a menu item that runs in the UI (a `.ui` item of the app's menu) is chosen.
 //
-export interface IMenuActionEvent {
-    // The item's action, as the app's menu names it.
-    action: string;
+export interface IMenuEvent {
+    // Always "menu": the one event type Ziggy sends among the app's own events.
+    type: "menu";
+
+    // The item's name, as the app's menu names it.
+    item: string;
 }
 
 //
@@ -161,7 +164,8 @@ export interface IZiggyBridge {
     send(name: string, data: IJsonValue): void;
 
     //
-    // Registers a callback for every event of the app's own the backend sends. Ziggy's own events never reach it.
+    // Registers a callback for every event of the app's own the backend sends and for each menu item that runs in the UI, as an
+    // IMenuEvent. Ziggy's own events never reach it.
     //
     onEvent<TData>(callback: IMessageCallback<TData>): void;
 
@@ -208,16 +212,6 @@ export interface IZiggyBridge {
     // Removes a callback onTaskCompleted registered.
     //
     removeTaskCompletedListener(callback: IMessageCallback<ITaskCompletedEvent>): void;
-
-    //
-    // Registers a callback for each menu item chosen that is the app's own.
-    //
-    onMenuAction(callback: IMessageCallback<IMenuActionEvent>): void;
-
-    //
-    // Removes a callback onMenuAction registered.
-    //
-    removeMenuActionListener(callback: IMessageCallback<IMenuActionEvent>): void;
 
     //
     // Registers a callback for a message that failed with no message response to carry the error. With no callback registered,

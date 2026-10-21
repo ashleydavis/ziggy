@@ -85,9 +85,69 @@ The `/ziggy:upgrade` Claude Code command follows these steps for an app.
 
 ## The menu and the window icon
 
-The app gives Ziggy its desktop menu as JSON text in `menu_json` of its `ziggy.core.App`: an array of menus, each `{"label", "items"}`, where an item is `{"label", "action", "accelerator"}` or `{"separator": true}` and may hold its own `"items"` for a submenu. A shortcut is modifiers and a key joined by plus signs, such as `CmdOrCtrl+Shift+I`, `F12` or `CmdOrCtrl+Plus`. `CmdOrCtrl` is Command on macOS and Control elsewhere. Shortcuts work wherever the focus is, including inside the web view.
+The app gives Ziggy its desktop menu as a Zig constant, a `[]const ziggy.menu.Menu`, passed to its `ziggy.core.App` as `.menu` (`&.{}` for none). Each menu has a `label` and its `items`. An item is `ziggy.menu.separator`, a submenu with a `label` and its own `items` or an item with a `label`, an optional `accelerator` (its shortcut) and what it runs in `run`. The template's is in `backend/src/lib/menu.zig`. A small one:
 
-The native app does these actions itself: `quit`, `close-window`, `reload`, `toggle-devtools`, `toggle-fullscreen`, `zoom-in`, `zoom-out`, `zoom-reset`, `undo`, `redo`, `cut`, `copy`, `paste` and `select-all`. Any other action reaches the UI as a `menu-action` system event, `{"action": "<action>"}`, which the UI hears through `window.ziggy.onMenuAction`, and the UI decides what it means. The developer tools open with `toggle-devtools` in every build, release included. A mobile device has no menu.
+```zig
+const ziggy = @import("ziggy-core");
+const menu_functions = @import("menu-functions.zig");
+
+pub const menu: []const ziggy.menu.Menu = &.{
+    .{
+        .label = "File",
+        .items = &.{
+            .{
+                .label = "Export",
+                .name = "export",
+                .accelerator = "CmdOrCtrl+E",
+                .run = .{
+                    .zig = menu_functions.exportFile,
+                },
+            },
+            .{
+                .label = "About",
+                .name = "about",
+                .run = .ui,
+            },
+            ziggy.menu.separator,
+            .{
+                .label = "Quit",
+                .accelerator = "CmdOrCtrl+Q",
+                .run = .{
+                    .standard = .quit,
+                },
+            },
+        },
+    },
+};
+```
+
+An item runs one of three things:
+
+- **`.standard`**: an action the native app does itself. The actions are `quit`, `close-window`, `reload`, `toggle-devtools`, `toggle-fullscreen`, `zoom-in`, `zoom-out`, `zoom-reset`, `undo`, `redo`, `cut`, `copy`, `paste`, `select-all` and `focus-window` (the `ziggy.menu.StandardAction` enum). The developer tools open with `toggle-devtools` in every build, release included. A standard item has no `.name`.
+- **`.zig`**: a Zig function of the app's, `fn (core: *ziggy.core.Core, arena: std.mem.Allocator) anyerror!void`, which the core calls. It runs on the thread that handles messages, like a message handler, so it must be quick: slow work queues a task from it. An error it returns is reported as a `core-error` system event, which the UI hears through `window.ziggy.onCoreError`.
+- **`.ui`**: the UI, which receives the app event `{"type": "menu", "item": "<name>"}` through `window.ziggy.onEvent` (typed as `IMenuEvent` in `ziggy-ui`) and decides what it means. An app must not send an event of its own with `type` set to `"menu"`: the UI could not tell it from a menu item.
+
+Every `.zig` and `.ui` item must have a `.name`. It is how the core finds the item when the native app passes on the choice. A `.ui` item's name is the `item` of its event.
+
+```ts
+window.ziggy.onEvent<IMenuEvent>(event => {
+    if (event.type === "menu" && event.item === "about") {
+        ...
+    }
+});
+```
+
+A shortcut is modifiers and a key joined by plus signs, such as `CmdOrCtrl+Shift+I`, `F12` or `CmdOrCtrl+Plus`. `CmdOrCtrl` is Command on macOS and Control elsewhere. Shortcuts work wherever the focus is, including inside the web view. A mobile device has no menu.
+
+`ziggy.core.App` checks the menu when the app is built. The build fails with a message naming the item when:
+
+- an item is not a separator or a submenu and has no `run`
+- a submenu has a `run` or a `name`
+- a separator has a `run`, `items`, `name` or `accelerator` (use `ziggy.menu.separator`)
+- a `.zig` or `.ui` item has no name, an empty name or the name of a standard action, such as `quit`
+- a `.standard` item has a name
+- two items have the same name or the same shortcut
+- a shortcut does not parse
 
 The window icon:
 

@@ -26,7 +26,7 @@ pub const app = ziggy.core.App(.{
     .tasks = .{
         .@"hello-world-task" = hello_world_backend.helloWorldTaskHandler,
     },
-    .menu_json = menu.menu_json,
+    .menu = menu.menu,
     .ui_files = &ui.files,
     .ui_query = ui_query.uiQuery,
 });
@@ -38,7 +38,7 @@ The fields of `ziggy.core.App`:
 |---|---|---|
 | `messages` | Yes | Each field is a message name and its handler, in any of the forms under "What a handler returns" below. `.{}` for an app with none. |
 | `tasks` | Yes | Each field is a task type and its task handler, or `.{ .handler = ..., .kind = .keep_alive }` for a keep-alive task type. See [Tasks](tasks.md#registering-a-handler). |
-| `menu_json` | Yes | The desktop menu as JSON text, `"[]"` for none. See [the menu](building-your-app.md#the-menu-and-the-window-icon). |
+| `menu` | Yes | The desktop menu, a `[]const ziggy.menu.Menu`, `&.{}` for none. It is checked when the app is built. See [the menu](building-your-app.md#the-menu-and-the-window-icon). |
 | `ui_files` | Yes | The files of the app's built UI, `&ui.files` from the `ui-files` module the build makes. |
 | `ui_query` | No | A function that gives the query the native app adds to the UI's address, so the UI's first render already holds what the backend tells it at start-up. |
 | `describe_error` | No | A function that turns an error a handler returned into the text of the error response (see "When a handler fails" below). |
@@ -206,6 +206,8 @@ window.ziggy.onEvent<IAppEvent>(event => {
 });
 ```
 
+Ziggy sends one app event of its own: when the user chooses a menu item that runs in the UI (a `.ui` item), the `onEvent` listeners receive `{"type": "menu", "item": "<name>"}`, typed as `IMenuEvent` in `ziggy-ui`, where `item` is the item's `.name`. An app must not send an event of its own with `type` set to `"menu"`. See [the menu](building-your-app.md#the-menu-and-the-window-icon).
+
 ## Ziggy's own calls
 
 Ziggy's own messages and events, the system messages and system events, are separate from the app's: they never reach the app's message handlers or an `onEvent` listener. An app cannot send or define one. The UI reaches what they do only through these calls on `window.ziggy`:
@@ -215,7 +217,6 @@ Ziggy's own messages and events, the system messages and system events, are sepa
 | `addTask(task)`, `cancelTasks(source)` | Queue a task and cancel the tasks of a source. See [Tasks](tasks.md). |
 | `onTaskMessage(callback)`, `onTaskCompleted(callback)` | Hear what a task sends while it runs and how it ended. See [Tasks](tasks.md). |
 | `getPlatform()` | Resolves with whether the app is on a desktop or a mobile device (`platformKind`), and the operating system and processor (`os`, `arch`). |
-| `onMenuAction(callback)` | Hears that a menu item that is the app's own was chosen, with its `action`. See [the menu](building-your-app.md#the-menu-and-the-window-icon). |
 | `onCoreError(callback)` | Hears of a message that failed with no message response to carry the error, such as one that is not JSON or was sent with `send`, with the `error`. With no listener, the error is logged to the console. |
 | `getPathForFile(file)` | The real path of a file dropped on the window. It asks the backend for the paths of the last drop, so the UI never does that itself. |
 | `onTestCommand(callback)`, `sendTestResult(requestId, result)`, `testUiReady()` | The test hooks, in a test hooks build only. See [Testing your app](testing.md). |

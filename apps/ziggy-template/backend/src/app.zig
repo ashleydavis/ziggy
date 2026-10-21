@@ -19,7 +19,7 @@ pub const app = ziggy.core.App(.{
     .tasks = .{
         .@"hello-world-task" = hello_world_backend.helloWorldTaskHandler,
     },
-    .menu_json = menu.menu_json,
+    .menu = menu.menu,
     .ui_files = &ui.files,
     .ui_query = ui_query.uiQuery,
 });

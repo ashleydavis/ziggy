@@ -263,6 +263,17 @@ describe("ziggy-inject", () => {
         expect(received).toEqual([{ type: "saved" }, { type: "saved" }]);
     });
 
+    test("a menu item that runs in the UI reaches the onEvent listeners as the app event menu; window.ziggy has no menu listener of its own", () => {
+        const fakeWindow = windowWithWebkit([]);
+        inject(fakeWindow);
+        const received: object[] = [];
+        fakeWindow.ziggy!.onEvent(data => received.push(data));
+        fakeWindow.__ziggyReceive!({ kind: "app", data: { type: "menu", item: "about" } });
+        expect(received).toEqual([{ type: "menu", item: "about" }]);
+        expect(Object.keys(fakeWindow.ziggy!)).not.toContain("onMenuAction");
+        expect(Object.keys(fakeWindow.ziggy!)).not.toContain("removeMenuActionListener");
+    });
+
     test("an app event reaches no system listener, even when it carries a system event's name", () => {
         const fakeWindow = windowWithWebkit([]);
         inject(fakeWindow);
@@ -337,7 +348,6 @@ describe("ziggy-inject", () => {
         const pairs: [string, string, string][] = [
             ["task-message", "onTaskMessage", "removeTaskMessageListener"],
             ["task-completed", "onTaskCompleted", "removeTaskCompletedListener"],
-            ["menu-action", "onMenuAction", "removeMenuActionListener"],
             ["core-error", "onCoreError", "removeCoreErrorListener"],
             ["test-command", "onTestCommand", "removeTestCommandListener"],
         ];
@@ -414,13 +424,11 @@ describe("ziggy-inject", () => {
             "invoke",
             "onCoreError",
             "onEvent",
-            "onMenuAction",
             "onTaskCompleted",
             "onTaskMessage",
             "onTestCommand",
             "removeCoreErrorListener",
             "removeEventListener",
-            "removeMenuActionListener",
             "removeTaskCompletedListener",
             "removeTaskMessageListener",
             "removeTestCommandListener",

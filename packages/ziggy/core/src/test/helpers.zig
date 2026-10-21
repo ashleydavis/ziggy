@@ -280,6 +280,77 @@ fn countHandler(core: *core_module.Core, arena: std.mem.Allocator, request: []co
 }
 
 //
+// The function of the tests' `.zig` menu item "zig-item": it delivers a line, so a test can see it ran on this core.
+//
+fn menuItemRan(core: *core_module.Core, arena: std.mem.Allocator) anyerror!void {
+    _ = arena;
+    core.deliver("{\"data\":\"the menu item's function ran\"}");
+}
+
+//
+// The function of the tests' `.zig` menu item "failing-item", which fails.
+//
+fn menuItemFails(core: *core_module.Core, arena: std.mem.Allocator) anyerror!void {
+    _ = core;
+    _ = arena;
+    return error.MenuItemFailed;
+}
+
+//
+// The tests' menu: a standard item, two `.zig` items, a separator, a `.ui` item and a submenu holding another `.ui` item.
+//
+pub const menu: []const ziggy.menu.Menu = &.{
+    .{
+        .label = "File",
+        .items = &.{
+            .{
+                .label = "Quit",
+                .accelerator = "CmdOrCtrl+Q",
+                .run = .{
+                    .standard = .quit,
+                },
+            },
+        },
+    },
+    .{
+        .label = "Example",
+        .items = &.{
+            .{
+                .label = "Zig Item",
+                .name = "zig-item",
+                .run = .{
+                    .zig = menuItemRan,
+                },
+            },
+            .{
+                .label = "Failing Item",
+                .name = "failing-item",
+                .run = .{
+                    .zig = menuItemFails,
+                },
+            },
+            ziggy.menu.separator,
+            .{
+                .label = "About",
+                .name = "about",
+                .run = .ui,
+            },
+            .{
+                .label = "More",
+                .items = &.{
+                    .{
+                        .label = "Nested",
+                        .name = "nested",
+                        .accelerator = "CmdOrCtrl+Shift+N",
+                        .run = .ui,
+                    },
+                },
+            },
+        },
+    },
+};
+
+//
 // The tests' messages: echo, fail, none, name, greet, forget, count, and quick-request, fail-request, pick-open-request and
 // pick-save-request, which are answered by the task quick, fail, pick-open or pick-save. App wants the task types as a struct
 // literal, and the tests also add task types of their own to the list in task_handlers, so the app takes that list after App has
@@ -302,7 +373,7 @@ pub const app = registered: {
             .@"pick-save-request" = answeredByTask("pick-save"),
         },
         .tasks = .{},
-        .menu_json = "[]",
+        .menu = menu,
         .ui_files = &[_]ziggy.ui_files.UiFile{
             .{
                 .path = "index.html",

@@ -17,7 +17,8 @@
 //
 // The shell delivers a message from the core by calling window.__ziggyReceive with the message as an object:
 //   { "id", "ok": true, "data" } or { "id", "ok": false, "error" }   a message response, of either kind, matched by id
-//   { "kind": "app", "data" }                                        an app event, for the onEvent listeners
+//   { "kind": "app", "data" }                                        an app event, for the onEvent listeners (a menu item the UI
+//                                                                    runs is one: { "type": "menu", "item" })
 //   { "kind": "system", "name", "data" }                             a system event, for Ziggy's listeners for that name
 (function () {
     if (window.ziggy) {
@@ -147,7 +148,6 @@
 
     var taskMessage = systemEvent("task-message");
     var taskCompleted = systemEvent("task-completed");
-    var menuAction = systemEvent("menu-action");
     var coreError = systemEvent("core-error");
     var testCommand = systemEvent("test-command");
 
@@ -260,8 +260,6 @@
             removeTaskMessageListener: taskMessage.remove,
             onTaskCompleted: taskCompleted.on,
             removeTaskCompletedListener: taskCompleted.remove,
-            onMenuAction: menuAction.on,
-            removeMenuActionListener: menuAction.remove,
             onCoreError: coreError.on,
             removeCoreErrorListener: coreError.remove,
             onTestCommand: testCommand.on,

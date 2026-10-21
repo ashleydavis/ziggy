@@ -7,6 +7,7 @@ const std = @import("std");
 const core_lib = @import("core.zig");
 const handlers = @import("handlers.zig");
 const task_runner = @import("task-runner.zig");
+const menu_lib = @import("menu.zig");
 
 //
 // The fields App takes, with whether each must be given.
@@ -31,7 +32,7 @@ const app_fields = [_]AppField{
         .required = true,
     },
     .{
-        .name = "menu_json",
+        .name = "menu",
         .required = true,
     },
     .{
@@ -66,7 +67,7 @@ const app_fields = [_]AppField{
 //   .messages         each field a message name and the handler for it (see wrapNamed in handlers.zig for the forms a handler takes)
 //   .tasks            each field a task type and its task handler, or `.{ .handler = ..., .kind = .keep_alive }` for a task type
 //                     the app is kept running for
-//   .menu_json        the desktop menu as JSON (see RegisteredApp)
+//   .menu             the desktop menu, a []const ziggy.menu.Menu (see menu.zig), checked when the app is built
 //   .ui_files         the files of the app's bundled UI
 //   .describe_error, .state, .on_task_end, .on_task_message, .ui_query   optional, as RegisteredApp describes them
 //
@@ -83,7 +84,7 @@ pub fn App(comptime definition: anytype) core_lib.RegisteredApp {
         }
         for (@typeInfo(Definition).@"struct".fields) |field| {
             if (!isAppField(field.name)) {
-                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu_json, ui_files, describe_error, state, on_task_end, on_task_message and ui_query.");
+                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, ui_files, describe_error, state, on_task_end, on_task_message and ui_query.");
             }
         }
         for (app_fields) |field| {
@@ -91,11 +92,13 @@ pub fn App(comptime definition: anytype) core_lib.RegisteredApp {
                 @compileError("ziggy.core.App: the field \"" ++ field.name ++ "\" is missing.");
             }
         }
+        menu_lib.checkMenu(definition.menu);
     }
     return .{
         .messages = comptime messageTable(definition.messages),
         .tasks = comptime taskTable(definition.tasks),
-        .menu_json = definition.menu_json,
+        .menu_json = comptime menu_lib.menuJson(definition.menu),
+        .menu_targets = comptime menu_lib.menuTargets(definition.menu),
         .ui_files = definition.ui_files,
         .describe_error = if (@hasField(Definition, "describe_error")) definition.describe_error else null,
         .state = if (@hasField(Definition, "state")) definition.state else null,

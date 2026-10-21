@@ -37,6 +37,15 @@ pub fn build(b: *std.Build) !void {
             .name = "ziggy-core",
             .module = test_core,
         },
+        // The Windows native app's list of the actions it does itself, which the menu's tests compare with the core's list.
+        .{
+            .name = "ziggy-native-windows-actions",
+            .module = b.createModule(.{
+                .root_source_file = b.path("packages/ziggy/native/windows/src/lib/actions.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
+        },
     }, target, optimize, core_test_binary_step);
 
     // The console writing to the real stdout, which a unit test cannot see: a program writes through it and the build checks what it

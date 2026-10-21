@@ -190,7 +190,7 @@ const recording = ziggy.core.App(.{
         .echo = recordAppMessage,
     },
     .tasks = .{},
-    .menu_json = "[]",
+    .menu = &.{},
     .ui_files = &[_]ziggy.ui_files.UiFile{},
 });
 
@@ -366,15 +366,49 @@ test "check url uses the configured prefix" {
     try std.testing.expectEqual(ziggy.types.UrlDecision.block, core.checkUrl("file:///other/index.html"));
 }
 
-test "a menu-action message from a shell reaches the UI as a menu-action event" {
+test "a menu-action message naming a .ui item reaches the UI as the app event menu; no menu-action event is sent" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
     core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
-    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":{}}");
+    const event = try shell.messageAt(std.testing.allocator, 0);
+    defer std.testing.allocator.free(event);
+    try std.testing.expectEqualStrings("{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"about\"}}", event);
+    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    // An item in a submenu is found too.
+    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"nested\"}}");
+    try shell.expectMessageContaining("{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"nested\"}}");
+    try expectLastMessage(&shell, "{\"id\":2,\"ok\":true,\"data\":{}}");
+    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("\"name\":\"menu-action\""));
+}
+
+test "a menu-action message naming a .zig item calls its function with the core; its error is the error reply" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try helpers.createCore(&shell, 1, 1);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"zig-item\"}}");
+    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("the menu item's function ran"));
+    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"failing-item\"}}");
+    try expectLastMessage(&shell, "{\"id\":2,\"ok\":false,\"error\":\"MenuItemFailed\"}");
+    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("\"type\":\"menu\""));
+}
+
+test "a menu-action message naming an unknown item or a standard action fails with UnknownMenuItem and runs nothing" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try helpers.createCore(&shell, 1, 1);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"nonsense\"}}");
+    try expectLastMessage(&shell, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMenuItem\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"quit\"}}");
+    try expectLastMessage(&shell, "{\"id\":2,\"ok\":false,\"error\":\"UnknownMenuItem\"}");
+    try std.testing.expectEqual(@as(usize, 2), shell.count());
 }
 
 test "a menu-action message with no action is an error reply" {
@@ -393,7 +427,8 @@ test "the core holds the app's menu for shells to read" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    try std.testing.expectEqualStrings("[]", core.menu_json);
+    try std.testing.expectEqualStrings(ziggy.menu.menuJson(helpers.menu), core.menu_json);
+    try std.testing.expect(core.menu_targets.get("zig-item") != null);
 }
 
 test "the core finds a file of the app's bundled UI by the path of a request" {

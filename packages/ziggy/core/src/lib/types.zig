@@ -44,7 +44,7 @@ pub const PickKind = enum(i32) {
 //
 // A native host callback that does a menu action as if the user had chosen its menu item, by the path the menu item takes in the
 // shell, so the shell's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
-// other action reaches the UI. The core calls it, from the thread of the test control connection, only to let a test choose a
+// other action reaches the core, which runs the app's item. The core calls it, from the thread of the test control connection, only to let a test choose a
 // menu item. The shell does the work on its UI thread and returns at once.
 //
 pub const MenuActionFn = *const fn (user_data: ?*anyopaque, action: [*:0]const u8) callconv(.c) void;

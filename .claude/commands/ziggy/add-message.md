@@ -12,7 +12,7 @@ Read Ziggy's guide [Messages](https://github.com/ashleydavis/ziggy/blob/main/doc
 
 - Prefer an existing message when one already does what is needed. Otherwise give the new action its own message name: the message name is what Ziggy picks the handler by, so an action's name does not go in the data.
 - Anything that takes long (reading many files, hashing, network) is a task, not a message its handler answers itself, because every message handler runs on the thread that handles every UI message. Use `/ziggy:add-task` for that, or have the handler answer with a task by returning `.task` (the Tasks guide's "A message answered by a task").
-- The new message is an app message. Never try to handle or send a system message, one of Ziggy's own (adding and cancelling tasks, the platform, menu actions, dropped files, the test hooks), from the app. They never reach the app's message handlers. The UI reaches them only through their own calls on `window.ziggy`.
+- The new message is an app message. Never try to handle or send a system message, one of Ziggy's own (adding and cancelling tasks, the platform, the menu items the native app passes on, dropped files, the test hooks), from the app. They never reach the app's message handlers. The UI reaches them only through their own calls on `window.ziggy`.
 
 ## Add it
 

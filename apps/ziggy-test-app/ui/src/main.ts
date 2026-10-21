@@ -1,4 +1,4 @@
-import type { IJsonValue, IMenuActionEvent } from "ziggy-ui";
+import type { IJsonValue, IMenuEvent } from "ziggy-ui";
 import { formatPingReply, IPingReply } from "./lib/format-reply";
 import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobList, IJobProgressMessage } from "./lib/job-list";
 import { makeLargePayload } from "./lib/large-payload";
@@ -70,6 +70,14 @@ interface IAppEvent {
 
     // The task the app queued.
     queued: string;
+}
+
+//
+// The app event the Send Event From Zig menu item's Zig function sends.
+//
+interface IMenuZigEvent {
+    // Always "menu-zig-event".
+    type: "menu-zig-event";
 }
 
 function element(dataId: string): HTMLElement {
@@ -489,20 +497,29 @@ function listenForEvents(): void {
 }
 
 //
-// Carries out a menu item's action that the shell did not do itself. A task action presses the same button the UI shows.
+// Carries out the menu items that run in the UI, which arrive as menu events. It also logs the event the Send Event From Zig item's
+// function sends. A task item presses the same button the UI shows. This is a listener of its own, apart from the one the App
+// facilities section can remove, so the menu keeps working after that button is pressed.
 //
-function listenForMenuActions(): void {
-    window.ziggy.onMenuAction((event: IMenuActionEvent) => {
-        appendTo("event-log", `menu-action ${event.action}`);
-        const buttonId = buttonForMenuAction(event.action);
+function listenForMenuEvents(): void {
+    window.ziggy.onEvent<IMenuEvent | IMenuZigEvent>(event => {
+        if (event.type === "menu-zig-event") {
+            appendTo("event-log", "menu-zig-event");
+            return;
+        }
+        if (event.type !== "menu") {
+            return;
+        }
+        appendTo("event-log", `menu-action ${event.item}`);
+        const buttonId = buttonForMenuAction(event.item);
         if (buttonId !== null) {
             element(buttonId).click();
         }
-        else if (event.action === "about") {
+        else if (event.item === "about") {
             element("edge-result").textContent = aboutText;
         }
         else {
-            throw new Error(`The UI does not know the menu action ${event.action}.`);
+            throw new Error(`The UI does not know the menu item ${event.item}.`);
         }
     });
 }
@@ -541,7 +558,7 @@ function listenForTestCommands(): void {
 }
 
 listenForEvents();
-listenForMenuActions();
+listenForMenuEvents();
 listenForTestCommands();
 startTasks();
 startEdgeChecks();

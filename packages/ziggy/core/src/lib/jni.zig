@@ -297,7 +297,7 @@ fn installSignalHandlers() void {
 
 //
 // The native host callback that does a menu action. A phone has no menu bar and none of the shell's own actions (reload, zoom,
-// full screen, quit), so every action reaches the UI as a menu-action message, the way an action of the UI's own does on a
+// full screen, quit), so every action is posted to the core as a menu-action message, which runs the app's item as it does on a
 // desktop. The core calls it from the thread of the test control connection.
 //
 fn menuActionCallback(user_data: ?*anyopaque, action: [*:0]const u8) callconv(.c) void {

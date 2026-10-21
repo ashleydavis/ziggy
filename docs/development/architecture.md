@@ -57,7 +57,7 @@ The smoke test scenario `24-ui-address` checks on every platform that the UI is 
 
 ![How a message and its message response travel between the UI, the native app and the backend](diagrams/message-bridge.svg)
 
-Each message, message response and event is the JSON text of one object. The native app carries it between the web view and the backend without reading it, except to post a menu action of its own:
+Each message, message response and event is the JSON text of one object. The native app carries it between the web view and the backend without reading it, except to post the `menu-action` system message when a menu item it does not run itself is chosen:
 
 | What | From | Laid out like |
 |---|---|---|
@@ -98,7 +98,7 @@ The system messages, each handled by Ziggy's core library and never by the app:
 | `add-task` | `window.ziggy.addTask(task)` | Queues a task. |
 | `cancel-tasks` | `window.ziggy.cancelTasks(source)` | Cancels the tasks of a source. |
 | `get-dropped-paths` | `window.ziggy.getPathForFile`, when a drop happens | Answers with the paths of the files in the last drop. |
-| `menu-action` | The native app | Passes on a menu action the native app does not do itself, which the backend sends the UI as a `menu-action` system event. |
+| `menu-action` | The native app | Passes on a menu item the native app does not run itself, by its name: the core calls a `.zig` item's function or sends a `.ui` item to the UI as the app event `{"type": "menu", "item": "<name>"}`. A name the menu does not have, or a standard action, fails with `UnknownMenuItem`. |
 | `test-result` | `window.ziggy.sendTestResult(requestId, result)` | The UI's result for a `test-command`. Test hooks builds only. |
 | `test-ui-ready` | `window.ziggy.testUiReady()` | Says the UI is listening for test commands. Test hooks builds only. |
 
@@ -110,7 +110,6 @@ The system events, each with its own listener on `window.ziggy`:
 |---|---|---|
 | `task-message` | `onTaskMessage` | A task sent a message while it ran: `taskId`, `source` and `message`. |
 | `task-completed` | `onTaskCompleted` | A task ended: `taskId` and `result`. |
-| `menu-action` | `onMenuAction` | A menu item that is the app's own was chosen: `action`. |
 | `core-error` | `onCoreError` | A message failed with no message response to carry the error: `error`. With no listener it is logged to the console. |
 | `test-command` | `onTestCommand` | A command from the test control connection: `requestId` and `command`. Test hooks builds only. |
 
@@ -131,8 +130,9 @@ The system events, each with its own listener on `window.ziggy`:
 
 ## Menus
 
-- The backend describes the desktop menu once as JSON. Each desktop native app reads that description and builds a native menu from it with the platform's own menu API. A mobile device has no menu.
-- The native app does the standard actions itself (quit, reload, zoom, the editing commands and the developer tools) and passes any other to the backend as a `menu-action` message, which the backend sends the UI as a `menu-action` event. The UI hears it through `window.ziggy.onMenuAction`.
+- The app declares the desktop menu once, as a `ziggy.menu.Menu` value passed to `ziggy.core.App` as `.menu` (`core/src/lib/menu.zig`). `App` checks it when the app is built and turns it, at compile time, into the menu JSON the native apps read through `ziggy_menu_json` and the table of named items the core runs. Each desktop native app builds a native menu from that JSON with the platform's own menu API. A mobile device has no menu.
+- Each item says what it runs. The native app does a `.standard` item itself (quit, reload, zoom, full screen, focusing the window, the editing commands and the developer tools). Any other item it posts to the core by name as the `menu-action` system message. The core calls a `.zig` item's function on the thread that handles messages. An error it returns becomes a `core-error` system event, since the message has no id. The core sends a `.ui` item to the UI as the app event `{"type": "menu", "item": "<name>"}`, which reaches the `onEvent` listeners.
+- `menu-action` is only a system message the native apps post. It is not a system event and the UI has no listener for it.
 - [Building your app](../user-guide/building-your-app.md#the-menu-and-the-window-icon) says how to write one.
 
 ## Test hooks

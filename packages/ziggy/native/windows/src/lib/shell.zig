@@ -1111,7 +1111,7 @@ fn buildMenu(shell: *Shell, core: *anyopaque) !void {
 
 //
 // Runs a menu action. The actions the shell knows are done here, and any other is sent to the core as a menu-action
-// message, which the core hands to the UI.
+// message. The core runs the app's item.
 //
 fn runAction(shell: *Shell, action: []const u8) void {
     const known = actions_lib.fromName(action) orelse {
