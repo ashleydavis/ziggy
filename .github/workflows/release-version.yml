@@ -1,0 +1,29 @@
+name: Release version
+
+# Publishes the GitHub release of a version tag when the tag is pushed: release notes listing the commits since the version tag
+# before it, and the tag's own docs/agent-quick-start.md attached. The docs tell users to point their agent at
+# https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md, which GitHub serves only from the files
+# attached to the newest release, so a release without it leaves that address returning 404.
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the tag
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash ./apps/ziggy-template/scripts/release-notes.sh --exclude-tag "$GITHUB_REF_NAME" > release-notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md docs/agent-quick-start.md

@@ -30,8 +30,8 @@ An app pins Ziggy to a version tag. A version tag is `v` followed by the version
    git push origin v0.1.0
    ```
 
-3. Write what changed for apps since the last version, and what an app has to change, in a GitHub release on the tag, so an app moving to it knows.
+   Pushing the tag starts `.github/workflows/release-version.yml`, which publishes the GitHub release on the tag, with notes listing the commits since the version tag before it and the tag's `docs/agent-quick-start.md` attached. The docs tell users to point their agent at `https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md`, which GitHub serves only from the files attached to the newest release.
 
-Publishing the release starts `.github/workflows/attach-agent-quick-start.yml`, which attaches the tag's `docs/agent-quick-start.md` to it. The docs tell users to point their agent at `https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md`, which GitHub serves only from the files attached to the newest release. Check the workflow passed and the release lists the file.
+3. When an app has to change something to move to the new version, add it to the release's notes.
 
 A version tag is never moved or deleted once pushed: an app that pinned it, and the hash in its `build.zig.zon`, depend on it staying the same. A mistake is fixed by releasing the next version.
