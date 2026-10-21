@@ -32,6 +32,7 @@ To see what building an app with Ziggy looks like, start with the quick start.
 
 - [Quick start](docs/quick-start.md): get an example app running and see the code behind it.
 - [User guide](docs/user-guide.md): how an app is put together, and how to build your own.
+- [Starting a new app](docs/user-guide/building-your-app.md#starting-a-new-app-from-the-template): have an AI coding agent, such as Claude Code, start one for you, or do it yourself.
 - Examples, complete apps built on Ziggy:
   - [Vite example](https://github.com/ashleydavis/ziggy-example-vite): the UI built with Vite.
   - [Rsbuild example](https://github.com/ashleydavis/ziggy-example-rsbuild): the UI built with Rsbuild.

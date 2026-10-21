@@ -203,4 +203,8 @@ Change the name in `ui/src/main.ts` or the greeting in `helloWorldHandler` and r
 ## Next
 
 - To change the UI and see it update as you save, run `bun run dev` and read [Dev mode](user-guide/building-your-app.md#dev-mode).
-- To start an app of your own, use the `/ziggy:new` Claude Code command ([Claude Code commands](user-guide/claude-code-commands.md) says how to get it), or follow the steps in the [user guide](user-guide.md).
+- To start an app of your own, start an AI coding agent, such as Claude Code, in the empty directory the app will go in and tell it:
+
+  > Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/blob/main/docs/agent-quick-start.md
+
+  Or follow the steps in [Building your app](user-guide/building-your-app.md#starting-a-new-app-from-the-template) yourself.

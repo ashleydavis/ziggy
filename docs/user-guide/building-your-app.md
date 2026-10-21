@@ -4,8 +4,20 @@ A new app starts as a copy of the Ziggy template (`apps/ziggy-template`), which 
 
 ## Starting a new app from the template
 
-The quickest way is the `/ziggy:new` Claude Code command, which does these steps for you and asks for the app's names as it goes. [Claude Code commands](claude-code-commands.md) says how to get it.
+Before you start, install [mise](https://mise.jdx.dev), then what your platform needs. [Dependencies](dependencies.md) lists everything an app needs and why.
 
+- **Linux:** install the libraries the app runs on and the tools its tests use:
+
+  ```bash
+  sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good gstreamer1.0-libav xvfb
+  ```
+
+- **Windows:** the scripts that set up, build, run, test and package your app are bash scripts, so install [Git for Windows](https://gitforwindows.org) for its Git Bash shell, add `%LOCALAPPDATA%\mise\shims` to PATH and run every command in Git Bash.
+- **macOS:** install Xcode.
+
+The quickest way is to have an AI coding agent, such as Claude Code, do these steps for you. It asks for the app's names as it goes. Start the agent in the empty directory the app will go in and tell it:
+
+> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/blob/main/docs/agent-quick-start.md
 Without the command:
 
 1. Find Ziggy's latest release, the highest version tag of its repository. The tag is the last part of the line this prints (`refs/tags/<tag>`):
@@ -60,6 +72,13 @@ Without the command:
    - "Ziggy template", the name a user sees: window titles, the menu, `Info.plist`, `AndroidManifest.xml`, the Windows installer and the docs.
    - The Windows installer's GUIDs in `scripts/package-windows.wxs` (the `UpgradeCode` and each `Component`'s `Guid`): make new ones with `uuidgen`, or Windows treats the new app as an upgrade of the template.
 5. Run `bun install`, then the unit tests and the smoke tests. They pass unchanged in a copy that is renamed and pinned to a release.
+6. Make the app a git repository and commit it. The template's `.gitignore` keeps what builds and tests write out of it:
+
+   ```bash
+   git init
+   git add .
+   git commit -m "Started the app from the Ziggy template <tag>"
+   ```
 
 Then change what the app does: its UI, its backend's message handlers and task handlers, its menu, its icon and its native projects.
 

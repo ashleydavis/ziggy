@@ -52,11 +52,11 @@ Every tracked markdown doc in the repo outside `docs/plans/`. Regenerate the lis
 
 ## Claude Code commands
 
-- [ ] [ziggy/new.md](../.claude/commands/ziggy/new.md)
-- [ ] [ziggy/upgrade.md](../.claude/commands/ziggy/upgrade.md)
-- [ ] [ziggy/check.md](../.claude/commands/ziggy/check.md)
-- [ ] [ziggy/add-message.md](../.claude/commands/ziggy/add-message.md)
-- [ ] [ziggy/add-task.md](../.claude/commands/ziggy/add-task.md)
+- [ ] [agent-quick-start.md](agent-quick-start.md)
+- [ ] [ziggy/upgrade.md](../apps/ziggy-template/.claude/commands/ziggy/upgrade.md)
+- [ ] [ziggy/check.md](../apps/ziggy-template/.claude/commands/ziggy/check.md)
+- [ ] [ziggy/add-message.md](../apps/ziggy-template/.claude/commands/ziggy/add-message.md)
+- [ ] [ziggy/add-task.md](../apps/ziggy-template/.claude/commands/ziggy/add-task.md)
 
 ## Ziggy template: READMEs
 

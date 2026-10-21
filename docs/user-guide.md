@@ -2,7 +2,9 @@
 
 This guide is for building an app on Ziggy. If try Ziggy quickly, start with the [quick start](quick-start.md).
 
-To create your own Ziggy app, use the Claude Code command `/ziggy:new` (described in [Claude Code commands](user-guide/claude-code-commands.md)). 
+To create your own Ziggy app with an AI coding agent, such as Claude Code, start the agent in the empty directory the app will go in and tell it:
+
+> Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/blob/main/docs/agent-quick-start.md
 
 Otherwise follow [Building your app](user-guide/building-your-app.md).
 
@@ -38,5 +40,5 @@ Also:
 
 - [Dependencies](user-guide/dependencies.md): what an app needs on each platform, what each dependency is and why.
 - [Scripts](user-guide/scripts.md): the `bun run` scripts that set up, build, run, test and package your app.
-- [Claude Code commands](user-guide/claude-code-commands.md): the Claude commands to start a new app on Ziggy, check it, add messages and tasks to it and move it to a newer Ziggy.
+- [Claude Code commands](user-guide/claude-code-commands.md): the Claude Code commands every app comes with, to check it, add messages and tasks to it and move it to a newer Ziggy.
 - [Architecture](development/architecture.md): how it all fits together.
