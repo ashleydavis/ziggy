@@ -4,10 +4,12 @@
 // Each item says what it runs. A `.standard` item is an action the native app does itself (quit, close-window, reload, the zoom and
 // editing actions, full screen and the developer tools). A `.zig` item calls a Zig function of the app's on the thread that handles
 // messages. A `.ui` item reaches the UI as the app event {"type": "menu", "item": "<name>"}; each of those has a `.name`. The
-// template's items are all standard. See "Menus" in the architecture document.
+// Hello menu is the hello world example of a `.zig` item and a `.ui` item. See "The menu and the window icon" in Ziggy's guide
+// "Building your app".
 //
 
 const ziggy = @import("ziggy-core");
+const hello_world = @import("hello-world.zig");
 
 //
 // The menu the template passes to ziggy.core.App as `.menu`.
@@ -127,6 +129,24 @@ pub const menu: []const ziggy.menu.Menu = &.{
                 .run = .{
                     .standard = .@"toggle-devtools",
                 },
+            },
+        },
+    },
+    .{
+        // Hello world example: change it into your own menu, or delete it.
+        .label = "Hello",
+        .items = &.{
+            .{
+                .label = "Say Hello From Zig",
+                .name = "hello-from-zig",
+                .run = .{
+                    .zig = hello_world.helloFromZigMenuItem,
+                },
+            },
+            .{
+                .label = "Say Hello From the UI",
+                .name = "hello-from-ui",
+                .run = .ui,
             },
         },
     },

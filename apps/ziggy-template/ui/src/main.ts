@@ -1,5 +1,5 @@
 import type { IJsonValue } from "ziggy-ui";
-import { greetingLine, IHelloWorldResponse } from "./lib/hello-world-ui";
+import { greetingLine, IAppEvent, IHelloWorldResponse, logLineForEvent } from "./lib/hello-world";
 import { ITestCommand, performTestCommand, testResultToJson } from "./lib/test-commands";
 
 //
@@ -25,17 +25,34 @@ function element(dataId: string): HTMLElement {
 }
 
 //
-// Sends the backend the hello-world message and shows its message response.
+// Writes a line at the end of the log, and scrolls it so the line can be seen.
 //
-async function sayHello(): Promise<void> {
-    const response = await window.ziggy.invoke<IHelloWorldResponse>("hello-world", {
-        name: "world",
-    });
-    element("greeting").textContent = greetingLine(response);
+function log(line: string): void {
+    const logElement = element("log");
+    logElement.textContent += `${line}\n`;
+    logElement.scrollTop = logElement.scrollHeight;
 }
 
 //
-// Starts the hello-world task when its button is pressed, and shows what the task sends and how it ends.
+// Sends the backend the hello-world message when its button is pressed, and logs the message response, or the error when there is
+// one.
+//
+function listenForTheMessageButton(): void {
+    element("send-message").addEventListener("click", async () => {
+        try {
+            const response = await window.ziggy.invoke<IHelloWorldResponse>("hello-world", {
+                name: "world",
+            });
+            log(greetingLine(response));
+        }
+        catch (error) {
+            log(`The backend did not answer: ${(error as Error).message}`);
+        }
+    });
+}
+
+//
+// Starts the hello-world task when its button is pressed, and logs what the task sends and how it ends.
 //
 function listenForTheTask(): void {
     let nextTaskNumber = 1;
@@ -50,10 +67,23 @@ function listenForTheTask(): void {
         });
     });
     window.ziggy.onTaskMessage<IOutputMessage>(event => {
-        element("task-output").textContent += `${event.message.text}\n`;
+        log(event.message.text);
     });
     window.ziggy.onTaskCompleted(event => {
-        element("task-output").textContent += `The task ended: ${event.result.status}\n`;
+        log(`The task ended: ${event.result.status}`);
+    });
+}
+
+//
+// Logs what the Hello menu's items lead to: the event Say Hello From Zig's Zig function sends, and the menu event Say Hello From
+// the UI reaches the UI as.
+//
+function listenForTheMenu(): void {
+    window.ziggy.onEvent<IAppEvent>(event => {
+        const line = logLineForEvent(event);
+        if (line !== null) {
+            log(line);
+        }
     });
 }
 
@@ -75,8 +105,7 @@ function listenForTestCommands(): void {
     window.ziggy.testUiReady();
 }
 
+listenForTheMessageButton();
 listenForTheTask();
+listenForTheMenu();
 listenForTestCommands();
-sayHello().catch(error => {
-    element("greeting").textContent = `The backend did not answer: ${(error as Error).message}`;
-});

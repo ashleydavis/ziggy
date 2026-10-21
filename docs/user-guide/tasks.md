@@ -81,7 +81,7 @@ The app lists its task types in the `.tasks` field of its `ziggy.core.App` (see 
 
 ```zig
 .tasks = .{
-    .@"hello-world-task" = hello_world_backend.helloWorldTaskHandler,
+    .@"hello-world-task" = hello_world.helloWorldTaskHandler,
 },
 ```
 
@@ -195,7 +195,7 @@ The core library implements the task queue's `IQueueBackend` on its own runner, 
 | `packages/ziggy/core/src/lib/core.zig` | `Core.registerTask` and `Core.answerWithTask`. |
 | `packages/ziggy/core/src/lib/handlers.zig` | `Answer`, whose `.task` answers a message with a task. |
 | `packages/ziggy/core/src/lib/task-queue` | The task queue that Ziggy's core library implements its queue backend for. |
-| `apps/ziggy-template/backend/src/lib/hello-world-backend.zig` | The template's hello world task. |
+| `apps/ziggy-template/backend/src/lib/hello-world.zig` | The template's hello world task. |
 | `apps/ziggy-test-app/backend/src/lib/hello-tasks.zig` | The test app's task handlers: long tasks, child tasks, cancelling, failing and keep-alive. |
 | `apps/ziggy-template/ui/src/main.ts` | How the template's UI queues tasks and handles their events. |
 

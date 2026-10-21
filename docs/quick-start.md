@@ -87,7 +87,7 @@ async function sayHello(): Promise<void> {
 }
 ```
 
-A Zig function in the backend, the message's handler, gets the message's data parsed into a struct of its own and returns the response, which Ziggy sends back as JSON. The backend code in this section is the Ziggy template's ([`backend/src/lib/hello-world-backend.zig`](../apps/ziggy-template/backend/src/lib/hello-world-backend.zig)):
+A Zig function in the backend, the message's handler, gets the message's data parsed into a struct of its own and returns the response, which Ziggy sends back as JSON. The backend code in this section is the Ziggy template's ([`backend/src/lib/hello-world.zig`](../apps/ziggy-template/backend/src/lib/hello-world.zig)):
 
 ```zig
 pub const HelloWorldRequest = struct {
@@ -122,7 +122,7 @@ The app declares itself to Ziggy in one file, which lists each message name with
 ```zig
 pub const app = ziggy.core.App(.{
     .messages = .{
-        .@"hello-world" = hello_world_backend.helloWorldHandler,
+        .@"hello-world" = hello_world.helloWorldHandler,
     },
     ...
 });
@@ -166,7 +166,7 @@ window.ziggy.onTaskCompleted(
 );
 ```
 
-A Zig function runs the task on a worker thread, sends the UI an event and completes with a result ([`backend/src/lib/hello-world-backend.zig`](../apps/ziggy-template/backend/src/lib/hello-world-backend.zig)):
+A Zig function runs the task on a worker thread, sends the UI an event and completes with a result ([`backend/src/lib/hello-world.zig`](../apps/ziggy-template/backend/src/lib/hello-world.zig)):
 
 ```zig
 pub fn helloWorldTaskHandler(
@@ -188,7 +188,7 @@ The app registers that function as the handler for `hello-world-task` tasks in t
 pub const app = ziggy.core.App(.{
     ...
     .tasks = .{
-        .@"hello-world-task" = hello_world_backend.helloWorldTaskHandler,
+        .@"hello-world-task" = hello_world.helloWorldTaskHandler,
     },
     ...
 });

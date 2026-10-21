@@ -59,10 +59,18 @@ if ! ziggy_platform_prepare "$RUN_DIR"; then
     exit 1
 fi
 #
-# Prints the scenario directories, one per line, in name order: every folder here that holds a test.sh.
+# Prints the scenario directories, one per line, in name order: every folder here that holds a test.sh, and on a desktop platform
+# every folder in desktop-only that holds one too, because a phone has no menu or window of its own to test.
 #
 list_scenarios() {
-    ls -d "$SMOKE_DIR"/*/ | sed 's#/$##' | while IFS= read -r directory; do
+    {
+        ls -d "$SMOKE_DIR"/*/
+        case "$PLATFORM" in
+            linux|windows|macos)
+                ls -d "$SMOKE_DIR"/desktop-only/*/
+                ;;
+        esac
+    } | sed 's#/$##' | while IFS= read -r directory; do
         if [ -f "$directory/test.sh" ]; then
             printf '%s\n' "$directory"
         fi

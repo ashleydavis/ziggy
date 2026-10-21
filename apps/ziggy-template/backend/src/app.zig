@@ -4,7 +4,7 @@
 //
 
 const ziggy = @import("ziggy-core");
-const hello_world_backend = @import("lib/hello-world-backend.zig");
+const hello_world = @import("lib/hello-world.zig");
 const menu = @import("lib/menu.zig");
 const ui_query = @import("lib/ui-query.zig");
 const ui = @import("ui-files");
@@ -14,10 +14,10 @@ const ui = @import("ui-files");
 //
 pub const app = ziggy.core.App(.{
     .messages = .{
-        .@"hello-world" = hello_world_backend.helloWorldHandler,
+        .@"hello-world" = hello_world.helloWorldHandler,
     },
     .tasks = .{
-        .@"hello-world-task" = hello_world_backend.helloWorldTaskHandler,
+        .@"hello-world-task" = hello_world.helloWorldTaskHandler,
     },
     .menu = menu.menu,
     .ui_files = &ui.files,

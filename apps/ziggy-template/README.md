@@ -8,11 +8,11 @@ The template is the smallest complete app: a hello world for each kind of code a
 
 | Kind | Code | Test |
 |---|---|---|
-| UI | `ui/src/lib/hello-world-ui.ts`, used by `ui/src/main.ts` | `ui/src/test/hello-world-ui.test.ts` (`bun run test`) |
-| Backend: a message handler and a task | `backend/src/lib/hello-world-backend.zig`, registered in `backend/src/app.zig` | `backend/src/test/hello-world-backend.test.zig` (`bun run test:zig`) |
-| The whole app | The app | `smoke-tests/hello-world-app/test.sh` (`bun run test:smoke`) |
+| UI | `ui/src/lib/hello-world.ts`, used by `ui/src/main.ts` | `ui/src/test/hello-world.test.ts` (`bun run test`) |
+| Backend: a message handler, a task and a menu item's function | `backend/src/lib/hello-world.zig`, registered in `backend/src/app.zig` | `backend/src/test/hello-world.test.zig` (`bun run test:zig`) |
+| The whole app | The app | `smoke-tests/hello-world-app/test.sh` and, on desktop only, `smoke-tests/desktop-only/hello-menu/test.sh` (`bun run test:smoke`) |
 
-The page shows the backend's message response to the `hello-world` message, and a button starts the `hello-world-task` task and shows what it sends. The desktop menu is defined once in Zig (`backend/src/lib/menu.zig`) and drawn natively; a mobile device shows no menu.
+One button sends the `hello-world` message and logs the backend's message response, and another starts the `hello-world-task` task and logs what it sends and how it ends. The desktop menu is defined once in Zig (`backend/src/lib/menu.zig`) and drawn natively; a mobile device shows no menu. Its Hello menu has Say Hello From Zig, which runs a Zig function that sends the UI an event, and Say Hello From the UI, which the UI handles itself. Each writes a line to the log.
 
 ## Where things are
 

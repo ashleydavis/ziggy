@@ -14,17 +14,17 @@ An app declares itself to Ziggy in one file, `backend/src/app.zig` in the templa
 
 ```zig
 const ziggy = @import("ziggy-core");
-const hello_world_backend = @import("lib/hello-world-backend.zig");
+const hello_world = @import("lib/hello-world.zig");
 const menu = @import("lib/menu.zig");
 const ui_query = @import("lib/ui-query.zig");
 const ui = @import("ui-files");
 
 pub const app = ziggy.core.App(.{
     .messages = .{
-        .@"hello-world" = hello_world_backend.helloWorldHandler,
+        .@"hello-world" = hello_world.helloWorldHandler,
     },
     .tasks = .{
-        .@"hello-world-task" = hello_world_backend.helloWorldTaskHandler,
+        .@"hello-world-task" = hello_world.helloWorldTaskHandler,
     },
     .menu = menu.menu,
     .ui_files = &ui.files,
@@ -51,7 +51,7 @@ The app writes nothing else for Ziggy. Its `build.zig` names this file as `backe
 
 ## A message handler
 
-A message handler takes the backend, an arena and the message's data parsed into a type of the handler's own and returns the message response. This is the template's, in `backend/src/lib/hello-world-backend.zig`:
+A message handler takes the backend, an arena and the message's data parsed into a type of the handler's own and returns the message response. This is the template's, in `backend/src/lib/hello-world.zig`:
 
 ```zig
 pub const HelloWorldRequest = struct {

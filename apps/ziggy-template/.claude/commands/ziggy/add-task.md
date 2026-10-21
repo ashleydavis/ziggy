@@ -6,7 +6,7 @@ description: Add a background task type to a Ziggy app: the backend's handler, i
 
 The human says what the work is, what it takes as input and what it produces. If they have not, ask, and wait for the answer.
 
-Read Ziggy's guide [Tasks](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/tasks.md) first, all of it, and the app's existing task handlers (in the template, `backend/src/lib/hello-world-backend.zig`). Write the new task the way those are written.
+Read Ziggy's guide [Tasks](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/tasks.md) first, all of it, and the app's existing task handlers (in the template, `backend/src/lib/hello-world.zig`). Write the new task the way those are written.
 
 ## Add it
 
