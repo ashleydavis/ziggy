@@ -4,7 +4,7 @@ Terms are defined in the [glossary](../glossary.md).
 
 A native call is how the backend has the native app do something only native code can do, such as showing a file dialog. The UI never sees it: a task makes the call, and the native app does the work on its UI thread while the task waits.
 
-Make native calls from a task, never from a channel handler, because the call waits for the native app and a dialog waits for the user. To answer a message from the UI with a dialog, list the channel in `task_channels` (see "A message handled by a task" in [Tasks](tasks.md)).
+Make native calls from a task, never from a message handler, because the call waits for the native app and a dialog waits for the user. To answer a message from the UI with a dialog, answer it with a task (see "A message answered by a task" in [Tasks](tasks.md#a-message-answered-by-a-task)).
 
 A native call the platform does not provide fails with `error.HostCallbackMissing`, so an app that runs there handles that error.
 
@@ -16,7 +16,7 @@ A task shows a native dialog with `context.pickPaths(kind, title, initial_name)`
 - `title`: the dialog's title.
 - `initial_name`: the suggested file name for a save, or the directory an open or directory dialog starts in.
 
-It returns the JSON text of an array of the paths chosen, `[]` when the user cancelled. The template's `pick-files`, `pick-folder` and `pick-file` channels work this way. A mobile device has no save dialog, so `pick-file` fails on iOS.
+It returns the JSON text of an array of the paths chosen, `[]` when the user cancelled. Ziggy's test app answers its `pick-files`, `pick-folder` and `pick-file` messages this way. A mobile device has no save dialog, so `pick-file` fails on iOS.
 
 ## The app's own native calls
 

@@ -7,13 +7,22 @@ fn lastMessage(shell: *helpers.FakeShell) ![]u8 {
     return try shell.messageAt(std.testing.allocator, shell.count() - 1);
 }
 
-test "a known channel is routed and replied to with the request's id" {
+//
+// Fails unless the last message the shell recorded is the expected text.
+//
+fn expectLastMessage(shell: *helpers.FakeShell, expected: []const u8) !void {
+    const last = try lastMessage(shell);
+    defer std.testing.allocator.free(last);
+    try std.testing.expectEqualStrings(expected, last);
+}
+
+test "a message with an id reaches the app's message handler and its response comes back with the same id" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":7,\"channel\":\"echo\",\"data\":{\"a\":1}}");
+    core.postMessage("{\"kind\":\"app\",\"id\":7,\"name\":\"echo\",\"data\":{\"a\":1}}");
     const reply = try lastMessage(&shell);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":7,\"ok\":true,\"data\":{\"a\":1}}", reply);
@@ -25,22 +34,22 @@ test "a string id is echoed as a string" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":\"abc\",\"channel\":\"echo\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":\"abc\",\"name\":\"echo\",\"data\":null}");
     const reply = try lastMessage(&shell);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":\"abc\",\"ok\":true,\"data\":null}", reply);
 }
 
-test "an unknown channel gets an error reply" {
+test "a system message name Ziggy does not know gets UnknownSystemMessage" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"nope\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"nope\",\"data\":null}");
     const reply = try lastMessage(&shell);
     defer std.testing.allocator.free(reply);
-    try std.testing.expectEqualStrings("{\"id\":1,\"ok\":false,\"error\":\"UnknownChannel\"}", reply);
+    try std.testing.expectEqualStrings("{\"id\":1,\"ok\":false,\"error\":\"UnknownSystemMessage\"}", reply);
 }
 
 test "test-result and test-ui-ready are error replies when the core is not in test mode" {
@@ -49,11 +58,11 @@ test "test-result and test-ui-ready are error replies when the core is not in te
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":null}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":null}}");
     const first = try lastMessage(&shell);
     defer std.testing.allocator.free(first);
     try std.testing.expectEqualStrings("{\"id\":1,\"ok\":false,\"error\":\"TestControlNotRunning\"}", first);
-    core.postMessage("{\"id\":2,\"channel\":\"test-ui-ready\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"test-ui-ready\",\"data\":null}");
     const second = try lastMessage(&shell);
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualStrings("{\"id\":2,\"ok\":false,\"error\":\"TestControlNotRunning\"}", second);
@@ -67,24 +76,185 @@ test "malformed JSON is reported as a core-error event and the core keeps workin
     defer core.destroy();
     core.postMessage("{not json");
     core.postMessage("[1,2,3]");
-    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("\"channel\":\"core-error\""));
+    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("\"kind\":\"system\",\"name\":\"core-error\""));
     try std.testing.expectEqual(@as(usize, 2), shell.countContaining("InvalidMessage"));
-    core.postMessage("{\"id\":2,\"channel\":\"echo\",\"data\":1}");
+    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"echo\",\"data\":1}");
     const reply = try lastMessage(&shell);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":2,\"ok\":true,\"data\":1}", reply);
 }
 
-test "a message without a channel gets an error reply when it has an id and a core-error event when not" {
+test "the message's name reaches the app's message handler unchanged" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":3,\"data\":1}");
-    try shell.expectMessageContaining("{\"id\":3,\"ok\":false,\"error\":\"MissingChannel\"}");
-    core.postMessage("{\"data\":1}");
-    try shell.expectMessageContaining("\"channel\":\"core-error\"");
+    core.postMessage("{\"kind\":\"app\",\"id\":7,\"name\":\"name\",\"data\":null}");
+    try expectLastMessage(&shell, "{\"id\":7,\"ok\":true,\"data\":\"name\"}");
+}
+
+test "a message with no name, an empty name or a name that is not a string is refused with MissingMessageName before the handler runs" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    var recording_app = helpers.app;
+    recording_app.messages = recording.messages;
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), recording_app);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"data\":null}");
+    try expectLastMessage(&shell, "{\"id\":1,\"ok\":false,\"error\":\"MissingMessageName\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"\",\"data\":null}");
+    try expectLastMessage(&shell, "{\"id\":2,\"ok\":false,\"error\":\"MissingMessageName\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":3,\"name\":7,\"data\":null}");
+    try expectLastMessage(&shell, "{\"id\":3,\"ok\":false,\"error\":\"MissingMessageName\"}");
+    // A message sent with send has no message response to carry the refusal, so it is a core-error event.
+    core.postMessage("{\"kind\":\"app\",\"data\":null}");
+    try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MissingMessageName\"}}");
+    core.postMessage("{\"kind\":\"app\",\"name\":\"\"}");
+    try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MissingMessageName\"}}");
+    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("the app's message handler was called"));
+}
+
+test "a handler that fails gets an error response when the message has an id and a core-error event when not" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try helpers.createCore(&shell, 1, 1);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"app\",\"id\":3,\"name\":\"nope\",\"data\":1}");
+    try shell.expectMessageContaining("{\"id\":3,\"ok\":false,\"error\":\"UnknownMessageName\"}");
+    core.postMessage("{\"kind\":\"app\",\"name\":\"fail\"}");
+    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"HandlerFailed\"}}");
+}
+
+test "a system message whose name is not a string is an invalid message" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try helpers.createCore(&shell, 1, 1);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"system\",\"id\":3,\"name\":7,\"data\":null}");
+    try expectLastMessage(&shell, "{\"id\":3,\"ok\":false,\"error\":\"InvalidMessage\"}");
+}
+
+test "a handler that returns none with an id gets an empty successful response, and without an id gets nothing" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try helpers.createCore(&shell, 1, 1);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"app\",\"name\":\"none\"}");
+    try std.testing.expectEqual(@as(usize, 0), shell.count());
+    core.postMessage("{\"kind\":\"app\",\"id\":9,\"name\":\"none\"}");
+    try expectLastMessage(&shell, "{\"id\":9,\"ok\":true,\"data\":null}");
+}
+
+test "core.sendEvent delivers the data as an app event" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try helpers.createCore(&shell, 1, 1);
+    defer core.destroy();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    try core.sendEvent(arena_state.allocator(), "{\"type\":\"saved\",\"count\":2}");
+    try expectLastMessage(&shell, "{\"kind\":\"app\",\"data\":{\"type\":\"saved\",\"count\":2}}");
+}
+
+//
+// The handler of every message of the recording app: it records that it was called by delivering a line the test counts.
+//
+fn recordAppMessage(core: *ziggy.core.Core, arena: std.mem.Allocator, message: ziggy.core.Message) anyerror!ziggy.core.MessageResult {
+    _ = message;
+    core.deliver("{\"data\":\"the app's message handler was called\"}");
+    return .{
+        .response = try arena.dupe(u8, "null"),
+    };
+}
+
+//
+// An app whose messages carry the names of every system message, and of two of its own, each handled by recordAppMessage. A test
+// takes its table of messages into a copy of the tests' app, to see whether a message reaches the app.
+//
+const recording = ziggy.core.App(.{
+    .messages = .{
+        .@"get-platform" = recordAppMessage,
+        .@"add-task" = recordAppMessage,
+        .@"cancel-tasks" = recordAppMessage,
+        .@"menu-action" = recordAppMessage,
+        .@"get-dropped-paths" = recordAppMessage,
+        .@"test-result" = recordAppMessage,
+        .@"test-ui-ready" = recordAppMessage,
+        .anything = recordAppMessage,
+        .echo = recordAppMessage,
+    },
+    .tasks = .{},
+    .menu_json = "[]",
+    .ui_files = &[_]ziggy.ui_files.UiFile{},
+});
+
+test "system messages are handled by Ziggy and never reach the app, even when the app has a message of the same name" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    var recording_app = helpers.app;
+    recording_app.messages = recording.messages;
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), recording_app);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"get-platform\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"own\",\"data\":null}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":3,\"name\":\"cancel-tasks\",\"data\":\"own\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":4,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":5,\"name\":\"get-dropped-paths\",\"data\":null}");
+    var id: usize = 1;
+    while (id <= 5) : (id += 1) {
+        var buffer: [32]u8 = undefined;
+        try shell.expectMessageContaining(try std.fmt.bufPrint(&buffer, "{{\"id\":{d},\"ok\":true,", .{id}));
+    }
+    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("the app's message handler was called"));
+    // The same handler is called for a message of the app's own, so the count above would have seen it.
+    core.postMessage("{\"kind\":\"app\",\"id\":6,\"name\":\"anything\",\"data\":null}");
+    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("the app's message handler was called"));
+}
+
+test "an app message reaches the app's handler and never a system handler, even with a system message's name" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    var recording_app = helpers.app;
+    recording_app.messages = recording.messages;
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), recording_app);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"get-platform\",\"data\":null}");
+    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
+    try expectLastMessage(&shell, "{\"id\":2,\"ok\":true,\"data\":null}");
+    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("the app's message handler was called"));
+    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("platformKind"));
+    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("\"name\":\"menu-action\""));
+}
+
+test "a message with no kind, or a kind that is neither app nor system, is refused as InvalidMessage with a core-error event" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    var recording_app = helpers.app;
+    recording_app.messages = recording.messages;
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), recording_app);
+    defer core.destroy();
+    const refused = [_][]const u8{
+        "{\"id\":1,\"name\":\"echo\",\"data\":null}",
+        "{\"kind\":\"other\",\"id\":2,\"name\":\"echo\",\"data\":null}",
+        "{\"kind\":7,\"id\":3,\"name\":\"get-platform\",\"data\":null}",
+        "{\"kind\":\"App\",\"name\":\"echo\"}",
+    };
+    for (refused) |message| {
+        core.postMessage(message);
+        try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"InvalidMessage\"}}");
+    }
+    try std.testing.expectEqual(refused.len, shell.count());
+    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("the app's message handler was called"));
 }
 
 test "a message without an id gets no reply" {
@@ -93,7 +263,7 @@ test "a message without an id gets no reply" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"echo\",\"data\":1}");
+    core.postMessage("{\"kind\":\"app\",\"name\":\"echo\",\"data\":1}");
     try std.testing.expectEqual(@as(usize, 0), shell.count());
 }
 
@@ -103,10 +273,10 @@ test "a handler that fails becomes an error reply" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":4,\"channel\":\"fail\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
     const reply = try lastMessage(&shell);
     defer std.testing.allocator.free(reply);
-    try std.testing.expectEqualStrings("{\"id\":4,\"ok\":false,\"error\":\"ChannelFailed\"}", reply);
+    try std.testing.expectEqualStrings("{\"id\":4,\"ok\":false,\"error\":\"HandlerFailed\"}", reply);
 }
 
 test "get-platform reports the platform kind" {
@@ -115,7 +285,7 @@ test "get-platform reports the platform kind" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":5,\"channel\":\"get-platform\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"id\":5,\"name\":\"get-platform\",\"data\":null}");
     // Android and iOS are the mobile platforms, and every other platform is desktop. The test runs on both, so it names the
     // kind each is expected to report.
     const expected = if (builtin.os.tag == .ios or builtin.abi.isAndroid())
@@ -131,7 +301,7 @@ test "text with quotes, newlines and non-ASCII characters round trips unchanged"
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":6,\"channel\":\"echo\",\"data\":{\"text\":\"say \\\"hi\\\"\\nline two \\u00e9 \\u4e16\\u754c \\ud83d\\ude00\"}}");
+    core.postMessage("{\"kind\":\"app\",\"id\":6,\"name\":\"echo\",\"data\":{\"text\":\"say \\\"hi\\\"\\nline two \\u00e9 \\u4e16\\u754c \\ud83d\\ude00\"}}");
     const reply = try lastMessage(&shell);
     defer std.testing.allocator.free(reply);
     var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, reply, .{});
@@ -152,8 +322,9 @@ test "a multi-megabyte payload round trips unchanged" {
         byte.* = 'a' + @as(u8, @intCast(index % 26));
     }
     const message = try ziggy.json.stringify(std.testing.allocator, .{
+        .kind = "app",
         .id = 8,
-        .channel = "echo",
+        .name = "echo",
         .data = .{
             .blob = payload,
         },
@@ -201,8 +372,8 @@ test "a menu-action message from a shell reaches the UI as a menu-action event" 
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
-    try shell.expectMessageContaining("{\"channel\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
+    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":{}}");
 }
 
@@ -212,8 +383,8 @@ test "a menu-action message with no action is an error reply" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"menu-action\",\"data\":{}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingAction\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"action\\\" is missing\"}");
 }
 
 test "the core holds the app's menu for shells to read" {
@@ -236,36 +407,38 @@ test "the core finds a file of the app's bundled UI by the path of a request" {
     try std.testing.expect(core.uiFile("/missing.js") == null);
 }
 
-test "a task channel answers the request with the task's result, without blocking the dispatcher" {
+test "answerWithTask answers the message with the task's result, without blocking the dispatcher" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 2, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":11,\"channel\":\"quick-request\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":11,\"name\":\"quick-request\"}");
     try shell.expectMessageContaining("{\"id\":11,\"ok\":true,\"data\":\"done\"}");
     // The reply is the only thing sent: a request's task sends no task-completed event of its own.
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("task-completed"));
 }
 
-test "a task channel whose task fails gives an error reply" {
+test "a message answered by a task that fails gets an error response" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 2, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":12,\"channel\":\"fail-request\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":12,\"name\":\"fail-request\"}");
     try shell.expectMessageContaining("{\"id\":12,\"ok\":false,\"error\":\"TestFailure\"}");
 }
 
-test "a task channel request with no id is reported and runs nothing" {
+test "answerWithTask refuses a message with no id and queues nothing" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 2, 1);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"quick-request\",\"data\":null}");
-    try shell.expectMessageContaining("RequestHasNoId");
+    core.postMessage("{\"kind\":\"app\",\"name\":\"quick-request\"}");
+    // The refusal reaches the UI before postMessage returns, as a core-error event, because there is no id to answer.
+    try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MessageHasNoId\"}}");
+    try std.testing.expectEqual(@as(usize, 0), core.runner.live.items.len);
 }
 
 test "a native dialog is shown through the shell's callback with the title and kind" {
@@ -274,9 +447,9 @@ test "a native dialog is shown through the shell's callback with the title and k
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 2, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":13,\"channel\":\"pick-open-request\",\"data\":\"Choose files\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":13,\"name\":\"pick-open-request\",\"data\":\"Choose files\"}");
     try shell.expectMessageContaining("{\"id\":13,\"ok\":true,\"data\":[\"kind0\",\"Choose files\",\"-\"]}");
-    core.postMessage("{\"id\":14,\"channel\":\"pick-save-request\",\"data\":\"photo.jpg\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":14,\"name\":\"pick-save-request\",\"data\":\"photo.jpg\"}");
     try shell.expectMessageContaining("{\"id\":14,\"ok\":true,\"data\":[\"kind1\",\"-\",\"photo.jpg\"]}");
 }
 
@@ -288,7 +461,7 @@ test "a dialog with no callback from the shell is an error reply naming what is 
     config.pick_paths = null;
     const core = try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
     defer core.destroy();
-    core.postMessage("{\"id\":15,\"channel\":\"pick-open-request\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":15,\"name\":\"pick-open-request\"}");
     try shell.expectMessageContaining("{\"id\":15,\"ok\":false,\"error\":\"HostCallbackMissing\"}");
 }
 
@@ -308,12 +481,12 @@ test "get-dropped-paths replies with the paths of the last drop, and an empty ar
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 2, 2);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"get-dropped-paths\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"get-dropped-paths\",\"data\":null}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":[]}");
     const paths_json = try ziggy.json.stringify(std.testing.allocator, &[_][]const u8{path});
     defer std.testing.allocator.free(paths_json);
     try core.filesDropped(paths_json);
-    core.postMessage("{\"id\":2,\"channel\":\"get-dropped-paths\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"get-dropped-paths\",\"data\":null}");
     const expected = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 2,
         .ok = true,
@@ -324,8 +497,8 @@ test "get-dropped-paths replies with the paths of the last drop, and an empty ar
 }
 
 fn describeTestError(err: anyerror) ?[]const u8 {
-    if (err == error.ChannelFailed) {
-        return "the channel failed because the test said so";
+    if (err == error.HandlerFailed) {
+        return "the handler failed because the test said so";
     }
     return null;
 }
@@ -338,10 +511,10 @@ test "an app's error describer gives the text of an error reply" {
     described_app.describe_error = describeTestError;
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), described_app);
     defer core.destroy();
-    core.postMessage("{\"id\":4,\"channel\":\"fail\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
     const reply = try lastMessage(&shell);
     defer std.testing.allocator.free(reply);
-    try std.testing.expectEqualStrings("{\"id\":4,\"ok\":false,\"error\":\"the channel failed because the test said so\"}", reply);
+    try std.testing.expectEqualStrings("{\"id\":4,\"ok\":false,\"error\":\"the handler failed because the test said so\"}", reply);
 }
 
 test "an error the describer has nothing to say about is replied to by name" {
@@ -349,11 +522,11 @@ test "an error the describer has nothing to say about is replied to by name" {
     shell.init(std.testing.allocator);
     defer shell.deinit();
     var described_app = helpers.app;
-    described_app.describe_error = describeTestError;
+    described_app.describe_error = describeTaskError;
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), described_app);
     defer core.destroy();
-    core.postMessage("{\"id\":5,\"channel\":\"nope\",\"data\":null}");
-    try shell.expectMessageContaining("{\"id\":5,\"ok\":false,\"error\":\"UnknownChannel\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":5,\"name\":\"fail\"}");
+    try shell.expectMessageContaining("{\"id\":5,\"ok\":false,\"error\":\"HandlerFailed\"}");
 }
 
 fn describeTaskError(err: anyerror) ?[]const u8 {
@@ -371,7 +544,7 @@ test "an app's error describer gives the text of a failed request task's error r
     described_app.describe_error = describeTaskError;
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), described_app);
     defer core.destroy();
-    core.postMessage("{\"id\":6,\"channel\":\"fail-request\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":6,\"name\":\"fail-request\"}");
     try shell.expectMessageContaining("{\"id\":6,\"ok\":false,\"error\":\"the task failed because \\\"the test\\\" said so, at C:\\\\dir\"}");
 }
 
@@ -470,7 +643,7 @@ test "an app observes the end of a task and the messages it sent, and keeps its 
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), observed_app);
     defer core.destroy();
     const record: *ObserverRecord = @ptrCast(@alignCast(core.app_state.?));
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"src\",\"data\":{\"a\":1},\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"src\",\"data\":{\"a\":1},\"priority\":\"background\"}}");
     var waited_ms: u32 = 0;
     while (waited_ms < 20_000) : (waited_ms += 2) {
         record.mutex.lockUncancelable(core.io());
@@ -505,7 +678,7 @@ test "a task handler reaches the app's state through its context" {
     };
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), state_app);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"t2\",\"taskType\":\"read-state\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t2\",\"taskType\":\"read-state\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
     try shell.expectMessageContaining("\"outputs\":{\"ends\":");
 }
 
@@ -515,8 +688,7 @@ test "a task handler reaches the app's state through its context" {
 //
 fn deliverState(core: *ziggy.core.Core, name: []const u8) void {
     const message = ziggy.json.stringify(core.allocator, .{
-        .channel = "state-hook",
-        .data = name,
+        .stateHook = name,
     }) catch @panic("out of memory");
     defer core.allocator.free(message);
     core.deliver(message);
@@ -570,15 +742,15 @@ test "the app's state is stopped before the task runner stops and destroyed afte
     };
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), ordered_app);
     // A task that is still running when the core is destroyed, and says so each time round its loop.
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"running\",\"taskType\":\"say-when-cancelled\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"running\",\"taskType\":\"say-when-cancelled\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
     try shell.expectMessageContaining("\"started\":true");
     core.destroy();
-    const created = shell.indexOfContaining("\"state-hook\",\"data\":\"created\"").?;
-    const stopped = shell.indexOfContaining("\"state-hook\",\"data\":\"stopped\"").?;
-    const destroyed = shell.indexOfContaining("\"state-hook\",\"data\":\"destroyed\"").?;
+    const created = shell.indexOfContaining("\"stateHook\":\"created\"").?;
+    const stopped = shell.indexOfContaining("\"stateHook\":\"stopped\"").?;
+    const destroyed = shell.indexOfContaining("\"stateHook\":\"destroyed\"").?;
     try std.testing.expect(created < stopped);
     // The task is cancelled when the task runner stops, which is after the state was stopped and before it is destroyed.
-    const task_ended = shell.indexOfContaining("\"state-hook\",\"data\":\"task-ended\"").?;
+    const task_ended = shell.indexOfContaining("\"stateHook\":\"task-ended\"").?;
     try std.testing.expect(stopped < task_ended);
     try std.testing.expect(task_ended < destroyed);
 }

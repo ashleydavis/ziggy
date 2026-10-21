@@ -18,7 +18,7 @@ Every tracked markdown doc in the repo outside `docs/plans/`. Regenerate the lis
 - [x] [diagrams/message-bridge.md](development/diagrams/message-bridge.md)
 - [x] [diagrams/task-queue.md](development/diagrams/task-queue.md)
 - [ ] [dev-mode.md](development/dev-mode.md)
-- [ ] [channels.md](user-guide/channels.md)
+- [ ] [messages.md](user-guide/messages.md)
 - [ ] [tasks.md](user-guide/tasks.md)
 - [ ] [native-calls.md](user-guide/native-calls.md)
 - [ ] [testing.md](user-guide/testing.md)
@@ -55,7 +55,7 @@ Every tracked markdown doc in the repo outside `docs/plans/`. Regenerate the lis
 - [ ] [ziggy/new.md](../.claude/commands/ziggy/new.md)
 - [ ] [ziggy/upgrade.md](../.claude/commands/ziggy/upgrade.md)
 - [ ] [ziggy/check.md](../.claude/commands/ziggy/check.md)
-- [ ] [ziggy/add-channel.md](../.claude/commands/ziggy/add-channel.md)
+- [ ] [ziggy/add-message.md](../.claude/commands/ziggy/add-message.md)
 - [ ] [ziggy/add-task.md](../.claude/commands/ziggy/add-task.md)
 
 ## Ziggy template: READMEs

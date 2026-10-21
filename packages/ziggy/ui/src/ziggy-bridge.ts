@@ -15,7 +15,7 @@ export interface IJsonObject {
 export type IJsonValue = string | number | boolean | null | IJsonValue[] | IJsonObject;
 
 //
-// Called with the data of an event the core sends on a channel.
+// Called with the data of an event the core sends.
 //
 export type IMessageCallback<TData> = (data: TData) => void;
 
@@ -79,29 +79,176 @@ export interface ITaskCompletedEvent {
 }
 
 //
+// What a menu-action event carries: a menu item that is the app's own was chosen.
+//
+export interface IMenuActionEvent {
+    // The item's action, as the app's menu names it.
+    action: string;
+}
+
+//
+// What a core-error event carries: a message failed and had no message response to carry the error.
+//
+export interface ICoreErrorEvent {
+    // The error's name, or the text the app's describe_error gave for it.
+    error: string;
+}
+
+//
+// What a test-command event carries, in a test hooks build only: a command from the test control connection for the UI to perform.
+//
+export interface ITestCommandEvent<TCommand> {
+    // Identifies the command, so the result the UI sends with sendTestResult reaches the connection waiting for it.
+    requestId: number;
+
+    // The command to perform.
+    command: TCommand;
+}
+
+//
+// What the core answers getPlatform with.
+//
+export interface IPlatformInfo {
+    // Whether the app is on a desktop or on a mobile device.
+    platformKind: "desktop" | "mobile";
+
+    // The operating system's name as Zig spells it, such as "linux", "windows", "macos" or "ios". Android reports "linux".
+    os: string;
+
+    // The processor architecture's name as Zig spells it, such as "x86_64" or "aarch64".
+    arch: string;
+}
+
+//
+// A task for addTask to queue.
+//
+export interface IAddTask {
+    // The id the UI gives the task. The task's events carry it.
+    taskId: string;
+
+    // The task type: the name the task's handler is registered under.
+    taskType: string;
+
+    // The group the task belongs to, which cancelTasks cancels together.
+    source: string;
+
+    // The task's input, which its handler is given.
+    data: IJsonValue;
+
+    // "interactive" for work the user is waiting on, which runs before the rest, or "background". Left out, it is background.
+    priority?: "interactive" | "background";
+}
+
+//
 // What every shell injects into the UI as window.ziggy. Nothing wider than these methods is exposed, and the
 // web view's own native handle is never used by the UI directly.
 //
 export interface IZiggyBridge {
-    //
-    // Sends a request on a channel and resolves with the core's reply, or rejects with the core's error.
-    //
-    invoke<TReply>(channel: string, data: IJsonValue): Promise<TReply>;
+    // The app calls. These send app messages ({ kind: "app" } on the wire), which reach the app's own handlers, and receive app
+    // events. They are all an app has for its own messages.
 
     //
-    // Sends a one-way message on a channel. There is no reply.
+    // Sends a message of the app's own, which the app's message handler receives and dispatches on its name, and resolves with the
+    // data of its message response, or rejects with the error it ended with. The name must not be empty: the core refuses a message
+    // without one with MissingMessageName. The data is the app's own to lay out.
     //
-    send(channel: string, data: IJsonValue): void;
+    invoke<TResponse>(name: string, data: IJsonValue): Promise<TResponse>;
 
     //
-    // Registers a callback for the events the core sends on a channel.
+    // Sends a message of the app's own, by name, that gets no message response. The name must not be empty: the core reports a
+    // message without one as a core-error event naming MissingMessageName.
     //
-    onMessage<TData>(channel: string, callback: IMessageCallback<TData>): void;
+    send(name: string, data: IJsonValue): void;
 
     //
-    // Removes every callback registered for a channel.
+    // Registers a callback for every event of the app's own the backend sends. Ziggy's own events never reach it.
     //
-    removeAllListeners(channel: string): void;
+    onEvent<TData>(callback: IMessageCallback<TData>): void;
+
+    //
+    // Removes a callback onEvent registered.
+    //
+    removeEventListener<TData>(callback: IMessageCallback<TData>): void;
+
+    // Ziggy's own calls. These send system messages ({ kind: "system" } on the wire), which Ziggy handles itself and the app's
+    // handlers never see, and receive system events. Each names its own system message: there is no call that sends any other.
+
+    //
+    // Resolves with what the backend says about the platform the app runs on.
+    //
+    getPlatform(): Promise<IPlatformInfo>;
+
+    //
+    // Queues a task. There is no message response: the task's events say what became of it, and a task that could not be queued is
+    // reported as a core-error event.
+    //
+    addTask(task: IAddTask): void;
+
+    //
+    // Cancels every task queued under the source, children included.
+    //
+    cancelTasks(source: string): void;
+
+    //
+    // Registers a callback for the messages tasks send while they run.
+    //
+    onTaskMessage<TMessage>(callback: IMessageCallback<ITaskMessageEvent<TMessage>>): void;
+
+    //
+    // Removes a callback onTaskMessage registered.
+    //
+    removeTaskMessageListener<TMessage>(callback: IMessageCallback<ITaskMessageEvent<TMessage>>): void;
+
+    //
+    // Registers a callback for the end of each task the UI queued.
+    //
+    onTaskCompleted(callback: IMessageCallback<ITaskCompletedEvent>): void;
+
+    //
+    // Removes a callback onTaskCompleted registered.
+    //
+    removeTaskCompletedListener(callback: IMessageCallback<ITaskCompletedEvent>): void;
+
+    //
+    // Registers a callback for each menu item chosen that is the app's own.
+    //
+    onMenuAction(callback: IMessageCallback<IMenuActionEvent>): void;
+
+    //
+    // Removes a callback onMenuAction registered.
+    //
+    removeMenuActionListener(callback: IMessageCallback<IMenuActionEvent>): void;
+
+    //
+    // Registers a callback for a message that failed with no message response to carry the error. With no callback registered,
+    // the error is logged to the console.
+    //
+    onCoreError(callback: IMessageCallback<ICoreErrorEvent>): void;
+
+    //
+    // Removes a callback onCoreError registered.
+    //
+    removeCoreErrorListener(callback: IMessageCallback<ICoreErrorEvent>): void;
+
+    //
+    // Registers a callback for the commands of the test control connection. Test hooks builds only.
+    //
+    onTestCommand<TCommand>(callback: IMessageCallback<ITestCommandEvent<TCommand>>): void;
+
+    //
+    // Removes a callback onTestCommand registered.
+    //
+    removeTestCommandListener<TCommand>(callback: IMessageCallback<ITestCommandEvent<TCommand>>): void;
+
+    //
+    // Sends the result of a test command to the connection waiting for it. Test hooks builds only.
+    //
+    sendTestResult(requestId: number, result: IJsonValue): Promise<void>;
+
+    //
+    // Tells the test control connection the UI is listening for test commands, which are held until it does. Test hooks builds only.
+    //
+    testUiReady(): void;
 
     //
     // Returns the absolute path of a file from the drop event of a file dropped on the window, or undefined for a File that was not dropped. The same as

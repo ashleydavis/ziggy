@@ -12,7 +12,8 @@ fn createCore(shell: *FakeShell, data_dir: [*:0]const u8) !*ziggy.core.Core {
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, data: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
-        .channel = "add-task",
+        .kind = "system",
+        .name = "add-task",
         .data = .{
             .taskId = id,
             .taskType = task_type,
@@ -36,7 +37,7 @@ test "ping replies with the Zig version, the platform and an echo of the payload
     defer shell.deinit();
     const core = try createCore(&shell, "/tmp");
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"ping\",\"data\":{\"hello\":\"world\"}}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"ping\",\"data\":{\"hello\":\"world\"}}");
     const reply = try shell.messageAt(std.testing.allocator, 0);
     defer std.testing.allocator.free(reply);
     var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, reply, .{});
@@ -58,8 +59,9 @@ test "payload-stats reports the length and checksum of a multi-megabyte payload"
     defer std.testing.allocator.free(payload);
     @memset(payload, 'x');
     const message = try ziggy.json.stringify(std.testing.allocator, .{
+        .kind = "app",
         .id = 1,
-        .channel = "payload-stats",
+        .name = "payload-stats",
         .data = .{
             .text = payload,
         },
@@ -79,7 +81,7 @@ test "payload-stats counts the bytes of text with non-ASCII characters" {
     defer shell.deinit();
     const core = try createCore(&shell, "/tmp");
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"payload-stats\",\"data\":{\"text\":\"é世界😀\"}}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"payload-stats\",\"data\":{\"text\":\"é世界😀\"}}");
     const reply = try shell.messageAt(std.testing.allocator, 0);
     defer std.testing.allocator.free(reply);
     try std.testing.expect(std.mem.indexOf(u8, reply, "\"length\":12,") != null);
@@ -91,8 +93,8 @@ test "payload-stats without text is an error reply" {
     defer shell.deinit();
     const core = try createCore(&shell, "/tmp");
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"payload-stats\",\"data\":{}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingText\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"payload-stats\"}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"text\\\" is missing\"}");
 }
 
 test "file-roundtrip writes a file in the data directory and reads it back" {
@@ -105,7 +107,7 @@ test "file-roundtrip writes a file in the data directory and reads it back" {
     defer shell.deinit();
     const core = try createCore(&shell, data_dir.ptr);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"file-roundtrip\",\"data\":{\"text\":\"kept \\u00e9\"}}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"file-roundtrip\",\"data\":{\"text\":\"kept \\u00e9\"}}");
     const reply = try shell.messageAt(std.testing.allocator, 0);
     defer std.testing.allocator.free(reply);
     try std.testing.expect(std.mem.indexOf(u8, reply, "\"text\":\"kept é\"") != null);
@@ -120,17 +122,17 @@ test "file-roundtrip reports a missing data directory as an error" {
     defer shell.deinit();
     const core = try createCore(&shell, "/this/directory/does/not/exist");
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"file-roundtrip\",\"data\":{\"text\":\"x\"}}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"file-roundtrip\",\"data\":{\"text\":\"x\"}}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"FileNotFound\"}");
 }
 
-test "the fail channel replies with an error" {
+test "the fail message replies with an error" {
     var shell: FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try createCore(&shell, "/tmp");
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"fail\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"fail\"}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"ExampleFailure\"}");
 }
 
@@ -207,7 +209,7 @@ test "cancelling hello-long stops it early and its children are cancelled" {
     defer core.destroy();
     try addTask(core, "long", "hello-long", "{\"durationMs\":60000,\"stepMs\":20,\"children\":2}");
     try shell.expectMessageContaining("long task step 3");
-    core.postMessage("{\"channel\":\"cancel-tasks\",\"data\":\"src\"}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"cancel-tasks\",\"data\":\"src\"}");
     try shell.expectMessageContaining("\"status\":\"failed\",\"error\":{\"message\":\"Cancelled\"},\"errorMessage\":\"Cancelled\"");
     try std.testing.expect(shell.countContaining("\"taskId\":\"long\",\"source\":\"src\",\"message\":{\"type\":\"output\",\"text\":\"long task step") < 100);
 }
@@ -280,8 +282,8 @@ test "file-roundtrip without text is an error reply" {
     defer shell.deinit();
     const core = try createCore(&shell, "/tmp");
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"file-roundtrip\",\"data\":{}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingText\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"file-roundtrip\"}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"text\\\" is missing\"}");
 }
 
 fn refusingOsVersion(user_data: ?*anyopaque, buffer: [*]u8, capacity: usize) callconv(.c) isize {
@@ -311,4 +313,26 @@ test "a background task without a file to count in fails with MissingFile" {
     defer core.destroy();
     try addTask(core, "bm", "background-normal", "{\"durationMs\":300}");
     try shell.expectMessageContaining("\"errorMessage\":\"MissingFile\"");
+}
+
+test "a message of a name the test app does not know is an UnknownMessageName error" {
+    var shell: FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try createCore(&shell, "/tmp");
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"no-such-name\"}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"UnknownMessageName\"}");
+}
+
+test "a message with no name, or an empty one, is refused with MissingMessageName" {
+    var shell: FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try createCore(&shell, "/tmp");
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"data\":{\"text\":\"x\"}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingMessageName\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"\",\"data\":\"a string, not an object\"}");
+    try shell.expectMessageContaining("{\"id\":2,\"ok\":false,\"error\":\"MissingMessageName\"}");
 }

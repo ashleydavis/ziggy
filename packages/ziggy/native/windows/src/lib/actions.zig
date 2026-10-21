@@ -83,8 +83,10 @@ pub fn nextZoom(current: f64, direction: i32) f64 {
 // The message a menu action the app owns becomes: the JSON text the core takes from a UI.
 //
 const MenuActionMessage = struct {
-    // The channel the core routes it by.
-    channel: []const u8,
+    // The kind of message, "system": a menu action is one of Ziggy's own messages, which never reach the app's handlers.
+    kind: []const u8,
+    // The name of the system message, which the core routes it by.
+    name: []const u8,
     // The message's content.
     data: MenuActionData,
 };
@@ -98,12 +100,13 @@ const MenuActionData = struct {
 };
 
 //
-// Returns the JSON text of the message for an action, such as {"channel":"menu-action","data":{"action":"about"}}. The caller
+// Returns the JSON text of the message for an action, such as {"kind":"system","name":"menu-action","data":{"action":"about"}}. The caller
 // owns it.
 //
 pub fn menuActionMessage(allocator: std.mem.Allocator, action: []const u8) ![]u8 {
     return std.json.Stringify.valueAlloc(allocator, MenuActionMessage{
-        .channel = "menu-action",
+        .kind = "system",
+        .name = "menu-action",
         .data = .{
             .action = action,
         },

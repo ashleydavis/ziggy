@@ -65,10 +65,10 @@ test "a command reaches the UI and its answer comes back" {
         .answer = null,
         .closed_without_answer = false,
     };
-    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
     const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    try shell.expectMessageContaining("\"channel\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"click\",\"dataId\":\"go\"}}");
-    core.postMessage("{\"id\":9,\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"clicked\":true}}}");
+    try shell.expectMessageContaining("\"kind\":\"system\",\"name\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"click\",\"dataId\":\"go\"}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":9,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"clicked\":true}}}");
     thread.join();
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"clicked\":true}", client.answer.?);
@@ -171,7 +171,7 @@ test "a test-result nobody is waiting for is an error reply" {
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"test-result\",\"data\":{\"requestId\":99,\"result\":1}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":99,\"result\":1}}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"UnexpectedTestResult\"}");
 }
 
@@ -222,9 +222,9 @@ test "a command waits until the UI says it is listening" {
     // The UI has not said it is listening, so the command is not sent to it.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
-    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
-    try shell.expectMessageContaining("\"channel\":\"test-command\"");
-    core.postMessage("{\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    try shell.expectMessageContaining("\"kind\":\"system\",\"name\":\"test-command\"");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
     thread.join();
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
@@ -249,9 +249,9 @@ test "a test's answer for the next dialog is used once and then the shell's dial
     thread.join();
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
-    core.postMessage("{\"id\":21,\"channel\":\"pick-open-request\",\"data\":\"Title\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":21,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
     try shell.expectMessageContaining("{\"id\":21,\"ok\":true,\"data\":[\"/answer/one.txt\",\"/answer/two.txt\"]}");
-    core.postMessage("{\"id\":22,\"channel\":\"pick-open-request\",\"data\":\"Title\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":22,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
     try shell.expectMessageContaining("{\"id\":22,\"ok\":true,\"data\":[\"kind0\",\"Title\",\"-\"]}");
 }
 
@@ -295,7 +295,7 @@ test "the menu command chooses the menu item through the shell's callback once t
     // The UI is not listening yet, so nothing is chosen.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.chosen_actions.items.len);
-    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
     thread.join();
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
@@ -310,7 +310,7 @@ test "choosing reload makes commands wait for the UI to say it is listening agai
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
     var reload = Client{
         .allocator = std.testing.allocator,
         .port = core.control.?.port,
@@ -333,9 +333,9 @@ test "choosing reload makes commands wait for the UI to say it is listening agai
     // The UI is reloading, so the next command is held back and not sent to it.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
-    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
-    try shell.expectMessageContaining("\"channel\":\"test-command\"");
-    core.postMessage("{\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    try shell.expectMessageContaining("\"kind\":\"system\",\"name\":\"test-command\"");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
     next_thread.join();
     defer if (next.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", next.answer.?);
@@ -401,7 +401,7 @@ test "the drop command records a drop the way the shell does, so the UI can ask 
     thread.join();
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
-    core.postMessage("{\"id\":31,\"channel\":\"get-dropped-paths\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"id\":31,\"name\":\"get-dropped-paths\",\"data\":null}");
     const expected = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 31,
         .ok = true,
@@ -440,14 +440,14 @@ test "a drop that names an element is also sent to the UI, and the UI's answer i
         .answer = null,
         .closed_without_answer = false,
     };
-    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
     const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    try shell.expectMessageContaining("\"channel\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"drop\",\"dataId\":\"zone\"");
-    core.postMessage("{\"id\":9,\"channel\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"dropped\":true}}}");
+    try shell.expectMessageContaining("\"kind\":\"system\",\"name\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"drop\",\"dataId\":\"zone\"");
+    core.postMessage("{\"kind\":\"system\",\"id\":9,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"dropped\":true}}}");
     thread.join();
     defer if (client.answer) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"dropped\":true}", client.answer.?);
-    core.postMessage("{\"id\":32,\"channel\":\"get-dropped-paths\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"id\":32,\"name\":\"get-dropped-paths\",\"data\":null}");
     const expected = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 32,
         .ok = true,
@@ -465,7 +465,7 @@ test "the screenshot command asks the shell to write a picture of the window to 
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
     var client = Client{
         .allocator = std.testing.allocator,
         .port = core.control.?.port,
@@ -488,7 +488,7 @@ test "the screenshot command answers with the reason when the shell cannot captu
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"test-ui-ready\",\"data\":null}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
     var client = Client{
         .allocator = std.testing.allocator,
         .port = core.control.?.port,
@@ -643,7 +643,7 @@ test "a second answer for the next dialog replaces the first" {
     const second = try answerFor(core, "{\"command\":\"pick-answer\",\"paths\":[\"/second.txt\"]}");
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualStrings("{\"ok\":true}", second);
-    core.postMessage("{\"id\":31,\"channel\":\"pick-open-request\",\"data\":\"Title\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":31,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
     try shell.expectMessageContaining("{\"id\":31,\"ok\":true,\"data\":[\"/second.txt\"]}");
 }
 
@@ -655,6 +655,6 @@ test "a test-result without a request id is an error reply" {
     defer shell.deinit();
     const core = try startControlledCore(&shell, &tmp);
     defer core.destroy();
-    core.postMessage("{\"id\":5,\"channel\":\"test-result\",\"data\":{\"result\":null}}");
-    try shell.expectMessageContaining("{\"id\":5,\"ok\":false,\"error\":\"MissingRequestId\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":5,\"name\":\"test-result\",\"data\":{\"result\":null}}");
+    try shell.expectMessageContaining("{\"id\":5,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"requestId\\\" is missing\"}");
 }

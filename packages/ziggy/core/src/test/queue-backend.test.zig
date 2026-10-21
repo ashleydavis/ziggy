@@ -106,7 +106,8 @@ fn createCore(shell: *helpers.FakeShell, worker_threads: u32) !*ziggy.core.Core 
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
-        .channel = "add-task",
+        .kind = "system",
+        .name = "add-task",
         .data = .{
             .taskId = id,
             .taskType = task_type,
@@ -127,7 +128,7 @@ test "a handler registered with the task queue runs on the runner, sends message
     const core = try createCore(&shell, 2);
     defer core.destroy();
     try addTask(core, "r1", "registered-echo", "s", "{\"a\":1}", "background");
-    try shell.expectMessageContaining("{\"channel\":\"task-message\",\"data\":{\"taskId\":\"r1\",\"source\":\"s\",\"message\":{\"type\":\"registered-hello\"}}}");
+    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"task-message\",\"data\":{\"taskId\":\"r1\",\"source\":\"s\",\"message\":{\"type\":\"registered-hello\"}}}");
     try shell.expectMessageContaining("\"outputs\":{\"taskId\":\"r1\",\"echo\":{\"a\":1}},\"type\":\"registered-echo\",\"inputs\":{\"a\":1}");
 }
 
@@ -140,7 +141,7 @@ test "a registered handler sees its task cancelled when the source is cancelled"
     defer core.destroy();
     try addTask(core, "w1", "registered-wait", "wait-source", "null", "background");
     shell.sleepMs(20);
-    core.postMessage("{\"channel\":\"cancel-tasks\",\"data\":\"wait-source\"}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"cancel-tasks\",\"data\":\"wait-source\"}");
     try shell.expectMessageContaining("\"status\":\"failed\",\"error\":{\"message\":\"Cancelled\"},\"errorMessage\":\"Cancelled\"");
 }
 
@@ -153,7 +154,7 @@ test "a registered handler queues child tasks with TaskQueue and awaits them" {
     const core = try createCore(&shell, 4);
     defer core.destroy();
     try addTask(core, "p1", "registered-parent", "s", "null", "background");
-    try shell.expectMessageContaining("{\"channel\":\"task-completed\",\"data\":{\"taskId\":\"p1\",\"result\":{\"taskId\":\"p1\",\"status\":\"succeeded\",\"outputs\":6,");
+    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"task-completed\",\"data\":{\"taskId\":\"p1\",\"result\":{\"taskId\":\"p1\",\"status\":\"succeeded\",\"outputs\":6,");
 }
 
 test "a task queued through the backend by a running task runs at that task's priority" {

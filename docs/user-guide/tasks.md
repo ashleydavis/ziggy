@@ -8,22 +8,22 @@ A task is work the backend runs on its own pool of worker threads, away from the
 sequenceDiagram
     participant UI
     participant NativeApp as Native app
-    participant Backend as Backend (channel handler)
+    participant Backend as Backend (core library)
     participant Runner as Task runner
     participant Worker as Worker thread
 
-    UI->>NativeApp: window.ziggy.addTask({ taskType, source, data, priority })
-    NativeApp->>Backend: the message
+    UI->>NativeApp: window.ziggy.addTask({ taskId, taskType, source, data, priority })
+    NativeApp->>Backend: the add-task system message
     Backend->>Runner: addTask
     Note over Runner: The task waits in the queue.<br/>Interactive tasks go to the head,<br/>background tasks to the end.
     Runner->>Worker: runs the handler when a thread is free
     loop While the handler runs
         Worker-->>NativeApp: context.sendMessage(...)
-        NativeApp-->>UI: task-message { taskId, source, message }
+        NativeApp-->>UI: task-message system event { taskId, source, message }
     end
     Worker->>Runner: the handler returns its result or an error
     Runner-->>NativeApp: the completion
-    NativeApp-->>UI: task-completed { taskId, result }
+    NativeApp-->>UI: task-completed system event { taskId, result }
 ```
 
 - The UI makes up the task's id and names a source. The source groups tasks so they can be cancelled together.
@@ -59,7 +59,7 @@ What the context gives a handler:
 
 | Method | What it does |
 |---|---|
-| `sendMessage(value)` | Sends any value `std.json` can serialise to the UI as a `task-message` event. `sendRawMessage(json)` sends JSON text. |
+| `sendMessage(value)` | Sends any value `std.json` can serialise to the UI as a `task-message` system event. `sendRawMessage(json)` sends JSON text. |
 | `isCancelled()` | Whether the task's source has been cancelled. |
 | `checkCancelled()` | Returns `error.Cancelled` when the source has been cancelled. Call it at the top of every loop. |
 | `queueChild(type, data, priority)` | Queues a child task and returns its id. It waits while the child limit is reached. |
@@ -77,25 +77,29 @@ What the context gives a handler:
 
 ## Registering a handler
 
-The app lists its task types in the `tasks` field of the app it hands to Ziggy, in `backend/src/handlers.zig` in the template:
+The app lists its task types in the `.tasks` field of its `ziggy.core.App` (see [Declaring the app](messages.md#declaring-the-app)), in `backend/src/app.zig` in the template. Each field is a task type and its handler:
 
 ```zig
-.tasks = &[_]ziggy.task_runner.TaskHandlerEntry{
-    .{
-        .name = "hello-world-task",
-        .handler = hello_world_backend.helloWorldTaskHandler,
-    },
+.tasks = .{
+    .@"hello-world-task" = hello_world_backend.helloWorldTaskHandler,
 },
 ```
 
-- `name` is the task type the UI queues it under.
-- `kind` is `.normal` by default. A `.keep_alive` task keeps the app running on a mobile device while it is in the background.
-- A task type that nothing is registered for fails as `UnknownTaskType`.
+- The field's name is the task type the UI queues it under.
+- A task type is `.normal` unless it is given as `.{ .handler = ..., .kind = .keep_alive }`. A keep-alive task keeps the app running on a mobile device while it is in the background (see "Keep-alive tasks" below).
+- A task type that nothing is registered for fails as `UnknownTaskType`, in a failed `task-completed` event.
+
+The task types in `.tasks` are registered when the backend starts. The app can register more at any point while the backend runs, from any thread, with `core.registerTask(task_type, handler)`, which takes a task handler or `.{ .handler = ..., .kind = ... }` as `.tasks` does. The task type can be queued from then on. A task type that is registered already is the error `DuplicateTaskType`. Its name is printed.
+
+```zig
+try core.registerTask("hello-later", helloLaterTaskHandler);
+```
 
 ## Queuing a task from the UI
 
 ```typescript
-const taskId = window.ziggy.addTask({
+window.ziggy.addTask({
+    taskId: "my-task-1",
     taskType: "hello-short",
     source: "my-source",
     data: {},
@@ -103,7 +107,7 @@ const taskId = window.ziggy.addTask({
 });
 ```
 
-- `addTask` returns the id Ziggy gave the task, straight away. The task's events carry it, so the UI can tell which task they belong to.
+- `taskId`: the id the UI makes up for the task. The task's events carry it, so the UI can tell which task they belong to.
 - `taskType`: the name the handler was registered under.
 - `source`: the group the task belongs to, for cancelling.
 - `data`: any JSON. It is the handler's `data`.
@@ -112,11 +116,11 @@ const taskId = window.ziggy.addTask({
 ## Receiving the events
 
 ```typescript
-window.ziggy.onTaskEvent("task-message", event => {
+window.ziggy.onTaskMessage(event => {
     // event.taskId, event.source, and event.message (what the handler sent)
 });
 
-window.ziggy.onTaskEvent("task-completed", event => {
+window.ziggy.onTaskCompleted(event => {
     // event.taskId, and event.result:
     //   status: "succeeded" or "failed"
     //   errorMessage: why it failed ("Cancelled" for a cancelled task)
@@ -126,12 +130,12 @@ window.ziggy.onTaskEvent("task-completed", event => {
 });
 ```
 
-Every message a handler sends arrives as one `task-message` event. The template gives each message a `type` field (`"output"`, `"job-progress"`) and the UI decides what to do with it from that. Ziggy does not look inside a message.
+Every message a handler sends arrives as one `task-message` event. The template gives each message a `type` field (`"output"`, `"job-progress"`) and the UI decides what to do with it from that. Ziggy does not look inside a message. `removeTaskMessageListener(callback)` and `removeTaskCompletedListener(callback)` stop a callback hearing them.
 
 ## Cancelling
 
 ```typescript
-window.ziggy.send("cancel-tasks", "my-source");
+window.ziggy.cancelTasks("my-source");
 ```
 
 Cancelling a source cancels its queued and running tasks, children included. A running task stops only when its handler next calls `checkCancelled()` or `isCancelled()`, so a handler that loops must check at every step.
@@ -144,18 +148,27 @@ A handler can split its work into child tasks with `queueChild` and wait for the
 - A child runs at the priority passed to `queueChild` or `runChild`, and otherwise at its parent's.
 - A failed child makes `awaitTask` return its failure to the parent.
 
-## A message handled by a task
+## A message answered by a task
 
-A message the UI sends with `window.ziggy.invoke` is handled by a channel handler on the thread that handles the UI's messages, so it must be quick. When the message response takes time, list the channel in the app's `task_channels` instead: the message is queued as a task of that type, with the message's data as its input, and the task's result is the message response. A task that fails or is cancelled gives an error message response. The template's file and directory pickers work this way, because they wait on a native dialog. These tasks run under the source `"request"`, so `cancel-tasks` with `"request"` cancels every one still running.
+A message the UI sends with `window.ziggy.invoke` is handled by its message handler on the thread that handles the UI's messages, so it must be quick. When the message response takes time, the handler answers it with a task instead: it returns a `ziggy.core.Answer(Response)` holding `.task`, with the task type and the task's input as JSON text. Ziggy queues a task of that type. The task's result is the message response. A task that fails or is cancelled gives an error message response. Ziggy's test app answers its file and directory pickers this way, because they wait on a native dialog, in `apps/ziggy-test-app/backend/src/lib/pickers.zig`:
 
 ```zig
-.task_channels = &[_]ziggy.core.TaskChannelEntry{
-    .{
-        .name = "pick-folder",
-        .task_type = "pick-folder",
-    },
-},
+pub fn pickFolderMessageHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: PickFolderRequest) !ziggy.core.Answer(?[]const u8) {
+    _ = core;
+    return .{
+        .task = .{
+            .task_type = "pick-folder",
+            .data = try json.stringify(arena, request),
+        },
+    };
+}
 ```
+
+- The handler decides what the task's input is: here the whole of the request.
+- These tasks run under the source `"request"`, so `cancelTasks("request")` cancels every one still running.
+- A message sent with `send` has no id and so nothing to answer: it fails with `MessageHasNoId` and nothing is queued.
+- The task is not one the UI queued, so it sends no `task-completed` event of its own: its result reaches the UI only as the message response.
+- A handler that takes the message unparsed (see [Messages](messages.md#taking-the-message-unparsed)) does the same by returning `core.answerWithTask(message, task_type, data_json)`.
 
 ## Keep-alive tasks
 
@@ -178,7 +191,9 @@ The core library implements the task queue's `IQueueBackend` on its own runner, 
 | File | What it holds |
 |---|---|
 | `packages/ziggy/core/src/lib/task-runner.zig` | The task runner, `TaskContext`, `TaskHandlerEntry`, `TaskPriority` and `TaskKind`. |
-| `packages/ziggy/core/src/lib/core.zig` | The `add-task` and `cancel-tasks` channels, and `TaskChannelEntry`. |
+| `packages/ziggy/core/src/lib/system-messages/tasks.zig` | Ziggy's own `add-task` and `cancel-tasks` system messages. |
+| `packages/ziggy/core/src/lib/core.zig` | `Core.registerTask` and `Core.answerWithTask`. |
+| `packages/ziggy/core/src/lib/handlers.zig` | `Answer`, whose `.task` answers a message with a task. |
 | `packages/ziggy/core/src/lib/task-queue` | The task queue that Ziggy's core library implements its queue backend for. |
 | `apps/ziggy-template/backend/src/lib/hello-world-backend.zig` | The template's hello world task. |
 | `apps/ziggy-test-app/backend/src/lib/hello-tasks.zig` | The test app's task handlers: long tasks, child tasks, cancelling, failing and keep-alive. |

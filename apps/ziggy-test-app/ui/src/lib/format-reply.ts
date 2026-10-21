@@ -1,5 +1,5 @@
 //
-// The reply the test app's ping channel gives.
+// The message response the test app's ping message gets.
 //
 export interface IPingReply {
     // The Zig version the backend was built with.

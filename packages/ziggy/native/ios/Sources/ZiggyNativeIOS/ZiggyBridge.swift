@@ -369,28 +369,30 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Sends the core a one-way message, as the UI's send does. The data is anything JSON can hold. Can be called from any thread.
-    public func send(channel: String, data: Any) {
+    // Sends the core a one-way message for the app's message handler, as the UI's send does, under the name the handler dispatches on. The data is anything JSON can hold. Can be called from any thread.
+    public func send(name: String, data: Any) {
         DispatchQueue.main.async {
             let message: [String: Any] = [
-                "channel": channel,
+                "kind": "app",
+                "name": name,
                 "data": data,
             ]
             self.post(ZiggyBridge.jsonText(message))
         }
     }
 
-    // Makes a request of the core, as the UI's invoke does, for an app that has to start work itself (when the system wakes it with
+    // Makes a request of the core under a name, as the UI's invoke does, for an app that has to start work itself (when the system wakes it with
     // the UI not on screen, for instance). The core's reply comes to the completion on the main thread, with nil when the request
     // succeeded and the core's reason when it failed, and it is not given to the UI. Can be called from any thread.
-    public func request(channel: String, data: Any, completion: @escaping (String?) -> Void) {
+    public func request(name: String, data: Any, completion: @escaping (String?) -> Void) {
         DispatchQueue.main.async {
             let id = "app-\(self.nextAppRequestNumber)"
             self.nextAppRequestNumber += 1
             self.appRequests[id] = completion
             let message: [String: Any] = [
+                "kind": "app",
                 "id": id,
-                "channel": channel,
+                "name": name,
                 "data": data,
             ]
             self.post(ZiggyBridge.jsonText(message))
@@ -429,7 +431,8 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // Tells the core that an app-owned menu item was chosen, as the menu-action message the UI's own code also gets.
     func postMenuAction(_ action: String) {
         let message: [String: Any] = [
-            "channel": "menu-action",
+            "kind": "system",
+            "name": "menu-action",
             "data": [
                 "action": action,
             ],

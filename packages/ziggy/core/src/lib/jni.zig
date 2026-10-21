@@ -1,7 +1,7 @@
 //
 // The JNI crossing for Ziggy's Android shell, written in Zig against the NDK's own jni.h. The Java class
 // dev.ziggy.nativeapp.ZiggyNative declares the native methods and the Java interface dev.ziggy.nativeapp.ZiggyHost is what the
-// core calls back into. An app calls exportJni with its own handlers, in a comptime block of its library's root file, and
+// core calls back into. Ziggy's app-root.zig, the root of every app's backend library, calls exportJni with the app registered with App, and
 // the Java_dev_ziggy_nativeapp_ZiggyNative_* functions below are exported from that library.
 //
 // Everything the crossing needs lives in a Bridge, which is allocated by create and whose address is the jlong handle the
@@ -303,7 +303,8 @@ fn installSignalHandlers() void {
 fn menuActionCallback(user_data: ?*anyopaque, action: [*:0]const u8) callconv(.c) void {
     const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
     const message = std.json.Stringify.valueAlloc(std.heap.smp_allocator, .{
-        .channel = "menu-action",
+        .kind = "system",
+        .name = "menu-action",
         .data = .{
             .action = std.mem.span(action),
         },
@@ -480,7 +481,7 @@ const CreateArguments = struct {
 // Creates the Bridge and the core behind it. On failure it returns an error, and a Java exception is already pending
 // when the error is error.JavaException.
 //
-fn createBridge(env: *c.JNIEnv, allocator: std.mem.Allocator, arguments: CreateArguments, app: core_module.AppHandlers) !*Bridge {
+fn createBridge(env: *c.JNIEnv, allocator: std.mem.Allocator, arguments: CreateArguments, app: core_module.RegisteredApp) !*Bridge {
     const bridge = try allocator.create(Bridge);
     errdefer allocator.destroy(bridge);
 
@@ -559,9 +560,9 @@ fn createBridge(env: *c.JNIEnv, allocator: std.mem.Allocator, arguments: CreateA
 
 //
 // Exports the JNI entry points of dev.ziggy.nativeapp.ZiggyNative and JNI_OnLoad from the library that calls this, serving the
-// given app handlers. It is called once, in a comptime block of the app's root file, and only for an Android target.
+// app registered with App. It is called once, from app-root.zig, and only for an Android target.
 //
-pub fn exportJni(comptime app: core_module.AppHandlers) void {
+pub fn exportJni(comptime app: core_module.RegisteredApp) void {
     const Exports = struct {
         //
         // Called when the virtual machine loads the library: checks that it supports the JNI version the entry points use.

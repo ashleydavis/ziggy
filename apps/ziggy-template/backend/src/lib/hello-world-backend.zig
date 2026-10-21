@@ -12,19 +12,32 @@ const ziggy = @import("ziggy-core");
 const TaskContext = ziggy.task_runner.TaskContext;
 
 //
+// The data of the UI's hello-world message.
+//
+pub const HelloWorldRequest = struct {
+    // Who to greet.
+    name: []const u8,
+};
+
+//
+// The message response to the hello-world message.
+//
+pub const HelloWorldResponse = struct {
+    // The greeting, naming the platform the app runs on.
+    greeting: []const u8,
+};
+
+//
 // Handles the UI's hello-world message: returns a greeting for the name in the message's data, naming the platform the app runs on.
 //
-pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
+pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: HelloWorldRequest) !HelloWorldResponse {
     _ = core;
-    const name = ziggy.json.getString(data, "name") orelse {
-        return error.MissingName;
-    };
-    return try ziggy.json.stringify(arena, .{
+    return .{
         .greeting = try std.fmt.allocPrint(arena, "Hello {s}, from Zig on {s}", .{
-            name,
+            request.name,
             @tagName(builtin.os.tag),
         }),
-    });
+    };
 }
 
 //

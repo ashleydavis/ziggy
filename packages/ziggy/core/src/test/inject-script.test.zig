@@ -1,7 +1,7 @@
 const std = @import("std");
 const ziggy = @import("ziggy-core");
 
-test "the embedded inject script is the one that exposes window.ziggy on every platform's channel" {
+test "the embedded inject script is the one that exposes window.ziggy on every platform" {
     const text = ziggy.inject_script.text;
     try std.testing.expect(std.mem.indexOf(u8, text, "window.__ziggyReceive") != null);
     try std.testing.expect(std.mem.indexOf(u8, text, "window.webkit.messageHandlers.ziggy") != null);

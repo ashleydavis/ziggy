@@ -23,26 +23,25 @@ Today the UI queues a task by sending an ordinary message on the `add-task` chan
    - Export the new types from `packages/ziggy/ui/src/index.ts`.
    - Run `mise exec -- bun run compile` from the repository root. It must pass.
 
-3. **Define the wire format.** Write down, in the comment block at the top of `packages/ziggy/core/src/lib/ziggy-inject.js`, the two new kinds of text that pass between the UI and the core, beside the existing message and event:
-   - From the UI: `{ "task": { "taskId", "taskType", "source", "data", "priority" } }` to queue a task, `{ "cancelTask": "<taskId>" }` to cancel one task and `{ "cancelTasks": "<source>" }` to cancel every task of a source.
-   - From the core: `{ "taskEvent": "task-message" | "task-completed", "data": {...} }`.
+3. **Define the wire format.** Tasks travel as system messages and system events, the envelope written down in the comment block at the top of `packages/ziggy/core/src/lib/ziggy-inject.js`, so no new field or kind is added. Write down there the system messages and events the task functions use:
+   - From the UI: `{ "kind": "system", "name": "add-task", "data": { "taskId", "taskType", "source", "data", "priority" } }` to queue a task (the `taskId` is the one `addTask` assigns), `{ "kind": "system", "name": "cancel-task", "data": "<taskId>" }` to cancel one task and `{ "kind": "system", "name": "cancel-tasks", "data": "<source>" }` to cancel every task of a source.
+   - From the core: the system events `{ "kind": "system", "name": "task-message", "data": {...} }` and `{ "kind": "system", "name": "task-completed", "data": {...} }`.
 
-4. **Queue and cancel tasks from their own messages in the core.** In `packages/ziggy/core/src/lib/core.zig`:
-   - Remove the `add-task` and `cancel-tasks` entries from `ziggy_channels`.
-   - In `Core.postMessage`, before the channel lookup, check for a `task` field and a `cancelTasks` field. A `task` field queues the task through the logic now in `addTaskHandler` (renamed `addTaskFromUi`, taking the `task` object). A `cancelTasks` field cancels through the logic now in `cancelTasksHandler` (renamed `cancelTasksFromUi`). Neither sends a reply. A failure (missing `taskId`, `taskType` or `source`, unknown priority, unknown task type) is reported to the UI as a `task-completed` task event with status `failed` for that `taskId` when it has one, and as a `core-error` event when it has none, so no failure is silent.
-   - A `cancelTask` field cancels the one task with that id. Read `TaskRunner` in `packages/ziggy/core/src/lib/task-runner.zig` for a way to cancel a single task by id. If there is none, add `TaskRunner.cancelTask(task_id: []const u8) !void`, which cancels the queued or running task with that id (and its children, as cancelling a source does) and returns `error.UnknownTask` when no task has it. Report that error to the UI as a `core-error` event.
+4. **Queue and cancel tasks from system messages in the core.** In `packages/ziggy/core/src/lib/system-messages.zig`:
+   - Keep `add-task` and `cancel-tasks` in `system_messages`. A failure of `add-task` (missing `taskId`, `taskType` or `source`, unknown priority, unknown task type) is reported to the UI as a `task-completed` system event with status `failed` for that `taskId` when it has one, or as a `core-error` system event when it has none, so no failure is silent.
+   - Add a `cancel-task` system message, which cancels the one task with that id. Read `TaskRunner` in `packages/ziggy/core/src/lib/task-runner.zig` for a way to cancel a single task by id. If there is none, add `TaskRunner.cancelTask(task_id: []const u8) !void`, which cancels the queued or running task with that id (and its children, as cancelling a source does) and returns `error.UnknownTask` when no task has it. Report that error to the UI as a `core-error` system event.
    - Keep `priorityFromText` as it is.
    - Run `mise exec -- zig build` and fix every compile error.
 
-5. **Deliver task events as their own kind.** In `packages/ziggy/core/src/lib/task-runner.zig`, change `emitTaskMessage` and `emitTaskCompleted` to build `{ "taskEvent": "task-message", "data": {...} }` and `{ "taskEvent": "task-completed", "data": {...} }` instead of `{ "channel": ..., "data": ... }`. Leave `emitReply` (the reply to a task channel request, `TaskChannelEntry`) as it is, since that is a message response. Run `mise exec -- zig build`.
+5. **Deliver task events as system events.** In `packages/ziggy/core/src/lib/task-runner.zig`, `emitTaskMessage` and `emitTaskCompleted` already build `{ "kind": "system", "name": "task-message", "data": {...} }` and `{ "kind": "system", "name": "task-completed", "data": {...} }`. Confirm it by reading them, and change them only if the data the task functions need differs. Leave the message response sent for a message answered by a task as it is. Run `mise exec -- zig build`.
 
-6. **Add the task functions to `window.ziggy`.** In `packages/ziggy/core/src/lib/ziggy-inject.js`:
-   - Add `addTask(request)`: assign the task id, post `{ task: {...} }` with it and return it. The id must not repeat within the page or after a reload while earlier tasks still run, so build it from a random prefix chosen when the script loads plus a counter (`crypto.getRandomValues` for the prefix, which every supported web view has).
-   - Add `cancelTask(taskId)`: post `{ cancelTask: taskId }`.
-   - Add `cancelTasks(source)`: post `{ cancelTasks: source }`.
-   - Add `onTaskEvent(kind, callback)`, keeping its own map of callbacks by kind, separate from `listeners`.
-   - In `receive`, route a message with a `taskEvent` field to the task callbacks for that kind before the reply and channel checks.
-   - Add the four functions to the frozen `window.ziggy` object.
+6. **Add the task functions to `window.ziggy`.** In `packages/ziggy/core/src/lib/ziggy-inject.js`, build each on the script's private system part (`postSystem` and the system listeners), which is not on `window.ziggy`:
+   - Change `addTask(request)` to assign the task id, post the `add-task` system message with it and return it. The id must not repeat within the page or after a reload while earlier tasks still run, so build it from a random prefix chosen when the script loads plus a counter (`crypto.getRandomValues` for the prefix, which every supported web view has).
+   - Add `cancelTask(taskId)`: post the `cancel-task` system message.
+   - Keep `cancelTasks(source)`: it posts the `cancel-tasks` system message.
+   - Add `onTaskEvent(kind, callback)`, which adds the callback as a system listener for the `task-message` or `task-completed` system event.
+   - `receive` already hands a system event only to the system listeners for its name, never to `onEvent`; no change is needed there.
+   - Add the new functions to the frozen `window.ziggy` object.
    - The dev client (`packages/ziggy/dev/src/lib/dev-client.js`) only stands in for the native handle, so it needs no change. Confirm by reading it.
 
 7. **Move every user of the old channels.** Replace `send("add-task", ...)`, `send("cancel-tasks", ...)` and `onMessage("task-message" | "task-completed", ...)` with the new functions in:

@@ -1,4 +1,4 @@
-import type { IJsonValue, ITaskCompletedEvent, ITaskMessageEvent } from "ziggy-ui";
+import type { IJsonValue } from "ziggy-ui";
 import { greetingLine, IHelloWorldResponse } from "./lib/hello-world-ui";
 import { ITestCommand, performTestCommand, testResultToJson } from "./lib/test-commands";
 
@@ -11,17 +11,6 @@ interface IOutputMessage {
 
     // The text to show.
     text: string;
-}
-
-//
-// A command from the test control connection, with the id the reply must carry.
-//
-interface ITestCommandEvent {
-    // Identifies the command so its reply reaches the right waiting connection.
-    requestId: number;
-
-    // The command to perform.
-    command: ITestCommand;
 }
 
 //
@@ -52,7 +41,7 @@ function listenForTheTask(): void {
     let nextTaskNumber = 1;
     element("start-task").addEventListener("click", () => {
         const data: IJsonValue = null;
-        window.ziggy.send("add-task", {
+        window.ziggy.addTask({
             taskId: `hello-world-task-${nextTaskNumber++}`,
             taskType: "hello-world-task",
             source: "hello-world",
@@ -60,10 +49,10 @@ function listenForTheTask(): void {
             priority: "interactive",
         });
     });
-    window.ziggy.onMessage<ITaskMessageEvent<IOutputMessage>>("task-message", event => {
+    window.ziggy.onTaskMessage<IOutputMessage>(event => {
         element("task-output").textContent += `${event.message.text}\n`;
     });
-    window.ziggy.onMessage<ITaskCompletedEvent>("task-completed", event => {
+    window.ziggy.onTaskCompleted(event => {
         element("task-output").textContent += `The task ended: ${event.result.status}\n`;
     });
 }
@@ -77,16 +66,13 @@ function listenForTestCommands(): void {
     if (new URLSearchParams(window.location.search).get("testMode") !== "1") {
         return;
     }
-    window.ziggy.onMessage<ITestCommandEvent>("test-command", async event => {
+    window.ziggy.onTestCommand<ITestCommand>(async event => {
         const finder = {
             find: (dataId: string) => document.querySelector<HTMLElement>(`[data-id="${dataId}"]`) as HTMLInputElement | null,
         };
-        await window.ziggy.invoke<IJsonValue>("test-result", {
-            requestId: event.requestId,
-            result: testResultToJson(performTestCommand(finder, event.command)),
-        });
+        await window.ziggy.sendTestResult(event.requestId, testResultToJson(performTestCommand(finder, event.command)));
     });
-    window.ziggy.send("test-ui-ready", null);
+    window.ziggy.testUiReady();
 }
 
 listenForTheTask();

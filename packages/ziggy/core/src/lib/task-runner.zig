@@ -441,8 +441,10 @@ pub const TaskRunner = struct {
     io: std.Io,
     // Where events go.
     sink: EventSink,
-    // The task types that can run.
-    handlers: []const TaskHandlerEntry,
+    // The task types that can run, by name, each a copy of its entry whose name the runner owns. Guarded by task_types_mutex.
+    task_types: std.StringHashMapUnmanaged(TaskHandlerEntry),
+    // Guards task_types, which a registration from any thread changes while tasks look their type up.
+    task_types_mutex: std.Io.Mutex,
     // The runner's settings.
     options: TaskRunnerOptions,
     // The shell's configuration, for host callbacks.
@@ -482,7 +484,8 @@ pub const TaskRunner = struct {
             .allocator = allocator,
             .io = io,
             .sink = sink,
-            .handlers = handlers,
+            .task_types = .empty,
+            .task_types_mutex = .init,
             .options = options,
             .config = config,
             .mutex = .init,
@@ -498,6 +501,10 @@ pub const TaskRunner = struct {
             .keep_alive_held = false,
             .app_state = null,
         };
+        errdefer self.freeTaskTypes();
+        for (handlers) |entry| {
+            try self.registerTaskType(entry);
+        }
         errdefer self.stop();
         var worker_index: u32 = 0;
         while (worker_index < options.worker_threads) : (worker_index += 1) {
@@ -529,6 +536,7 @@ pub const TaskRunner = struct {
         self.queue.deinit(self.allocator);
         self.live.deinit(self.allocator);
         self.running.deinit(self.allocator);
+        self.freeTaskTypes();
     }
 
     //
@@ -577,13 +585,53 @@ pub const TaskRunner = struct {
     }
 
     //
+    // Registers a task type, at start or at any point while the runner runs, from any thread. A task type registered already is the
+    // error DuplicateTaskType, and its name is printed.
+    //
+    pub fn registerTaskType(self: *TaskRunner, entry: TaskHandlerEntry) !void {
+        const owned_name = try self.allocator.dupe(u8, entry.name);
+        errdefer self.allocator.free(owned_name);
+        self.task_types_mutex.lockUncancelable(self.io);
+        defer self.task_types_mutex.unlock(self.io);
+        const slot = try self.task_types.getOrPut(self.allocator, owned_name);
+        if (slot.found_existing) {
+            std.debug.print("Ziggy: the task type \"{s}\" is registered already\n", .{entry.name});
+            return error.DuplicateTaskType;
+        }
+        slot.value_ptr.* = .{
+            .name = owned_name,
+            .handler = entry.handler,
+            .kind = entry.kind,
+        };
+    }
+
+    //
+    // The entry of a registered task type, or null when none is registered by that name.
+    //
+    fn findTaskType(self: *TaskRunner, task_type: []const u8) ?TaskHandlerEntry {
+        self.task_types_mutex.lockUncancelable(self.io);
+        defer self.task_types_mutex.unlock(self.io);
+        return self.task_types.get(task_type);
+    }
+
+    //
+    // Releases the registered task types. It may be called more than once.
+    //
+    fn freeTaskTypes(self: *TaskRunner) void {
+        var iterator = self.task_types.keyIterator();
+        while (iterator.next()) |name| {
+            self.allocator.free(name.*);
+        }
+        self.task_types.deinit(self.allocator);
+        self.task_types = .empty;
+    }
+
+    //
     // The kind of a task type, normal when the type is not known (the task then fails as an unknown type).
     //
     fn kindOf(self: *TaskRunner, task_type: []const u8) TaskKind {
-        for (self.handlers) |entry| {
-            if (std.mem.eql(u8, entry.name, task_type)) {
-                return entry.kind;
-            }
+        if (self.findTaskType(task_type)) |entry| {
+            return entry.kind;
         }
         return .normal;
     }
@@ -836,13 +884,7 @@ pub const TaskRunner = struct {
     //
     fn callHandler(self: *TaskRunner, context: *TaskContext, arena: std.mem.Allocator) Completion {
         const task = context.task;
-        var handler: ?TaskHandler = null;
-        for (self.handlers) |entry| {
-            if (std.mem.eql(u8, entry.name, task.task_type)) {
-                handler = entry.handler;
-                break;
-            }
-        }
+        const handler: ?TaskHandler = if (self.findTaskType(task.task_type)) |entry| entry.handler else null;
         var fallback: ?FallbackHandler = null;
         if (handler == null) {
             if (self.options.fallback_handler) |candidate| {
@@ -1071,7 +1113,8 @@ pub const TaskRunner = struct {
             return;
         }
         const event = try json.stringify(self.allocator, .{
-            .channel = "task-message",
+            .kind = "system",
+            .name = "task-message",
             .data = .{
                 .taskId = task.id,
                 .source = task.source,
@@ -1132,7 +1175,8 @@ pub const TaskRunner = struct {
             .failed => completion.error_message orelse "Failed",
         };
         const event = json.stringify(self.allocator, .{
-            .channel = "task-completed",
+            .kind = "system",
+            .name = "task-completed",
             .data = .{
                 .taskId = task.id,
                 .result = .{

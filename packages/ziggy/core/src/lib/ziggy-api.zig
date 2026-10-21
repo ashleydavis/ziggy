@@ -1,5 +1,5 @@
 //
-// The C interface to the core. An app calls exportApi with its own handlers and the functions below are exported
+// The C interface to the core. Ziggy's app-root.zig, the root of every app's backend library, calls exportApi with the app registered with App and the functions below are exported
 // from its library, so every shell reaches the core the same way. The declarations are in ziggy.h.
 //
 
@@ -26,9 +26,9 @@ const UiFileResult = extern struct {
 //
 // Exports every function declared in ziggy.h (ziggy_create, ziggy_destroy, ziggy_post_message, ziggy_check_url, ziggy_menu_json,
 // ziggy_ui_file, ziggy_inject_script, ziggy_parse_accelerator, ziggy_test_hooks_enabled, ziggy_files_dropped and ziggy_ui_query) from the library
-// that calls this, serving the given app handlers. It is called once, in a comptime block of the app's root file.
+// that calls this, serving the app registered with App. It is called once, from app-root.zig.
 //
-pub fn exportApi(comptime app: core_module.AppHandlers) void {
+pub fn exportApi(comptime app: core_module.RegisteredApp) void {
     const Api = struct {
         //
         // ziggy_create: creates a core serving the app, or returns null after printing why it could not.

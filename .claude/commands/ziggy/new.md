@@ -36,4 +36,4 @@ Ask the human for these, in one message, and wait for the answers. Suggest value
 
 Run the app's checks with `/ziggy:check`. Every one must pass before you report that the app is made. A failure is a mistake in the copy, the rename or the pointing at Ziggy: find it and fix it. Say which checks ran and which platforms they could not run on.
 
-Then tell the human the next steps in a few lines: `bun run dev` to work on the UI in a browser, `/ziggy:add-channel` and `/ziggy:add-task` to give the backend work to do.
+Then tell the human the next steps in a few lines: `bun run dev` to work on the UI in a browser, `/ziggy:add-message` and `/ziggy:add-task` to give the backend work to do.

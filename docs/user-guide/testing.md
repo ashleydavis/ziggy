@@ -19,7 +19,7 @@ The native app reads two environment variables, in a test build only. On Android
 
 ## The control connection
 
-The control connection listens on the loopback address, on a port the operating system chooses. A command is one line holding a JSON object with a `command` field, and the reply is one line. Commands are handled one at a time, and held until the UI says it is listening (`test-ui-ready`).
+The control connection listens on the loopback address, on a port the operating system chooses. A command is one line holding a JSON object with a `command` field, and the reply is one line. Commands are handled one at a time, and held until the UI says it is listening (`window.ziggy.testUiReady()`).
 
 Commands Ziggy handles itself:
 
@@ -31,7 +31,7 @@ Commands Ziggy handles itself:
 | `{"command": "drop", "paths": [...]}` | Records a drop of these files, as the native app does when the user drops them. The native app's own reading of a real drop is not covered. |
 | `{"command": "screenshot", "outputPath": "<absolute path>"}` | Writes a PNG of the app's window to the path once the UI is ready. On Android and the iOS simulator the smoke test scripts take it from the host instead, of the whole screen. The Windows and macOS native apps have not been built or run on those systems yet. |
 
-Every other command goes to the UI as a `test-command` event, and the UI replies on the `test-result` channel. The template's UI handles `ready`, `click`, `type`, `get-value`, `get-text`, `exists`, `viewport`, `insert` and `drop-file`, finding elements by `data-id`.
+Every other command goes to the UI as a `test-command` event, which the UI hears through `window.ziggy.onTestCommand`, and the UI replies with `window.ziggy.sendTestResult(requestId, result)`. The template's UI handles `ready`, `click`, `type`, `get-value`, `get-text`, `exists`, `viewport`, `insert` and `drop-file`, finding elements by `data-id`.
 
 ## See also
 

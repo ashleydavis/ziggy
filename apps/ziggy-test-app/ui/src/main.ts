@@ -1,4 +1,4 @@
-import type { IJsonValue, ITaskCompletedEvent, ITaskMessageEvent } from "ziggy-ui";
+import type { IJsonValue, IMenuActionEvent } from "ziggy-ui";
 import { formatPingReply, IPingReply } from "./lib/format-reply";
 import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobList, IJobProgressMessage } from "./lib/job-list";
 import { makeLargePayload } from "./lib/large-payload";
@@ -30,7 +30,7 @@ interface IOutputMessage {
 }
 
 //
-// The reply of the payload-stats channel.
+// The message response of the payload-stats message.
 //
 interface IPayloadStats {
     // The length in bytes of the text that arrived.
@@ -41,7 +41,7 @@ interface IPayloadStats {
 }
 
 //
-// The reply of the file-roundtrip channel.
+// The message response of the file-roundtrip message.
 //
 interface IFileRoundtrip {
     // The file that was written.
@@ -51,7 +51,7 @@ interface IFileRoundtrip {
     text: string;
 }
 //
-// The reply of the task-stats channel.
+// The message response of the task-stats message.
 //
 interface ITaskStats {
     // How many tasks have ended since the app started.
@@ -62,31 +62,14 @@ interface ITaskStats {
 }
 
 //
-// What an app-event carries: the id of a task the app's own code queued.
+// What the backend's app event carries: its type, "queued-from-app", and the id of a task the app's own code queued.
 //
 interface IAppEvent {
+    // What the event says: always "queued-from-app" in the test app.
+    type: string;
+
     // The task the app queued.
     queued: string;
-}
-
-//
-// What a menu-action event carries.
-//
-interface IMenuActionEvent {
-    // The action of the menu item that was chosen.
-    action: string;
-}
-
-
-//
-// A command from the test control connection, with the id the reply must carry.
-//
-interface ITestCommandEvent {
-    // Identifies the command so its reply reaches the right waiting connection.
-    requestId: number;
-
-    // The command to perform.
-    command: ITestCommand;
 }
 
 function element(dataId: string): HTMLElement {
@@ -118,7 +101,7 @@ function renderJobs(): void {
 
 function queueTask(taskType: string, source: string, data: IJsonValue): string {
     const taskId = `${taskType}-${nextTaskNumber++}`;
-    window.ziggy.send("add-task", {
+    window.ziggy.addTask({
         taskId,
         taskType,
         source,
@@ -137,7 +120,9 @@ function jobTag(name: string, source: string): IJsonValue {
 }
 
 async function showReply(): Promise<void> {
-    const reply = await window.ziggy.invoke<IPingReply>("ping", { greeting: "hello from the UI" });
+    const reply = await window.ziggy.invoke<IPingReply>("ping", {
+        greeting: "hello from the UI",
+    });
     element("reply").textContent = formatPingReply(reply);
 }
 
@@ -166,10 +151,10 @@ function startTasks(): void {
         }
     });
     element("cancel-source").addEventListener("click", () => {
-        window.ziggy.send("cancel-tasks", "long-source");
+        window.ziggy.cancelTasks("long-source");
     });
     element("cancel-many-first").addEventListener("click", () => {
-        window.ziggy.send("cancel-tasks", "many-1");
+        window.ziggy.cancelTasks("many-1");
     });
     element("start-fail").addEventListener("click", () => {
         queueTask("hello-fail", "fail-source", null);
@@ -191,26 +176,32 @@ function startEdgeChecks(): void {
     const result = element("edge-result");
     element("send-large").addEventListener("click", async () => {
         const text = makeLargePayload(5 * 1024 * 1024);
-        const stats = await window.ziggy.invoke<IPayloadStats>("payload-stats", { text });
+        const stats = await window.ziggy.invoke<IPayloadStats>("payload-stats", {
+            text,
+        });
         const expectedLength = new TextEncoder().encode(text).length;
         const matches = stats.length === expectedLength && stats.crc32 === crc32(text);
         result.textContent = matches ? `large payload ok: ${stats.length} bytes` : `large payload WRONG: sent ${expectedLength} bytes, core saw ${stats.length}`;
     });
     element("send-unicode").addEventListener("click", async () => {
         const text = "say \"hi\"\nline two é 世界 😀";
-        const stats = await window.ziggy.invoke<IPayloadStats>("payload-stats", { text });
+        const stats = await window.ziggy.invoke<IPayloadStats>("payload-stats", {
+            text,
+        });
         const matches = stats.length === new TextEncoder().encode(text).length && stats.crc32 === crc32(text);
         result.textContent = matches ? "unicode ok" : "unicode WRONG";
     });
     element("file-roundtrip").addEventListener("click", async () => {
         const text = "written by Zig é 世界";
-        const reply = await window.ziggy.invoke<IFileRoundtrip>("file-roundtrip", { text });
+        const reply = await window.ziggy.invoke<IFileRoundtrip>("file-roundtrip", {
+            text,
+        });
         result.textContent = reply.text === text ? "file ok" : "file WRONG";
     });
     element("invoke-fail").addEventListener("click", async () => {
         try {
             await window.ziggy.invoke<IJsonValue>("fail", null);
-            result.textContent = "failing channel did not fail";
+            result.textContent = "failing message did not fail";
         }
         catch (error) {
             result.textContent = `error reply: ${(error as Error).message}`;
@@ -227,7 +218,7 @@ function startAppFacilities(): void {
     element("app-refuse").addEventListener("click", async () => {
         try {
             await window.ziggy.invoke<IJsonValue>("refuse", null);
-            result.textContent = "the refuse channel did not fail";
+            result.textContent = "the refuse message did not fail";
         }
         catch (error) {
             result.textContent = `error reply: ${(error as Error).message}`;
@@ -240,44 +231,57 @@ function startAppFacilities(): void {
         queueTask("run-in-turn", "run-in-turn-source", { children: 3 });
     });
     element("app-queue").addEventListener("click", async () => {
-        const taskId = await window.ziggy.invoke<string>("queue-from-app", { source: "app-source" });
+        const taskId = await window.ziggy.invoke<string>("queue-from-app", {
+            source: "app-source",
+        });
         appendTo("app-result", `queued by the app: ${taskId}`);
     });
     element("app-start-long").addEventListener("click", () => {
         queueTask("hello-long", "app-cancel-source", { durationMs: 60000, stepMs: 100, children: 0 });
     });
     element("app-cancel").addEventListener("click", async () => {
-        await window.ziggy.invoke<IJsonValue>("cancel-from-app", { source: "app-cancel-source" });
+        await window.ziggy.invoke<IJsonValue>("cancel-from-app", {
+            source: "app-cancel-source",
+        });
     });
     element("app-stats").addEventListener("click", async () => {
         const stats = await window.ziggy.invoke<ITaskStats>("task-stats", null);
         result.textContent = `tasks ended ${stats.tasksEnded}, messages sent ${stats.messagesSent}`;
     });
+    const onAppEvent = (event: IAppEvent) => {
+        if (event.type === "queued-from-app") {
+            appendTo("event-log", `app-event queued ${event.queued}`);
+        }
+    };
     element("app-stop-listening").addEventListener("click", () => {
-        window.ziggy.removeAllListeners("app-event");
+        window.ziggy.removeEventListener(onAppEvent);
         appendTo("app-result", "stopped listening for app events");
     });
-    window.ziggy.onMessage<IAppEvent>("app-event", event => {
-        appendTo("event-log", `app-event queued ${event.queued}`);
-    });
+    window.ziggy.onEvent<IAppEvent>(onAppEvent);
 }
 
 //
-// The file and folder pickers. Each is a request to the backend on the Electron app's channel for it, and the reply is shown in
-// the UI. A cancelled dialog replies null.
+// The file and folder pickers. Each is a message to the backend of the type the Electron app's channel for it is named, and the
+// message response is shown in the UI. A cancelled dialog replies null.
 //
 function startPickers(): void {
     const picked = element("picked");
     element("pick-files").addEventListener("click", async () => {
-        const paths = await window.ziggy.invoke<string[] | null>("pick-files", "Select files");
+        const paths = await window.ziggy.invoke<string[] | null>("pick-files", {
+            title: "Select files",
+        });
         picked.textContent = formatPicked("pick-files", paths);
     });
     element("pick-folder").addEventListener("click", async () => {
-        const path = await window.ziggy.invoke<string | null>("pick-folder", { title: "Select folder" });
+        const path = await window.ziggy.invoke<string | null>("pick-folder", {
+            title: "Select folder",
+        });
         picked.textContent = formatPicked("pick-folder", path);
     });
     element("pick-file").addEventListener("click", async () => {
-        const path = await window.ziggy.invoke<string | null>("pick-file", "example.txt");
+        const path = await window.ziggy.invoke<string | null>("pick-file", {
+            name: "example.txt",
+        });
         picked.textContent = formatPicked("pick-file", path);
     });
 }
@@ -321,7 +325,7 @@ function startMedia(): void {
         queueTask("media-server", "media-source", null);
     });
     element("cancel-media").addEventListener("click", () => {
-        window.ziggy.send("cancel-tasks", "media-source");
+        window.ziggy.cancelTasks("media-source");
     });
 }
 
@@ -458,7 +462,7 @@ function startAddressCheck(): void {
 }
 
 function listenForEvents(): void {
-    window.ziggy.onMessage<ITaskMessageEvent<IOutputMessage | IJobProgressMessage | IMediaServerMessage>>("task-message", event => {
+    window.ziggy.onTaskMessage<IOutputMessage | IJobProgressMessage | IMediaServerMessage>(event => {
         appendTo("event-log", `task-message ${event.taskId} ${JSON.stringify(event.message)}`);
         if (event.message.type === "output") {
             appendTo("output", event.message.text);
@@ -471,7 +475,7 @@ function listenForEvents(): void {
             showMedia(event.message.port);
         }
     });
-    window.ziggy.onMessage<ITaskCompletedEvent>("task-completed", event => {
+    window.ziggy.onTaskCompleted(event => {
         appendTo("event-log", `task-completed ${event.taskId} ${event.result.status}${event.result.errorMessage ? ` ${event.result.errorMessage}` : ""}`);
         jobList = applyTaskCompleted(jobList, event.taskId);
         renderJobs();
@@ -488,7 +492,7 @@ function listenForEvents(): void {
 // Carries out a menu item's action that the shell did not do itself. A task action presses the same button the UI shows.
 //
 function listenForMenuActions(): void {
-    window.ziggy.onMessage<IMenuActionEvent>("menu-action", event => {
+    window.ziggy.onMenuAction((event: IMenuActionEvent) => {
         appendTo("event-log", `menu-action ${event.action}`);
         const buttonId = buttonForMenuAction(event.action);
         if (buttonId !== null) {
@@ -512,7 +516,7 @@ function listenForTestCommands(): void {
     if (new URLSearchParams(window.location.search).get("testMode") !== "1") {
         return;
     }
-    window.ziggy.onMessage<ITestCommandEvent>("test-command", async event => {
+    window.ziggy.onTestCommand<ITestCommand>(async event => {
         const finder = {
             find: (dataId: string) => document.querySelector<HTMLElement>(`[data-id="${dataId}"]`) as HTMLInputElement | null,
         };
@@ -531,12 +535,9 @@ function listenForTestCommands(): void {
                     });
                 })
                 : performTestCommand(finder, event.command);
-        await window.ziggy.invoke<IJsonValue>("test-result", {
-            requestId: event.requestId,
-            result: testResultToJson(result),
-        });
+        await window.ziggy.sendTestResult(event.requestId, testResultToJson(result));
     });
-    window.ziggy.send("test-ui-ready", null);
+    window.ziggy.testUiReady();
 }
 
 listenForEvents();

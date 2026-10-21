@@ -752,7 +752,8 @@ fn performAction(shell: *Shell, action: []const u8) !void {
     }
     else {
         const message = try std.json.Stringify.valueAlloc(std.heap.c_allocator, .{
-            .channel = "menu-action",
+            .kind = "system",
+            .name = "menu-action",
             .data = .{
                 .action = action,
             },

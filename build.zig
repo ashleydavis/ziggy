@@ -163,7 +163,7 @@ pub const IAppBackend = struct {
     name: []const u8,
     // The name the step's description uses for the app, such as "the Ziggy template".
     title: []const u8,
-    // The file the build of the app's backend starts from, relative to the app's folder.
+    // The app's backend source file, relative to the app's folder: the file that declares `pub const app = ziggy.core.App(.{ ... });`.
     backend_source_file: []const u8,
     // The directory of the app's built UI, relative to the app's build root, which is embedded in the core as "ui-files".
     ui_directory: []const u8,
@@ -229,8 +229,10 @@ pub fn addAppBackend(
 }
 
 //
-// Makes the module an app's backend library is built from: the app's backend source file, importing Ziggy's core, the module of the app's UI
-// (its built UI, or none for the dev host) and the app's own modules.
+// Makes the module an app's backend library is built from. Its root is Ziggy's app-root.zig, which exports Ziggy's C interface (and,
+// for Android, the JNI entry points) for the `app` the app's backend source file declares, so the app writes no exports of its own.
+// The backend source file is imported as "app-backend", and it imports Ziggy's core, the module of the app's UI (its built UI, or
+// none for the dev host) and the app's own modules.
 //
 fn createAppBackendModule(
     b: *std.Build,
@@ -240,17 +242,25 @@ fn createAppBackendModule(
     optimize: std.builtin.OptimizeMode,
     ui_files_module: *std.Build.Module,
 ) !*std.Build.Module {
-    const module = b.createModule(.{
+    const backend = b.createModule(.{
         .root_source_file = b.path(app.backend_source_file),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    module.addImport("ziggy-core", ziggy.module);
-    module.addImport("ui-files", ui_files_module);
+    backend.addImport("ziggy-core", ziggy.module);
+    backend.addImport("ui-files", ui_files_module);
     for (app.imports) |import| {
-        module.addImport(import.name, import.module);
+        backend.addImport(import.name, import.module);
     }
+    const module = b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/app-root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    module.addImport("ziggy-core", ziggy.module);
+    module.addImport("app-backend", backend);
     return module;
 }
 
@@ -266,7 +276,7 @@ fn appPath(b: *std.Build, directory: []const u8, sub_path: []const u8) []const u
 
 //
 // Makes the module that holds an app's built UI, a list of every file under the UI's directory (a path relative to the root of
-// the repository), each embedded with @embedFile. Pass the module to the app's backend, which gives the list to AppHandlers.ui_files.
+// the repository), each embedded with @embedFile. Pass the module to the app's backend, which gives the list to the `ui_files` field of its ziggy.core.App.
 // The directory is read every time the build runs, so whatever the UI build produced is what gets embedded, with no list of files
 // to keep up to date. A changed file rebuilds the executable. When the directory is missing or has no index.html, which means the
 // UI was not built first, the module does not compile and says so: the build of anything that does not use the UI is not
@@ -415,8 +425,12 @@ pub fn addDirectoryTests(
             .cwd_relative = "/usr/lib",
         });
     }
+    // -Dtest-filter=<text> runs only the tests whose names contain the text, and may be given more than once. Every test runs
+    // without it.
+    const filters = b.option([]const []const u8, "test-filter", "Run only the unit tests whose names contain this text") orelse &.{};
     const unit_test = b.addTest(.{
         .name = std.fs.path.basename(directory),
+        .filters = filters,
         .root_module = test_module,
     });
     // The NDK has no libc.a for the sysroot's API level directory Zig looks in, only libc.so, so a test program for Android is linked

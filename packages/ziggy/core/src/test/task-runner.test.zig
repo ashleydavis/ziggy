@@ -5,7 +5,8 @@ const utils = @import("ziggy-core").task_queue.utils;
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
-        .channel = "add-task",
+        .kind = "system",
+        .name = "add-task",
         .data = .{
             .taskId = id,
             .taskType = task_type,
@@ -20,7 +21,8 @@ fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source
 
 fn cancelSource(core: *ziggy.core.Core, source: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
-        .channel = "cancel-tasks",
+        .kind = "system",
+        .name = "cancel-tasks",
         .data = source,
     });
     defer std.testing.allocator.free(message);
@@ -54,12 +56,12 @@ test "a short task sends its message and completes as succeeded with its result"
     defer core.destroy();
     try addTask(core, "t1", "quick", "s", "null", "background");
     try shell.expectMessageContaining("\"status\":\"succeeded\",\"outputs\":\"done\"");
-    const message_index = shell.indexOfContaining("\"channel\":\"task-message\"").?;
-    const completed_index = shell.indexOfContaining("\"channel\":\"task-completed\"").?;
+    const message_index = shell.indexOfContaining("\"kind\":\"system\",\"name\":\"task-message\"").?;
+    const completed_index = shell.indexOfContaining("\"kind\":\"system\",\"name\":\"task-completed\"").?;
     try std.testing.expect(message_index < completed_index);
     const message = try shell.messageAt(std.testing.allocator, message_index);
     defer std.testing.allocator.free(message);
-    try std.testing.expectEqualStrings("{\"channel\":\"task-message\",\"data\":{\"taskId\":\"t1\",\"source\":\"s\",\"message\":{\"text\":\"hello\"}}}", message);
+    try std.testing.expectEqualStrings("{\"kind\":\"system\",\"name\":\"task-message\",\"data\":{\"taskId\":\"t1\",\"source\":\"s\",\"message\":{\"text\":\"hello\"}}}", message);
 }
 
 test "a failing task completes as failed with its error" {
@@ -221,8 +223,8 @@ test "add-task without a task type is an error reply" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"add-task\",\"data\":{\"taskId\":\"x\",\"source\":\"s\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingTaskType\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"x\",\"source\":\"s\"}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"taskType\\\" is missing\"}");
 }
 
 test "add-task without a task id is an error reply" {
@@ -231,8 +233,8 @@ test "add-task without a task id is an error reply" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"source\":\"s\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingTaskId\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"source\":\"s\"}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"taskId\\\" is missing\"}");
 }
 
 test "add-task without a source is an error reply" {
@@ -241,8 +243,8 @@ test "add-task without a source is an error reply" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"taskId\":\"x\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingSource\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"taskId\":\"x\"}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"source\\\" is missing\"}");
 }
 
 test "messages sent from several tasks at once all arrive, in order within each task" {
@@ -550,7 +552,7 @@ test "a task asks the shell to do something only the platform can do, and gets i
     host_app.tasks = &host_tasks;
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), host_app);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"h1\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"exportFile\"},\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h1\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"exportFile\"},\"priority\":\"background\"}}");
     try shell.expectMessageContaining("\"outputs\":{\"method\":\"exportFile\",\"request\":{\"key\":\"value\"}}");
 }
 
@@ -565,7 +567,7 @@ test "a task is told why the shell could not do what was asked" {
     host_app.tasks = &host_tasks;
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), host_app);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"h2\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"fail\"},\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h2\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"fail\"},\"priority\":\"background\"}}");
     try shell.expectMessageContaining("\"outputs\":{\"failedBecause\":\"The phone said no.\"}");
 }
 
@@ -582,7 +584,7 @@ test "a task on a platform with no host request callback gets HostCallbackMissin
     config.host_request = null;
     const core = try ziggy.core.Core.create(std.testing.allocator, config, host_app);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"h3\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"exportFile\"},\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h3\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"exportFile\"},\"priority\":\"background\"}}");
     try shell.expectMessageContaining("HostCallbackMissing");
 }
 
@@ -635,7 +637,7 @@ test "a task's host requester asks the shell through the host request callback" 
     host_app.tasks = &host_tasks;
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), host_app);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"r1\",\"taskType\":\"host-requester\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"r1\",\"taskType\":\"host-requester\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
     try shell.expectMessageContaining("\"outputs\":{\"method\":\"shareFile\",\"request\":{\"name\":\"a.jpg\"}}");
 }
 
@@ -652,7 +654,7 @@ test "a task has no host requester when the shell gave no host request callback"
     config.host_request = null;
     const core = try ziggy.core.Core.create(std.testing.allocator, config, host_app);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"r2\",\"taskType\":\"host-requester\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"r2\",\"taskType\":\"host-requester\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
     try shell.expectMessageContaining("\"outputs\":\"no requester\"");
 }
 
@@ -674,7 +676,7 @@ test "a dialog the shell could not show fails the task with HostCallbackFailed" 
     config.pick_paths = refusingPick;
     const core = try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"p1\",\"taskType\":\"pick-open\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"p1\",\"taskType\":\"pick-open\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
     try shell.expectMessageContaining("\"errorMessage\":\"HostCallbackFailed\"");
 }
 
@@ -685,7 +687,7 @@ test "task-completed carries the full task result: the task's type and its input
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
     try addTask(core, "t1", "quick", "s", "{\"a\":1}", "background");
-    try shell.expectMessageContaining("{\"channel\":\"task-completed\",\"data\":{\"taskId\":\"t1\",\"result\":{\"taskId\":\"t1\",\"status\":\"succeeded\",\"outputs\":\"done\",\"type\":\"quick\",\"inputs\":{\"a\":1}}}}");
+    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"task-completed\",\"data\":{\"taskId\":\"t1\",\"result\":{\"taskId\":\"t1\",\"status\":\"succeeded\",\"outputs\":\"done\",\"type\":\"quick\",\"inputs\":{\"a\":1}}}}");
 }
 
 test "add-task with a priority that is not interactive or background is an error reply" {
@@ -694,10 +696,10 @@ test "add-task with a priority that is not interactive or background is an error
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"add-task\",\"data\":{\"taskId\":\"x\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"urgent\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"UnknownPriority\"}");
-    core.postMessage("{\"id\":2,\"channel\":\"add-task\",\"data\":{\"taskId\":\"y\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":5}}");
-    try shell.expectMessageContaining("{\"id\":2,\"ok\":false,\"error\":\"UnknownPriority\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"x\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"urgent\"}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
+    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"y\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":5}}");
+    try shell.expectMessageContaining("{\"id\":2,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
 }
 
 test "add-task without a priority runs the task as background" {
@@ -706,7 +708,7 @@ test "add-task without a priority runs the task as background" {
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"channel\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null}}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null}}");
     try expectCompleted(&shell, "t1", "succeeded");
 }
 
@@ -716,15 +718,24 @@ test "cancel-tasks with the source as an object instead of a bare string is an e
     defer shell.deinit();
     const core = try helpers.createCore(&shell, 1, 1);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"cancel-tasks\",\"data\":{\"source\":\"s\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingSource\"}");
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"cancel-tasks\",\"data\":{\"source\":\"s\"}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: ");
 }
 
-test "priorityFromText maps interactive and background and refuses anything else" {
-    try std.testing.expectEqual(ziggy.task_runner.TaskPriority.interactive, try ziggy.core.priorityFromText("interactive"));
-    try std.testing.expectEqual(ziggy.task_runner.TaskPriority.background, try ziggy.core.priorityFromText("background"));
-    try std.testing.expectEqual(ziggy.task_runner.TaskPriority.background, try ziggy.core.priorityFromText(null));
-    try std.testing.expectError(error.UnknownPriority, ziggy.core.priorityFromText("Interactive"));
+test "add-task takes the priority interactive or background, or none, and refuses anything else" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    const core = try helpers.createCore(&shell, 1, 1);
+    defer core.destroy();
+    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"a\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"interactive\"}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":{}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"b\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"background\"}}");
+    try shell.expectMessageContaining("{\"id\":2,\"ok\":true,\"data\":{}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":3,\"name\":\"add-task\",\"data\":{\"taskId\":\"c\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null}}");
+    try shell.expectMessageContaining("{\"id\":3,\"ok\":true,\"data\":{}}");
+    core.postMessage("{\"kind\":\"system\",\"id\":4,\"name\":\"add-task\",\"data\":{\"taskId\":\"d\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"Interactive\"}}");
+    try shell.expectMessageContaining("{\"id\":4,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
 }
 
 test "a second interactive task goes in front of the first one still waiting, and background tasks keep their arrival order" {

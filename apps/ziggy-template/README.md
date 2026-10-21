@@ -1,6 +1,6 @@
 # Ziggy template
 
-The template a new app on Ziggy is copied from. It has a UI (TypeScript and HTML, which runs in the system web view), a Zig backend with its own channel handlers and task handlers, a native app for each platform, and its tests. It takes Ziggy as a dependency exactly as an app in another repository does, and nothing in Ziggy knows about it. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
+The template a new app on Ziggy is copied from. It has a UI (TypeScript and HTML, which runs in the system web view), a Zig backend with its own message handlers and task handlers, a native app for each platform, and its tests. It takes Ziggy as a dependency exactly as an app in another repository does, and nothing in Ziggy knows about it. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
 
 ## Hello world
 
@@ -9,7 +9,7 @@ The template is the smallest complete app: a hello world for each kind of code a
 | Kind | Code | Test |
 |---|---|---|
 | UI | `ui/src/lib/hello-world-ui.ts`, used by `ui/src/main.ts` | `ui/src/test/hello-world-ui.test.ts` (`bun run test`) |
-| Backend: a message handler and a task | `backend/src/lib/hello-world-backend.zig`, registered in `backend/src/handlers.zig` | `backend/src/test/hello-world-backend.test.zig` (`bun run test:zig`) |
+| Backend: a message handler and a task | `backend/src/lib/hello-world-backend.zig`, registered in `backend/src/app.zig` | `backend/src/test/hello-world-backend.test.zig` (`bun run test:zig`) |
 | The whole app | The app | `smoke-tests/hello-world-app/test.sh` (`bun run test:smoke`) |
 
 The page shows the backend's message response to the `hello-world` message, and a button starts the `hello-world-task` task and shows what it sends. The desktop menu is defined once in Zig (`backend/src/lib/menu.zig`) and drawn natively; a mobile device shows no menu.
@@ -20,7 +20,7 @@ Everything here is the template's own. Ziggy, the package it is built on, is in 
 
 - `build.zig` and `build.zig.zon`: the template's Zig build. It takes Ziggy as the dependency `ziggy` by the path `../..`, and builds the backend (`ziggy-template-backend`), the Linux and Windows native apps (`ziggy-template-linux`, `ziggy-template-windows`) and the backend's unit tests (`test`) with Ziggy's build functions.
 - `ui/`: the UI. `ui/index.html` is the UI and `ui/src/lib` holds the plain functions that have unit tests. `vite.config.ts` is its build, which writes `dist` with relative paths and a classic script so it loads from an address of the app's own in every web view. `dist` is embedded in the app's own code on every platform (the Linux and Windows executables, and the backend library that the MacOS, iOS and Android apps contain), so no platform has a directory of UI files.
-- `backend/`: the template's Zig library, which adds its channel handlers and task handlers to Ziggy's core library.
+- `backend/`: the template's Zig library, which adds its message handlers and task handlers to Ziggy's core library.
 - `native/<platform>/`: the template's native project for each platform: its name, window, icon and the app's backend and UI packaged together. Each one builds on the part Ziggy provides for that platform, in `packages/ziggy/native/<platform>` of Ziggy's repository: the Linux and Windows native apps through the Zig build, the Xcode projects through a local Swift package and the Android project through an included Gradle build.
 - `scripts`: the build, run, packaging and setup scripts, and the shell libraries the scripts share (`scripts/lib`), each with a markdown file beside it.
 - `smoke-tests`: the smoke tests, with a library for each platform that builds, starts and stops the app. See `smoke-tests/run.md`.

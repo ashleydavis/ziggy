@@ -163,40 +163,155 @@ fn pickSaveTask(context: *task_runner.TaskContext, data: std.json.Value) anyerro
 }
 
 
-fn echoChannel(core: *core_module.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
+//
+// echo: the message response is the message's data, unparsed.
+//
+fn echoHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
     _ = core;
-    return try ziggy.json.stringify(arena, data);
+    return .{
+        .response = try ziggy.json.stringify(arena, message.data),
+    };
 }
 
-fn failChannel(core: *core_module.Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
+//
+// fail: fails with error.HandlerFailed, whatever the data.
+//
+fn failHandler(core: *core_module.Core, arena: std.mem.Allocator, request: std.json.Value) anyerror!void {
     _ = core;
     _ = arena;
-    _ = data;
-    return error.ChannelFailed;
+    _ = request;
+    return error.HandlerFailed;
 }
 
 //
-// The handlers the tests register: two channels and the task handlers.
+// none: returns none, so a message with an id gets an empty successful message response.
 //
-pub const app = core_module.AppHandlers{
-    .channels = &[_]core_module.ChannelEntry{
-        .{ .name = "echo", .handler = echoChannel },
-        .{ .name = "fail", .handler = failChannel },
-    },
-    .tasks = &task_handlers,
-    .menu_json = "[]",
-    .ui_files = &[_]ziggy.ui_files.UiFile{
-        .{
-            .path = "index.html",
-            .content = "<html></html>",
+fn noneHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
+    _ = core;
+    _ = arena;
+    _ = message;
+    return .none;
+}
+
+//
+// name: the message response is the message's name, so a test can see the name reached the handler unchanged.
+//
+fn nameHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
+    _ = core;
+    return .{
+        .response = try ziggy.json.stringify(arena, message.name),
+    };
+}
+
+
+//
+// raw: the message response is the message's name, id and data as they arrived, so a test can see the handler that takes
+// ziggy.core.Message gets the message unparsed.
+//
+fn rawHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
+    _ = core;
+    return .{
+        .response = try ziggy.json.stringify(arena, .{
+            .name = message.name,
+            .id = message.id,
+            .data = message.data,
+        }),
+    };
+}
+//
+// Makes the handler of a message answered by a task of the given type, whose input is the message's data.
+//
+fn answeredByTask(comptime task_type: []const u8) fn (core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
+    return struct {
+        fn handle(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
+            return try core.answerWithTask(message, task_type, try ziggy.json.stringify(arena, message.data));
+        }
+    }.handle;
+}
+
+//
+// The data of a greet message.
+//
+pub const GreetRequest = struct {
+    // Who to greet.
+    name: []const u8,
+    // How many times to greet them.
+    times: u32 = 1,
+    // A title to put before the name, or null for none.
+    title: ?[]const u8 = null,
+};
+
+//
+// The message response to a greet message.
+//
+pub const GreetResponse = struct {
+    // The greeting.
+    text: []const u8,
+    // How many times it was given.
+    times: u32,
+};
+
+//
+// greet: a handler with a typed request and response, which answers with a greeting built from the request's fields.
+//
+fn greetHandler(core: *core_module.Core, arena: std.mem.Allocator, request: GreetRequest) !GreetResponse {
+    _ = core;
+    return .{
+        .text = try std.fmt.allocPrint(arena, "Hello {s}{s}", .{ request.title orelse "", request.name }),
+        .times = request.times,
+    };
+}
+
+//
+// forget: a handler with a typed request that returns nothing, so a message with an id gets a successful message response
+// holding null. It delivers what it was given, so a test can see it ran and with which data.
+//
+fn forgetHandler(core: *core_module.Core, arena: std.mem.Allocator, request: GreetRequest) !void {
+    core.deliver(try std.fmt.allocPrint(arena, "forgot {s} {d}", .{ request.name, request.times }));
+}
+
+//
+// count: a handler whose request is not a struct.
+//
+fn countHandler(core: *core_module.Core, arena: std.mem.Allocator, request: []const u32) !usize {
+    _ = core;
+    _ = arena;
+    return request.len;
+}
+
+//
+// The tests' messages: echo, fail, none, name, greet, forget, count, and quick-request, fail-request, pick-open-request and
+// pick-save-request, which are answered by the task quick, fail, pick-open or pick-save. App wants the task types as a struct
+// literal, and the tests also add task types of their own to the list in task_handlers, so the app takes that list after App has
+// made it.
+//
+pub const app = registered: {
+    var registered = core_module.App(.{
+        .messages = .{
+            .echo = echoHandler,
+            .fail = failHandler,
+            .none = noneHandler,
+            .name = nameHandler,
+            .raw = rawHandler,
+            .greet = greetHandler,
+            .forget = forgetHandler,
+            .count = countHandler,
+            .@"quick-request" = answeredByTask("quick"),
+            .@"fail-request" = answeredByTask("fail"),
+            .@"pick-open-request" = answeredByTask("pick-open"),
+            .@"pick-save-request" = answeredByTask("pick-save"),
         },
-    },
-    .task_channels = &[_]core_module.TaskChannelEntry{
-        .{ .name = "quick-request", .task_type = "quick" },
-        .{ .name = "fail-request", .task_type = "fail" },
-        .{ .name = "pick-open-request", .task_type = "pick-open" },
-        .{ .name = "pick-save-request", .task_type = "pick-save" },
-    },
+        .tasks = .{},
+        .menu_json = "[]",
+        .ui_files = &[_]ziggy.ui_files.UiFile{
+            .{
+                .path = "index.html",
+                .content = "<html></html>",
+            },
+        },
+    });
+    registered.tasks = &task_handlers;
+    break :registered registered;
 };
 
 //

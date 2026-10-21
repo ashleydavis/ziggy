@@ -123,8 +123,8 @@ describe("dev-client", () => {
         const { fakeWindow, sockets } = makeWindow(() => respond(true, ""));
         run(fakeWindow);
         sockets[0].fire("open", {});
-        fakeWindow.webkit!.messageHandlers.ziggy.postMessage("{\"channel\":\"x\"}");
-        expect(sockets[0].sent).toEqual(["{\"channel\":\"x\"}"]);
+        fakeWindow.webkit!.messageHandlers.ziggy.postMessage("{\"data\":\"x\"}");
+        expect(sockets[0].sent).toEqual(["{\"data\":\"x\"}"]);
     });
 
     test("messages posted before the socket opens are sent, in order, once it does", () => {

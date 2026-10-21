@@ -3,8 +3,8 @@
 // commands to the running app over a loopback connection.
 //
 // A script connects to the port found in the port file and sends one line per command: a JSON object with a "command"
-// field. The core forwards the command to the UI as a test-command event, the UI performs it and replies on the
-// test-result channel, and the reply is written back as one line. A line that is not a command gets an
+// field. The core forwards the command to the UI as a test-command event, the UI performs it and replies with
+// Ziggy's own test-result message, and the reply is written back as one line. A line that is not a command gets an
 // error as its reply.
 //
 
@@ -160,7 +160,7 @@ pub const TestControl = struct {
     }
 
     //
-    // Called when the UI replies to a command on the test-result channel.
+    // Called when the UI replies to a command with Ziggy's own test-result message.
     //
     //
     // Called by a task that is about to show a native dialog: takes the result a test gave for it, copied with the allocator, or
@@ -400,7 +400,8 @@ pub const TestControl = struct {
         }
         self.mutex.unlock(self.io);
         const event = try json.stringify(arena, .{
-            .channel = "test-command",
+            .kind = "system",
+            .name = "test-command",
             .data = .{
                 .requestId = request,
                 .command = json.Raw{ .text = command_json },

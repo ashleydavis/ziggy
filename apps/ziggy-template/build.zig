@@ -24,7 +24,7 @@ pub fn build(b: *std.Build) !void {
     const core = try ziggy_build.addAppBackend(b, ziggy, .{
         .name = "ziggy-template",
         .title = "the Ziggy template",
-        .backend_source_file = "backend/src/index.zig",
+        .backend_source_file = "backend/src/app.zig",
         .ui_directory = "dist",
         .imports = &.{},
     }, target, optimize);
@@ -41,7 +41,7 @@ pub fn build(b: *std.Build) !void {
     // The unit tests of the template's backend, which run it with Ziggy's test hooks compiled in.
     const test_ziggy = ziggy_build.dependency(b, target, optimize, true);
     const template_for_tests = b.createModule(.{
-        .root_source_file = b.path("backend/src/handlers.zig"),
+        .root_source_file = b.path("backend/src/app.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,

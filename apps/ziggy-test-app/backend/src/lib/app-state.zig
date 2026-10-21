@@ -1,6 +1,6 @@
 //
 // What the test app keeps while it runs, and the parts of Ziggy that reach it: the state the backend holds for the app, the observers the
-// backend calls when a task ends or sends a message, the describer that turns an error into the text of its reply, and channels that
+// backend calls when a task ends or sends a message, the describer that turns an error into the text of its reply, and messages that
 // queue, cancel and announce work from the app's own code rather than from the UI.
 //
 
@@ -42,9 +42,9 @@ pub const ExampleState = struct {
 };
 
 //
-// The counts as the task-stats channel and the describe-self task reply with them.
+// The counts as the task-stats message and the describe-self task reply with them.
 //
-const ITaskStats = struct {
+const TaskStats = struct {
     // How many tasks have ended.
     tasksEnded: u64,
     // How many messages tasks have sent.
@@ -104,7 +104,7 @@ fn fromCore(core: *Core) *ExampleState {
 //
 // The counts, read under the lock.
 //
-fn readStats(state: *ExampleState) ITaskStats {
+fn readStats(state: *ExampleState) TaskStats {
     state.lock();
     defer state.unlock();
     return .{
@@ -136,25 +136,31 @@ pub fn onTaskMessage(core: *Core, sent: ziggy.types.TaskSentMessage) void {
 }
 
 //
+// The data of task-stats and of refuse, which have none.
+//
+pub const NoRequest = struct {};
+
+//
 // Replies with how many tasks have ended and how many messages tasks have sent since the app started.
 //
-pub fn taskStatsHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
-    _ = data;
-    return try json.stringify(arena, readStats(fromCore(core)));
+pub fn taskStatsHandler(core: *Core, arena: std.mem.Allocator, request: NoRequest) !TaskStats {
+    _ = arena;
+    _ = request;
+    return readStats(fromCore(core));
 }
 
 //
 // Always fails with an error the test app's describer has a sentence for, so the UI can check the sentence is what reaches it.
 //
-pub fn refuseHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
+pub fn refuseHandler(core: *Core, arena: std.mem.Allocator, request: NoRequest) !void {
     _ = core;
     _ = arena;
-    _ = data;
+    _ = request;
     return error.Refused;
 }
 
 //
-// The test app's error describer: a sentence for the error the refuse channel returns, and nothing for any other, which is then replied
+// The test app's error describer: a sentence for the error the refuse message returns, and nothing for any other, which is then replied
 // to by name.
 //
 pub fn describeError(err: anyerror) ?[]const u8 {
@@ -165,33 +171,39 @@ pub fn describeError(err: anyerror) ?[]const u8 {
 }
 
 //
-// Queues a hello-short task from the app's own code, under the source given in "source", and tells the UI with an app-event that it
-// did. The reply is the id of the task.
+// The data of queue-from-app and of cancel-from-app.
 //
-pub fn queueFromAppHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
-    const source = json.getString(data, "source") orelse {
-        return error.MissingSource;
-    };
-    const task_id = try std.fmt.allocPrint(arena, "from-app-{s}", .{source});
-    try core.runner.addTask(task_id, "hello-short", source, "null", .background, null);
-    core.deliver(try json.stringify(arena, .{
-        .channel = "app-event",
-        .data = .{
-            .queued = task_id,
-        },
+pub const SourceRequest = struct {
+    // The source to queue the task under, or to cancel the tasks of.
+    source: []const u8,
+};
+
+//
+// Queues a hello-short task from the app's own code, under the source given in "source", and tells the UI with an app event of the
+// type "queued-from-app" that it did. The reply is the id of the task.
+//
+pub fn queueFromAppHandler(core: *Core, arena: std.mem.Allocator, request: SourceRequest) ![]const u8 {
+    const task_id = try std.fmt.allocPrint(arena, "from-app-{s}", .{request.source});
+    try core.runner.addTask(task_id, "hello-short", request.source, "null", .background, null);
+    try core.sendEvent(arena, try json.stringify(arena, .{
+        .type = "queued-from-app",
+        .queued = task_id,
     }));
-    return try json.stringify(arena, task_id);
+    return task_id;
 }
+
+//
+// The message response to cancel-from-app, an empty object.
+//
+pub const CancelFromAppResponse = struct {};
 
 //
 // Cancels, from the app's own code, the tasks queued under the source given in "source".
 //
-pub fn cancelFromAppHandler(core: *Core, arena: std.mem.Allocator, data: std.json.Value) anyerror![]const u8 {
-    const source = json.getString(data, "source") orelse {
-        return error.MissingSource;
-    };
-    core.runner.cancelSource(source);
-    return try arena.dupe(u8, "{}");
+pub fn cancelFromAppHandler(core: *Core, arena: std.mem.Allocator, request: SourceRequest) !CancelFromAppResponse {
+    _ = arena;
+    core.runner.cancelSource(request.source);
+    return .{};
 }
 
 //

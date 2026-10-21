@@ -36,13 +36,13 @@ test "repeated zoom steps do not drift" {
 test "an app action becomes a menu-action message" {
     const message = try actions.menuActionMessage(std.testing.allocator, "about");
     defer std.testing.allocator.free(message);
-    try std.testing.expectEqualStrings("{\"channel\":\"menu-action\",\"data\":{\"action\":\"about\"}}", message);
+    try std.testing.expectEqualStrings("{\"kind\":\"system\",\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}", message);
 }
 
 test "an action name with quotes is escaped" {
     const message = try actions.menuActionMessage(std.testing.allocator, "a\"b");
     defer std.testing.allocator.free(message);
-    try std.testing.expectEqualStrings("{\"channel\":\"menu-action\",\"data\":{\"action\":\"a\\\"b\"}}", message);
+    try std.testing.expectEqualStrings("{\"kind\":\"system\",\"name\":\"menu-action\",\"data\":{\"action\":\"a\\\"b\"}}", message);
 }
 
 test "the selected text is read from the script's JSON result" {

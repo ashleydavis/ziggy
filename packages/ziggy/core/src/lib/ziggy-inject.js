@@ -3,9 +3,22 @@
 // WebKitGTK and WKWebView post through window.webkit.messageHandlers.ziggy, WebView2 through window.chrome.webview,
 // and the Android WebView through the interface object named ZiggyAndroid.
 //
-// A UI message is the JSON text { "id", "channel", "data" } for a request, and the same without an id for a one-way
-// message. The shell delivers a message from the core by calling window.__ziggyReceive with the message as an object:
-// { "id", "ok", "data" } or { "id", "ok": false, "error" } for a reply, and { "channel", "data" } for an event.
+// There are two kinds of message, kept apart from end to end. An app message belongs to the app: the UI sends it with invoke or
+// send, the core hands it to the app's handler for its name and the app sends app events back. A system message belongs to Ziggy
+// itself (tasks, the platform, menu actions, dropped files, core errors and the test hooks): only this script and the native app
+// send one, the core handles it without the app ever seeing it, and window.ziggy has no call that sends an arbitrary one.
+//
+// Every message posted to the core is the JSON text of an object whose "kind" says which it is:
+//   { "kind": "app", "id", "name", "data" }      an app message that gets a message response (invoke)
+//   { "kind": "app", "name", "data" }            an app message that does not (send)
+//   { "kind": "system", "id", "name", "data" }   a system message that gets a message response
+//   { "kind": "system", "name", "data" }         a system message that does not
+// The core refuses a message with no "kind", or any other value, as InvalidMessage, reported as a core-error system event.
+//
+// The shell delivers a message from the core by calling window.__ziggyReceive with the message as an object:
+//   { "id", "ok": true, "data" } or { "id", "ok": false, "error" }   a message response, of either kind, matched by id
+//   { "kind": "app", "data" }                                        an app event, for the onEvent listeners
+//   { "kind": "system", "name", "data" }                             a system event, for Ziggy's listeners for that name
 (function () {
     if (window.ziggy) {
         return;
@@ -14,7 +27,8 @@
     var nativePost = findNativePost();
     var nextId = 1;
     var pending = new Map();
-    var listeners = new Map();
+    var eventListeners = [];
+    var systemListeners = new Map();
 
     function findNativePost() {
         if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.ziggy) {
@@ -35,12 +49,14 @@
         throw new Error("Ziggy: this web view has no native message handler to post to.");
     }
 
-    function invoke(channel, data) {
+    // Posts a message of either kind that gets a message response, and resolves with the response's data or rejects with its
+    // error.
+    function postWithResponse(kind, name, data) {
         return new Promise(function (resolve, reject) {
             var id = nextId++;
             pending.set(id, { resolve: resolve, reject: reject });
             try {
-                nativePost(JSON.stringify({ id: id, channel: channel, data: data }));
+                nativePost(JSON.stringify({ kind: kind, id: id, name: name, data: data }));
             }
             catch (error) {
                 pending.delete(id);
@@ -49,22 +65,91 @@
         });
     }
 
-    function send(channel, data) {
-        nativePost(JSON.stringify({ channel: channel, data: data }));
+    // The app part: app messages and app events, which is all the app reaches through invoke, send and onEvent.
+
+    // The core refuses an app message with no name, or an empty one, with MissingMessageName: invoke rejects with it, and for
+    // send it is a core-error event.
+    function invoke(name, data) {
+        return postWithResponse("app", name, data);
     }
 
-    function onMessage(channel, callback) {
-        var callbacks = listeners.get(channel);
+    function send(name, data) {
+        nativePost(JSON.stringify({ kind: "app", name: name, data: data }));
+    }
+
+    function onEvent(callback) {
+        eventListeners.push(callback);
+    }
+
+    function removeEventListener(callback) {
+        eventListeners = eventListeners.filter(function (listener) {
+            return listener !== callback;
+        });
+    }
+
+    function receiveAppEvent(message) {
+        eventListeners.slice().forEach(function (callback) {
+            callback(message.data);
+        });
+    }
+
+    // The system part: Ziggy's own messages and events. None of these functions is on window.ziggy, so the app cannot send a
+    // system message of its choosing: it reaches them only through the fixed calls below, each of which names its own message.
+
+    function invokeSystem(name, data) {
+        return postWithResponse("system", name, data);
+    }
+
+    function postSystem(name, data) {
+        nativePost(JSON.stringify({ kind: "system", name: name, data: data }));
+    }
+
+    function addSystemListener(name, callback) {
+        var callbacks = systemListeners.get(name);
         if (!callbacks) {
             callbacks = [];
-            listeners.set(channel, callbacks);
+            systemListeners.set(name, callbacks);
         }
         callbacks.push(callback);
     }
 
-    function removeAllListeners(channel) {
-        listeners.delete(channel);
+    function removeSystemListener(name, callback) {
+        var callbacks = systemListeners.get(name);
+        if (!callbacks) {
+            return;
+        }
+        systemListeners.set(name, callbacks.filter(function (listener) {
+            return listener !== callback;
+        }));
     }
+
+    function receiveSystemEvent(message) {
+        var callbacks = systemListeners.get(message.name) || [];
+        if (callbacks.length === 0 && message.name === "core-error") {
+            console.error("Ziggy core error:", message.data && message.data.error);
+        }
+        callbacks.slice().forEach(function (callback) {
+            callback(message.data);
+        });
+    }
+
+    // Makes the pair of functions that add and remove a listener for one system event.
+    function systemEvent(name) {
+        return {
+            on: function (callback) {
+                addSystemListener(name, callback);
+            },
+            remove: function (callback) {
+                removeSystemListener(name, callback);
+            },
+        };
+    }
+
+    var taskMessage = systemEvent("task-message");
+    var taskCompleted = systemEvent("task-completed");
+    var menuAction = systemEvent("menu-action");
+    var coreError = systemEvent("core-error");
+    var testCommand = systemEvent("test-command");
 
     // Dropped files. A web view does not give the UI the real paths of the files dropped on it: WebKitGTK lists file addresses as a
     // type of the drop and gives no way to read them, and no File objects, and the others give Files that have no path readable by the
@@ -106,7 +191,7 @@
                 console.warn("Ziggy: WebView2 would not hand the shell these files, so their paths are not known from the files themselves.", error);
             }
         }
-        invoke("get-dropped-paths", null).then(function (paths) {
+        invokeSystem("get-dropped-paths", null).then(function (paths) {
             var transfer = new window.DataTransfer();
             paths.forEach(function (path) {
                 var file = new window.File([], path.split(/[\\/]/).pop());
@@ -145,24 +230,51 @@
             }
             return;
         }
-        var callbacks = listeners.get(message.channel);
-        if (!callbacks) {
-            if (message.channel === "core-error") {
-                console.error("Ziggy core error:", message.data && message.data.error);
-            }
+        if (message.kind === "app") {
+            receiveAppEvent(message);
             return;
         }
-        callbacks.slice().forEach(function (callback) {
-            callback(message.data);
-        });
+        if (message.kind === "system") {
+            receiveSystemEvent(message);
+            return;
+        }
+        console.error("Ziggy: an event arrived with no kind, or one that is neither app nor system", message);
     }
 
     Object.defineProperty(window, "ziggy", {
         value: Object.freeze({
             invoke: invoke,
             send: send,
-            onMessage: onMessage,
-            removeAllListeners: removeAllListeners,
+            onEvent: onEvent,
+            removeEventListener: removeEventListener,
+            getPlatform: function () {
+                return invokeSystem("get-platform", null);
+            },
+            addTask: function (task) {
+                postSystem("add-task", task);
+            },
+            cancelTasks: function (source) {
+                postSystem("cancel-tasks", source);
+            },
+            onTaskMessage: taskMessage.on,
+            removeTaskMessageListener: taskMessage.remove,
+            onTaskCompleted: taskCompleted.on,
+            removeTaskCompletedListener: taskCompleted.remove,
+            onMenuAction: menuAction.on,
+            removeMenuActionListener: menuAction.remove,
+            onCoreError: coreError.on,
+            removeCoreErrorListener: coreError.remove,
+            onTestCommand: testCommand.on,
+            removeTestCommandListener: testCommand.remove,
+            sendTestResult: function (requestId, result) {
+                return invokeSystem("test-result", {
+                    requestId: requestId,
+                    result: result,
+                });
+            },
+            testUiReady: function () {
+                postSystem("test-ui-ready", null);
+            },
             getPathForFile: getPathForFile,
         }),
     });

@@ -9,6 +9,6 @@ flowchart LR
     Queue["Task queue"]
     Workers["Worker threads"]
 
-    UI -->|"add-task, cancel-tasks"| Queue
+    UI -->|"addTask, cancelTasks"| Queue
     Queue -->|"next task"| Workers
     Workers -->|"task events"| UI

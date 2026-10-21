@@ -9,11 +9,17 @@ interface IFakeWindow {
     chrome?: { webview: { postMessage: (text: string) => void; postMessageWithAdditionalObjects?: (text: string, objects: object[]) => void } };
     ZiggyAndroid?: { postMessage: (text: string) => void };
     ziggy?: {
-        invoke: (channel: string, data: object | null) => Promise<object>;
-        send: (channel: string, data: object | null) => void;
-        onMessage: (channel: string, callback: (data: object) => void) => void;
-        removeAllListeners: (channel: string) => void;
+        invoke: (name: string, data: object | null) => Promise<object>;
+        send: (name: string, data: object | null) => void;
+        onEvent: (callback: (data: object) => void) => void;
+        removeEventListener: (callback: (data: object) => void) => void;
+        getPlatform: () => Promise<object>;
+        addTask: (task: object) => void;
+        cancelTasks: (source: string) => void;
+        sendTestResult: (requestId: number, result: object | null) => Promise<object>;
+        testUiReady: () => void;
         getPathForFile: (file: object) => string | undefined;
+        [listenerCall: string]: any;
     };
     __ziggyReceive?: (message: object) => void;
     addEventListener?: (type: string, listener: (event: IFakeDropEvent) => void, capture: boolean) => void;
@@ -138,12 +144,12 @@ function makeEvent(type: string, dataTransfer: IFakeDataTransfer | null, target:
 }
 
 describe("ziggy-inject", () => {
-    test("invoke posts a request with an id and resolves with the reply's data", async () => {
+    test("invoke posts a request with an id and the name and resolves with the reply's data", async () => {
         const posted: string[] = [];
         const fakeWindow = windowWithWebkit(posted);
         inject(fakeWindow);
         const reply = fakeWindow.ziggy!.invoke("ping", { a: 1 });
-        expect(JSON.parse(posted[0])).toEqual({ id: 1, channel: "ping", data: { a: 1 } });
+        expect(JSON.parse(posted[0])).toEqual({ kind: "app", id: 1, name: "ping", data: { a: 1 } });
         fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: { answer: 42 } });
         expect(await reply).toEqual({ answer: 42 });
     });
@@ -178,7 +184,7 @@ describe("ziggy-inject", () => {
         fakeWindow.dropListeners[0](drop);
         expect(drop.prevented).toBe(true);
         expect(drop.stopped).toBe(true);
-        expect(JSON.parse(posted[0])).toEqual({ id: 1, channel: "get-dropped-paths", data: null });
+        expect(JSON.parse(posted[0])).toEqual({ kind: "system", id: 1, name: "get-dropped-paths", data: null });
         fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: ["/home/me/two words.txt", "/home/me/a folder"] });
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(target.dispatched.length).toBe(1);
@@ -222,7 +228,7 @@ describe("ziggy-inject", () => {
         const target: IFakeTarget = { dispatched: [], dispatchEvent: () => undefined };
         fakeWindow.dropListeners[0](makeEvent("drop", fakeTransfer(files, {}, ["Files"]), target, 0, 0));
         expect(withObjects).toEqual([{ text: "ziggy-file", objects: files }]);
-        expect(JSON.parse(posted[0]).channel).toBe("get-dropped-paths");
+        expect(JSON.parse(posted[0])).toEqual({ kind: "system", id: 1, name: "get-dropped-paths", data: null });
     });
 
     test("a drop of a link or of text is left alone", () => {
@@ -241,38 +247,146 @@ describe("ziggy-inject", () => {
         const posted: string[] = [];
         const fakeWindow = windowWithWebkit(posted);
         inject(fakeWindow);
-        fakeWindow.ziggy!.send("cancel-tasks", { source: "s" });
-        expect(JSON.parse(posted[0])).toEqual({ channel: "cancel-tasks", data: { source: "s" } });
+        fakeWindow.ziggy!.send("notify", { source: "s" });
+        expect(JSON.parse(posted[0])).toEqual({ kind: "app", name: "notify", data: { source: "s" } });
     });
 
-    test("an event calls every callback registered for its channel and no others", () => {
+    test("onEvent gets every app event and none of Ziggy's own", () => {
         const fakeWindow = windowWithWebkit([]);
         inject(fakeWindow);
         const received: object[] = [];
-        const other: object[] = [];
-        fakeWindow.ziggy!.onMessage("task-message", data => received.push(data));
-        fakeWindow.ziggy!.onMessage("task-message", data => received.push(data));
-        fakeWindow.ziggy!.onMessage("other", data => other.push(data));
-        fakeWindow.__ziggyReceive!({ channel: "task-message", data: { taskId: "t" } });
-        expect(received).toEqual([{ taskId: "t" }, { taskId: "t" }]);
-        expect(other).toEqual([]);
+        fakeWindow.ziggy!.onEvent(data => received.push(data));
+        fakeWindow.ziggy!.onEvent(data => received.push(data));
+        fakeWindow.__ziggyReceive!({ kind: "app", data: { type: "saved" } });
+        fakeWindow.__ziggyReceive!({ kind: "system", name: "task-message", data: { taskId: "t" } });
+        fakeWindow.__ziggyReceive!({ kind: "system", name: "core-error", data: { error: "E" } });
+        expect(received).toEqual([{ type: "saved" }, { type: "saved" }]);
     });
 
-    test("removeAllListeners stops a channel's events reaching its callbacks", () => {
+    test("an app event reaches no system listener, even when it carries a system event's name", () => {
+        const fakeWindow = windowWithWebkit([]);
+        inject(fakeWindow);
+        const system: object[] = [];
+        const app: object[] = [];
+        fakeWindow.ziggy!.onTaskMessage((data: object) => system.push(data));
+        fakeWindow.ziggy!.onCoreError((data: object) => system.push(data));
+        fakeWindow.ziggy!.onEvent(data => app.push(data));
+        fakeWindow.__ziggyReceive!({ kind: "app", name: "task-message", data: { taskId: "t" } });
+        fakeWindow.__ziggyReceive!({ kind: "app", name: "core-error", data: { error: "E" } });
+        expect(system).toEqual([]);
+        expect(app).toEqual([{ taskId: "t" }, { error: "E" }]);
+    });
+
+    test("an event with no kind, or an unknown one, reaches no listener and is logged", () => {
         const fakeWindow = windowWithWebkit([]);
         inject(fakeWindow);
         const received: object[] = [];
-        fakeWindow.ziggy!.onMessage("task-message", data => received.push(data));
-        fakeWindow.ziggy!.removeAllListeners("task-message");
-        fakeWindow.__ziggyReceive!({ channel: "task-message", data: {} });
-        expect(received).toEqual([]);
+        fakeWindow.ziggy!.onEvent(data => received.push(data));
+        fakeWindow.ziggy!.onTaskMessage((data: object) => received.push(data));
+        const logged = jest.spyOn(console, "error").mockImplementation(() => undefined);
+        try {
+            fakeWindow.__ziggyReceive!({ data: { a: 1 } });
+            fakeWindow.__ziggyReceive!({ kind: "other", name: "task-message", data: { a: 2 } });
+            expect(received).toEqual([]);
+            expect(logged).toHaveBeenCalledTimes(2);
+        }
+        finally {
+            logged.mockRestore();
+        }
+    });
+
+    test("removeEventListener stops that callback hearing app events, and leaves the others", () => {
+        const fakeWindow = windowWithWebkit([]);
+        inject(fakeWindow);
+        const removed: object[] = [];
+        const kept: object[] = [];
+        const removedCallback = (data: object) => removed.push(data);
+        fakeWindow.ziggy!.onEvent(removedCallback);
+        fakeWindow.ziggy!.onEvent(data => kept.push(data));
+        fakeWindow.ziggy!.removeEventListener(removedCallback);
+        fakeWindow.__ziggyReceive!({ kind: "app", data: 1 });
+        expect(removed).toEqual([]);
+        expect(kept).toEqual([1]);
+    });
+
+    test("each of Ziggy's own calls posts a system message", async () => {
+        const posted: string[] = [];
+        const fakeWindow = windowWithWebkit(posted);
+        inject(fakeWindow);
+        const platform = fakeWindow.ziggy!.getPlatform();
+        fakeWindow.ziggy!.addTask({ taskId: "t1", taskType: "quick", source: "s", data: null });
+        fakeWindow.ziggy!.cancelTasks("s");
+        const result = fakeWindow.ziggy!.sendTestResult(4, { ok: true });
+        fakeWindow.ziggy!.testUiReady();
+        expect(posted.map(text => JSON.parse(text))).toEqual([
+            { kind: "system", id: 1, name: "get-platform", data: null },
+            { kind: "system", name: "add-task", data: { taskId: "t1", taskType: "quick", source: "s", data: null } },
+            { kind: "system", name: "cancel-tasks", data: "s" },
+            { kind: "system", id: 2, name: "test-result", data: { requestId: 4, result: { ok: true } } },
+            { kind: "system", name: "test-ui-ready", data: null },
+        ]);
+        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: { platformKind: "desktop" } });
+        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: {} });
+        expect(await platform).toEqual({ platformKind: "desktop" });
+        expect(await result).toEqual({});
+    });
+
+    test("each of Ziggy's own listeners gets only its own event, and its remover removes it", () => {
+        const fakeWindow = windowWithWebkit([]);
+        inject(fakeWindow);
+        const pairs: [string, string, string][] = [
+            ["task-message", "onTaskMessage", "removeTaskMessageListener"],
+            ["task-completed", "onTaskCompleted", "removeTaskCompletedListener"],
+            ["menu-action", "onMenuAction", "removeMenuActionListener"],
+            ["core-error", "onCoreError", "removeCoreErrorListener"],
+            ["test-command", "onTestCommand", "removeTestCommandListener"],
+        ];
+        const received = new Map<string, object[]>();
+        const callbacks = new Map<string, (data: object) => void>();
+        for (const [name, onCall] of pairs) {
+            received.set(name, []);
+            const callback = (data: object) => received.get(name)!.push(data);
+            callbacks.set(name, callback);
+            fakeWindow.ziggy![onCall](callback);
+        }
+        const app: object[] = [];
+        fakeWindow.ziggy!.onEvent(data => app.push(data));
+        for (const [name] of pairs) {
+            fakeWindow.__ziggyReceive!({ kind: "system", name, data: { from: name } });
+        }
+        for (const [name] of pairs) {
+            expect(received.get(name)).toEqual([{ from: name }]);
+        }
+        expect(app).toEqual([]);
+        for (const [name, , removeCall] of pairs) {
+            fakeWindow.ziggy![removeCall](callbacks.get(name));
+            fakeWindow.__ziggyReceive!({ kind: "system", name, data: { again: name } });
+            expect(received.get(name)).toEqual([{ from: name }]);
+        }
+    });
+
+    test("a core-error goes to the console only when nothing listens for it", () => {
+        const fakeWindow = windowWithWebkit([]);
+        inject(fakeWindow);
+        const logged = jest.spyOn(console, "error").mockImplementation(() => undefined);
+        try {
+            fakeWindow.__ziggyReceive!({ kind: "system", name: "core-error", data: { error: "InvalidMessage" } });
+            expect(logged).toHaveBeenCalledWith("Ziggy core error:", "InvalidMessage");
+            logged.mockClear();
+            fakeWindow.ziggy!.onCoreError(() => undefined);
+            fakeWindow.__ziggyReceive!({ kind: "system", name: "core-error", data: { error: "InvalidMessage" } });
+            expect(logged).not.toHaveBeenCalled();
+        }
+        finally {
+            logged.mockRestore();
+        }
     });
 
     test("it posts through WebView2's handle when that is what the web view has", () => {
         const posted: string[] = [];
         const fakeWindow: IFakeWindow = { chrome: { webview: { postMessage: text => posted.push(text) } } };
         inject(fakeWindow);
-        fakeWindow.ziggy!.send("x", null);
+        fakeWindow.ziggy!.send("notify", null);
         expect(posted.length).toBe(1);
     });
 
@@ -280,7 +394,7 @@ describe("ziggy-inject", () => {
         const posted: string[] = [];
         const fakeWindow: IFakeWindow = { ZiggyAndroid: { postMessage: text => posted.push(text) } };
         inject(fakeWindow);
-        fakeWindow.ziggy!.send("x", null);
+        fakeWindow.ziggy!.send("notify", null);
         expect(posted.length).toBe(1);
     });
 
@@ -288,10 +402,32 @@ describe("ziggy-inject", () => {
         expect(() => inject({})).toThrow("no native message handler");
     });
 
+    // window.ziggy has no call that posts a system message the caller names: these are all there is.
     test("window.ziggy exposes exactly these methods and cannot be replaced", () => {
         const fakeWindow = windowWithWebkit([]);
         inject(fakeWindow);
-        expect(Object.keys(fakeWindow.ziggy!).sort()).toEqual(["getPathForFile", "invoke", "onMessage", "removeAllListeners", "send"]);
+        expect(Object.keys(fakeWindow.ziggy!).sort()).toEqual([
+            "addTask",
+            "cancelTasks",
+            "getPathForFile",
+            "getPlatform",
+            "invoke",
+            "onCoreError",
+            "onEvent",
+            "onMenuAction",
+            "onTaskCompleted",
+            "onTaskMessage",
+            "onTestCommand",
+            "removeCoreErrorListener",
+            "removeEventListener",
+            "removeMenuActionListener",
+            "removeTaskCompletedListener",
+            "removeTaskMessageListener",
+            "removeTestCommandListener",
+            "send",
+            "sendTestResult",
+            "testUiReady",
+        ]);
         expect(() => {
             "use strict";
             (fakeWindow as { ziggy: object }).ziggy = {};

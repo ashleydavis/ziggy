@@ -70,7 +70,7 @@ To check everything works, `bun run test:smoke` runs the app's smoke test in a h
 
 ### Sending and handling messages
 
-The example app sends the backend a `hello-world` message and shows the response it gets back ([`ui/src/main.ts`](https://github.com/ashleydavis/ziggy-example-vite/blob/main/ui/src/main.ts)):
+The example app sends the backend a message named `hello-world` and shows the response it gets back ([`ui/src/main.ts`](https://github.com/ashleydavis/ziggy-example-vite/blob/main/ui/src/main.ts)):
 
 ```ts
 async function sayHello(): Promise<void> {
@@ -78,7 +78,7 @@ async function sayHello(): Promise<void> {
         name: "world",
     };
     const response = 
-        await window.ziggy.send<IHelloWorldResponse>(
+        await window.ziggy.invoke<IHelloWorldResponse>(
             "hello-world",
             request,
         );
@@ -87,40 +87,45 @@ async function sayHello(): Promise<void> {
 }
 ```
 
-A Zig function in the backend handles the message and sends back a JSON response ([`backend/src/lib/hello-world-backend.zig`](https://github.com/ashleydavis/ziggy-example-vite/blob/main/backend/src/lib/hello-world-backend.zig)):
+A Zig function in the backend, the message's handler, gets the message's data parsed into a struct of its own and returns the response, which Ziggy sends back as JSON. The backend code in this section is the Ziggy template's ([`backend/src/lib/hello-world-backend.zig`](../apps/ziggy-template/backend/src/lib/hello-world-backend.zig)):
 
 ```zig
+pub const HelloWorldRequest = struct {
+    // Who to greet.
+    name: []const u8,
+};
+
+pub const HelloWorldResponse = struct {
+    // The greeting, naming the platform the app runs on.
+    greeting: []const u8,
+};
+
 pub fn helloWorldHandler(
     core: *ziggy.core.Core,
     arena: std.mem.Allocator,
-    data: std.json.Value,
-) anyerror![]const u8 {
+    request: HelloWorldRequest,
+) !HelloWorldResponse {
     _ = core;
-    const name = ziggy.json.getString(data, "name") orelse {
-        return error.MissingName;
-    };
-    return try ziggy.json.stringify(arena, .{
+    return .{
         .greeting = try std.fmt.allocPrint(arena, "Hello {s}, from Zig on {s}", .{
-            name,
+            request.name,
             @tagName(builtin.os.tag),
         }),
-    });
+    };
 }
 ```
 
 The backend is compiled native code and runs on every platform, so it is fast and can do what a web page cannot, such as reading and writing files and calling the operating system directly.
 
-The backend registers that function as the handler for `hello-world` messages ([`backend/src/handlers.zig`](https://github.com/ashleydavis/ziggy-example-vite/blob/main/backend/src/handlers.zig)):
+The app declares itself to Ziggy in one file, which lists each message name with its handler ([`backend/src/app.zig`](../apps/ziggy-template/backend/src/app.zig)):
 
 ```zig
-pub const app = ziggy.core.AppHandlers{
-    .channels = &[_]ziggy.core.ChannelEntry{
-        .{
-            .name = "hello-world",
-            .handler = hello_world_backend.helloWorldHandler,
-        },
+pub const app = ziggy.core.App(.{
+    .messages = .{
+        .@"hello-world" = hello_world_backend.helloWorldHandler,
     },
     ...
+});
 ```
 
 ### Running background tasks
@@ -133,8 +138,10 @@ The example app queues a task when the "Start the hello world task" button is pr
 
 ```ts
 // Starts the task when the button is pressed.
+let nextTaskNumber = 1;
 element("start-task").addEventListener("click", () => {
-    const taskId = window.ziggy.addTask({
+    window.ziggy.addTask({
+        taskId: `hello-world-task-${nextTaskNumber++}`,
         taskType: "hello-world-task",
         source: "hello-world",
         data: null,
@@ -143,8 +150,7 @@ element("start-task").addEventListener("click", () => {
 });
 
 // Shows each event the task sends while it runs.
-window.ziggy.onTaskEvent<ITaskMessageEvent<IOutputMessage>>(
-    "task-message",
+window.ziggy.onTaskMessage<IOutputMessage>(
     event => {
         element("task-output").textContent +=
             `${event.message.text}\n`;
@@ -152,8 +158,7 @@ window.ziggy.onTaskEvent<ITaskMessageEvent<IOutputMessage>>(
 );
 
 // Shows how the task ended.
-window.ziggy.onTaskEvent<ITaskCompletedEvent>(
-    "task-completed",
+window.ziggy.onTaskCompleted(
     event => {
         element("task-output").textContent +=
             `The task ended: ${event.result.status}\n`;
@@ -161,7 +166,7 @@ window.ziggy.onTaskEvent<ITaskCompletedEvent>(
 );
 ```
 
-A Zig function runs the task on a worker thread, sends the UI an event and completes with a result ([`backend/src/lib/hello-world-backend.zig`](https://github.com/ashleydavis/ziggy-example-vite/blob/main/backend/src/lib/hello-world-backend.zig)):
+A Zig function runs the task on a worker thread, sends the UI an event and completes with a result ([`backend/src/lib/hello-world-backend.zig`](../apps/ziggy-template/backend/src/lib/hello-world-backend.zig)):
 
 ```zig
 pub fn helloWorldTaskHandler(
@@ -177,21 +182,19 @@ pub fn helloWorldTaskHandler(
 }
 ```
 
-The backend registers that function as the handler for `hello-world-task` tasks ([`backend/src/handlers.zig`](https://github.com/ashleydavis/ziggy-example-vite/blob/main/backend/src/handlers.zig)):
+The app registers that function as the handler for `hello-world-task` tasks in the same declaration ([`backend/src/app.zig`](../apps/ziggy-template/backend/src/app.zig)):
 
 ```zig
-pub const app = ziggy.core.AppHandlers{
+pub const app = ziggy.core.App(.{
     ...
-    .tasks = &[_]ziggy.task_runner.TaskHandlerEntry{
-        .{
-            .name = "hello-world-task",
-            .handler = hello_world_backend.helloWorldTaskHandler,
-        },
+    .tasks = .{
+        .@"hello-world-task" = hello_world_backend.helloWorldTaskHandler,
     },
     ...
+});
 ```
 
-`window.ziggy.addTask` queues the task and returns the id Ziggy gave it straight away, without waiting for the task to run. Every event the task sends carries that id, and `window.ziggy.onTaskEvent` listens for them.
+`window.ziggy.addTask` queues the task under the id the UI gave it and returns straight away, without waiting for the task to run. Every event the task sends carries that id, and `window.ziggy.onTaskMessage` and `window.ziggy.onTaskCompleted` listen for them.
 
 ### Try a change
 

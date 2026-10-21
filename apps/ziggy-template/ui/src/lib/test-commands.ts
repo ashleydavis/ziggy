@@ -108,7 +108,7 @@ export function performTestCommand(finder: IElementFinder, command: ITestCommand
 }
 
 //
-// Converts a result to the JSON the UI sends back on the test-result channel. A field with no value is left out.
+// Converts a result to the JSON the UI sends back with window.ziggy.sendTestResult. A field with no value is left out.
 //
 export function testResultToJson(result: ITestResult): IJsonObject {
     const json: IJsonObject = { ok: result.ok };

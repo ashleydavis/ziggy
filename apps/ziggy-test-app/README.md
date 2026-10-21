@@ -1,10 +1,10 @@
 # Ziggy test app
 
-The app Ziggy's own tests drive: it has a feature for each part of Ziggy, and nobody copies it. Ziggy's smoke tests (`smoke-tests` at the root of the repository) drive it on every platform, and its unit tests check its features. A new app starts from the Ziggy template instead. It has a UI (TypeScript and HTML, which runs in the system web view), a Zig backend with its own channel handlers and task handlers, a native app for each platform and unit tests of its UI and backend. It takes Ziggy as a dependency exactly as an app in another repository does, and nothing in Ziggy knows about it. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
+The app Ziggy's own tests drive: it has a feature for each part of Ziggy, and nobody copies it. Ziggy's smoke tests (`smoke-tests` at the root of the repository) drive it on every platform, and its unit tests check its features. A new app starts from the Ziggy template instead. It has a UI (TypeScript and HTML, which runs in the system web view), a Zig backend with its own message handlers and task handlers, a native app for each platform and unit tests of its UI and backend. It takes Ziggy as a dependency exactly as an app in another repository does, and nothing in Ziggy knows about it. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
 
 ## What it shows
 
-- The UI sends a message on the `ping` channel and shows the backend's message response.
+- The UI sends a `ping` message and shows the backend's message response.
 - Tasks: a short task, a long task that queues child tasks and waits for them, several long tasks at once, cancelling by source and a task that fails. Output text, `job-progress` messages and every `task-message` and `task-completed` event appear in the UI.
 - The edges of the bridge: a multi-megabyte payload, text with quotes, newlines and non-ASCII characters, an error message response and a file written and read in the app's private data directory.
 - A native call: the UI sends a message for the operating system's version, a task calls the native app's callback and the result comes back to the UI.
@@ -22,7 +22,7 @@ Everything here is the test app's own. Ziggy, the package it is built on, is in 
 
 - `build.zig` and `build.zig.zon`: the test app's Zig build. It takes Ziggy as the dependency `ziggy` by the path `../..`, and builds the backend (`ziggy-test-app-backend`), the Linux and Windows native apps (`ziggy-test-app-linux`, `ziggy-test-app-windows`) and the backend's unit tests (`test`) with Ziggy's build functions.
 - `ui/`: the UI. `ui/index.html` is the UI and `ui/src/lib` holds the plain functions that have unit tests. `vite.config.ts` is its build, which writes `dist` with relative paths and a classic script so it loads from an address of the app's own in every web view. `dist` is embedded in the app's own code on every platform (the Linux and Windows executables, and the backend library that the MacOS, iOS and Android apps contain), so no platform has a directory of UI files.
-- `backend/`: the test app's Zig library, which adds its channel handlers and task handlers to Ziggy's core library.
+- `backend/`: the test app's Zig library, which adds its message handlers and task handlers to Ziggy's core library.
 - `native/<platform>/`: the test app's native project for each platform: its name, window, icon and the app's backend and UI packaged together. Each one builds on the part Ziggy provides for that platform, in `packages/ziggy/native/<platform>` of Ziggy's repository: the Linux and Windows native apps through the Zig build, the Xcode projects through a local Swift package and the Android project through an included Gradle build.
 - `scripts`: the build, run, packaging and setup scripts, and the shell libraries the scripts share (`scripts/lib`), each with a markdown file beside it.
 

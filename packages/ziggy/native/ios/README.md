@@ -49,4 +49,4 @@ The app's own native calls are how the backend has the app's own code do somethi
 
 ## Starting work from the app
 
-When the system wakes the app with no UI on screen (a background task, for instance) the app starts work in the backend itself. `ZiggyBridge.request(channel:data:completion:)` sends a message as the UI's `invoke` does, and its message response goes to the completion and not to the UI. `ZiggyBridge.send(channel:data:)` is the one-way form. `keepRunningChanged` is called on the main thread each time the backend says the app must be kept running or no longer must be.
+When the system wakes the app with no UI on screen (a background task, for instance) the app starts work in the backend itself. `ZiggyBridge.request(name:data:completion:)` sends an app message by name as the UI's `invoke` does, and its message response goes to the completion and not to the UI. `ZiggyBridge.send(name:data:)` is the one-way form. `keepRunningChanged` is called on the main thread each time the backend says the app must be kept running or no longer must be.

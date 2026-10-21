@@ -1,6 +1,6 @@
 # task-queue.svg
 
-The diagram under "Tasks" in the architecture guide: how the UI queues a task with `add-task`, how a worker thread runs it and reports with `task-message` and `task-completed` events, and how `cancel-tasks` stops it. The native app carries every message and event, as `message-bridge.svg` shows, and is left out.
+The diagram under "Tasks" in the architecture guide: how the UI queues a task with `window.ziggy.addTask`, how a worker thread runs it and reports with `task-message` and `task-completed` events, and how `window.ziggy.cancelTasks` stops it. The native app carries every message and event, as `message-bridge.svg` shows, and is left out.
 
 ## How it is made
 

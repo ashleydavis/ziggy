@@ -31,7 +31,7 @@ A failure that leaves the app unusable prints to standard error and exits non-ze
 
 After the backend is created `ZiggyBridge.start` reads the menu JSON and `ZiggyMenu` makes it the main menu: the application menu first (About, Quit), then the app's menus. The backend's Quit and About items become the application menu's items instead of appearing twice. Shortcuts come from `ziggy_parse_accelerator` and become key equivalents with modifier masks, which AppKit runs even when the web view has the focus.
 
-The native app performs quit, close-window, reload, toggle-devtools, toggle-fullscreen, zoom-in, zoom-out and zoom-reset itself. The edit actions (undo, redo, cut, copy, paste, select-all) go to the first responder as the standard selectors. Every other action is posted to the backend as `{"channel":"menu-action","data":{"action":"<action>"}}`.
+The native app performs quit, close-window, reload, toggle-devtools, toggle-fullscreen, zoom-in, zoom-out and zoom-reset itself. The edit actions (undo, redo, cut, copy, paste, select-all) go to the first responder as the standard selectors. Every other action is posted to the backend as `{"kind":"system","name":"menu-action","data":{"action":"<action>"}}`, a system message.
 
 Developer tools are on in every build. The `developerExtrasEnabled` preference gives Inspect Element, and `isInspectable` is set under `#if swift(>=5.8)` and `#available(macOS 13.3, *)`, because Xcode 14.2's SDK lacks it. Toggle Developer Tools calls the private WebKit interface `-[WKWebView _inspector]` (`isVisible`, `show`, `hide`), reached by selector name, because no public call opens the inspector programmatically on these SDKs. A missing selector prints a message to standard error.
 

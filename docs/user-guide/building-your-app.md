@@ -61,7 +61,7 @@ Without the command:
    - The Windows installer's GUIDs in `scripts/package-windows.wxs` (the `UpgradeCode` and each `Component`'s `Guid`): make new ones with `uuidgen`, or Windows treats the new app as an upgrade of the template.
 5. Run `bun install`, then the unit tests and the smoke tests. They pass unchanged in a copy that is renamed and pinned to a release.
 
-Then change what the app does: its UI, its backend's channel and task handlers, its menu, its icon and its native projects.
+Then change what the app does: its UI, its backend's message handlers and task handlers, its menu, its icon and its native projects.
 
 ## Moving to a newer version
 
@@ -77,17 +77,17 @@ The `/ziggy:upgrade` Claude Code command follows these steps for an app.
 ## The parts of an app
 
 - **The UI** (`ui/`): the user interface, in TypeScript and HTML, built by Vite (`vite.config.ts`) into `dist`, which must hold an `index.html`. The template's Vite config writes relative paths (`base: './'`) and a classic script instead of a module script, and another bundler must do the same. It talks to the backend through `window.ziggy`, whose types are in `ziggy-ui`. `ui/src/lib` holds plain functions with unit tests. The UI is served from `ziggy-app://app/` on Linux, macOS and iOS and from `https://ziggy-app.invalid/` on Windows and Android, so it must not depend on its address, and a Content-Security-Policy names both (see [the bundled UI](../development/architecture.md#the-bundled-ui)).
-- **The backend** (`backend/`): the app's Zig library. `backend/src/handlers.zig` lists the app's handlers for Ziggy: the channels the UI sends messages on, the task types it queues, the menu and the UI's query. `backend/src/lib` holds the handlers themselves. `backend/src/index.zig` is the file the backend's build starts from, and it exports Ziggy's C interface for those handlers so the native app can call them. It is built with Ziggy's core library into one library: a static library on every platform except Android, and a shared library on Android. The backend embeds the built UI, so `dist` must be built before the backend, and a changed UI file rebuilds the backend.
-- **The handlers**: a channel handler runs for a message from the UI on the thread that handles the UI's messages, so it must be quick. Anything slow is a task, which runs on the backend's pool of threads, reports progress with task messages and can be cancelled.
+- **The backend** (`backend/`): the app's Zig library. `backend/src/app.zig` declares the app to Ziggy with `ziggy.core.App`: each message the UI sends with its handler, each task type with its handler, the menu, the built UI and the UI's query (see [Declaring the app](messages.md#declaring-the-app)). `backend/src/lib` holds the handlers themselves. `app.zig` is the `backend_source_file` the app's `build.zig` gives `addAppBackend`, and Ziggy's build exports Ziggy's C interface for the app it declares, so the native app can call it. The app writes no exports of its own. It is built with Ziggy's core library into one library: a static library on every platform except Android, and a shared library on Android. The backend embeds the built UI, so `dist` must be built before the backend, and a changed UI file rebuilds the backend.
+- **The handlers**: a message handler runs for each message of its name from the UI on the thread that handles the UI's messages, so it must be quick. Anything slow is a task, which runs on the backend's pool of threads, reports progress with task messages and can be cancelled.
 - **The native apps** (`native/<platform>/`): the app's native project for each platform, built on the part Ziggy provides for that platform: its name, window, icon, permissions and anything only the operating system can do. The Linux and Windows native apps are Zig, built by `build.zig`. The MacOS and iOS native apps are Xcode projects, the Android native app a Gradle project, each built by the app's scripts after the backend library is built for that platform. The Android project must use the same version of the Android Gradle plugin as Ziggy's Android native app (see `packages/ziggy/native/android/build.gradle`), because Gradle does not allow two versions of it in one build, and its `minSdkVersion` must be at least Ziggy's.
 - **The scripts** (`scripts/`): set up, sync, build, run, open, package, distribute and clean, for each platform, each with a markdown file beside it, and the shell libraries they share in `scripts/lib`.
 - **The tests**: the UI's unit tests in `ui/src/test`, the backend's in `backend/src/test` and the smoke tests in `smoke-tests`, which start the real app, built with the test hooks, and check what it shows. The template has a hello world of each.
 
 ## The menu and the window icon
 
-The app gives Ziggy its desktop menu as JSON text in `menu_json` of its handlers: an array of menus, each `{"label", "items"}`, where an item is `{"label", "action", "accelerator"}` or `{"separator": true}` and may hold its own `"items"` for a submenu. A shortcut is modifiers and a key joined by plus signs, such as `CmdOrCtrl+Shift+I`, `F12` or `CmdOrCtrl+Plus`. `CmdOrCtrl` is Command on macOS and Control elsewhere. Shortcuts work wherever the focus is, including inside the web view.
+The app gives Ziggy its desktop menu as JSON text in `menu_json` of its `ziggy.core.App`: an array of menus, each `{"label", "items"}`, where an item is `{"label", "action", "accelerator"}` or `{"separator": true}` and may hold its own `"items"` for a submenu. A shortcut is modifiers and a key joined by plus signs, such as `CmdOrCtrl+Shift+I`, `F12` or `CmdOrCtrl+Plus`. `CmdOrCtrl` is Command on macOS and Control elsewhere. Shortcuts work wherever the focus is, including inside the web view.
 
-The native app does these actions itself: `quit`, `close-window`, `reload`, `toggle-devtools`, `toggle-fullscreen`, `zoom-in`, `zoom-out`, `zoom-reset`, `undo`, `redo`, `cut`, `copy`, `paste` and `select-all`. Any other action reaches the UI as a `menu-action` event, `{"action": "<action>"}`, and the UI decides what it means. The developer tools open with `toggle-devtools` in every build, release included. A mobile device has no menu.
+The native app does these actions itself: `quit`, `close-window`, `reload`, `toggle-devtools`, `toggle-fullscreen`, `zoom-in`, `zoom-out`, `zoom-reset`, `undo`, `redo`, `cut`, `copy`, `paste` and `select-all`. Any other action reaches the UI as a `menu-action` system event, `{"action": "<action>"}`, which the UI hears through `window.ziggy.onMenuAction`, and the UI decides what it means. The developer tools open with `toggle-devtools` in every build, release included. A mobile device has no menu.
 
 The window icon:
 
@@ -99,9 +99,9 @@ An app with no icon passes null and shows the desktop's generic one.
 
 ## Keeping state in the backend
 
-An app that has to remember things while it runs (whether a database is open, a timer) gives Ziggy a `state` in its handlers:
+An app that has to remember things while it runs (whether a database is open, a timer) gives Ziggy a `state` in its `ziggy.core.App`:
 
-- `create` runs once the task runner is running. Ziggy holds the value it returns and hands it to a channel handler as `Core.app_state` and to a task as `TaskContext.appState()`. The app casts it back to its own type.
+- `create` runs once the task runner is running. Ziggy holds the value it returns and hands it to the message handlers as `Core.app_state` and to a task as `TaskContext.appState()`. The app casts it back to its own type.
 - `stop` runs first when the backend is destroyed, while tasks can still be queued, so a thread the state owns can end.
 - `destroy` runs last, after the task runner has stopped, so nothing a running task reads is gone while it runs.
 
@@ -134,7 +134,7 @@ Dev mode is for development only: no native app and no release build includes it
 
 ## See also
 
-- [Channels](channels.md) and [Tasks](tasks.md): the two kinds of handler.
+- [Messages](messages.md) and [Tasks](tasks.md): the two kinds of handler.
 - [Native calls](native-calls.md): dialogs and the app's own calls into its native app.
 - [Testing your app](testing.md): the test hooks the smoke tests drive the app through.
 - [Distributing your app](distributing-your-app.md): packaging, signing and Firebase App Distribution.

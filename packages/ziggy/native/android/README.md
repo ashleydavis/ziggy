@@ -26,7 +26,7 @@ And these when the app needs them, before `start`:
 
 A handler of the app's own native calls can show an activity of its own and wait for it, from a thread that is not the main thread: `startActivityAndWait(intent)` returns the activity's result data, and `startIntentSenderAndWait(sender)` shows a system confirmation and returns whether the user accepted it. Both share the one slot the pickers use, so one such activity is on screen at a time.
 
-The native methods (`ZiggyNative`) are implemented in Zig, in `packages/ziggy/core/src/lib/jni.zig`, which the app's backend library exports with `ziggy.jni.exportJni(...)` for an Android target. The Java side is the web view and the lifecycle, and everything that crosses to the backend goes through that file. Messages cross as UTF-8 byte arrays.
+The native methods (`ZiggyNative`) are implemented in Zig, in `packages/ziggy/core/src/lib/jni.zig`, which Ziggy's build exports from every app's backend library for an Android target (`packages/ziggy/core/src/app-root.zig`). The Java side is the web view and the lifecycle, and everything that crosses to the backend goes through that file. Messages cross as UTF-8 byte arrays.
 
 The library is built by the app's Gradle build, which includes this one.
 

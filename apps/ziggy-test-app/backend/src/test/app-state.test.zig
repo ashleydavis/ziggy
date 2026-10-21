@@ -10,7 +10,8 @@ fn createCore(shell: *FakeShell) !*ziggy.core.Core {
 
 fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
-        .channel = "add-task",
+        .kind = "system",
+        .name = "add-task",
         .data = .{
             .taskId = id,
             .taskType = task_type,
@@ -29,7 +30,7 @@ test "task-stats counts the tasks that ended and the messages they sent, through
     defer shell.deinit();
     const core = try createCore(&shell);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"task-stats\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"task-stats\"}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":{\"tasksEnded\":0,\"messagesSent\":0}}");
     try addTask(core, "s1", "hello-short", "src", "null");
     try shell.expectMessageContaining("task-completed\",\"data\":{\"taskId\":\"s1\"");
@@ -39,18 +40,18 @@ test "task-stats counts the tasks that ended and the messages they sent, through
         if (waited_ms > 20_000) {
             return error.CountsNeverArrived;
         }
-        core.postMessage("{\"id\":2,\"channel\":\"task-stats\",\"data\":null}");
+        core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"task-stats\"}");
         shell.sleepMs(10);
     }
 }
 
-test "the refuse channel's error reaches the UI as the sentence the test app's describer gives" {
+test "the refuse message's error reaches the UI as the sentence the test app's describer gives" {
     var shell: FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try createCore(&shell);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"refuse\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"refuse\"}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"The test app refused, as it was asked to.\"}");
 }
 
@@ -60,18 +61,18 @@ test "an error the describer has no sentence for is replied to by name" {
     defer shell.deinit();
     const core = try createCore(&shell);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"fail\",\"data\":null}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"fail\"}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"ExampleFailure\"}");
 }
 
-test "queue-from-app queues a task from the app's code, tells the UI with an app-event, and the task runs" {
+test "queue-from-app queues a task from the app's code, tells the UI with an app event, and the task runs" {
     var shell: FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try createCore(&shell);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"queue-from-app\",\"data\":{\"source\":\"app-source\"}}");
-    try shell.expectMessageContaining("{\"channel\":\"app-event\",\"data\":{\"queued\":\"from-app-app-source\"}}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"queue-from-app\",\"data\":{\"source\":\"app-source\"}}");
+    try shell.expectMessageContaining("{\"kind\":\"app\",\"data\":{\"type\":\"queued-from-app\",\"queued\":\"from-app-app-source\"}}");
     try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":\"from-app-app-source\"}");
     try shell.expectMessageContaining("\"taskId\":\"from-app-app-source\",\"status\":\"succeeded\"");
 }
@@ -82,10 +83,10 @@ test "queue-from-app and cancel-from-app without a source are error replies" {
     defer shell.deinit();
     const core = try createCore(&shell);
     defer core.destroy();
-    core.postMessage("{\"id\":1,\"channel\":\"queue-from-app\",\"data\":{}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingSource\"}");
-    core.postMessage("{\"id\":2,\"channel\":\"cancel-from-app\",\"data\":{}}");
-    try shell.expectMessageContaining("{\"id\":2,\"ok\":false,\"error\":\"MissingSource\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"queue-from-app\"}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"source\\\" is missing\"}");
+    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"cancel-from-app\"}");
+    try shell.expectMessageContaining("{\"id\":2,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"source\\\" is missing\"}");
 }
 
 test "cancel-from-app cancels, from the app's code, a task the UI queued" {
@@ -96,7 +97,7 @@ test "cancel-from-app cancels, from the app's code, a task the UI queued" {
     defer core.destroy();
     try addTask(core, "long", "hello-long", "to-cancel", "{\"durationMs\":60000,\"stepMs\":10}");
     try shell.expectMessageContaining("long task step 1");
-    core.postMessage("{\"id\":1,\"channel\":\"cancel-from-app\",\"data\":{\"source\":\"to-cancel\"}}");
+    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"cancel-from-app\",\"data\":{\"source\":\"to-cancel\"}}");
     try shell.expectMessageContaining("\"taskId\":\"long\",\"status\":\"failed\",\"error\":{\"message\":\"Cancelled\"}");
 }
 
@@ -128,7 +129,7 @@ test "run-in-turn stops starting children once it is cancelled" {
     defer core.destroy();
     try addTask(core, "r2", "run-in-turn", "turn-cancel", "{\"children\":100000}");
     try shell.expectMessageContaining("child 1 running");
-    core.postMessage("{\"channel\":\"cancel-tasks\",\"data\":\"turn-cancel\"}");
+    core.postMessage("{\"kind\":\"system\",\"name\":\"cancel-tasks\",\"data\":\"turn-cancel\"}");
     try shell.expectMessageContaining("run-in-turn stopped after ");
     try shell.expectMessageContaining("\"taskId\":\"r2\",\"status\":\"failed\",\"error\":{\"message\":\"Cancelled\"}");
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("child 99999 running"));

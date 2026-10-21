@@ -1243,7 +1243,7 @@ fn findDevToolsWindow(window: c.HWND, lparam: c.LPARAM) callconv(.winapi) c.BOOL
 }
 
 //
-// Sends an action that belongs to the app to the core, as the message {"channel":"menu-action","data":{"action":...}}.
+// Sends an action that belongs to the app to the core, as the system message {"kind":"system","name":"menu-action","data":{"action":...}}.
 //
 fn sendMenuAction(shell: *Shell, action: []const u8) void {
     const core = shell.core orelse {
@@ -2000,7 +2000,7 @@ fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sen
     defer std.heap.c_allocator.free(text);
     if (std.mem.eql(u8, text, "ziggy-file")) {
         // The UI's getPathForFile handed the web view the File itself, which has its real path. It is recorded with the core, and the
-        // UI's request for the path follows on the same channel.
+        // UI's request for the path follows through the same web message.
         recordPostedFiles(core, args);
         return c.S_OK;
     }
