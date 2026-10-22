@@ -6,7 +6,7 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        // The same plugin version as Ziggy's Android shell, which is an included build of this one (it needs Gradle 8.7, see the
+        // The same plugin version as Ziggy's Android native app, which is an included build of this one (it needs Gradle 8.7, see the
         // wrapper, and JDK 17). Gradle does not allow two versions of the Android plugin in one build.
         classpath 'com.android.tools.build:gradle:8.6.0'
     }

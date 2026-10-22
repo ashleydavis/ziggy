@@ -1,5 +1,5 @@
 //
-// Ziggy's Linux shell.
+// Ziggy's Linux native app.
 //
 
 pub const shell = @import("lib/shell.zig");

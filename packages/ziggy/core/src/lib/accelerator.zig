@@ -1,6 +1,6 @@
 //
 // Parses the keyboard shortcut text a menu item carries, such as "CmdOrCtrl+Shift+I", into modifiers and a key name, so every
-// shell reads shortcuts the same way and each only has to turn the result into its own platform's form.
+// native app reads shortcuts the same way and each only has to turn the result into its own platform's form.
 //
 // A shortcut is modifiers and one key joined by plus signs. The modifiers are CmdOrCtrl (Command on MacOS and Control
 // everywhere else), Cmd, Ctrl, Alt (also Option) and Shift. The key is a letter, a digit, a function key such as F12, or one of

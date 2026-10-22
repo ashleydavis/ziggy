@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # The Toggle Developer Tools item opens the developer tools, and choosing it again closes them. How a script sees them differs between
-# platforms, so each platform's library says (ziggy_platform_devtools_visible).
+# platforms, so each platform's library reports it (ziggy_platform_devtools_visible).
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 

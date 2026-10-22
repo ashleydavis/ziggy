@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# What every scenario uses: start the app, talk to its test control connection, and check what the UI shows.
+# What every scenario uses: start the app, talk to its test control connection, and check what the frontend shows.
 #
 # A scenario sources this file. It defines functions only. The platform library chosen by the runner implements:
 #
@@ -18,9 +18,9 @@
 #   ziggy_platform_stop <test_dir> [keep-device]
 #       Stops the app and everything it started. With keep-device a phone stays claimed, so a restart finds its data.
 #
-#   ziggy_platform_devtools_visible <test_dir> <the UI's area before they opened>   (desktop platforms)
+#   ziggy_platform_devtools_visible <test_dir> <the frontend's area before they opened>   (desktop platforms)
 #       Succeeds when the developer tools are showing. How a script sees them differs: on Linux and macOS they dock inside the
-#       window and shrink the UI's area, and on Windows they are a window of their own.
+#       window and shrink the frontend's area, and on Windows they are a window of their own.
 #
 #   ziggy_platform_leave_app <test_dir>
 #       Takes the app out of the user's sight without ending it: on a desktop it closes the window (the File menu's Close Window), on
@@ -40,7 +40,7 @@ source "$ZIGGY_SMOKE_DIR/lib/process-control.sh"
 source "$ZIGGY_SMOKE_DIR/lib/$ZIGGY_SMOKE_PLATFORM.sh"
 
 
-# Seconds the UI has to show something before a wait gives up.
+# Seconds the frontend has to show something before a wait gives up.
 WAIT_TIMEOUT_SECONDS=60
 
 fail() {
@@ -102,7 +102,7 @@ control() {
     local answer
     if ! read -r -t 90 -u 3 answer; then
         # The macOS job of the Ziggy test app workflow (run 37455466019, scenario 13-menu-edit) failed here with the app gone and
-        # nothing to say why, because only the command was reported. The app's own log is what says whether it crashed.
+        # nothing to show why, because only the command was reported. The app's own log is what shows whether it crashed.
         if [ -f "$ZIGGY_TEST_DIR/app.log" ]; then
             echo "The app's log:" >&2
             cat "$ZIGGY_TEST_DIR/app.log" >&2
@@ -120,7 +120,7 @@ control() {
 }
 
 #
-# Waits until the UI replies to commands, which means it has loaded and the bridge works.
+# Waits until the frontend replies to commands, which means it has loaded and the bridge works.
 #
 wait_for_ready() {
     local waited=0
@@ -236,7 +236,7 @@ wait_for_empty() {
 
 
 #
-# Says what the next native file or folder dialog returns, so a scenario can use a picker without a dialog being shown. The
+# Sets what the next native file or folder dialog returns, so a scenario can use a picker without a dialog being shown. The
 # paths are used for one dialog. Usage: answer_next_dialog <JSON array of paths>
 #
 answer_next_dialog() {
@@ -248,8 +248,8 @@ answer_next_dialog() {
 }
 
 #
-# Chooses a menu item as a user would, through the shell, so the shell's own actions really happen and any other action reaches the
-# UI. Usage: choose_menu_item <action>
+# Chooses a menu item as a user would, through the native app, so the native app's own actions really happen and any other action reaches the
+# frontend. Usage: choose_menu_item <action>
 #
 choose_menu_item() {
     local answer
@@ -260,15 +260,15 @@ choose_menu_item() {
 }
 
 #
-# Prints the size in pixels of the area the UI is drawn in, as <width>x<height>. Zooming, docking the developer tools and going
-# full screen change it.
+# Prints the size in pixels of the area the frontend is drawn in, as <width>x<height>. Zooming, docking the developer tools and
+# going full screen change it.
 #
 viewport_size() {
     control '{"command":"viewport"}' | jq -r '.value'
 }
 
 #
-# Waits until the UI's area is a size other than the one given, and prints the new size. Fails when it never is.
+# Waits until the frontend's area is a size other than the one given, and prints the new size. Fails when it never is.
 # Usage: wait_for_viewport_other_than <size>
 #
 wait_for_viewport_other_than() {
@@ -287,7 +287,7 @@ wait_for_viewport_other_than() {
 }
 
 #
-# Waits until the UI's area is the size given. Fails when it never is. Usage: wait_for_viewport <size>
+# Waits until the frontend's area is the size given. Fails when it never is. Usage: wait_for_viewport <size>
 #
 wait_for_viewport() {
     local waited=0

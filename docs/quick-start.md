@@ -8,23 +8,7 @@ Check the [glossary](glossary.md) to understand the jargon.
 
 ## 1. Install the tools
 
-Install [mise](https://mise.jdx.dev), then what your platform needs.
-
-### Linux
-
-Install the libraries the app runs on and the tools its tests use:
-
-```bash
-sudo apt install libgtk-3-0 libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good gstreamer1.0-libav xvfb
-```
-
-### Windows
-
-Install [Git for Windows](https://gitforwindows.org), add `%LOCALAPPDATA%\mise\shims` to PATH and run every command in Git Bash.
-
-### macOS
-
-Install Xcode.
+Install the dependencies for your platform: [Dependencies](user-guide/dependencies.md#installing-them).
 
 ## 2. Get the example
 
@@ -38,7 +22,7 @@ bun install
 
 ### Other examples:
 
-- [Rsbuild example](https://github.com/ashleydavis/ziggy-example-rsbuild): the UI built with Rsbuild.
+- [Rsbuild example](https://github.com/ashleydavis/ziggy-example-rsbuild): the frontend built with Rsbuild.
 
 ## 3. Set up
 
@@ -62,50 +46,94 @@ bun run macos
 
 This builds the app and opens its window:
 
-![The example app's window: "The backend says: Hello world, from Zig on linux", and the output of the hello world task](images/quick-start-app.png)
+![The Ziggy template's window: its File, Edit, View and Hello menus, the "Send the hello world message" and "Start the hello world task" buttons and a log showing "The backend says: Hello world, from Zig on linux" and the output of the hello world task](images/quick-start-app.png)
 
-To check everything works, `bun run test:smoke` runs the app's smoke test in a hidden window.
+## 5. Test it
 
-## 5. See how it works
+Run the automated tests:
+
+```bash
+bun run compile     # Type-checks the frontend.
+bun run test        # Runs the frontend's unit tests.
+bun run test:zig    # Builds the backend and runs its unit tests.
+bun run test:smoke  # Builds the app and runs its smoke tests in a hidden window.
+```
+
+## 6. See how it works
+
+The app is declared and sets message handlers, background tasks and menu ([`backend/src/app.zig`](../apps/ziggy-template/backend/src/app.zig)):
+
+```zig
+pub const app = ziggy.core.App(.{
+    // Handlers for messages from the frontend.
+    .messages = .{
+        .@"hello-world" = hello_world.helloWorldHandler,
+    },
+
+    // Handlers for background tasks requested by backend and frontend.
+    .tasks = .{
+        .@"hello-world-task" = hello_world.helloWorldTaskHandler,
+    },
+
+    // The desktop menu, declared in backend/src/lib/menu.zig.
+    .menu = menu.menu,
+    ...
+});
+```
 
 ### Sending and handling messages
 
-The example app sends the backend a message named `hello-world` and shows the response it gets back ([`ui/src/main.ts`](https://github.com/ashleydavis/ziggy-example-vite/blob/main/ui/src/main.ts)):
+When the "Send the hello world message" button is pressed, the app sends the backend a message named `hello-world` and writes the response it gets back to its log. The code in this section is the Ziggy template's ([`frontend/src/main.ts`](../apps/ziggy-template/frontend/src/main.ts)):
 
 ```ts
-async function sayHello(): Promise<void> {
-    const request = {
-        name: "world",
-    };
-    const response = 
-        await window.ziggy.invoke<IHelloWorldResponse>(
-            "hello-world",
-            request,
-        );
-    element("greeting").textContent = 
-        greetingLine(response);
+//
+// Sends the backend the hello-world message when its button is pressed.
+//
+function listenForTheMessageButton(): void {
+    element("send-message").addEventListener("click", async () => {
+        try {
+            // Sends a message to the backend.
+            const response = await window.ziggy.invoke<IHelloWorldResponse>("hello-world", {
+                name: "world",
+            });
+            log(greetingLine(response));
+        }
+        catch (error) {
+            // The message failed: log the error's message.
+            log(`The backend did not answer: ${(error as Error).message}`);
+        }
+    });
 }
 ```
 
-A Zig function in the backend, the message's handler, gets the message's data parsed into a struct of its own and returns the response, which Ziggy sends back as JSON. The backend code in this section is the Ziggy template's ([`backend/src/lib/hello-world.zig`](../apps/ziggy-template/backend/src/lib/hello-world.zig)):
+A Zig function in the backend, the message's handler, gets the message's data parsed into a struct of its own and returns the response, which Ziggy sends back as JSON ([`backend/src/lib/hello-world.zig`](../apps/ziggy-template/backend/src/lib/hello-world.zig)):
 
 ```zig
+//
+// The data of the frontend's hello-world message.
+//
 pub const HelloWorldRequest = struct {
     // Who to greet.
     name: []const u8,
 };
 
+//
+// The message response to the hello-world message.
+//
 pub const HelloWorldResponse = struct {
     // The greeting, naming the platform the app runs on.
     greeting: []const u8,
 };
 
-pub fn helloWorldHandler(
-    core: *ziggy.core.Core,
-    arena: std.mem.Allocator,
-    request: HelloWorldRequest,
-) !HelloWorldResponse {
+//
+// Handles the frontend's hello-world message.
+//
+pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: HelloWorldRequest) !HelloWorldResponse {
     _ = core;
+
+    //
+    // Sends the response back to the frontend.
+    //
     return .{
         .greeting = try std.fmt.allocPrint(arena, "Hello {s}, from Zig on {s}", .{
             request.name,
@@ -115,96 +143,150 @@ pub fn helloWorldHandler(
 }
 ```
 
-The backend is compiled native code and runs on every platform, so it is fast and can do what a web page cannot, such as reading and writing files and calling the operating system directly.
-
-The app declares itself to Ziggy in one file, which lists each message name with its handler ([`backend/src/app.zig`](../apps/ziggy-template/backend/src/app.zig)):
-
-```zig
-pub const app = ziggy.core.App(.{
-    .messages = .{
-        .@"hello-world" = hello_world.helloWorldHandler,
-    },
-    ...
-});
-```
-
 ### Running background tasks
 
-A message handler runs on the thread that handles every message from the UI, so while it works no other message is handled. That makes it good only for work that completes quickly. 
+Slower work should be sent to the backend as a background task so that it doesn't block the main thread or the frontend.
 
-Anything slower, such as reading files, hashing or talking to the network, belongs in a task: it runs on its own worker thread and does not block the main thread, it can report progress while it runs and can be cancelled.
-
-The example app queues a task when the "Start the hello world task" button is pressed, then shows each event the task sends and how it ends ([`ui/src/main.ts`](https://github.com/ashleydavis/ziggy-example-vite/blob/main/ui/src/main.ts)):
+The frontend queues a task when the "Start the hello world task" button is pressed. It then logs the task's events and the task completion ([`frontend/src/main.ts`](../apps/ziggy-template/frontend/src/main.ts)):
 
 ```ts
-// Starts the task when the button is pressed.
-let nextTaskNumber = 1;
-element("start-task").addEventListener("click", () => {
-    window.ziggy.addTask({
-        taskId: `hello-world-task-${nextTaskNumber++}`,
-        taskType: "hello-world-task",
-        source: "hello-world",
-        data: null,
-        priority: "interactive",
+//
+// Starts the hello-world task when its button is pressed, and logs what the task sends and how it ends.
+//
+function listenForTheTask(): void {
+    // Numbers the tasks, so each one gets an id of its own.
+    let nextTaskNumber = 1;
+    element("start-task").addEventListener("click", () => {
+        // The hello-world task takes no input.
+        const data: IJsonValue = null;
+
+        // Queues the task, which the backend runs on a worker thread. This returns straight away.
+        window.ziggy.addTask({
+            taskId: `hello-world-task-${nextTaskNumber++}`,
+            taskType: "hello-world-task",
+            source: "hello-world",
+            data,
+            priority: "interactive",
+        });
     });
-});
 
-// Shows each event the task sends while it runs.
-window.ziggy.onTaskMessage<IOutputMessage>(
-    event => {
-        element("task-output").textContent +=
-            `${event.message.text}\n`;
-    },
-);
+    // Logs each event a task sends while it runs.
+    window.ziggy.onTaskEvent<IOutputEvent>(event => {
+        log(event.data.text);
+    });
 
-// Shows how the task ended.
-window.ziggy.onTaskCompleted(
-    event => {
-        element("task-output").textContent +=
-            `The task ended: ${event.result.status}\n`;
-    },
-);
+    // Logs how each task ended.
+    window.ziggy.onTaskCompleted(event => {
+        log(`The task ended: ${event.result.status}`);
+    });
+}
 ```
 
-A Zig function runs the task on a worker thread, sends the UI an event and completes with a result ([`backend/src/lib/hello-world.zig`](../apps/ziggy-template/backend/src/lib/hello-world.zig)):
+A Zig function runs the task on a worker thread, sends the frontend an event and completes with a result ([`backend/src/lib/hello-world.zig`](../apps/ziggy-template/backend/src/lib/hello-world.zig)):
 
 ```zig
-pub fn helloWorldTaskHandler(
-    context: *TaskContext,
-    data: std.json.Value,
-) anyerror!?[]const u8 {
+//
+// The hello-world task: sends the frontend one output event while it runs, then completes with a result.
+//
+pub fn helloWorldTaskHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
-    try context.sendMessage(.{
+
+    //
+    // Sends the frontend an event while the task runs.
+    //
+    try context.sendEvent(.{
         .type = "output",
         .text = "Hello world from a task",
     });
+
+    //
+    // Completes with a result for the frontend.
+    //
     return try context.arena.dupe(u8, "\"hello world task done\"");
 }
 ```
 
-The app registers that function as the handler for `hello-world-task` tasks in the same declaration ([`backend/src/app.zig`](../apps/ziggy-template/backend/src/app.zig)):
+### Using the menu
+
+The Hello menu has two items. Choosing "Say Hello From Zig" runs a Zig function in the backend, which sends the frontend an event. Choosing "Say Hello From the UI" runs no Zig: it reaches the frontend as the menu event `{"type": "menu", "item": "hello-from-ui"}`. Both are declared in the app's menu ([`backend/src/lib/menu.zig`](../apps/ziggy-template/backend/src/lib/menu.zig)):
 
 ```zig
-pub const app = ziggy.core.App(.{
+pub const menu: []const ziggy.menu.Menu = &.{
     ...
-    .tasks = .{
-        .@"hello-world-task" = hello_world.helloWorldTaskHandler,
+    .{
+        .label = "Hello",
+        .items = &.{
+            // This menu runs a Zig function in the backend.
+            .{
+                .label = "Say Hello From Zig",
+                .name = "hello-from-zig",
+                .run = .{
+                    .zig = hello_world.helloFromZigMenuItem,
+                },
+            },
+            // This menu sends a message to the frontend.
+            .{
+                .label = "Say Hello From the UI",
+                .name = "hello-from-ui",
+                .run = .ui,
+            },
+        },
     },
-    ...
-});
+};
 ```
 
-`window.ziggy.addTask` queues the task under the id the UI gave it and returns straight away, without waiting for the task to run. Every event the task sends carries that id, and `window.ziggy.onTaskMessage` and `window.ziggy.onTaskCompleted` listen for them.
+The Zig function sends the frontend an event of its own ([`backend/src/lib/hello-world.zig`](../apps/ziggy-template/backend/src/lib/hello-world.zig)):
+
+```zig
+//
+// Runs when "Say Hello From Zig" is chosen. Sends the frontend an event to log.
+//
+pub fn helloFromZigMenuItem(core: *ziggy.core.Core, arena: std.mem.Allocator) !void {
+    try core.sendEvent(arena, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
+}
+```
+
+The frontend listens for both events and logs a line for each ([`frontend/src/main.ts`](../apps/ziggy-template/frontend/src/main.ts)):
+
+```ts
+//
+// Logs what the Hello menu's items lead to: the event Say Hello From Zig's Zig function sends, and the menu event Say Hello From
+// the UI reaches the frontend as.
+//
+function listenForTheMenu(): void {
+    window.ziggy.onEvent<IAppEvent>(event => {
+        const line = logLineForEvent(event);
+        if (line !== null) {
+            log(line);
+        }
+    });
+}
+```
+
+`logLineForEvent` picks the line: the text the Zig function sent, or a fixed line for the menu event ([`frontend/src/lib/hello-world.ts`](../apps/ziggy-template/frontend/src/lib/hello-world.ts)):
+
+```ts
+//
+// The line the frontend logs for an app event from the Hello menu, or null when the event is not one it logs.
+//
+export function logLineForEvent(event: IAppEvent): string | null {
+    if (event.type === "hello-from-zig") {
+        return event.text;
+    }
+    if (event.type === "menu" && event.item === "hello-from-ui") {
+        return "Hello from the UI, run from the menu";
+    }
+    return null;
+}
+```
+
+For the rest of what a menu can do (standard actions, shortcuts and platforms), see [Menus](user-guide/menus.md).
 
 ### Try a change
 
-Change the name in `ui/src/main.ts` or the greeting in `helloWorldHandler` and run the same `bun run <platform>` again to see it change.
+Change `name: "world"` in `frontend/src/main.ts`, or the greeting text in `helloWorldHandler`, then run the same `bun run <platform>` again and press "Send the hello world message" to see it change.
 
 ## Next
 
-- To change the UI and see it update as you save, run `bun run dev` and read [Dev mode](user-guide/building-your-app.md#dev-mode).
-- To start an app of your own, start an AI coding agent, such as Claude Code, in the empty directory the app will go in and tell it:
-
-  > Make a new Ziggy app here by following https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md
-
-  Or follow the steps in [Building your app](user-guide/building-your-app.md#starting-a-new-app-from-the-template) yourself.
+- To change the frontend and see it update as you save, run `bun run dev` and see [Dev mode](user-guide/dev-mode.md).
+- To create your own app, see [Building your app](user-guide/building-your-app.md#starting-a-new-app-from-the-template).

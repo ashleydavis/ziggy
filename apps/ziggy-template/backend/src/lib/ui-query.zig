@@ -1,12 +1,12 @@
 //
-// The query of the template UI's address.
+// The query of the template frontend's address.
 //
 
 const std = @import("std");
 const ziggy = @import("ziggy");
 
 //
-// Says whether the test mode switch is on, which is all the template's UI reads from its address.
+// Reports whether the test mode switch is on, which is all the template's frontend reads from its address.
 //
 pub fn uiQuery(core: *ziggy.core.Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8 {
     _ = core;

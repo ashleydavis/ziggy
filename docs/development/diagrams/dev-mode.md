@@ -1,6 +1,6 @@
 # dev-mode.svg
 
-The diagram under "Dev mode" at the start of the architecture guide: the UI in an ordinary browser, the dev backend (the app's backend built as a program of its own), the app's dev server it gets the page from and the OS, and what passes between them.
+The diagram under "Dev mode" at the start of the architecture guide: the frontend in an ordinary browser, the dev backend (the app's backend built as a program of its own), the app's dev server it gets the page from and the OS, and what passes between them.
 
 ## How it is made
 

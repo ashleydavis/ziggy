@@ -1,6 +1,6 @@
 // Ziggy's dev mode script, which the dev host serves at /__ziggy/dev.js and puts in every page it passes on from the app's dev
-// server, before the inject script and before any script of the UI. Nothing of dev mode is in the inject script or the core, so this
-// script gives the browser what the inject script looks for in a web view: the handle WebKitGTK and WKWebView give a page,
+// server, before the inject script and before any script of the frontend. Nothing of dev mode is in the inject script or the core,
+// so this script gives the browser what the inject script looks for in a web view: the handle WebKitGTK and WKWebView give a page,
 // window.webkit.messageHandlers.ziggy, whose postMessage here sends the message over a WebSocket to the dev host.
 //
 // A message from the core arrives as the JSON text the native apps hand window.__ziggyReceive, and is handed to it the same way.

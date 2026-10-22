@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Opens the template's Linux shell project in the editor. See open-linux.md.
+# Opens the template's Linux native app project in the editor. See open-linux.md.
 
 set -eu
 

@@ -157,7 +157,7 @@ process_children() {
 # has to read do not agree on either. MSYS prints `PID PPID PGID WINPID TTY UID STIME COMMAND`, and a
 # bare POSIX `ps` prints `PID TTY TIME CMD`, where the second column is a terminal and matching on it
 # would give confident nonsense. Reading the headings means a table with no PPID column
-# yields nothing, which is the truthful result when the table cannot say.
+# yields nothing, which is the truthful result when the table cannot tell.
 # Usage: <ps output> | process_children_from_ps_table <pid>
 #
 process_children_from_ps_table() {
@@ -242,7 +242,7 @@ kill_process_tree() {
 # Stops every process in the given process group, politely first and then not. Reaches members whose
 # parents have already died, which is what the tree walk cannot do.
 #
-# Refuses to act on the caller's own group and says so, because that group holds the calling script
+# Refuses to act on the caller's own group and reports it, because that group holds the calling script
 # itself: a suite that killed it would take out its own runner mid-run and report the damage as a
 # test failure. launch_in_process_group never records the caller's own group, so reaching this guard
 # means a pgid came from somewhere it should not have.
@@ -278,7 +278,7 @@ kill_process_group() {
 # `pkill -f` and anything built on it matches against every process on the machine, and a
 # suite's CLI looks exactly like the CLI another worktree's run started a second ago, so it kills
 # that one too. It has already happened: one LAN share suite's exit trap SIGTERMed another suite's
-# sender mid-test, and the failure it produced named an innocent test and said nothing of the kill.
+# sender mid-test, and the failure it produced named an innocent test and gave no sign of the kill.
 # Scoping the match to the caller's process group is not enough either, because
 # scripts/test-everything-parallel.sh starts its lanes as plain background jobs, which leaves every
 # lane of one run sharing a single group.
@@ -298,7 +298,7 @@ kill_process_group() {
 # group, and the cleanup then kills whatever is in it.
 #
 # The probe is a real background job, because the question is what the kernel did and not what the
-# manual says. It is killed as soon as its group has been read, so it costs one process spawn rather
+# manual documents. It is killed as soon as its group has been read, so it costs one process spawn rather
 # than the minute its sleep would take, and it happens once for the life of the shell.
 # Usage: process_control_verify_job_control
 #
@@ -320,7 +320,7 @@ process_control_verify_job_control() {
     #
     # Refusing on such a host is what stopped the Windows release job launching the app at all. Every
     # test then waited out both of its readiness attempts against an app that had never been started,
-    # four minutes each, and forty of those filled the job's whole hour without once saying why.
+    # four minutes each, and forty of those filled the job's whole hour without once reporting why.
     #
     # Nothing is assumed in exchange. launch_in_process_group falls back to the launched pid when no
     # group can be read, and kill_process_tree walks the children from that pid, which is what the

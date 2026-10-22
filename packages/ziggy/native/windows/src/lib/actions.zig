@@ -1,11 +1,11 @@
 //
-// The menu actions the shell performs itself, and the message the others become.
+// The menu actions the native app performs itself, and the message the others become.
 //
 
 const std = @import("std");
 
 //
-// The actions the shell knows. Any other action name belongs to the app.
+// The actions the native app knows. Any other action name belongs to the app.
 //
 pub const Action = enum {
     quit,
@@ -26,7 +26,7 @@ pub const Action = enum {
 };
 
 //
-// Returns the shell's action for an action name from the menu, or null when the name is the app's.
+// Returns the native app's action for an action name from the menu, or null when the name is the app's.
 //
 pub fn fromName(name: []const u8) ?Action {
     // An action's name is the member's name with a hyphen where the member has an underscore.
@@ -80,7 +80,7 @@ pub fn nextZoom(current: f64, direction: i32) f64 {
 }
 
 //
-// The message a menu action the app owns becomes: the JSON text the core takes from a UI.
+// The message a menu action the app owns becomes: the JSON text the core takes from a frontend.
 //
 const MenuActionMessage = struct {
     // The kind of message, "system": a menu action is one of Ziggy's own messages, which never reach the app's handlers.
@@ -114,8 +114,8 @@ pub fn menuActionMessage(allocator: std.mem.Allocator, action: []const u8) ![]u8
 }
 
 //
-// The script that returns the text the user has selected in the UI: the selected part of the focused text field or text
-// area, or else the UI's own selection.
+// The script that returns the text the user has selected in the frontend: the selected part of the focused text field or
+// text area, or else the frontend's own selection.
 //
 pub const selection_script =
     "(function () { var element = document.activeElement; if (element && (element.tagName === 'TEXTAREA' || element.tagName === 'INPUT') && typeof element.selectionStart === 'number') { return element.value.substring(element.selectionStart, element.selectionEnd); } return String(window.getSelection()); })();";

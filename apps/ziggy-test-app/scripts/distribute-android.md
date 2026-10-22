@@ -5,8 +5,8 @@ Builds the test app's Android app and uploads it to Firebase App Distribution, w
 Run it from the repository root:
 
 ```
-bun run distribute:ziggy-test-app:android
-bun run distribute:ziggy-test-app:android -- --groups testers,family
+bun run --filter=ziggy-test-app distribute:android
+bun run --filter=ziggy-test-app distribute:android -- --groups testers,family
 ```
 
 It needs the Firebase CLI on your PATH and signed in (`curl -sL https://firebase.tools | bash`, then `firebase login`), and the Android SDK and NDK that `bun run --filter=ziggy-test-app setup` sets up.

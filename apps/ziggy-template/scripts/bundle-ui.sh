@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Builds the template's UI into dist without ever leaving dist half written. See bundle-ui.md.
+# Builds the template's frontend into dist without ever leaving dist half written. See bundle-ui.md.
 
 set -eu
 
@@ -13,8 +13,8 @@ trap 'find "$BUILD_DIR" -type f -delete; find "$BUILD_DIR" -depth -type d -empty
 
 (cd "$EXAMPLE_DIR" && vite build --outDir "$BUILD_DIR" --emptyOutDir)
 
-# Other builds running at the same moment read dist (the Zig builds embed it), so dist is left untouched when the UI has
-# not changed, and a changed file is moved into place whole.
+# Other builds running at the same moment read dist (the Zig builds embed it), so dist is left untouched when
+# the frontend has not changed, and a changed file is moved into place whole.
 if [ -d "$DIST_DIR" ] && diff -r -q "$BUILD_DIR" "$DIST_DIR" > /dev/null; then
     exit 0
 fi

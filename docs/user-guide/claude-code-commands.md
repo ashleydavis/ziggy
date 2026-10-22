@@ -6,8 +6,8 @@ To start a new app with an AI coding agent, see [Starting a new app from the tem
 
 | Command | What it does |
 |---|---|
-| `/ziggy:check` | Runs every check the app has that the machine can run, fixes what fails and says what could not run. |
-| `/ziggy:add-message` | Adds a message the UI sends to the backend: its handler and its registration, the UI's call and their tests. |
+| `/ziggy:check` | Runs every check the app has that the machine can run, fixes what fails and reports what could not run. |
+| `/ziggy:add-message` | Adds a message the frontend sends to the backend: its handler and its registration, the frontend's call and their tests. |
 | `/ziggy:add-task` | Adds a background task type. |
 | `/ziggy:upgrade` | Moves an app to a newer version of Ziggy. |
 

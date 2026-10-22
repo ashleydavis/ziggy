@@ -48,7 +48,7 @@ fn expectCompleted(shell: *helpers.FakeShell, id: []const u8, status: []const u8
     }
 }
 
-test "a short task sends its message and completes as succeeded with its result" {
+test "a short task sends its event and completes as succeeded with its result" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
@@ -56,12 +56,12 @@ test "a short task sends its message and completes as succeeded with its result"
     defer core.destroy();
     try addTask(core, "t1", "quick", "s", "null", "background");
     try shell.expectMessageContaining("\"status\":\"succeeded\",\"outputs\":\"done\"");
-    const message_index = shell.indexOfContaining("\"kind\":\"system\",\"name\":\"task-message\"").?;
+    const event_index = shell.indexOfContaining("\"kind\":\"system\",\"name\":\"task-event\"").?;
     const completed_index = shell.indexOfContaining("\"kind\":\"system\",\"name\":\"task-completed\"").?;
-    try std.testing.expect(message_index < completed_index);
-    const message = try shell.messageAt(std.testing.allocator, message_index);
-    defer std.testing.allocator.free(message);
-    try std.testing.expectEqualStrings("{\"kind\":\"system\",\"name\":\"task-message\",\"data\":{\"taskId\":\"t1\",\"source\":\"s\",\"message\":{\"text\":\"hello\"}}}", message);
+    try std.testing.expect(event_index < completed_index);
+    const event = try shell.messageAt(std.testing.allocator, event_index);
+    defer std.testing.allocator.free(event);
+    try std.testing.expectEqualStrings("{\"kind\":\"system\",\"name\":\"task-event\",\"data\":{\"taskId\":\"t1\",\"source\":\"s\",\"data\":{\"text\":\"hello\"}}}", event);
 }
 
 test "a failing task completes as failed with its error" {
@@ -119,8 +119,8 @@ test "cancelling one source leaves another source's tasks running" {
     defer core.destroy();
     try addTask(core, "a", "spin", "source-a", "null", "background");
     try addTask(core, "b", "spin", "source-b", "null", "background");
-    try shell.expectMessageContaining("\"taskId\":\"a\",\"source\":\"source-a\",\"message\":{\"step\":2}");
-    try shell.expectMessageContaining("\"taskId\":\"b\",\"source\":\"source-b\",\"message\":{\"step\":2}");
+    try shell.expectMessageContaining("\"taskId\":\"a\",\"source\":\"source-a\",\"data\":{\"step\":2}");
+    try shell.expectMessageContaining("\"taskId\":\"b\",\"source\":\"source-b\",\"data\":{\"step\":2}");
     try cancelSource(core, "source-a");
     try expectCompleted(&shell, "a", "cancelled");
     shell.sleepMs(50);
@@ -247,7 +247,7 @@ test "add-task without a source is an error reply" {
     try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"source\\\" is missing\"}");
 }
 
-test "messages sent from several tasks at once all arrive, in order within each task" {
+test "events sent from several tasks at once all arrive, in order within each task" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
@@ -293,7 +293,7 @@ test "destroy with tasks still running cancels them, waits and leaves no leak" {
     try addTask(core, "t1", "spin", "s", "null", "background");
     try addTask(core, "t2", "spin", "s", "null", "background");
     try addTask(core, "t3", "sleep", "s", "{\"ms\":100000,\"name\":\"queued\"}", "background");
-    try shell.expectMessageContaining("\"taskId\":\"t2\",\"source\":\"s\",\"message\":{\"step\":1}");
+    try shell.expectMessageContaining("\"taskId\":\"t2\",\"source\":\"s\",\"data\":{\"step\":1}");
     core.destroy();
 }
 
@@ -424,7 +424,7 @@ test "cancelling the parent's source cancels its children and the parent complet
 }
 
 //
-// Waits until the shell has been told the given number of keep-alive changes, and returns what it was told.
+// Waits until the fake native app has been told the given number of keep-alive changes, and returns what it was told.
 //
 fn keepAliveCalls(shell: *helpers.FakeShell, count: usize) ![]bool {
     var waited: u32 = 0;

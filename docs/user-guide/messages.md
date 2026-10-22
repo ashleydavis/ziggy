@@ -2,9 +2,9 @@
 
 Terms are defined in the [glossary](../glossary.md).
 
-A message is how the UI asks the backend for something. The UI sends a message with a name and any JSON data, the backend runs the Zig function registered for that name (the message's handler) and sends back a message response. The backend can also send the UI an event when something happens. All of it passes inside the app, through the native app: there is no HTTP and no network.
+A message is how the frontend asks the backend for something. The frontend sends a message with a name and any JSON data, the backend runs the Zig function registered for that name (the message's handler) and sends back a message response. The backend can also send the frontend an event when something happens. All of it passes inside the app, through the native app: there is no HTTP and no network.
 
-This guide is about app messages and app events, the app's own. Every app message has a message name, a string that says what the message is for, such as `hello-world`. The app registers one handler for each name. Ziggy parses the message's data into the type the handler takes and turns what the handler returns into the message response.
+This guide is about app messages and app events, the app's own. Every app message has a message name, a string that names what the message is for, such as `hello-world`. The app registers one handler for each name. Ziggy parses the message's data into the type the handler takes and turns what the handler returns into the message response.
 
 The `/ziggy:add-message` Claude Code command adds a message to an app by following this guide.
 
@@ -20,9 +20,12 @@ const ui_query = @import("lib/ui-query.zig");
 const ui = @import("ui-files");
 
 pub const app = ziggy.core.App(.{
+    // Each message name the frontend sends, with the function that handles it.
     .messages = .{
         .@"hello-world" = hello_world.helloWorldHandler,
     },
+
+    // Each task type the frontend queues, with the function that runs it.
     .tasks = .{
         .@"hello-world-task" = hello_world.helloWorldTaskHandler,
     },
@@ -38,12 +41,12 @@ The fields of `ziggy.core.App`:
 |---|---|---|
 | `messages` | Yes | Each field is a message name and its handler, in any of the forms under "What a handler returns" below. `.{}` for an app with none. |
 | `tasks` | Yes | Each field is a task type and its task handler, or `.{ .handler = ..., .kind = .keep_alive }` for a keep-alive task type. See [Tasks](tasks.md#registering-a-handler). |
-| `menu` | Yes | The desktop menu, a `[]const ziggy.menu.Menu`, `&.{}` for none. It is checked when the app is built. See [the menu](building-your-app.md#the-menu-and-the-window-icon). |
-| `ui_files` | Yes | The files of the app's built UI, `&ui.files` from the `ui-files` module the build makes. |
-| `ui_query` | No | A function that gives the query the native app adds to the UI's address, so the UI's first render already holds what the backend tells it at start-up. |
+| `menu` | Yes | The desktop menu, a `[]const ziggy.menu.Menu`, `&.{}` for none. It is checked when the app is built. See [Menus](menus.md). |
+| `ui_files` | Yes | The files of the app's built frontend, `&ui.files` from the `ui-files` module the build makes. |
+| `ui_query` | No | A function that gives the query the native app adds to the frontend's address, so the frontend's first render already holds what the backend tells it at start-up. |
 | `describe_error` | No | A function that turns an error a handler returned into the text of the error response (see "When a handler fails" below). |
-| `state` | No | Where the app keeps what it remembers while it runs. See [Keeping state in the backend](building-your-app.md#keeping-state-in-the-backend). |
-| `on_task_end`, `on_task_message` | No | Functions told of every task that ends and every message a task sends. See [Keeping state in the backend](building-your-app.md#keeping-state-in-the-backend). |
+| `state` | No | Where the app keeps what it remembers while it runs. |
+| `on_task_end`, `on_task_event` | No | Functions told of every task that ends and every event a task sends. |
 
 `ziggy.core.App` checks every field and every handler when the app is built. A field it does not know, a required field that is missing or a handler of the wrong type fails the build with a message that names it.
 
@@ -54,18 +57,30 @@ The app writes nothing else for Ziggy. Its `build.zig` names this file as `backe
 A message handler takes the backend, an arena and the message's data parsed into a type of the handler's own and returns the message response. This is the template's, in `backend/src/lib/hello-world.zig`:
 
 ```zig
+//
+// The data of the frontend's hello-world message.
+//
 pub const HelloWorldRequest = struct {
     // Who to greet.
     name: []const u8,
 };
 
+//
+// The message response to the hello-world message.
+//
 pub const HelloWorldResponse = struct {
     // The greeting, naming the platform the app runs on.
     greeting: []const u8,
 };
 
+//
+// Handles the frontend's hello-world message: returns a greeting for the name in the message's data, naming the platform the app runs on.
+//
 pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: HelloWorldRequest) !HelloWorldResponse {
     _ = core;
+
+    // Ziggy turns the response into JSON and sends it back to the frontend. The greeting is allocated from the arena, which is freed once
+    // the response has been sent.
     return .{
         .greeting = try std.fmt.allocPrint(arena, "Hello {s}, from Zig on {s}", .{
             request.name,
@@ -83,7 +98,7 @@ pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, reque
 
 Allocate from `arena`. It is freed once the handler has returned and the message response has been sent.
 
-The handler runs on the thread that handles every message from the UI, so it must be quick. Anything slow, such as reading many files, hashing or waiting on the network, is a task instead.
+The handler runs on the thread that handles every message from the frontend, so it must be quick. Anything slow, such as reading many files, hashing or waiting on the network, is a task instead.
 
 ## What a handler returns
 
@@ -99,7 +114,7 @@ fn (core: *ziggy.core.Core, arena: std.mem.Allocator, message: ziggy.core.Messag
 What it returns decides the message response:
 
 - A `Response`: sent at once as the message response.
-- `void`: there is nothing to say. A message with an id still gets a successful message response holding null, so the UI's `invoke` never waits for ever.
+- `void`: there is nothing to send back. A message with an id still gets a successful message response holding null, so the frontend's `invoke` never waits for ever.
 - A `ziggy.core.Answer(Response)`, one of:
   - `.{ .now = value }`: the response, sent at once.
   - `.{ .task = .{ .task_type = "...", .data = json_text } }`: a task of that type is queued with `data` (JSON text, which `ziggy.json.stringify` makes from any value) as its input. The task's result is the message response. See "A message answered by a task" below.
@@ -127,9 +142,9 @@ pub fn lookUpHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: 
 
 A handler can take the message as Ziggy received it, with `ziggy.core.Message` as its third parameter, and return a `ziggy.core.MessageResult`. Ziggy's test app answers its `ping` message this way, in `apps/ziggy-test-app/backend/src/lib/messages.zig`, because it echoes data of any kind without parsing it.
 
-- `message.name` is the message name the UI sent.
-- `message.data` is the data the UI sent, as a `std.json.Value`, null when it sent none.
-- `message.id` is the message's id, which the message response carries back to the UI. It is null for a message sent with `send`.
+- `message.name` is the message name the frontend sent.
+- `message.data` is the data the frontend sent, as a `std.json.Value`, null when it sent none.
+- `message.id` is the message's id, which the message response carries back to the frontend. It is null for a message sent with `send`.
 
 What it returns:
 
@@ -148,9 +163,9 @@ The messages in `.messages` are registered when the backend starts. The app can 
 try core.registerMessage("look-up", lookUpHandler);
 ```
 
-## Sending a message from the UI
+## Sending a message from the frontend
 
-The UI sends a message with `window.ziggy.invoke(name, data)`, which resolves with the data of the message response. Both arguments are required: pass `null` as the data when there is none.
+The frontend sends a message with `window.ziggy.invoke(name, data)`, which resolves with the data of the message response. Both arguments are required: pass `null` as the data when there is none.
 
 ```ts
 const response = await window.ziggy.invoke<IHelloWorldResponse>("hello-world", {
@@ -168,9 +183,9 @@ Ziggy refuses these before any handler runs. They fail the same way as a handler
 
 - `MissingMessageName`: the message's name is missing, empty or not a string.
 - `UnknownMessageName`: no message is registered under the name.
-- `InvalidMessageData`: the data does not fit the handler's request type. The error says how: `InvalidMessageData: the data is not an object`, `InvalidMessageData: the field "name" is missing`, `InvalidMessageData: the field "name" does not fit (<error>)`, or for a request that is not a struct, `InvalidMessageData: <error>`, where `<error>` is the name of the error `std.json` gave.
+- `InvalidMessageData`: the data does not fit the handler's request type. The error describes how: `InvalidMessageData: the data is not an object`, `InvalidMessageData: the field "name" is missing`, `InvalidMessageData: the field "name" does not fit (<error>)`, or for a request that is not a struct, `InvalidMessageData: <error>`, where `<error>` is the name of the error `std.json` gave.
 
-An app that can say more about a failure gives `ziggy.core.App` a `describe_error` function. The backend calls it with the error a message handler or a task's handler returned, or a reply was failed with. It uses the text it returns in place of the error's name. It returns null for an error it has nothing to say about. This is the test app's:
+An app that can describe a failure in more detail gives `ziggy.core.App` a `describe_error` function. The backend calls it with the error a message handler or a task's handler returned, or a reply was failed with. It uses the text it returns in place of the error's name. It returns null for an error it has no description of. This is the test app's:
 
 ```zig
 pub fn describeError(err: anyerror) ?[]const u8 {
@@ -183,11 +198,11 @@ pub fn describeError(err: anyerror) ?[]const u8 {
 
 ## A message answered by a task
 
-A message whose message response takes time is answered by a task, so it does not hold up the other messages: the handler returns `.{ .task = ... }`. The [Tasks](tasks.md#a-message-answered-by-a-task) guide says how.
+A message whose message response takes time is answered by a task, so it does not hold up the other messages: the handler returns `.{ .task = ... }`. The [Tasks](tasks.md#a-message-answered-by-a-task) guide explains how.
 
-## Sending an event to the UI
+## Sending an event to the frontend
 
-The backend sends an app event with `core.sendEvent(arena, data_json)`, where `data_json` is the JSON text of the event's data. Like a message, an event's data is the app's to lay out, and the template gives it a `type` field. Events have no message name. Here a handler tells the UI it queued a task:
+The backend sends an app event with `core.sendEvent(arena, data_json)`, where `data_json` is the JSON text of the event's data. Like a message, an event's data is the app's to lay out, and the template gives it a `type` field. Events have no message name. Here a handler tells the frontend it queued a task:
 
 ```zig
 try core.sendEvent(arena, try ziggy.json.stringify(arena, .{
@@ -196,7 +211,7 @@ try core.sendEvent(arena, try ziggy.json.stringify(arena, .{
 }));
 ```
 
-The UI listens for every app event with `window.ziggy.onEvent`, and stops with `window.ziggy.removeEventListener(callback)`. The listener decides what an event means from its data:
+The frontend listens for every app event with `window.ziggy.onEvent`, and stops with `window.ziggy.removeEventListener(callback)`. The listener decides what an event means from its data:
 
 ```ts
 window.ziggy.onEvent<IAppEvent>(event => {
@@ -206,25 +221,25 @@ window.ziggy.onEvent<IAppEvent>(event => {
 });
 ```
 
-Ziggy sends one app event of its own: when the user chooses a menu item that runs in the UI (a `.ui` item), the `onEvent` listeners receive `{"type": "menu", "item": "<name>"}`, typed as `IMenuEvent` in `ziggy`, where `item` is the item's `.name`. An app must not send an event of its own with `type` set to `"menu"`. See [the menu](building-your-app.md#the-menu-and-the-window-icon).
+Ziggy sends one app event of its own: when the user chooses a menu item that runs in the frontend (a `.ui` item), the `onEvent` listeners receive `{"type": "menu", "item": "<name>"}`, typed as `IMenuEvent` in `ziggy`, where `item` is the item's `.name`. An app must not send an event of its own with `type` set to `"menu"`. See [Menus](menus.md).
 
 ## Ziggy's own calls
 
-Ziggy's own messages and events, the system messages and system events, are separate from the app's: they never reach the app's message handlers or an `onEvent` listener. An app cannot send or define one. The UI reaches what they do only through these calls on `window.ziggy`:
+Ziggy's own messages and events, the system messages and system events, are separate from the app's: they never reach the app's message handlers or an `onEvent` listener. An app cannot send or define one. The frontend reaches what they do only through these calls on `window.ziggy`:
 
 | Call | What it does |
 |---|---|
 | `addTask(task)`, `cancelTasks(source)` | Queue a task and cancel the tasks of a source. See [Tasks](tasks.md). |
-| `onTaskMessage(callback)`, `onTaskCompleted(callback)` | Hear what a task sends while it runs and how it ended. See [Tasks](tasks.md). |
+| `onTaskEvent(callback)`, `onTaskCompleted(callback)` | Hear what a task sends while it runs and how it ended. See [Tasks](tasks.md). |
 | `getPlatform()` | Resolves with whether the app is on a desktop or a mobile device (`platformKind`), and the operating system and processor (`os`, `arch`). |
 | `onCoreError(callback)` | Hears of a message that failed with no message response to carry the error, such as one that is not JSON or was sent with `send`, with the `error`. With no listener, the error is logged to the console. |
-| `getPathForFile(file)` | The real path of a file dropped on the window. It asks the backend for the paths of the last drop, so the UI never does that itself. |
+| `getPathForFile(file)` | The real path of a file dropped on the window. It asks the backend for the paths of the last drop, so the frontend never does that itself. |
 | `onTestCommand(callback)`, `sendTestResult(requestId, result)`, `testUiReady()` | The test hooks, in a test hooks build only. See [Testing your app](testing.md). |
 
-Each `on...` call has a `remove...Listener` call beside it that takes the same callback, such as `removeTaskMessageListener`.
+Each `on...` call has a `remove...Listener` call beside it that takes the same callback, such as `removeTaskEventListener`.
 
 ## See also
 
 - [Tasks](tasks.md): slow work, and a message answered by a task.
-- [The message bridge](../development/architecture.md#the-message-bridge): how a message and its message response travel between the UI and the backend, and what they look like on the way.
+- [The message bridge](../development/architecture.md#the-message-bridge): how a message and its message response travel between the frontend and the backend, and what they look like on the way.
 - [Claude Code commands](claude-code-commands.md): `/ziggy:add-message`.

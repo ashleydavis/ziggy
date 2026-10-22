@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 
-# The UI is served from ziggy-app://app/ on Linux, macOS and iOS and from https://ziggy-app.invalid/ on Windows and Android.
-# On each the page must be a secure context in which localStorage, IndexedDB, and fetch and XMLHttpRequest of the UI's own
-# files work, which a change to how a native app serves the UI could break while the UI still loads.
+# The frontend is served from ziggy-app://app/ on Linux, macOS and iOS and from https://ziggy-app.invalid/ on Windows
+# and Android. On each the page must be a secure context in which localStorage, IndexedDB, and fetch and XMLHttpRequest
+# of the frontend's own files work, which a change to how a native app serves the frontend could break while the frontend
+# still loads.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 

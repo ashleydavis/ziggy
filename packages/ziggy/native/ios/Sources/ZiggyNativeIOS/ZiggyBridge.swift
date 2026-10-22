@@ -1,9 +1,9 @@
 //
-// Ziggy's shell for iOS. It owns the WKWebView, injects window.ziggy, loads the app's bundled UI, calls the
-// core through the C interface and moves messages between the UI and the core.
+// Ziggy's native app for iOS. It owns the WKWebView, injects window.ziggy, loads the app's bundled frontend, calls the
+// core through the C interface and moves messages between the frontend and the core.
 //
 // Messages from the core arrive on any thread, so each is copied and handed to the main queue, which delivers them to the
-// UI in the order they were handed over.
+// frontend in the order they were handed over.
 //
 
 import Foundation
@@ -11,11 +11,11 @@ import WebKit
 import CZiggy
 import UIKit
 
-// Serves the web view's requests for the bundled UI from the files embedded in the core library, calling ziggy_ui_file for
-// each file. The UI's address is ziggy-app://app/, and the core is given to the handler once it exists.
+// Serves the web view's requests for the bundled frontend from the files embedded in the core library, calling ziggy_ui_file
+// for each file. The frontend's address is ziggy-app://app/, and the core is given to the handler once it exists.
 // It runs on the main thread, as does everything that sets or clears the core.
 final class ZiggyUiSchemeHandler: NSObject, WKURLSchemeHandler {
-    // The core's handle, from start until shutdown. Null means the UI cannot be served.
+    // The core's handle, from start until shutdown. Null means the frontend cannot be served.
     var core: UnsafeMutableRawPointer?
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -61,19 +61,19 @@ final class ZiggyUiSchemeHandler: NSObject, WKURLSchemeHandler {
 // Hosts one web view and one Ziggy core for the app. The app creates it, puts webView on screen, calls start, and calls
 // shutdown when the app is ending.
 public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
-    // The web view that shows the app's UI. The app puts it on screen.
+    // The web view that shows the app's frontend. The app puts it on screen.
     public let webView: WKWebView
 
     // The core's handle, from start until shutdown.
     private var core: UnsafeMutableRawPointer?
 
-    // Set by shutdown. Read and written on the main thread only, so nothing is delivered to the UI after it is set.
+    // Set by shutdown. Read and written on the main thread only, so nothing is delivered to the frontend after it is set.
     private var destroyed: Bool
 
-    // Serves the web view's requests for the bundled UI, from the core.
+    // Serves the web view's requests for the bundled frontend, from the core.
     private let uiHandler = ZiggyUiSchemeHandler()
 
-    // The scheme and address of the bundled UI. The files are embedded in the core library, not in the app bundle.
+    // The scheme and address of the bundled frontend. The files are embedded in the core library, not in the app bundle.
     private static let uiScheme = "ziggy-app"
     private static let appUrlPrefix = "ziggy-app://app/"
 
@@ -87,7 +87,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // threads read it without a lock.
     private var hostRequestHandler: ZiggyHostRequestHandler?
 
-    // Called on the main thread each time the core says the app must be kept running (true) or no longer must be (false). The app sets
+    // Called on the main thread each time the core reports the app must be kept running (true) or no longer must be (false). The app sets
     // it before start.
     public var keepRunningChanged: ((Bool) -> Void)?
 
@@ -95,7 +95,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // written on the main thread only.
     private var appRequests: [String: (String?) -> Void] = [:]
 
-    // The number the next request the app makes is numbered with. The ids it makes cannot collide with the UI's, which are numbers.
+    // The number the next request the app makes is numbered with. The ids it makes cannot collide with the frontend's, which are numbers.
     private var nextAppRequestNumber = 1
 
     // The background task that keeps an iOS app running for a while after it leaves the foreground, while the core's last keep-alive
@@ -108,8 +108,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The name the os_version callback gives the operating system.
     private static let operatingSystemName = "iOS"
 
-    // Creates the web view with the injected script and the message handler. The UI is not loaded and the core does not
-    // exist until start. The UI and the injected script are both embedded in the core library, so the app supplies neither.
+    // Creates the web view with the injected script and the message handler. The frontend is not loaded and the core does not
+    // exist until start. The frontend and the injected script are both embedded in the core library, so the app supplies
+    // neither.
     public init(frame: CGRect) {
         let bundle = Bundle.main
         guard let bundleIdentifier = bundle.bundleIdentifier else {
@@ -164,7 +165,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         hostRequestHandler = handler
     }
 
-    // Creates the core and loads the app's UI.
+    // Creates the core and loads the app's frontend.
     public func start() {
         if core != nil || destroyed {
             ZiggyBridge.fail("start was called more than once")
@@ -291,7 +292,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         webView.load(URLRequest(url: uiURL))
     }
 
-    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the UI.
+    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the frontend.
     public func shutdown() {
         guard let handle = core else {
             return
@@ -303,7 +304,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         ziggy_destroy(handle)
     }
 
-    // Runs on the main thread: takes a background task while the core says tasks the app must be kept running for are queued or
+    // Runs on the main thread: takes a background task while the core reports tasks the app must be kept running for are queued or
     // running, which lets the app run on after it leaves the foreground (the system ends it after a limited time, and the app is
     // suspended then), and gives it back when they end. A desktop app has no such callback: closing its window quits the app.
     private func setKeepsRunning(_ keep: Bool) {
@@ -333,13 +334,13 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         exit(0)
     }
 
-    // Runs on the main thread: sends one message from the core to the UI.
+    // Runs on the main thread: sends one message from the core to the frontend.
     private func deliverToUi(_ text: String) {
         // A message queued before shutdown is dropped here, because shutdown promises nothing is delivered after it.
         if destroyed {
             return
         }
-        // A reply to a request the app made itself is for the app, not the UI.
+        // A reply to a request the app made itself is for the app, not the frontend.
         if consumeAppReply(text) {
             return
         }
@@ -350,7 +351,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // A message from the UI: hands it to the core.
+    // A message from the frontend: hands it to the core.
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let text = message.body as? String else {
             ZiggyBridge.fail("the UI posted a message that is not a string")
@@ -358,9 +359,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         post(text)
     }
 
-    // Gives the core a JSON message, as if the UI had posted it.
+    // Gives the core a JSON message, as if the frontend had posted it.
     func post(_ text: String) {
-        // The UI can still post while the app is ending. The core is gone by then, so there is nobody to give it to.
+        // The frontend can still post while the app is ending. The core is gone by then, so there is nobody to give it to.
         guard let handle = core else {
             return
         }
@@ -369,7 +370,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Sends the core a one-way message for the app's message handler, as the UI's send does, under the name the handler dispatches on. The data is anything JSON can hold. Can be called from any thread.
+    // Sends the core a one-way message for the app's message handler, as the frontend's send does, under the name the handler dispatches on. The data is anything JSON can hold. Can be called from any thread.
     public func send(name: String, data: Any) {
         DispatchQueue.main.async {
             let message: [String: Any] = [
@@ -381,9 +382,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Makes a request of the core under a name, as the UI's invoke does, for an app that has to start work itself (when the system wakes it with
-    // the UI not on screen, for instance). The core's reply comes to the completion on the main thread, with nil when the request
-    // succeeded and the core's reason when it failed, and it is not given to the UI. Can be called from any thread.
+    // Makes a request of the core under a name, as the frontend's invoke does, for an app that has to start work itself (when the system wakes
+    // it with the frontend not on screen, for instance). The core's reply comes to the completion on the main thread, with nil when the
+    // request succeeded and the core's reason when it failed, and it is not given to the frontend. Can be called from any thread.
     public func request(name: String, data: Any, completion: @escaping (String?) -> Void) {
         DispatchQueue.main.async {
             let id = "app-\(self.nextAppRequestNumber)"
@@ -463,12 +464,12 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         return nil
     }
 
-    // Reports a UI that failed to load.
+    // Reports a frontend that failed to load.
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         ZiggyBridge.report("the UI failed to load: \(error)")
     }
 
-    // Reports a UI that failed part way through loading.
+    // Reports a frontend that failed part way through loading.
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         ZiggyBridge.report("the UI failed while loading: \(error)")
     }
@@ -479,7 +480,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     }
 
     // Has the core decide what to do with an address. An external link is opened in the system browser here. Returns true when
-    // the web view may load the address, which is only for the app's own UI in an existing frame.
+    // the web view may load the address, which is only for the app's own frontend in an existing frame.
     private func shouldLoad(_ url: URL?, isNewWindow: Bool) -> Bool {
         guard let handle = core else {
             return false

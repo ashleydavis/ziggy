@@ -1,6 +1,6 @@
 //
-// Ziggy's Windows shell. It creates the window, hosts WebView2, injects window.ziggy, loads the app's bundled UI,
-// calls the core through the C interface and moves messages between the UI and the core.
+// Ziggy's Windows native app. It creates the window, hosts WebView2, injects window.ziggy, loads the app's bundled
+// frontend, calls the core through the C interface and moves messages between the frontend and the core.
 //
 // Messages from the core arrive on any thread, so they are queued and delivered to the web view from the UI thread.
 //
@@ -18,12 +18,12 @@ const menu_lib = @import("menu.zig");
 const pickers_lib = @import("pickers.zig");
 
 //
-// The URL prefix the bundled UI is served under, with a trailing slash. The host name is under .invalid, which can never
-// be looked up, so a request to it can only ever be served by the shell. It is what the core allows the web view to navigate to.
+// The URL prefix the bundled frontend is served under, with a trailing slash. The host name is under .invalid, which can
+// never be looked up, so a request to it can only ever be served by the native app. It is what the core allows the web view to navigate to.
 const app_url_prefix = "https://ziggy-app.invalid/";
 
 //
-// What an app tells the shell about itself.
+// What an app tells the native app about itself.
 //
 pub const AppConfig = struct {
     // The application id, which also names the app's private data directory.
@@ -39,7 +39,7 @@ pub const AppConfig = struct {
 };
 
 //
-// The window message the deliver callback posts to the UI thread to say messages are waiting in the queue.
+// The window message the deliver callback posts to the UI thread to signal that messages are waiting in the queue.
 //
 const WM_ZIGGY_DELIVER: c.UINT = c.WM_APP + 1;
 
@@ -64,7 +64,7 @@ const WM_ZIGGY_SCREENSHOT: c.UINT = c.WM_APP + 4;
 //
 
 //
-// The name of the window class the shell registers.
+// The name of the window class the native app registers.
 //
 const window_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggyShellWindow");
 
@@ -75,13 +75,13 @@ const window_style: c.DWORD = c.WS_OVERLAPPEDWINDOW;
 
 //
 // Implements the parts of IUnknown that every handler object shares. A handler lives inside the Shell, which outlives
-// every call WebView2 can make to it, so it counts no references and says it always has one.
+// every call WebView2 can make to it, so it counts no references and reports it always has one.
 //
 fn ComHandler(comptime Interface: type, comptime interface_id: c.IID) type {
     return struct {
         // The COM object WebView2 is given: a pointer to its table of functions.
         interface: Interface,
-        // The shell the handler works for.
+        // The native app the handler works for.
         shell: *Shell,
 
         //
@@ -103,7 +103,7 @@ fn ComHandler(comptime Interface: type, comptime interface_id: c.IID) type {
         }
 
         //
-        // COM adds a reference. The object lives in the shell, which outlasts the web view, so it is not counted.
+        // COM adds a reference. The object lives in the native app, which outlasts the web view, so it is not counted.
         //
         fn addRef(this: [*c]Interface) callconv(.c) c.ULONG {
             _ = this;
@@ -111,7 +111,7 @@ fn ComHandler(comptime Interface: type, comptime interface_id: c.IID) type {
         }
 
         //
-        // COM drops a reference. The object lives in the shell, which outlasts the web view, so it is not counted.
+        // COM drops a reference. The object lives in the native app, which outlasts the web view, so it is not counted.
         //
         fn release(this: [*c]Interface) callconv(.c) c.ULONG {
             _ = this;
@@ -148,7 +148,8 @@ const NavigationHandler = ComHandler(c.ICoreWebView2NavigationStartingEventHandl
 //
 const NewWindowHandler = ComHandler(c.ICoreWebView2NewWindowRequestedEventHandler, c.IID_ICoreWebView2NewWindowRequestedEventHandler);
 //
-// The handler object for the WebResourceRequested callback, which WebView2 calls on the UI thread for each request to the bundled UI.
+// The handler object for the WebResourceRequested callback, which WebView2 calls on the UI thread for each request to the bundled
+// frontend.
 //
 const ResourceHandler = ComHandler(c.ICoreWebView2WebResourceRequestedEventHandler, c.IID_ICoreWebView2WebResourceRequestedEventHandler);
 //
@@ -164,7 +165,8 @@ const ScriptExecutedHandler = ComHandler(c.ICoreWebView2ExecuteScriptCompletedHa
 //
 const DevToolsCallHandler = ComHandler(c.ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, c.IID_ICoreWebView2CallDevToolsProtocolMethodCompletedHandler);
 //
-// The handler object for the AcceleratorKey callback, which WebView2 calls on the UI thread before a key press reaches the UI.
+// The handler object for the AcceleratorKey callback, which WebView2 calls on the UI thread before a key press reaches the
+// frontend.
 //
 const AcceleratorHandler = ComHandler(c.ICoreWebView2AcceleratorKeyPressedEventHandler, c.IID_ICoreWebView2AcceleratorKeyPressedEventHandler);
 //
@@ -173,7 +175,7 @@ const AcceleratorHandler = ComHandler(c.ICoreWebView2AcceleratorKeyPressedEventH
 const CapturePreviewHandler = ComHandler(c.ICoreWebView2CapturePreviewCompletedHandler, c.IID_ICoreWebView2CapturePreviewCompletedHandler);
 
 //
-// The first command id given to a menu item. An item's id is this plus its place in the shell's list of menu actions.
+// The first command id given to a menu item. An item's id is this plus its place in the native app's list of menu actions.
 //
 const first_command_id: usize = 1000;
 
@@ -207,7 +209,7 @@ const MenuAction = struct {
 };
 
 //
-// Everything one running shell owns. It lives on the stack of run and every callback is given its address.
+// Everything one running native app owns. It lives on the stack of run and every callback is given its address.
 //
 const Shell = struct {
     // The configuration the app passed in.
@@ -230,7 +232,7 @@ const Shell = struct {
     destroyed: std.atomic.Value(bool),
     // Set on the UI thread when the window starts closing, so the creation callbacks still to come do nothing.
     closing: bool,
-    // The UI's address as UTF-16, including the query the app supplies. Made once the core exists. Owned.
+    // The frontend's address as UTF-16, including the query the app supplies. Made once the core exists. Owned.
     ui_url: [:0]u16,
     // The script that exposes window.ziggy, as UTF-16. Owned.
     inject_script: [:0]u16,
@@ -244,13 +246,13 @@ const Shell = struct {
     environment_handler: EnvironmentHandler,
     // Receives the WebView2 controller.
     controller_handler: ControllerHandler,
-    // Receives messages posted by the UI.
+    // Receives messages posted by the frontend.
     web_message_handler: WebMessageHandler,
     // Receives the start of every navigation.
     navigation_handler: NavigationHandler,
     // Receives every request to open a new window.
     new_window_handler: NewWindowHandler,
-    // Receives every request to the bundled UI, which is served from the files the core holds.
+    // Receives every request to the bundled frontend, which is served from the files the core holds.
     resource_handler: ResourceHandler,
     // The WebView2 environment, which makes the responses to those requests. Null until it exists.
     environment: ?*c.ICoreWebView2Environment,
@@ -266,11 +268,11 @@ const Shell = struct {
     fullscreen: bool,
     // Where the window was before it went full screen.
     saved_placement: c.WINDOWPLACEMENT,
-    // Receives the keys pressed inside the web view before the UI sees them.
+    // Receives the keys pressed inside the web view before the frontend sees them.
     accelerator_handler: AcceleratorHandler,
-    // Receives the selected text the copy's script read from the UI.
+    // Receives the selected text the copy's script read from the frontend.
     copy_handler: ScriptExecutedHandler,
-    // Receives the selected text the cut's script read from the UI.
+    // Receives the selected text the cut's script read from the frontend.
     cut_handler: ScriptExecutedHandler,
     // Receives the end of a paste, which is a DevTools protocol call.
     paste_handler: DevToolsCallHandler,
@@ -367,7 +369,7 @@ fn guidEquals(left: *const c.GUID, right: *const c.GUID) bool {
 }
 
 //
-// Points every handler's COM object at its table of functions and at the shell.
+// Points every handler's COM object at its table of functions and at the native app.
 //
 fn initHandlers(shell: *Shell) void {
     shell.environment_handler = .{
@@ -526,7 +528,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
         }
     }
 
-    // Without this Windows scales the window as a bitmap on a high resolution screen and the UI looks blurred.
+    // Without this Windows scales the window as a bitmap on a high resolution screen and the frontend looks blurred.
     if (c.SetProcessDpiAwarenessContext(c.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == 0) {
         std.debug.print("ziggy shell: could not set per monitor DPI awareness, error {d}\n", .{c.GetLastError()});
     }
@@ -551,7 +553,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
         return error.WindowClassFailed;
     }
 
-    // The size the command line gives is the size of the UI, and a pixel here is a pixel at 96 DPI.
+    // The size the command line gives is the size of the frontend, and a pixel here is a pixel at 96 DPI.
     const dpi = c.GetDpiForSystem();
     var frame = c.RECT{
         .left = 0,
@@ -606,7 +608,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
 }
 
 //
-// Finds the shell a window belongs to, or null before the shell has attached itself.
+// Finds the native app a window belongs to, or null before the native app has attached itself.
 //
 fn shellOf(window: c.HWND) ?*Shell {
     const value = c.GetWindowLongPtrW(window, c.GWLP_USERDATA);
@@ -729,7 +731,7 @@ fn closeWebView(shell: *Shell) void {
 }
 
 //
-// Destroys the core once. After it nothing more is delivered to the UI.
+// Destroys the core once. After it nothing more is delivered to the frontend.
 //
 fn destroyCore(shell: *Shell) void {
     const core = shell.core orelse {
@@ -741,7 +743,7 @@ fn destroyCore(shell: *Shell) void {
 }
 
 //
-// Frees the messages queued for the UI that were never delivered.
+// Frees the messages queued for the frontend that were never delivered.
 //
 fn discardPending(shell: *Shell, allocator: std.mem.Allocator) void {
     for (shell.queue.items) |text| {
@@ -768,7 +770,7 @@ fn deliver(user_data: ?*anyopaque, message: [*c]const u8, message_len: usize) ca
 }
 
 //
-// Runs on the UI thread: sends every queued message to the UI, in the order they were queued.
+// Runs on the UI thread: sends every queued message to the frontend, in the order they were queued.
 //
 fn drainQueue(shell: *Shell) void {
     const allocator = std.heap.c_allocator;
@@ -896,7 +898,7 @@ fn onControllerCreated(shell: *Shell, controller: *c.ICoreWebView2Controller) vo
         fatal("the core could not be created", .{});
     };
 
-    // The app supplies the query unread, and the core says nothing about its parts.
+    // The app supplies the query unread, and the core names none of its parts.
     var query_length: usize = 0;
     const query_pointer = c.ziggy_ui_query(shell.core, &query_length) orelse {
         fatal("the app could not make the UI's query", .{});
@@ -954,7 +956,7 @@ fn heldModifiers() u32 {
 }
 
 //
-// Adds the items of one menu or submenu to a Win32 menu, recording each item that does something in the shell's list of
+// Adds the items of one menu or submenu to a Win32 menu, recording each item that does something in the native app's list of
 // menu actions. The menu's label text is shown with the shortcut after a tab, as Windows menus do.
 //
 fn appendMenuItems(shell: *Shell, allocator: std.mem.Allocator, win32_menu: c.HMENU, items: []const menu_lib.MenuItem) !void {
@@ -1110,7 +1112,7 @@ fn buildMenu(shell: *Shell, core: *anyopaque) !void {
 }
 
 //
-// Runs a menu action. The actions the shell knows are done here, and any other is sent to the core as a menu-action
+// Runs a menu action. The actions the native app knows are done here, and any other is sent to the core as a menu-action
 // message. The core runs the app's item.
 //
 fn runAction(shell: *Shell, action: []const u8) void {
@@ -1257,7 +1259,7 @@ fn sendMenuAction(shell: *Shell, action: []const u8) void {
 }
 
 //
-// Steps the UI zoom up or down by a tenth, or back to 100 percent for a direction of zero.
+// Steps the frontend's zoom up or down by a tenth, or back to 100 percent for a direction of zero.
 //
 fn changeZoom(controller: *c.ICoreWebView2Controller, direction: i32) void {
     var current: f64 = 1.0;
@@ -1266,7 +1268,7 @@ fn changeZoom(controller: *c.ICoreWebView2Controller, direction: i32) void {
 }
 
 //
-// Runs a script in the UI, with the handler that receives its result.
+// Runs a script in the frontend, with the handler that receives its result.
 //
 fn runScript(web_view: *c.ICoreWebView2, script: []const u8, handler: *c.ICoreWebView2ExecuteScriptCompletedHandler) void {
     const allocator = std.heap.c_allocator;
@@ -1279,16 +1281,17 @@ fn runScript(web_view: *c.ICoreWebView2, script: []const u8, handler: *c.ICoreWe
 
 //
 // Copies the selected text to the clipboard. document.execCommand('copy') and ('cut') are refused to a script, which has no
-// user gesture, so the shell reads the selected text with a script it runs in the UI and puts it on the clipboard itself.
+// user gesture, so the native app reads the selected text with a script it runs in the frontend and puts it on the clipboard
+// itself.
 //
 fn copySelection(web_view: *c.ICoreWebView2, handler: *c.ICoreWebView2ExecuteScriptCompletedHandler) void {
     runScript(web_view, actions_lib.selection_script, handler);
 }
 
 //
-// Pastes the clipboard into the UI with the web view's own paste command, as the paste key does, so the paste is an undo
-// step of its own. document.execCommand('paste') is refused to a script and WebView2 has no paste call, so the command is
-// sent through the DevTools protocol, whose key events can carry editing commands.
+// Pastes the clipboard into the frontend with the web view's own paste command, as the paste key does, so the paste is an
+// undo step of its own. document.execCommand('paste') is refused to a script and WebView2 has no paste call, so the command
+// is sent through the DevTools protocol, whose key events can carry editing commands.
 //
 fn pasteClipboard(shell: *Shell, web_view: *c.ICoreWebView2) void {
     check("CallDevToolsProtocolMethod", web_view.lpVtbl.*.CallDevToolsProtocolMethod.?(
@@ -1300,7 +1303,7 @@ fn pasteClipboard(shell: *Shell, web_view: *c.ICoreWebView2) void {
 }
 
 //
-// The UI has been given the clipboard text to paste: checks that it worked.
+// The frontend has been given the clipboard text to paste: checks that it worked.
 //
 fn pasteInvoke(this: [*c]c.ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = this;
@@ -1344,7 +1347,7 @@ fn setClipboardText(shell: *Shell, text: []const u8) void {
 }
 
 //
-// The UI has returned the selected text: puts it on the clipboard. Nothing selected leaves the clipboard as it was.
+// The frontend has returned the selected text: puts it on the clipboard. Nothing selected leaves the clipboard as it was.
 //
 fn takeSelection(shell: *Shell, error_code: c.HRESULT, result: [*c]const c.WCHAR) bool {
     check("reading the selected text", error_code);
@@ -1365,7 +1368,7 @@ fn takeSelection(shell: *Shell, error_code: c.HRESULT, result: [*c]const c.WCHAR
 }
 
 //
-// The UI has returned the selected text for a copy: puts it on the clipboard.
+// The frontend has returned the selected text for a copy: puts it on the clipboard.
 //
 fn copyInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = takeSelection(ScriptExecutedHandler.fromInterface(this).shell, error_code, result);
@@ -1373,7 +1376,7 @@ fn copyInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code
 }
 
 //
-// The UI has returned the selected text for a cut: puts it on the clipboard and deletes it from the UI.
+// The frontend has returned the selected text for a cut: puts it on the clipboard and deletes it from the frontend.
 //
 fn cutInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     const shell = ScriptExecutedHandler.fromInterface(this).shell;
@@ -1411,7 +1414,7 @@ fn handleMenuRequest(shell: *Shell, action: [*:0]u8) void {
 //
 // A request for a picture of the window, passed from the thread of the test control connection that wants it to the UI thread that
 // makes it. It lives on the heap and is shared by those two threads, each holding a reference, because the caller gives up waiting
-// when the shell is closing and the UI thread may still be making the capture.
+// when the native app is closing and the UI thread may still be making the capture.
 //
 const ScreenshotRequest = struct {
     // The file to write the PNG to, as UTF-16. Owned.
@@ -1572,7 +1575,7 @@ fn writeCapture(stream: *c.IStream, path: [:0]const u16) ?[]u8 {
     if (memory_result < 0) {
         return screenshotReason("could not read the capture, HRESULT 0x{x}", .{@as(u32, @bitCast(memory_result))});
     }
-    // The memory can be larger than what was written to the stream, so the stream says how much of it is the picture.
+    // The memory can be larger than what was written to the stream, so the stream reports how much of it is the picture.
     var status = std.mem.zeroes(c.STATSTG);
     const status_result = stream.lpVtbl.*.Stat.?(stream, &status, c.STATFLAG_NONAME);
     if (status_result < 0) {
@@ -1601,7 +1604,7 @@ fn writeCapture(stream: *c.IStream, path: [:0]const u16) ?[]u8 {
 }
 
 //
-// Runs an editing command in the UI with document.execCommand, because WebView2 has no editing commands of its own.
+// Runs an editing command in the frontend with document.execCommand, because WebView2 has no editing commands of its own.
 //
 fn runEditCommand(shell: *Shell, web_view: *c.ICoreWebView2, command: []const u8) void {
     var script_buffer: [96]u8 = undefined;
@@ -1654,8 +1657,8 @@ fn toggleFullscreen(shell: *Shell) void {
 }
 
 //
-// A key was pressed with the keyboard inside the web view, before the UI sees it. When it is a menu shortcut the shell
-// runs the action and marks the key handled. The editing shortcuts are left to the web view, which does them natively.
+// A key was pressed with the keyboard inside the web view, before the frontend sees it. When it is a menu shortcut the
+// native app runs the action and marks the key handled. The editing shortcuts are left to the web view, which does them natively.
 //
 fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler, sender: [*c]c.ICoreWebView2Controller, args: [*c]c.ICoreWebView2AcceleratorKeyPressedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
@@ -1693,7 +1696,7 @@ fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler,
 //
 // A request for a file or folder dialog, passed from the worker thread that wants the result to the UI thread that shows the
 // dialog. It lives on the heap and is shared by those two threads, each holding a reference, because the worker gives up
-// waiting when the shell is closing and the UI thread may still be inside the dialog. The UI thread never touches the
+// waiting when the native app is closing and the UI thread may still be inside the dialog. The UI thread never touches the
 // worker's buffer: it leaves the result here and the worker copies it out.
 //
 const PickRequest = struct {
@@ -1938,8 +1941,8 @@ fn controllerInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2ControllerComplet
 }
 
 //
-// Records the files that came with a message from the UI, which WebView2 gives the native side as objects with real paths,
-// as a drop with the core.
+// Records the files that came with a message from the frontend, which WebView2 gives the native side as objects with real
+// paths, as a drop with the core.
 //
 fn recordPostedFiles(core: ?*anyopaque, args: [*c]c.ICoreWebView2WebMessageReceivedEventArgs) void {
     var args2: ?*c.ICoreWebView2WebMessageReceivedEventArgs2 = null;
@@ -1983,7 +1986,7 @@ fn recordPostedFiles(core: ?*anyopaque, args: [*c]c.ICoreWebView2WebMessageRecei
 }
 
 //
-// A message from the UI: hands it to the core.
+// A message from the frontend: hands it to the core.
 //
 fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2WebMessageReceivedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
@@ -1999,8 +2002,8 @@ fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sen
     const text = takeAddress(wide);
     defer std.heap.c_allocator.free(text);
     if (std.mem.eql(u8, text, "ziggy-file")) {
-        // The UI's getPathForFile handed the web view the File itself, which has its real path. It is recorded with the core, and the
-        // UI's request for the path follows through the same web message.
+        // The frontend's getPathForFile handed the web view the File itself, which has its real path. It is recorded with the core,
+        // and the frontend's request for the path follows through the same web message.
         recordPostedFiles(core, args);
         return c.S_OK;
     }
@@ -2009,8 +2012,8 @@ fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sen
 }
 
 //
-// Decides every navigation with the core's origin check: the app's own UI loads, external links open in the system
-// browser, and everything else is blocked.
+// Decides every navigation with the core's origin check: the app's own frontend loads, external links open in the
+// system browser, and everything else is blocked.
 //
 fn navigationInvoke(this: [*c]c.ICoreWebView2NavigationStartingEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2NavigationStartingEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
@@ -2068,9 +2071,9 @@ fn memoryStream(content: []const u8) *c.IStream {
 }
 
 //
-// Serves a request to the bundled UI from the files the core holds, with a header that allows any origin to read the
-// file (the UI script is a module loaded with the crossorigin attribute). A path that is not one of them gets
-// a 404.
+// Serves a request to the bundled frontend from the files the core holds, with a header that allows any origin to read
+// the file (the frontend's script is a module loaded with the crossorigin attribute). A path that is not one of them
+// gets a 404.
 //
 fn resourceInvoke(this: [*c]c.ICoreWebView2WebResourceRequestedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2WebResourceRequestedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
@@ -2137,7 +2140,7 @@ fn openAddress(address: []const u8) void {
 }
 
 //
-// The injected script is in place, so the UI can load.
+// The injected script is in place, so the frontend can load.
 //
 fn scriptAddedInvoke(this: [*c]c.ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler, error_code: c.HRESULT, id: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = id;
@@ -2154,7 +2157,7 @@ fn scriptAddedInvoke(this: [*c]c.ICoreWebView2AddScriptToExecuteOnDocumentCreate
 }
 
 //
-// A message has been delivered to the UI: checks that it worked.
+// A message has been delivered to the frontend: checks that it worked.
 //
 fn scriptExecutedInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = this;

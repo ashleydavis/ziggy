@@ -6,7 +6,7 @@
 const std = @import("std");
 
 //
-// The Control modifier bit. The four modifier bits are the same as the ZIGGY_MOD_ values in ziggy.h, which the shell checks.
+// The Control modifier bit. The four modifier bits are the same as the ZIGGY_MOD_ values in ziggy.h, which the native app checks.
 //
 pub const modifier_control: u32 = 1;
 

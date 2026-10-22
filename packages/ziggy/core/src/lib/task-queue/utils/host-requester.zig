@@ -1,7 +1,7 @@
 const std = @import("std");
 
 //
-// Has the program that hosts the app (the phone's shell) do something only it can, by the method's name, and gives back its
+// Has the program that hosts the app (the native app) do something only it can, by the method's name, and gives back its
 // result as JSON text. Whoever owns the connection to the host makes one and hands it down to the code that needs it, so no code
 // reaches for it through a global. A platform with no such host has none to hand down, and the code that needs one fails loudly.
 //

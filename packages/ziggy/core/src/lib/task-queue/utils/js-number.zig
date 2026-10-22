@@ -3,7 +3,7 @@ const js_string = @import("js-string.zig");
 
 //
 // JavaScript's global `parseInt` and `parseFloat`, applied to text read from files, tools and continuation tokens.
-// Both return a JavaScript number, so NaN is how they say the text holds no number.
+// Both return a JavaScript number, so NaN is how they report the text holds no number.
 //
 
 //

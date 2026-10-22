@@ -48,7 +48,7 @@
     "test:zig": "bash ./scripts/zig-packages.sh test",
     "distribute:android": "bash ./scripts/distribute-android.sh",
     "test:smoke": "bash ./smoke-tests/run-desktop.sh",
-    "test:smoke:and": "bash ./smoke-tests/run.sh android",
+    "test:smoke:android": "bash ./smoke-tests/run.sh android",
     "test:smoke:ios": "bash ./smoke-tests/run.sh ios"
   },
   "dependencies": {

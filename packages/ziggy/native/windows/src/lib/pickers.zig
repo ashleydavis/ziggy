@@ -5,7 +5,7 @@
 const std = @import("std");
 
 //
-// The kind of dialog the core passes to the shell. The numbers are the ZIGGY_PICK_ values in ziggy.h, which the shell checks.
+// The kind of dialog the core passes to the native app. The numbers are the ZIGGY_PICK_ values in ziggy.h, which the native app checks.
 //
 pub const PickKind = enum(i32) {
     // Choose one or more existing files.
@@ -25,7 +25,7 @@ pub fn kindFromInt(value: i32) ?PickKind {
 
 //
 // The dialog option bit that allows choosing more than one item. The option bits are the FOS_ values of the Windows
-// shell, which the shell checks.
+// native app, which the native app checks.
 //
 pub const option_allow_multiselect: u32 = 0x200;
 

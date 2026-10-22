@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
-# A file dropped on the page in dev mode reaches the UI with a path from window.ziggy.getPathForFile, the path of the copy the dev
-# host saved under the data directory, holding the dropped file's contents. The browser gives a page no dropped file's path, so the
-# dev script sends the file to the dev host, which saves it and records the copy with the backend as the drop.
+# A file dropped on the page in dev mode reaches the frontend with a path from window.ziggy.getPathForFile, the path of the copy
+# the dev host saved under the data directory, holding the dropped file's contents. The browser gives a page no dropped file's
+# path, so the dev script sends the file to the dev host, which saves it and records the copy with the backend as the drop.
 #
-# No tool can drag a file into the headless browser, so the drop-file command makes the UI receive a drop event carrying a File, which
-# is what the browser hands the page when a file is dropped on it.
+# No tool can drag a file into the headless browser, so the drop-file command makes the frontend receive a drop event carrying a
+# File, which is what the browser hands the page when a file is dropped on it.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 

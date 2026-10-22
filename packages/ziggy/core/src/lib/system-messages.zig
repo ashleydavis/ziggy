@@ -1,5 +1,5 @@
 //
-// The system messages: Ziggy's own messages, which only Ziggy's UI script and the native apps send (a message whose kind is
+// The system messages: Ziggy's own messages, which only Ziggy's frontend script and the native apps send (a message whose kind is
 // "system") and which never reach the app. There is no list of them: each part of Ziggy registers its own with the core's registry of
 // system messages (the files under system-messages/), while the core is being created or at any later point, from any thread, and the
 // core looks a system message's name up there. A system message handler takes the same forms as an app's (see handlers.zig). Nothing

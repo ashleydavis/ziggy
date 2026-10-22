@@ -20,7 +20,7 @@ git ls-remote --tags --refs --sort=-version:refname https://github.com/ashleydav
 
 If there is none, stop and say so. Tell the human which release the app will be pinned to.
 
-Then read the guide of that release, `https://github.com/ashleydavis/ziggy/blob/<tag>/docs/user-guide/building-your-app.md`, before doing anything else. It is the authority, and this page only says how to carry it out. Read every other Ziggy doc at the same tag, never from `main`, so the steps match the template you copy.
+Then read the guide of that release, `https://github.com/ashleydavis/ziggy/blob/<tag>/docs/user-guide/building-your-app.md`, before doing anything else. It is the authority, and this page only covers how to carry it out. Read every other Ziggy doc at the same tag, never from `main`, so the steps match the template you download.
 
 ### Ask for the names
 
@@ -32,7 +32,7 @@ The defaults: the app's name is the current directory's name (`my-app`) and the 
 - The name a user sees (`My Photo App`).
 - The app's identifier, reverse domain (`com.example.myphotoapp`).
 - The Xcode projects' name, PascalCase (`MyPhotoApp`).
-- Which bundler builds the UI: Vite, as the template does, or another.
+- Which bundler builds the frontend: Vite, as the template does, or another.
 
 ### Make the app
 
@@ -40,22 +40,30 @@ First tell the human that making the app takes a while, because it installs Zig,
 
 Before each step below, and before committing the app, tell the human in one plain sentence what you are about to do and why, such as "Downloading the Ziggy template of v0.0.5 into this directory, which is the starting point of your app."
 
-Do not build the app or run its tests, apart from the `zig build` in step 6 that prints the fingerprint. Building and testing it is the human's next step in the guide.
+Do not build the app or run its tests, apart from the `zig build` in step 5 that prints the fingerprint. Building and testing it is the human's next step in the guide.
 
 1. Check the current directory is empty apart from hidden files. If it is not, stop and say what is in it.
-2. Download the template and Ziggy's `mise.toml` of that release and install the tools, as step 2 of the guide says. Before `mise install`, tell the human: "Installing Zig, Bun, Node and jq with mise, at the exact versions Ziggy's `mise.toml` pins, so this app builds with the same tools Ziggy is tested with."
-3. Pin every part to the release, as step 3 of the guide says. Use the same form of each line the Vite example uses. Before `zig fetch`, tell the human: "Fetching Ziggy at <tag> as the app's Zig dependency, which records its address and hash in `build.zig.zon` so every build uses that exact version."
-4. Rename the app, every form the guide lists, using the answers above. Rename the directories and files that carry a name too: the `.xcodeproj` directories, the source directories beside them, the schemes and the Android Java package's directory. When done, search the whole app, case-insensitively, for `ziggy-template`, `ziggy_template`, `ZiggyTemplate`, `dev.ziggy.template` and "Ziggy template", and fix anything left. Anything that names Ziggy itself (`@import("ziggy")`, the `ziggy` package, `ZiggyNativeMacOS`, `dev.ziggy.nativeapp` and the like) stays as it is, and so do the Claude Code commands in `.claude/commands/ziggy`, which talk about the Ziggy template.
-5. Make new GUIDs for `scripts/package-windows.wxs` with `uuidgen`: the `UpgradeCode` and every `Component`'s `Guid`.
-6. Run `zig build`. It fails and prints the new fingerprint. Put it in `build.zig.zon` as `.fingerprint` and run `zig build` again.
-7. Run `bun install`. Before it, tell the human: "Installing the app's Bun dependencies: TypeScript, Vite, Jest, Ziggy's UI types (`ziggy`) and the rest of `package.json`."
-8. When the human chose a bundler other than Vite, replace Vite with it: the `dev:ui` script, the `vite build` call in `scripts/bundle-ui.sh`, the build config and the dev dependencies. The built UI must still load from a relative address with a classic deferred script, which is what the template's `vite.config.ts` does.
+2. Download the release's template archive, `ziggy-template-<tag>.zip`, unpack it into the current directory and install the tools, following step 1 of the guide's "Creating your app without Claude". The archive is the template with every reference to Ziggy already pinned to the release, and Ziggy's `mise.toml`, so nothing has to be pinned. If the download fails, stop and say so. Before `mise install`, tell the human: "Installing Zig, Bun, Node and jq with mise, at the exact versions Ziggy's `mise.toml` pins, so this app builds with the same tools Ziggy is tested with."
+
+   ```bash
+   curl -fsSLO https://github.com/ashleydavis/ziggy/releases/latest/download/ziggy-template-<tag>.zip
+   unzip -q ziggy-template-<tag>.zip
+   rm ziggy-template-<tag>.zip
+   mise trust
+   mise install
+   ```
+
+3. Rename the app, every form the guide lists, using the answers above. Rename the directories and files that carry a name too: the `.xcodeproj` directories, the source directories beside them, the schemes and the Android Java package's directory. When done, search the whole app, case-insensitively, for `ziggy-template`, `ziggy_template`, `ZiggyTemplate`, `dev.ziggy.template` and "Ziggy template", and fix anything left. Anything that names Ziggy itself (`@import("ziggy")`, the `ziggy` package, `ZiggyNativeMacOS`, `dev.ziggy.nativeapp` and the like) stays as it is, and so do the Claude Code commands in `.claude/commands/ziggy`, which talk about the Ziggy template.
+4. Make new GUIDs for `scripts/package-windows.wxs` with `uuidgen`: the `UpgradeCode` and every `Component`'s `Guid`.
+5. Run `zig build`. It fails and prints the new fingerprint. Put it in `build.zig.zon` as `.fingerprint` and run `zig build` again.
+6. Run `bun install`. Before it, tell the human: "Installing the app's Bun dependencies: TypeScript, Vite, Jest, Ziggy's frontend types (`ziggy`) and the rest of `package.json`."
+7. When the human chose a bundler other than Vite, replace Vite with it: the `dev:ui` script, the `vite build` call in `scripts/bundle-ui.sh`, the build config and the dev dependencies. The built frontend must still load from a relative address with a classic deferred script, which is what the template's `vite.config.ts` does.
 
 ### Commit it
 
-Once the app is made, make the app a git repository and commit it, as step 6 of the guide says. Run `git status` before committing: the template's `.gitignore` keeps what builds and tests write out of the repository, so only the app's own files should be listed.
+Once the app is made, make the app a git repository and commit it. Run `git status` before committing: the template's `.gitignore` keeps what builds and tests write out of the repository, so only the app's own files should be listed.
 
-Do not create the GitHub repository or push the app yourself. Then tell the human the next steps with this message, with `<platform>` set to their platform (`linux`, `windows` or `macos`). Every command goes in a code block on a line of its own, with a comment saying what it does, so the human can copy it:
+Do not create the GitHub repository or push the app yourself. Then tell the human the next steps with this message, with `<platform>` set to their platform (`linux`, `windows` or `macos`). Every command goes in a code block on a line of its own, with a comment explaining what it does, so the human can copy it:
 
 ````markdown
 ## Next steps
@@ -63,8 +71,8 @@ Do not create the GitHub repository or push the app yourself. Then tell the huma
 Build and test your app:
 
 ```bash
-bun run compile     # Type-checks the UI.
-bun run test        # Runs the UI's unit tests.
+bun run compile     # Type-checks the frontend.
+bun run test        # Runs the frontend's unit tests.
 bun run test:zig    # Builds the backend and runs its unit tests.
 bun run test:smoke  # Builds your app and runs its smoke tests in a hidden window.
 ```
@@ -75,7 +83,7 @@ Run it:
 bun run <platform>  # Builds and runs your app.
 ```
 
-Work on the UI in a browser, with it reloading as you save:
+Work on the frontend in a browser, with it reloading as you save:
 
 ```bash
 bun run dev

@@ -1,6 +1,6 @@
 //
-// Ziggy's Linux shell. It creates the window, hosts WebKitGTK, injects window.ziggy, loads the app's bundled UI,
-// calls the core through the C interface and moves messages between the UI and the core.
+// Ziggy's Linux native app. It creates the window, hosts WebKitGTK, injects window.ziggy, loads the app's bundled
+// frontend, calls the core through the C interface and moves messages between the frontend and the core.
 //
 // Messages from the core arrive on any thread, so they are queued and delivered to the web view from the GTK main thread.
 //
@@ -13,17 +13,17 @@ const geometry_lib = @import("geometry.zig");
 const render_device = @import("render-device.zig");
 const host_reply = @import("host-reply");
 
-// The URL scheme the bundled UI is served under. WebKitGTK calls the shell's scheme handler for each file instead of reading a directory.
+// The URL scheme the bundled frontend is served under. WebKitGTK calls the native app's scheme handler for each file instead of reading a directory.
 const app_scheme = "ziggy-app";
 
-// The URL prefix of the bundled UI, with a trailing slash. It is what the core allows the web view to navigate to.
+// The URL prefix of the bundled frontend, with a trailing slash. It is what the core allows the web view to navigate to.
 const app_url_prefix = app_scheme ++ "://app/";
 
 //
-// What a host request handler can call on the shell.
+// What a host request handler can call on the native app.
 //
 pub const Host = struct {
-    // The shell the request came to.
+    // The native app the request came to.
     shell: *Shell,
 
     //
@@ -42,7 +42,7 @@ pub const Host = struct {
 pub const HostRequestFn = *const fn (host: Host, method: []const u8, request_json: []const u8) anyerror!?[]const u8;
 
 //
-// What an app tells the shell about itself.
+// What an app tells the native app about itself.
 //
 pub const AppConfig = struct {
     // Handles the requests only the platform can do, by method name, or null when the app has none.
@@ -60,7 +60,7 @@ pub const AppConfig = struct {
 };
 
 //
-// A message from the core, waiting to be delivered to the UI.
+// A message from the core, waiting to be delivered to the frontend.
 //
 const PendingMessage = struct {
     // The JSON text of the message.
@@ -68,7 +68,7 @@ const PendingMessage = struct {
 };
 
 //
-// Everything one running shell owns. It lives on the stack of run and every callback is given its address.
+// Everything one running native app owns. It lives on the stack of run and every callback is given its address.
 //
 const Shell = struct {
     // The configuration the app passed in.
@@ -155,7 +155,7 @@ fn setWindowIcon(window: *c.GtkWindow, icon_png: []const u8) void {
 }
 
 //
-// Says why the shell cannot go on and ends the program with a failure code.
+// Reports why the native app cannot go on and ends the program with a failure code.
 //
 fn fatal(comptime format: []const u8, arguments: anytype) noreturn {
     std.debug.print("ziggy shell: " ++ format ++ "\n", arguments);
@@ -166,9 +166,9 @@ fn fatal(comptime format: []const u8, arguments: anytype) noreturn {
 // WebKitGTK runs its web process in a bubblewrap sandbox, which needs the program to be allowed to create a user
 // namespace. Some systems do not allow that to an ordinary program (Ubuntu's default restriction on user namespaces is one),
 // and the web view then cannot start at all. This runs the same bubblewrap setup WebKitGTK does, and when it fails turns the
-// sandbox off for this process through the environment variable WebKitGTK documents for it, and says so on standard error.
-// The app loads only its own bundled UI and refuses every other navigation, which is what limits what runs without the
-// sandbox. A setting made in the environment is left alone, so it can still be set either way from outside.
+// sandbox off for this process through the environment variable WebKitGTK documents for it, and reports it on standard error.
+// The app loads only its own bundled frontend and refuses every other navigation, which is what limits what runs without
+// the sandbox. A setting made in the environment is left alone, so it can still be set either way from outside.
 //
 fn turnSandboxOffWhenItCannotStart() !void {
     if (c.g_getenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS") != null) {
@@ -184,8 +184,8 @@ fn turnSandboxOffWhenItCannotStart() !void {
 }
 
 //
-// Serves a web view request for one of the bundled UI's files, from the files the core holds. A path that is not one of
-// them gets a not found error. The UI is loaded only once the core exists.
+// Serves a web view request for one of the bundled frontend's files, from the files the core holds. A path that is not
+// one of them gets a not found error. The frontend is loaded only once the core exists.
 //
 fn onUriSchemeRequest(request: *c.WebKitURISchemeRequest, user_data: c.gpointer) callconv(.c) void {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -217,14 +217,14 @@ fn onActivate(application: *c.GtkApplication, user_data: ?*anyopaque) callconv(.
 }
 
 //
-// Creates the window and the web view, creates the core and loads the UI.
+// Creates the window and the web view, creates the core and loads the frontend.
 //
 fn start(shell: *Shell, application: *c.GtkApplication) !void {
     const test_hooks = z.ziggy_test_hooks_enabled();
     shell.test_mode = test_hooks and c.g_getenv("ZIGGY_TEST_MODE") != null;
 
-    // The UI's own scripts are classic scripts, but a UI may also fetch its files, which needs the scheme to be
-    // allowed to make cross-origin style requests and to count as a secure context like https does.
+    // The frontend's own scripts are classic scripts, but a frontend may also fetch its files, which needs the scheme to
+    // be allowed to make cross-origin style requests and to count as a secure context like https does.
     const web_context = c.webkit_web_context_get_default();
     c.webkit_web_context_register_uri_scheme(web_context, app_scheme, onUriSchemeRequest, shell, null);
     const security_manager = c.webkit_web_context_get_security_manager(web_context);
@@ -307,7 +307,7 @@ fn start(shell: *Shell, application: *c.GtkApplication) !void {
 
     try buildMenu(shell, box_widget, window);
 
-    // The app supplies the query unread, and the core says nothing about its parts.
+    // The app supplies the query unread, and the core names none of its parts.
     var query_length: usize = 0;
     const query_pointer = z.ziggy_ui_query(shell.core, &query_length) orelse {
         return error.UiQueryFailed;
@@ -322,7 +322,7 @@ fn start(shell: *Shell, application: *c.GtkApplication) !void {
 }
 
 //
-// A message from the UI: hands it to the core.
+// A message from the frontend: hands it to the core.
 //
 fn onScriptMessage(content_manager: *c.WebKitUserContentManager, result: *c.WebKitJavascriptResult, user_data: ?*anyopaque) callconv(.c) void {
     _ = content_manager;
@@ -339,8 +339,8 @@ fn onScriptMessage(content_manager: *c.WebKitUserContentManager, result: *c.WebK
 }
 
 //
-// Decides every navigation with the core's origin check: the app's own UI loads, external links open in the system
-// browser, and everything else is blocked.
+// Decides every navigation with the core's origin check: the app's own frontend loads, external links open in the
+// system browser, and everything else is blocked.
 //
 fn onDecidePolicy(web_view: *c.WebKitWebView, decision: *c.WebKitPolicyDecision, decision_type: c.WebKitPolicyDecisionType, user_data: ?*anyopaque) callconv(.c) c.gboolean {
     _ = web_view;
@@ -365,9 +365,9 @@ fn onDecidePolicy(web_view: *c.WebKitWebView, decision: *c.WebKitPolicyDecision,
 }
 
 //
-// Records the files of a drop on the web view with the core, so the UI can get their paths. WebKitGTK gives the UI no files and
-// hides the file addresses, so the paths can only be read here. This handler runs before WebKit's own, which is the default handler of
-// the signal and runs last, so the paths are recorded before the UI's drop is handled. Anything dropped that is not a file is ignored.
+// Records the files of a drop on the web view with the core, so the frontend can get their paths. WebKitGTK gives the frontend no
+// files and hides the file addresses, so the paths can only be read here. This handler runs before WebKit's own, which is the default
+// handler of the signal and runs last, so the paths are recorded before the frontend's drop is handled. Anything dropped that is not a file is ignored.
 //
 fn onDragDataReceived(widget: *c.GtkWidget, drag_context: *c.GdkDragContext, x: c_int, y: c_int, data: *c.GtkSelectionData, info: c_uint, time: c_uint, user_data: ?*anyopaque) callconv(.c) void {
     _ = widget;
@@ -429,7 +429,7 @@ fn onShutdown(application: *c.GApplication, user_data: ?*anyopaque) callconv(.c)
 }
 
 //
-// Destroys the core once. After it nothing more is delivered to the UI.
+// Destroys the core once. After it nothing more is delivered to the frontend.
 //
 fn destroyCore(shell: *Shell) void {
     const core = shell.core orelse {
@@ -441,7 +441,7 @@ fn destroyCore(shell: *Shell) void {
 }
 
 //
-// Frees the messages queued for the UI that were never delivered.
+// Frees the messages queued for the frontend that were never delivered.
 //
 fn discardPending(shell: *Shell) void {
     while (c.g_async_queue_try_pop(shell.queue)) |item| {
@@ -466,7 +466,7 @@ fn deliver(user_data: ?*anyopaque, message: [*c]const u8, message_len: usize) ca
 }
 
 //
-// Runs on the main thread: sends every queued message to the UI, in the order they were queued.
+// Runs on the main thread: sends every queued message to the frontend, in the order they were queued.
 //
 fn drainQueue(user_data: ?*anyopaque) callconv(.c) c.gboolean {
     const shell: *Shell = @ptrCast(@alignCast(user_data.?));
@@ -590,7 +590,7 @@ fn quitOnMainThread(user_data: ?*anyopaque) callconv(.c) c.gboolean {
 // One menu item's action, kept for as long as the menu lives.
 //
 const MenuItemContext = struct {
-    // The shell the item belongs to.
+    // The native app the item belongs to.
     shell: *Shell,
     // The item's action.
     action: [:0]const u8,
@@ -702,7 +702,7 @@ fn onMenuItemActivate(menu_item: *c.GtkWidget, user_data: ?*anyopaque) callconv(
 }
 
 //
-// Does a menu action. The actions every shell does itself are done here. Any other is the app's: it goes to the core, which
+// Does a menu action. The actions every native app does itself are done here. Any other is the app's: it goes to the core, which
 // runs the app's item.
 //
 fn performAction(shell: *Shell, action: []const u8) !void {
@@ -802,7 +802,7 @@ fn onInspectorClosed(inspector: *c.WebKitWebInspector, user_data: ?*anyopaque) c
 // for as long as the worker waits.
 //
 const PickRequest = struct {
-    // The shell the dialog belongs to.
+    // The native app the dialog belongs to.
     shell: *Shell,
     // What to show, a ZIGGY_PICK_ value.
     kind: i32,
@@ -916,7 +916,7 @@ fn copyAnswer(request: *PickRequest, json: []const u8) !isize {
 // A menu action chosen by a test, handed from the test control connection's thread to the main thread.
 //
 const MenuActionRequest = struct {
-    // The shell the menu belongs to.
+    // The native app the menu belongs to.
     shell: *Shell,
     // The action, as a NUL terminated copy owned by the request.
     action: [:0]u8,
@@ -952,7 +952,7 @@ fn runMenuAction(user_data: ?*anyopaque) callconv(.c) c.gboolean {
 // lives on that thread's stack for as long as it waits.
 //
 const ScreenshotRequest = struct {
-    // The shell whose window is captured.
+    // The native app whose window is captured.
     shell: *Shell,
     // The file to write the PNG to.
     output_path: [*:0]const u8,

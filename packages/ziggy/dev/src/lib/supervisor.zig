@@ -6,7 +6,7 @@
 //
 // From then on it watches the Zig files of the app and of Ziggy. A change rebuilds the dev host and restarts it on the same port,
 // and the page reloads by itself once the new one responds. A build that fails is reported and the dev host that is running keeps
-// running, until the next change. A change to the UI is the dev server's to see and reload.
+// running, until the next change. A change to the frontend is the dev server's to see and reload.
 //
 // It stops when the dev host stops, which is when the app quits, and stops the dev server with it. Ctrl+C stops all of them,
 // because they are in the terminal's process group.
@@ -23,7 +23,7 @@ const poll_interval_ms = 250;
 // How long the dev host and the dev server each have to start listening.
 const start_timeout_ms = 120 * 1000;
 
-// How often the supervisor says a build is still going.
+// How often the supervisor reports a build is still going.
 const progress_interval_ms = 5 * 1000;
 
 //
@@ -201,7 +201,7 @@ fn slotPrefix(supervisor: *Supervisor, slot: u1) ![]const u8 {
 }
 
 //
-// Builds the dev host into the prefix of the slot, in the app's build root, saying every few seconds that it is still building. Says whether
+// Builds the dev host into the prefix of the slot, in the app's build root, reporting every few seconds that it is still building. Returns whether
 // it built.
 //
 fn buildHost(supervisor: *Supervisor, slot: u1) !bool {
@@ -237,7 +237,7 @@ fn buildHost(supervisor: *Supervisor, slot: u1) !bool {
 }
 
 //
-// Says how long the build has been going, every few seconds, until it has finished.
+// Reports how long the build has been going, every few seconds, until it has finished.
 //
 fn reportProgress(io: std.Io, finished: *std.atomic.Value(bool)) void {
     const started = std.Io.Clock.awake.now(io);
@@ -256,7 +256,7 @@ fn reportProgress(io: std.Io, finished: *std.atomic.Value(bool)) void {
 
 //
 // Starts the dev host on the supervisor's port, or on one the operating system chooses the first time when none was given, in
-// front of the app's dev server, and waits until it says which port it listens on.
+// front of the app's dev server, and waits until it reports which port it listens on.
 //
 fn startHost(supervisor: *Supervisor, slot: u1) !void {
     const io = supervisor.io;

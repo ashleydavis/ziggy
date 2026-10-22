@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 
 //
-// A stand-in for the browser's WebSocket, which records what is sent and lets a test fire its events.
+// A fake of the browser's WebSocket, which records what is sent and lets a test fire its events.
 //
 interface IFakeSocket {
     url: string;
@@ -14,7 +14,7 @@ interface IFakeSocket {
 }
 
 //
-// A stand-in for a response to fetch.
+// A fake response to fetch.
 //
 interface IFakeResponse {
     ok: boolean;
@@ -31,7 +31,7 @@ interface IFakeRequest {
 }
 
 //
-// A stand-in for the page's window, with what the script uses.
+// A fake of the page's window, with what the script uses.
 //
 interface IFakeWindow {
     location: { host: string; reloads: number; reload: () => void };

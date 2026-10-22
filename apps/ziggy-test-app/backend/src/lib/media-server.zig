@@ -1,10 +1,11 @@
 //
-// A loopback HTTP server that serves the test app's image and video to the UI. It is the test app's own code and not part of
-// Ziggy: an app that needs to show media from outside the UI's origin starts one like it, and the web view fetches the media
-// from it as it would from any web server. It listens on 127.0.0.1 only, on a port the operating system chooses.
+// A loopback HTTP server that serves the test app's image and video to the frontend. It is the test app's own code and not
+// part of Ziggy: an app that needs to show media from outside the frontend's origin starts one like it, and the web view
+// fetches the media from it as it would from any web server. It listens on 127.0.0.1 only, on a port the operating system
+// chooses.
 //
-// It runs as a task so that the task's stack owns its state and cancelling the task stops it. The task tells the UI its port
-// with a "media-server" message.
+// It runs as a task so that the task's stack owns its state and cancelling the task stops it. The task tells the frontend
+// its port with a "media-server" event.
 //
 
 const std = @import("std");
@@ -110,9 +111,10 @@ pub fn findAsset(request_path: []const u8) ?*const Asset {
 }
 
 //
-// The task: listens, tells the UI the port and serves connections until the task is cancelled. A connection is served on a
-// thread of its own that owns everything it uses, because a browser opens connections it never sends a request on and a thread
-// waiting on one cannot be woken. Such a thread ends when the browser closes the connection, and the task does not wait for it.
+// The task: listens, tells the frontend the port and serves connections until the task is cancelled. A connection is served
+// on a thread of its own that owns everything it uses, because a browser opens connections it never sends a request on and a
+// thread waiting on one cannot be woken. Such a thread ends when the browser closes the connection, and the task does not wait
+// for it.
 //
 pub fn mediaServerHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
@@ -123,7 +125,7 @@ pub fn mediaServerHandler(context: *TaskContext, data: std.json.Value) anyerror!
     const port = listener.socket.address.getPort();
     var stopping: std.atomic.Value(bool) = .init(false);
     const watcher = try std.Thread.spawn(.{}, watchForCancel, .{ context, &stopping, port });
-    try context.sendMessage(.{
+    try context.sendEvent(.{
         .type = "media-server",
         .port = port,
     });

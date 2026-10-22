@@ -1,5 +1,5 @@
 {
-    "include": ["ui/**/*", "vite.config.ts"],
+    "include": ["frontend/**/*", "vite.config.ts"],
     "exclude": ["node_modules", "build", "dist"],
     "compilerOptions": {
         "composite": true,

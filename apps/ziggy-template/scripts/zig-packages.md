@@ -1,6 +1,6 @@
 # zig-packages.sh
 
-Builds the UI first (`bun run bundle:ui`), because the template's backend embeds it, then builds, cross-builds or tests the Zig parts of the template with the steps of the template's own `build.zig`, which takes Ziggy as a dependency: the template's backend (`backend`, with Ziggy's core library built into it) and the native apps.
+Builds the frontend first (`bun run bundle:ui`), because the template's backend embeds it, then builds, cross-builds or tests the Zig parts of the template with the steps of the template's own `build.zig`, which takes Ziggy as a dependency: the template's backend (`backend`, with Ziggy's core library built into it) and the native apps.
 
 ## Usage
 

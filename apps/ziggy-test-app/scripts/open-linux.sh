@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Opens the test app's Linux shell project in the editor. See open-linux.md.
+# Opens the test app's Linux native app project in the editor. See open-linux.md.
 
 set -eu
 

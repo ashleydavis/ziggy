@@ -6,8 +6,8 @@ const std = @import("std");
 const ziggy = @import("ziggy");
 
 //
-// Send Event From Zig: sends the UI the app event {"type": "menu-zig-event"}, which shows that a `.zig` item ran in the core and that
-// what it sends reaches the UI.
+// Send Event From Zig: sends the frontend the app event {"type": "menu-zig-event"}, which shows that a `.zig` item ran in the core
+// and that what it sends reaches the frontend.
 //
 pub fn sendZigEvent(core: *ziggy.core.Core, arena: std.mem.Allocator) !void {
     try core.sendEvent(arena, "{\"type\":\"menu-zig-event\"}");

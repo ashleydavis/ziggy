@@ -90,7 +90,7 @@ windows_msvc_toolchain_installed() {
 }
 
 #
-# Fails, saying how to get them, when Microsoft's C++ toolchain or the Windows SDK is not installed on this Windows machine.
+# Fails with how to get them when Microsoft's C++ toolchain or the Windows SDK is not installed on this Windows machine.
 # On any other host there is no vswhere or registry to look in, so Zig is left to find what it needs or report it.
 # Usage: windows_require_msvc_toolchain
 #
@@ -127,7 +127,7 @@ fetch_verified() {
 }
 
 #
-# Fails, saying how to get it, when the pinned WiX Toolset has not been fetched into WINDOWS_WIX_DIR.
+# Fails with how to get it when the pinned WiX Toolset has not been fetched into WINDOWS_WIX_DIR.
 # Usage: windows_require_wix
 #
 windows_require_wix() {

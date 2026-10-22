@@ -83,7 +83,7 @@ run_test_with_timeout() {
 
     # Found with type -P and run by its resolved path, so a shell function named `timeout` in a
     # caller cannot be taken for the real command: command -v finds functions, and function lookup
-    # beats PATH whatever the check said. Handing GNU's --kill-after to something that expects a
+    # beats PATH whatever the check found. Handing GNU's --kill-after to something that expects a
     # bare duration fails instantly and everywhere, so the two extra lines earn their place.
     local timeout_bin
     timeout_bin="$(type -P timeout 2>/dev/null)"
@@ -207,8 +207,8 @@ run_test_function_with_timeout() {
 # Prints everything known about a test that was killed for running too long.
 #
 # A timeout and a failed assertion look identical in a suite summary otherwise, and they need
-# different responses: one says the code is wrong, the other says the test never got to the point of
-# deciding. This says which it was, how long it was given, where the whole log is, and what the test
+# different responses: one means the code is wrong, the other means the test never got to the point of
+# deciding. This reports which it was, how long it was given, where the whole log is, and what the test
 # had managed to write before it stopped, because the last thing a stuck test printed is usually the
 # thing it was waiting for.
 #

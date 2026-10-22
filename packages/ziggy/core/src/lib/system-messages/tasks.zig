@@ -1,6 +1,6 @@
 //
-// The task runner's system messages: add-task, which queues a task the UI names, and cancel-tasks, which cancels the tasks queued
-// under a source.
+// The task runner's system messages: add-task, which queues a task the frontend names, and cancel-tasks, which cancels the
+// tasks queued under a source.
 //
 
 const std = @import("std");
@@ -20,7 +20,7 @@ pub fn register(registry: *message_registry.Registry) !void {
 }
 
 //
-// The data of add-task: the task the UI queues.
+// The data of add-task: the task the frontend queues.
 //
 const AddTaskRequest = struct {
     // The task's id, which its events carry.
@@ -41,7 +41,7 @@ const AddTaskRequest = struct {
 const DoneResponse = struct {};
 
 //
-// Handles add-task: queues the task the UI's add-task message names.
+// Handles add-task: queues the task the frontend's add-task message names.
 //
 fn addTaskHandler(core: *Core, arena: std.mem.Allocator, request: AddTaskRequest) !DoneResponse {
     const data_json = try json.stringify(arena, request.data);
@@ -50,7 +50,7 @@ fn addTaskHandler(core: *Core, arena: std.mem.Allocator, request: AddTaskRequest
 }
 
 //
-// Handles cancel-tasks: cancels the tasks queued under the source, which the UI sends as a bare string.
+// Handles cancel-tasks: cancels the tasks queued under the source, which the frontend sends as a bare string.
 //
 fn cancelTasksHandler(core: *Core, arena: std.mem.Allocator, source: []const u8) !DoneResponse {
     _ = arena;

@@ -1,6 +1,6 @@
 //
 // The test app's file and folder pickers. They answer the pick-folder, pick-files and pick-file messages, each handler answering with the task of its name: a
-// cancelled dialog is a reply of null. Each runs as a task, because a dialog waits for the user and must not hold up the thread that handles UI
+// cancelled dialog is a reply of null. Each runs as a task, because a dialog waits for the user and must not hold up the thread that handles frontend
 // messages.
 //
 

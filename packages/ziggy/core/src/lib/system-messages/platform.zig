@@ -1,5 +1,5 @@
 //
-// The platform's system message: get-platform, which says what the app runs on.
+// The platform's system message: get-platform, which reports what the app runs on.
 //
 
 const std = @import("std");

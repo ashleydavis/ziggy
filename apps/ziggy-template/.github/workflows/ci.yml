@@ -56,7 +56,7 @@ jobs:
         run: bun run compile
 
   typescript-unit-tests:
-    # The TypeScript unit tests (the app's UI).
+    # The TypeScript unit tests (the app's frontend).
     timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
@@ -220,9 +220,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-test-build-baseline-
 
-      # The same tests `bun run test:zig` runs, which bundles the UI first because the backend's tests embed it. They are built for
-      # any x86-64 CPU: built for the runner's own, which differs from run to run, every compile step would miss the build cache
-      # restored above.
+      # The same tests `bun run test:zig` runs, which bundles the frontend first because the backend's tests embed it. They are
+      # built for any x86-64 CPU: built for the runner's own, which differs from run to run, every compile step would miss the
+      # build cache restored above.
       - name: Run the Zig unit tests
         timeout-minutes: 40
         shell: bash

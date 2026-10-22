@@ -1,6 +1,6 @@
 # communication.svg
 
-The diagram at the start of the architecture guide, "How the parts communicate": the UI, the native app, the backend and the OS, the messages, responses, native calls and OS calls between them, and the languages each part is written in.
+The diagram at the start of the architecture guide, "How the parts communicate": the frontend, the native app, the backend and the OS, the messages, responses, native calls and OS calls between them, and the languages each part is written in.
 
 ## How it is made
 

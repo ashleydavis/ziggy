@@ -3,10 +3,10 @@ const utils = @import("utils.zig");
 const types = @import("types.zig");
 const queue_backend = @import("queue-backend.zig");
 const ITaskResult = types.ITaskResult;
-const ITaskMessageData = types.ITaskMessageData;
-const TaskMessageCallback = types.TaskMessageCallback;
+const ITaskEventData = types.ITaskEventData;
+const TaskEventCallback = types.TaskEventCallback;
 const TaskCompletionCallback = types.TaskCompletionCallback;
-const IMessageCallbackEntry = types.IMessageCallbackEntry;
+const IEventCallbackEntry = types.IEventCallbackEntry;
 const UnsubscribeFn = types.UnsubscribeFn;
 const TaskPriority = types.TaskPriority;
 const IQueueBackend = queue_backend.IQueueBackend;
@@ -27,8 +27,8 @@ const QueueEventKind = enum {
     // A tracked task completed (the event holds an ITaskResult).
     completed,
 
-    // A tracked task sent a message (the event holds an ITaskMessageData).
-    message,
+    // A tracked task sent an event (the event holds an ITaskEventData).
+    task_event,
 };
 
 //
@@ -37,10 +37,10 @@ const QueueEventKind = enum {
 // while the owner of the queue awaits.
 //
 const IQueueEvent = struct {
-    // Whether the event is a completion or a message.
+    // Whether the event is a completion or one the task sent.
     kind: QueueEventKind,
 
-    // The ITaskResult or ITaskMessageData serialized to JSON (allocated with transit_allocator), so
+    // The ITaskResult or ITaskEventData serialized to JSON (allocated with transit_allocator), so
     // that the event does not depend on memory owned by the backend.
     json: []u8,
 };
@@ -85,31 +85,31 @@ const ICompletionCallbackRegistration = struct {
 };
 
 //
-// A message callback entry with the key that identifies it for unsubscribing.
+// An event callback entry with the key that identifies it for unsubscribing.
 //
-const IMessageCallbackRegistration = struct {
+const IEventCallbackRegistration = struct {
     // Identifies the registration.
     key: usize,
 
-    // The message type filter (owned by the queue) and the callback.
-    entry: IMessageCallbackEntry,
+    // The event type filter (owned by the queue) and the callback.
+    entry: IEventCallbackEntry,
 };
 
 //
-// A callback for every task message, with the key that identifies it for unsubscribing.
+// A callback for every task event, with the key that identifies it for unsubscribing.
 //
-const IAnyMessageCallbackRegistration = struct {
+const IAnyEventCallbackRegistration = struct {
     // Identifies the registration.
     key: usize,
 
     // The callback.
-    callback: TaskMessageCallback,
+    callback: TaskEventCallback,
 };
 
 //
 // Generic task queue implementation with an abstraction for workers.
 //
-// Zig threading model: the backend reports completions and messages from any thread. They are queued
+// Zig threading model: the backend reports completions and events from any thread. They are queued
 // and the registered callbacks run on the thread that is blocked in awaitAllTasks or awaitTask (one
 // callback at a time).
 // Values passed to callbacks are only valid during the call.
@@ -148,14 +148,14 @@ pub const TaskQueue = struct {
     completionCallbacks: std.ArrayList(ICompletionCallbackRegistration),
 
     //
-    // Callbacks invoked when a tracked task emits a message of a specific type.
+    // Callbacks invoked when a tracked task emits an event of a specific type.
     //
-    messageCallbacks: std.ArrayList(IMessageCallbackRegistration),
+    eventCallbacks: std.ArrayList(IEventCallbackRegistration),
 
     //
-    // Callbacks invoked for every message emitted by a tracked task (regardless of type).
+    // Callbacks invoked for every event emitted by a tracked task (regardless of type).
     //
-    anyMessageCallbacks: std.ArrayList(IAnyMessageCallbackRegistration),
+    anyEventCallbacks: std.ArrayList(IAnyEventCallbackRegistration),
 
     //
     // Count of tasks that have been added but not yet completed.
@@ -234,8 +234,8 @@ pub const TaskQueue = struct {
             .source = try transit_allocator.dupe(u8, source),
             .backend = backend,
             .completionCallbacks = .empty,
-            .messageCallbacks = .empty,
-            .anyMessageCallbacks = .empty,
+            .eventCallbacks = .empty,
+            .anyEventCallbacks = .empty,
             .numTasksInFlight = 0,
             .trackedTaskIds = .empty,
             .awaitAllResolvers = .empty,
@@ -258,9 +258,9 @@ pub const TaskQueue = struct {
             .context = self,
             .function = onBackendTaskComplete,
         }));
-        try self.unsubscribeFunctions.append(transit_allocator, try self.backend.onAnyTaskMessage(.{
+        try self.unsubscribeFunctions.append(transit_allocator, try self.backend.onAnyTaskEvent(.{
             .context = self,
-            .function = onBackendAnyTaskMessage,
+            .function = onBackendAnyTaskEvent,
         }));
         try self.unsubscribeFunctions.append(transit_allocator, try self.backend.onTasksCancelled(self.source, .{
             .context = self,
@@ -277,8 +277,8 @@ pub const TaskQueue = struct {
             self.shutdown();
         }
         self.completionCallbacks.deinit(transit_allocator);
-        self.messageCallbacks.deinit(transit_allocator);
-        self.anyMessageCallbacks.deinit(transit_allocator);
+        self.eventCallbacks.deinit(transit_allocator);
+        self.anyEventCallbacks.deinit(transit_allocator);
         self.trackedTaskIds.deinit(transit_allocator);
         self.awaitAllResolvers.deinit(transit_allocator);
         self.awaitTaskResolvers.deinit(transit_allocator);
@@ -338,17 +338,17 @@ pub const TaskQueue = struct {
     }
 
     //
-    // Backend callback: a task sent a message.
-    // Messages of tracked tasks are queued for dispatch.
+    // Backend callback: a task sent an event.
+    // Events of tracked tasks are queued for dispatch.
     //
-    fn onBackendAnyTaskMessage(context: ?*anyopaque, message: ITaskMessageData) anyerror!void {
+    fn onBackendAnyTaskEvent(context: ?*anyopaque, sent: ITaskEventData) anyerror!void {
         const self: *TaskQueue = @ptrCast(@alignCast(context.?));
         self.lock();
         defer self.unlock();
-        if (!self.trackedTaskIds.contains(message.taskId)) {
+        if (!self.trackedTaskIds.contains(sent.taskId)) {
             return;
         }
-        try self.queueEvent(.message, message);
+        try self.queueEvent(.task_event, sent);
     }
 
     //
@@ -428,71 +428,71 @@ pub const TaskQueue = struct {
     }
 
     //
-    // Registers a callback that will be called when a task sends messages to the client.
-    // Only messages with the specified messageType will be passed to the callback.
+    // Registers a callback that will be called when a task sends events to the client.
+    // Only events with the specified eventType will be passed to the callback.
     // Returns an unsubscribe function to remove the callback.
     //
-    pub fn onTaskMessage(self: *TaskQueue, messageType: []const u8, callback: TaskMessageCallback) !UnsubscribeFn {
-        const owned_message_type = try transit_allocator.dupe(u8, messageType);
-        errdefer transit_allocator.free(owned_message_type);
+    pub fn onTaskEvent(self: *TaskQueue, eventType: []const u8, callback: TaskEventCallback) !UnsubscribeFn {
+        const owned_event_type = try transit_allocator.dupe(u8, eventType);
+        errdefer transit_allocator.free(owned_event_type);
         self.lock();
         defer self.unlock();
         const key = self.nextCallbackKey;
         self.nextCallbackKey += 1;
-        try self.messageCallbacks.append(transit_allocator, .{
+        try self.eventCallbacks.append(transit_allocator, .{
             .key = key,
-            .entry = .{ .messageType = owned_message_type, .callback = callback },
+            .entry = .{ .eventType = owned_event_type, .callback = callback },
         });
-        return .{ .context = self, .key = key, .function = unsubscribeMessageCallback };
+        return .{ .context = self, .key = key, .function = unsubscribeEventCallback };
     }
 
     //
-    // Removes a message callback (the function returned by onTaskMessage).
+    // Removes an event callback (the function returned by onTaskEvent).
     //
-    fn unsubscribeMessageCallback(context: ?*anyopaque, key: usize) void {
+    fn unsubscribeEventCallback(context: ?*anyopaque, key: usize) void {
         const self: *TaskQueue = @ptrCast(@alignCast(context.?));
         self.lock();
         defer self.unlock();
-        for (self.messageCallbacks.items, 0..) |registration, index| {
+        for (self.eventCallbacks.items, 0..) |registration, index| {
             if (registration.key == key) {
-                transit_allocator.free(registration.entry.messageType);
-                _ = self.messageCallbacks.orderedRemove(index);
+                transit_allocator.free(registration.entry.eventType);
+                _ = self.eventCallbacks.orderedRemove(index);
                 return;
             }
         }
     }
 
     //
-    // Registers a callback that will be called for every message sent by any tracked task,
-    // regardless of the message type.
+    // Registers a callback that will be called for every event sent by any tracked task,
+    // regardless of the event type.
     // Returns an unsubscribe function to remove the callback.
     //
-    pub fn onAnyTaskMessage(self: *TaskQueue, callback: TaskMessageCallback) !UnsubscribeFn {
+    pub fn onAnyTaskEvent(self: *TaskQueue, callback: TaskEventCallback) !UnsubscribeFn {
         self.lock();
         defer self.unlock();
         const key = self.nextCallbackKey;
         self.nextCallbackKey += 1;
-        try self.anyMessageCallbacks.append(transit_allocator, .{
+        try self.anyEventCallbacks.append(transit_allocator, .{
             .key = key,
             .callback = callback,
         });
         return .{
             .context = self,
             .key = key,
-            .function = unsubscribeAnyMessageCallback,
+            .function = unsubscribeAnyEventCallback,
         };
     }
 
     //
-    // Removes a callback registered with onAnyTaskMessage (the function onAnyTaskMessage returned).
+    // Removes a callback registered with onAnyTaskEvent (the function onAnyTaskEvent returned).
     //
-    fn unsubscribeAnyMessageCallback(context: ?*anyopaque, key: usize) void {
+    fn unsubscribeAnyEventCallback(context: ?*anyopaque, key: usize) void {
         const self: *TaskQueue = @ptrCast(@alignCast(context.?));
         self.lock();
         defer self.unlock();
-        for (self.anyMessageCallbacks.items, 0..) |registration, index| {
+        for (self.anyEventCallbacks.items, 0..) |registration, index| {
             if (registration.key == key) {
-                _ = self.anyMessageCallbacks.orderedRemove(index);
+                _ = self.anyEventCallbacks.orderedRemove(index);
                 return;
             }
         }
@@ -500,7 +500,7 @@ pub const TaskQueue = struct {
 
     //
     // Returns when all currently in-flight tasks have completed, running the queue's callbacks
-    // for the completions and messages that arrive meanwhile.
+    // for the completions and events that arrive meanwhile.
     // Returns immediately if no tasks are in flight.
     //
     pub fn awaitAllTasks(self: *TaskQueue) !void {
@@ -597,9 +597,9 @@ pub const TaskQueue = struct {
                 const result = try std.json.parseFromSliceLeaky(ITaskResult, scratch_allocator, event.json, .{ .allocate = .alloc_always });
                 try self.notifyCompletionCallbacks(scratch_allocator, result, event.json);
             },
-            .message => {
-                const message = try std.json.parseFromSliceLeaky(ITaskMessageData, scratch_allocator, event.json, .{ .allocate = .alloc_always });
-                try self.notifyMessageCallbacks(scratch_allocator, message.taskId, message.message);
+            .task_event => {
+                const sent = try std.json.parseFromSliceLeaky(ITaskEventData, scratch_allocator, event.json, .{ .allocate = .alloc_always });
+                try self.notifyEventCallbacks(scratch_allocator, sent.taskId, sent.event);
             },
         }
     }
@@ -660,17 +660,17 @@ pub const TaskQueue = struct {
     }
 
     //
-    // Invokes all registered message callbacks with the task message.
-    // Only callbacks that match the message type will be invoked.
+    // Invokes all registered event callbacks with the task's event.
+    // Only callbacks that match the event type will be invoked.
     // Callback errors are caught and logged to prevent breaking the queue.
     //
-    fn notifyMessageCallbacks(self: *TaskQueue, scratchAllocator: std.mem.Allocator, taskId: []const u8, message: std.json.Value) !void {
-        const messageType = types.messageTypeOf(message);
+    fn notifyEventCallbacks(self: *TaskQueue, scratchAllocator: std.mem.Allocator, taskId: []const u8, event: std.json.Value) !void {
+        const eventType = types.eventTypeOf(event);
 
         self.lock();
-        var callbacks: std.ArrayList(TaskMessageCallback) = .empty;
-        for (self.messageCallbacks.items) |registration| {
-            if (messageType == null or !std.mem.eql(u8, messageType.?, registration.entry.messageType)) {
+        var callbacks: std.ArrayList(TaskEventCallback) = .empty;
+        for (self.eventCallbacks.items) |registration| {
+            if (eventType == null or !std.mem.eql(u8, eventType.?, registration.entry.eventType)) {
                 continue;
             }
             callbacks.append(scratchAllocator, registration.entry.callback) catch |err| {
@@ -681,13 +681,13 @@ pub const TaskQueue = struct {
         self.unlock();
 
         for (callbacks.items) |callback| {
-            callback.call(.{ .taskId = taskId, .message = message }) catch |err| {
-                log.exception("Error in task message callback", err);
+            callback.call(.{ .taskId = taskId, .event = event }) catch |err| {
+                log.exception("Error in task event callback", err);
             };
         }
 
         self.lock();
-        const anyCallbacks = scratchAllocator.dupe(IAnyMessageCallbackRegistration, self.anyMessageCallbacks.items) catch |err| {
+        const anyCallbacks = scratchAllocator.dupe(IAnyEventCallbackRegistration, self.anyEventCallbacks.items) catch |err| {
             self.unlock();
             return err;
         };
@@ -696,9 +696,9 @@ pub const TaskQueue = struct {
         for (anyCallbacks) |registration| {
             registration.callback.call(.{
                 .taskId = taskId,
-                .message = message,
+                .event = event,
             }) catch |err| {
-                log.exception("Error in any task message callback", err);
+                log.exception("Error in any task event callback", err);
             };
         }
     }
@@ -731,11 +731,11 @@ pub const TaskQueue = struct {
         }
         self.trackedTaskIds.clearRetainingCapacity();
         self.resolveAllWaiters();
-        for (self.messageCallbacks.items) |registration| {
-            transit_allocator.free(registration.entry.messageType);
+        for (self.eventCallbacks.items) |registration| {
+            transit_allocator.free(registration.entry.eventType);
         }
-        self.messageCallbacks.clearRetainingCapacity();
-        self.anyMessageCallbacks.clearRetainingCapacity();
+        self.eventCallbacks.clearRetainingCapacity();
+        self.anyEventCallbacks.clearRetainingCapacity();
         self.completionCallbacks.clearRetainingCapacity();
 
         for (self.pendingEvents.items[self.pendingEventsHead..]) |event| {

@@ -9,18 +9,18 @@ test "TaskStatus.toString returns the enum values" {
     try std.testing.expectEqualStrings("failed", types.TaskStatus.Failed.toString());
 }
 
-test "messageTypeOf returns the string type of an object message" {
+test "eventTypeOf returns the string type of an object event" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
     const typed = try std.json.parseFromSliceLeaky(std.json.Value, allocator, "{\"type\":\"replicate-progress\",\"progress\":\"x\"}", .{});
-    try std.testing.expectEqualStrings("replicate-progress", types.messageTypeOf(typed).?);
+    try std.testing.expectEqualStrings("replicate-progress", types.eventTypeOf(typed).?);
     const untyped = try std.json.parseFromSliceLeaky(std.json.Value, allocator, "{\"progress\":\"x\"}", .{});
-    try std.testing.expect(types.messageTypeOf(untyped) == null);
+    try std.testing.expect(types.eventTypeOf(untyped) == null);
     const number_type = try std.json.parseFromSliceLeaky(std.json.Value, allocator, "{\"type\":5}", .{});
-    try std.testing.expect(types.messageTypeOf(number_type) == null);
-    try std.testing.expect(types.messageTypeOf(.{ .string = "type" }) == null);
-    try std.testing.expect(types.messageTypeOf(.null) == null);
+    try std.testing.expect(types.eventTypeOf(number_type) == null);
+    try std.testing.expect(types.eventTypeOf(.{ .string = "type" }) == null);
+    try std.testing.expect(types.eventTypeOf(.null) == null);
 }
 
 test "ITaskResult round-trips through JSON" {

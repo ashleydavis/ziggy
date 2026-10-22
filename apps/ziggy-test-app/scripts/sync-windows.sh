@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Builds the UI and the Windows shell and installs everything the app needs into one directory. See sync-windows.md.
+# Builds the frontend and the Windows native app and installs everything the app needs into one directory. See sync-windows.md.
 
 set -euo pipefail
 

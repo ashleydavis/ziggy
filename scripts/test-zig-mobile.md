@@ -12,4 +12,4 @@ From the root of the Ziggy repository, `bun run test:zig:android` and `bun run t
 - `ios`: builds the programs for the iOS simulator (`aarch64-ios.14.0-simulator`) and runs each with `xcrun simctl spawn` on the booted simulator. A simulator must already be booted, and the script fails when none is. It needs a Mac.
 - `--ziggy-dir <dir>`: a checkout of Ziggy, whose core library's tests run as well.
 
-Both start by building the UI (`bun run bundle:ui`), because the test app's backend embeds it.
+Both start by building the frontend (`bun run bundle:ui`), because the test app's backend embeds it.

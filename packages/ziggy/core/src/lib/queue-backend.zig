@@ -2,8 +2,8 @@
 // The queue backend of Ziggy: the IQueueBackend that code written against the task queue talks to,
 // backed by Ziggy's task runner. The runner owns the threads, the one queue (an interactive
 // task at the head, a background task at the end), cancellation by source and the pool and child task limits the platform layer
-// sets. This file owns what the runner does not: the callbacks (onTaskAdded, onTaskComplete, onTaskMessage,
-// onAnyTaskMessage, onTasksCancelled) that TaskQueue is built on, and the context a handler runs with.
+// sets. This file owns what the runner does not: the callbacks (onTaskAdded, onTaskComplete, onTaskEvent,
+// onAnyTaskEvent, onTasksCancelled) that TaskQueue is built on, and the context a handler runs with.
 //
 // A handler an app registers with the task queue's registry (`worker.registerHandler`) runs on the
 // runner through `fallbackHandler`, for a task type the app has no entry of its own for. It gets the ITaskContext of the task queue.
@@ -11,8 +11,8 @@
 //
 // (A task a handler queues through TaskQueue reaches `addTask` here on the handler's thread, and the runner tells which task is
 // running on that thread, which is how the child takes its parent's priority. The callbacks are
-// invoked on the thread that ended the task or sent the message, with the backend's lock held, as the contract in the task queue's
-// queue-backend.zig says.)
+// invoked on the thread that ended the task or sent the event, with the backend's lock held, as the contract in the task queue's
+// queue-backend.zig describes.)
 //
 
 const std = @import("std");
@@ -25,12 +25,12 @@ const worker = task_queue.worker;
 const IQueueBackend = queue_backend.IQueueBackend;
 const ITaskContext = types.ITaskContext;
 const ITaskResult = types.ITaskResult;
-const ITaskMessageData = types.ITaskMessageData;
+const ITaskEventData = types.ITaskEventData;
 const TaskPriority = types.TaskPriority;
 const UnsubscribeFn = types.UnsubscribeFn;
 const WorkerTaskCompletionCallback = types.WorkerTaskCompletionCallback;
-const TaskMessageCallback = types.TaskMessageCallback;
-const IMessageCallbackEntry = types.IMessageCallbackEntry;
+const TaskEventCallback = types.TaskEventCallback;
+const IEventCallbackEntry = types.IEventCallbackEntry;
 const TaskAddedCallback = types.TaskAddedCallback;
 const TasksCancelledCallback = types.TasksCancelledCallback;
 const task_runner = @import("task-runner.zig");
@@ -84,11 +84,11 @@ pub const ZiggyQueueBackend = struct {
     // Callbacks for every task that ends.
     completion_callbacks: std.ArrayList(Registration(WorkerTaskCompletionCallback)),
 
-    // Callbacks for the messages of one type.
-    message_callbacks: std.ArrayList(Registration(IMessageCallbackEntry)),
+    // Callbacks for the events of one type.
+    event_callbacks: std.ArrayList(Registration(IEventCallbackEntry)),
 
-    // Callbacks for every message.
-    any_message_callbacks: std.ArrayList(Registration(TaskMessageCallback)),
+    // Callbacks for every event.
+    any_event_callbacks: std.ArrayList(Registration(TaskEventCallback)),
 
     // Callbacks for the cancelling of a source.
     tasks_cancelled_callbacks: std.ArrayList(Registration(TasksCancelledCallback)),
@@ -120,8 +120,8 @@ pub const ZiggyQueueBackend = struct {
             .next_key = 0,
             .task_added_callbacks = .empty,
             .completion_callbacks = .empty,
-            .message_callbacks = .empty,
-            .any_message_callbacks = .empty,
+            .event_callbacks = .empty,
+            .any_event_callbacks = .empty,
             .tasks_cancelled_callbacks = .empty,
             .uuid_generator = .{},
             .timestamp_provider = .{},
@@ -138,8 +138,8 @@ pub const ZiggyQueueBackend = struct {
     pub fn destroy(self: *ZiggyQueueBackend) void {
         self.freeList(&self.task_added_callbacks);
         self.freeList(&self.completion_callbacks);
-        self.freeList(&self.message_callbacks);
-        self.freeList(&self.any_message_callbacks);
+        self.freeList(&self.event_callbacks);
+        self.freeList(&self.any_event_callbacks);
         self.freeList(&self.tasks_cancelled_callbacks);
         self.allocator.free(self.session_id);
         self.allocator.destroy(self);
@@ -172,8 +172,8 @@ pub const ZiggyQueueBackend = struct {
         .addTask = addTaskErased,
         .onTaskAdded = onTaskAddedErased,
         .onTaskComplete = onTaskCompleteErased,
-        .onTaskMessage = onTaskMessageErased,
-        .onAnyTaskMessage = onAnyTaskMessageErased,
+        .onTaskEvent = onTaskEventErased,
+        .onAnyTaskEvent = onAnyTaskEventErased,
         .cancelTasks = cancelTasksErased,
         .onTasksCancelled = onTasksCancelledErased,
         .shutdown = shutdownErased,
@@ -234,20 +234,20 @@ pub const ZiggyQueueBackend = struct {
     }
 
     //
-    // Registers a callback for the messages of one type.
+    // Registers a callback for the events of one type.
     //
-    pub fn onTaskMessage(self: *ZiggyQueueBackend, messageType: []const u8, callback: TaskMessageCallback) !UnsubscribeFn {
-        return self.register(IMessageCallbackEntry, &self.message_callbacks, "", .{
-            .messageType = messageType,
+    pub fn onTaskEvent(self: *ZiggyQueueBackend, eventType: []const u8, callback: TaskEventCallback) !UnsubscribeFn {
+        return self.register(IEventCallbackEntry, &self.event_callbacks, "", .{
+            .eventType = eventType,
             .callback = callback,
         });
     }
 
     //
-    // Registers a callback for every message.
+    // Registers a callback for every event.
     //
-    pub fn onAnyTaskMessage(self: *ZiggyQueueBackend, callback: TaskMessageCallback) !UnsubscribeFn {
-        return self.register(TaskMessageCallback, &self.any_message_callbacks, "", callback);
+    pub fn onAnyTaskEvent(self: *ZiggyQueueBackend, callback: TaskEventCallback) !UnsubscribeFn {
+        return self.register(TaskEventCallback, &self.any_event_callbacks, "", callback);
     }
 
     //
@@ -289,8 +289,8 @@ pub const ZiggyQueueBackend = struct {
         defer self.unlock();
         self.removeKey(TaskAddedCallback, &self.task_added_callbacks, key);
         self.removeKey(WorkerTaskCompletionCallback, &self.completion_callbacks, key);
-        self.removeKey(IMessageCallbackEntry, &self.message_callbacks, key);
-        self.removeKey(TaskMessageCallback, &self.any_message_callbacks, key);
+        self.removeKey(IEventCallbackEntry, &self.event_callbacks, key);
+        self.removeKey(TaskEventCallback, &self.any_event_callbacks, key);
         self.removeKey(TasksCancelledCallback, &self.tasks_cancelled_callbacks, key);
     }
 
@@ -309,7 +309,7 @@ pub const ZiggyQueueBackend = struct {
 
     //
     // Drops the queued tasks with the given source, tells the running ones to stop, and fires the callbacks registered for the source.
-    // (The UI is told of each queued task that was dropped, as a cancelled completion.)
+    // (The frontend is told of each queued task that was dropped, as a cancelled completion.)
     //
     pub fn cancelTasks(self: *ZiggyQueueBackend, source: []const u8) void {
         self.runner.cancelSource(source);
@@ -380,36 +380,36 @@ pub const ZiggyQueueBackend = struct {
     }
 
     //
-    // A task sent a message: tells the callbacks for its type and the callbacks for every message.
+    // A task sent an event: tells the callbacks for its type and the callbacks for every event.
     //
-    pub fn messageSent(self: *ZiggyQueueBackend, sent: ziggy_types.TaskSentMessage) void {
+    pub fn eventSent(self: *ZiggyQueueBackend, sent: ziggy_types.TaskSentEvent) void {
         var arena_state = std.heap.ArenaAllocator.init(self.allocator);
         defer arena_state.deinit();
-        const message = std.json.parseFromSliceLeaky(std.json.Value, arena_state.allocator(), sent.message_json, .{}) catch |err| {
-            log.exception("Error reading a message a task sent", err);
+        const event = std.json.parseFromSliceLeaky(std.json.Value, arena_state.allocator(), sent.event_json, .{}) catch |err| {
+            log.exception("Error reading an event a task sent", err);
             return;
         };
-        const message_type = types.messageTypeOf(message);
-        const data: ITaskMessageData = .{
+        const event_type = types.eventTypeOf(event);
+        const data: ITaskEventData = .{
             .taskId = sent.task_id,
-            .message = message,
+            .event = event,
         };
         self.lock();
         defer self.unlock();
-        for (self.message_callbacks.items) |registration| {
-            const wanted = message_type orelse {
+        for (self.event_callbacks.items) |registration| {
+            const wanted = event_type orelse {
                 continue;
             };
-            if (!std.mem.eql(u8, wanted, registration.callback.messageType)) {
+            if (!std.mem.eql(u8, wanted, registration.callback.eventType)) {
                 continue;
             }
             registration.callback.callback.call(data) catch |err| {
-                log.exception("Error in task message callback", err);
+                log.exception("Error in task event callback", err);
             };
         }
-        for (self.any_message_callbacks.items) |registration| {
+        for (self.any_event_callbacks.items) |registration| {
             registration.callback.call(data) catch |err| {
-                log.exception("Error in any task message callback", err);
+                log.exception("Error in any task event callback", err);
             };
         }
     }
@@ -439,19 +439,19 @@ pub const ZiggyQueueBackend = struct {
     }
 
     //
-    // The IQueueBackend onTaskMessage of this backend.
+    // The IQueueBackend onTaskEvent of this backend.
     //
-    fn onTaskMessageErased(ptr: *anyopaque, messageType: []const u8, callback: TaskMessageCallback) anyerror!UnsubscribeFn {
+    fn onTaskEventErased(ptr: *anyopaque, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn {
         const self: *ZiggyQueueBackend = @ptrCast(@alignCast(ptr));
-        return self.onTaskMessage(messageType, callback);
+        return self.onTaskEvent(eventType, callback);
     }
 
     //
-    // The IQueueBackend onAnyTaskMessage of this backend.
+    // The IQueueBackend onAnyTaskEvent of this backend.
     //
-    fn onAnyTaskMessageErased(ptr: *anyopaque, callback: TaskMessageCallback) anyerror!UnsubscribeFn {
+    fn onAnyTaskEventErased(ptr: *anyopaque, callback: TaskEventCallback) anyerror!UnsubscribeFn {
         const self: *ZiggyQueueBackend = @ptrCast(@alignCast(ptr));
-        return self.onAnyTaskMessage(callback);
+        return self.onAnyTaskEvent(callback);
     }
 
     //
@@ -487,17 +487,17 @@ const ContextBridge = struct {
     context: *TaskContext,
 
     const vtable: ITaskContext.VTable = .{
-        .sendMessage = sendMessageErased,
+        .sendEvent = sendEventErased,
         .isCancelled = isCancelledErased,
     };
 
     //
-    // Sends a message to the UI and to the observers of the backend.
+    // Sends an event to the frontend and to the observers of the backend.
     //
-    fn sendMessageErased(ptr: *anyopaque, message: std.json.Value) void {
+    fn sendEventErased(ptr: *anyopaque, event: std.json.Value) void {
         const self: *ContextBridge = @ptrCast(@alignCast(ptr));
-        self.context.sendMessage(message) catch |err| {
-            log.exception("Error sending a task message", err);
+        self.context.sendEvent(event) catch |err| {
+            log.exception("Error sending a task event", err);
         };
     }
 
@@ -532,7 +532,7 @@ fn handlesTaskType(user_data: ?*anyopaque, task_type: []const u8) bool {
 //
 // Runs the handler registered for the task's type, with the context those handlers expect, and returns its outputs as JSON text.
 // A handler that fails gives the error it returned, with the message it recorded (the task queue's throwError), which the app's
-// describe_error gives to the UI.
+// describe_error gives to the frontend.
 //
 fn runRegisteredHandler(user_data: ?*anyopaque, context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     const backend: *ZiggyQueueBackend = @ptrCast(@alignCast(user_data.?));

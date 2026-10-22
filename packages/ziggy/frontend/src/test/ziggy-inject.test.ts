@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 
 //
-// A stand-in for the UI's window, with the native handle of the platform under test.
+// A fake of the frontend's window, with the native handle of the platform under test.
 //
 interface IFakeWindow {
     webkit?: { messageHandlers: { ziggy: { postMessage: (text: string) => void } } };
@@ -48,7 +48,7 @@ function windowWithWebkit(posted: string[]): IFakeWindow {
 }
 
 //
-// A stand-in for a drop event as the inject script sees one.
+// A fake drop event as the inject script sees one.
 //
 interface IFakeDropEvent {
     type: string;
@@ -63,7 +63,7 @@ interface IFakeDropEvent {
 }
 
 //
-// A stand-in for a drop's data.
+// A fake of a drop's data.
 //
 interface IFakeDataTransfer {
     types: string[];
@@ -75,7 +75,7 @@ interface IFakeDataTransfer {
 }
 
 //
-// A stand-in for the element a drop landed on, which records the events dispatched on it.
+// A fake of the element a drop landed on, which records the events dispatched on it.
 //
 interface IFakeTarget {
     dispatched: IFakeDropEvent[];
@@ -258,7 +258,7 @@ describe("ziggy-inject", () => {
         fakeWindow.ziggy!.onEvent(data => received.push(data));
         fakeWindow.ziggy!.onEvent(data => received.push(data));
         fakeWindow.__ziggyReceive!({ kind: "app", data: { type: "saved" } });
-        fakeWindow.__ziggyReceive!({ kind: "system", name: "task-message", data: { taskId: "t" } });
+        fakeWindow.__ziggyReceive!({ kind: "system", name: "task-event", data: { taskId: "t" } });
         fakeWindow.__ziggyReceive!({ kind: "system", name: "core-error", data: { error: "E" } });
         expect(received).toEqual([{ type: "saved" }, { type: "saved" }]);
     });
@@ -279,10 +279,10 @@ describe("ziggy-inject", () => {
         inject(fakeWindow);
         const system: object[] = [];
         const app: object[] = [];
-        fakeWindow.ziggy!.onTaskMessage((data: object) => system.push(data));
+        fakeWindow.ziggy!.onTaskEvent((data: object) => system.push(data));
         fakeWindow.ziggy!.onCoreError((data: object) => system.push(data));
         fakeWindow.ziggy!.onEvent(data => app.push(data));
-        fakeWindow.__ziggyReceive!({ kind: "app", name: "task-message", data: { taskId: "t" } });
+        fakeWindow.__ziggyReceive!({ kind: "app", name: "task-event", data: { taskId: "t" } });
         fakeWindow.__ziggyReceive!({ kind: "app", name: "core-error", data: { error: "E" } });
         expect(system).toEqual([]);
         expect(app).toEqual([{ taskId: "t" }, { error: "E" }]);
@@ -293,11 +293,11 @@ describe("ziggy-inject", () => {
         inject(fakeWindow);
         const received: object[] = [];
         fakeWindow.ziggy!.onEvent(data => received.push(data));
-        fakeWindow.ziggy!.onTaskMessage((data: object) => received.push(data));
+        fakeWindow.ziggy!.onTaskEvent((data: object) => received.push(data));
         const logged = jest.spyOn(console, "error").mockImplementation(() => undefined);
         try {
             fakeWindow.__ziggyReceive!({ data: { a: 1 } });
-            fakeWindow.__ziggyReceive!({ kind: "other", name: "task-message", data: { a: 2 } });
+            fakeWindow.__ziggyReceive!({ kind: "other", name: "task-event", data: { a: 2 } });
             expect(received).toEqual([]);
             expect(logged).toHaveBeenCalledTimes(2);
         }
@@ -346,7 +346,7 @@ describe("ziggy-inject", () => {
         const fakeWindow = windowWithWebkit([]);
         inject(fakeWindow);
         const pairs: [string, string, string][] = [
-            ["task-message", "onTaskMessage", "removeTaskMessageListener"],
+            ["task-event", "onTaskEvent", "removeTaskEventListener"],
             ["task-completed", "onTaskCompleted", "removeTaskCompletedListener"],
             ["core-error", "onCoreError", "removeCoreErrorListener"],
             ["test-command", "onTestCommand", "removeTestCommandListener"],
@@ -425,12 +425,12 @@ describe("ziggy-inject", () => {
             "onCoreError",
             "onEvent",
             "onTaskCompleted",
-            "onTaskMessage",
+            "onTaskEvent",
             "onTestCommand",
             "removeCoreErrorListener",
             "removeEventListener",
             "removeTaskCompletedListener",
-            "removeTaskMessageListener",
+            "removeTaskEventListener",
             "removeTestCommandListener",
             "send",
             "sendTestResult",

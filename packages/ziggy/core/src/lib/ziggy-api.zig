@@ -1,6 +1,6 @@
 //
 // The C interface to the core. Ziggy's app-root.zig, the root of every app's backend library, calls exportApi with the app registered with App and the functions below are exported
-// from its library, so every shell reaches the core the same way. The declarations are in ziggy.h.
+// from its library, so every native app reaches the core the same way. The declarations are in ziggy.h.
 //
 
 const std = @import("std");
@@ -12,7 +12,7 @@ const ui_files = @import("ui-files.zig");
 const inject_script = @import("inject-script.zig");
 
 //
-// What ziggy_ui_file gives back for a file of the bundled UI. Laid out like ziggy_ui_file_result in ziggy.h.
+// What ziggy_ui_file gives back for a file of the bundled frontend. Laid out like ziggy_ui_file_result in ziggy.h.
 //
 const UiFileResult = extern struct {
     // The file's bytes, which stay valid for as long as the library is loaded.
@@ -51,7 +51,7 @@ pub fn exportApi(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // ziggy_post_message: passes a message from the UI to the core.
+        // ziggy_post_message: passes a message from the frontend to the core.
         //
         fn postMessage(handle: ?*core_module.Core, message_ptr: [*]const u8, message_len: usize) callconv(.c) void {
             const core = handle orelse {
@@ -82,7 +82,7 @@ pub fn exportApi(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // ziggy_ui_file: finds a file of the bundled UI by the path of a request, and says whether the UI has it.
+        // ziggy_ui_file: finds a file of the bundled frontend by the path of a request, and returns whether the frontend has it.
         //
         fn uiFile(handle: ?*core_module.Core, path_ptr: [*]const u8, path_len: usize, result: *UiFileResult) callconv(.c) bool {
             const core = handle orelse {
@@ -100,7 +100,8 @@ pub fn exportApi(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // ziggy_inject_script: gives the script to inject into the UI before it loads and writes its length to the pointer given.
+        // ziggy_inject_script: gives the script to inject into the frontend before it loads and writes its length to the pointer
+        // given.
         //
         fn injectScript(length: *usize) callconv(.c) [*:0]const u8 {
             length.* = inject_script.text.len;
@@ -108,7 +109,7 @@ pub fn exportApi(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // ziggy_parse_accelerator: parses the text of a keyboard shortcut, and says whether it was one.
+        // ziggy_parse_accelerator: parses the text of a keyboard shortcut, and returns whether it was one.
         //
         fn parseAccelerator(text_ptr: [*]const u8, text_len: usize, result: *accelerator.Accelerator) callconv(.c) bool {
             result.* = accelerator.parse(text_ptr[0..text_len]) catch {
@@ -118,7 +119,7 @@ pub fn exportApi(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // ziggy_files_dropped: records the files the user dropped on the window, and says whether it could.
+        // ziggy_files_dropped: records the files the user dropped on the window, and returns whether it could.
         //
         fn filesDropped(handle: ?*core_module.Core, paths_ptr: [*]const u8, paths_len: usize) callconv(.c) bool {
             const core = handle orelse {
@@ -132,7 +133,7 @@ pub fn exportApi(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // ziggy_ui_query: gives the query of the UI's address, or null when the app could not make it.
+        // ziggy_ui_query: gives the query of the frontend's address, or null when the app could not make it.
         //
         fn uiQuery(handle: ?*core_module.Core, length: *usize) callconv(.c) ?[*:0]const u8 {
             const core = handle orelse {
@@ -147,7 +148,7 @@ pub fn exportApi(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // ziggy_test_hooks_enabled: says whether this library was built with the test hooks.
+        // ziggy_test_hooks_enabled: returns whether this library was built with the test hooks.
         //
         fn testHooksEnabled() callconv(.c) bool {
             return build_options.test_hooks;

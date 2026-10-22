@@ -1,6 +1,6 @@
 # run.sh
 
-Runs the app's smoke tests for one platform: each directory here that holds a `test.sh` starts the real app and checks what it shows. Invoked by the `package.json` scripts `test:smoke`, `test:smoke:and` and `test:smoke:ios`, never directly. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
+Runs the app's smoke tests for one platform: each directory here that holds a `test.sh` starts the real app and checks what it shows. Invoked by the `package.json` scripts `test:smoke`, `test:smoke:android` and `test:smoke:ios`, never directly. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
 
 ## Arguments
 

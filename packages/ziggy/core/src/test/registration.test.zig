@@ -3,7 +3,7 @@ const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
 
 //
-// Fails unless the last message the shell recorded is the expected text.
+// Fails unless the last message the fake native app recorded is the expected text.
 //
 fn expectLastMessage(shell: *helpers.FakeShell, expected: []const u8) !void {
     const last = try shell.messageAt(std.testing.allocator, shell.count() - 1);

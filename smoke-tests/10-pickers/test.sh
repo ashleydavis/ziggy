@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# The file and folder pickers: each button sends the backend a message that shows a native dialog, of the type named after the Electron app's channel for it, and the UI
-# shows what was chosen, or that nothing was. The scenario supplies the dialogs' results itself, so none is shown.
+# The file and folder pickers: each button sends the backend a message that shows a native dialog, of the type named after the Electron app's channel for it,
+# and the frontend shows what was chosen, or that nothing was. The scenario supplies the dialogs' results itself, so none is shown.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 

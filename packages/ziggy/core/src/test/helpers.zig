@@ -1,5 +1,5 @@
 //
-// What the core's tests share: the shell stand-in, and small task handlers.
+// What the core's tests share: the fake native app, and small task handlers.
 //
 
 const std = @import("std");
@@ -9,7 +9,7 @@ const core_module = ziggy.core;
 const task_runner = ziggy.task_runner;
 
 //
-// A stand-in for a shell that records every message the core delivers.
+// A fake native app that records every message the core delivers.
 //
 pub const FakeShell = ziggy.fake_shell.FakeShell;
 
@@ -26,7 +26,7 @@ pub fn sleepOrCancel(context: *task_runner.TaskContext, milliseconds: i64) !void
 
 fn quickTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
-    try context.sendMessage(.{ .text = "hello" });
+    try context.sendEvent(.{ .text = "hello" });
     return try context.arena.dupe(u8, "\"done\"");
 }
 
@@ -35,7 +35,7 @@ fn spinTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[
     var step: u32 = 0;
     while (true) : (step += 1) {
         try context.checkCancelled();
-        try context.sendMessage(.{ .step = step });
+        try context.sendEvent(.{ .step = step });
         try context.io().sleep(.fromMilliseconds(2), .awake);
     }
 }
@@ -49,9 +49,9 @@ fn failTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[
 fn sleepTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     const milliseconds = ziggy.json.getInteger(data, "ms") orelse 0;
     const name = ziggy.json.getString(data, "name") orelse "sleep";
-    try context.sendMessage(.{ .start = name });
+    try context.sendEvent(.{ .start = name });
     try sleepOrCancel(context, milliseconds);
-    try context.sendMessage(.{ .end = name });
+    try context.sendEvent(.{ .end = name });
     return null;
 }
 
@@ -64,7 +64,7 @@ fn parentTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!
         _ = try context.queueChild("child", .{ .name = parent_name, .ms = child_ms }, null);
     }
     context.awaitAllTasks();
-    try context.sendMessage(.{ .allChildrenDone = parent_name });
+    try context.sendEvent(.{ .allChildrenDone = parent_name });
     return null;
 }
 
@@ -108,9 +108,9 @@ fn childResultTask(context: *task_runner.TaskContext, data: std.json.Value) anye
 fn childTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     const milliseconds = ziggy.json.getInteger(data, "ms") orelse 0;
     const name = ziggy.json.getString(data, "name") orelse "child";
-    try context.sendMessage(.{ .childStart = name });
+    try context.sendEvent(.{ .childStart = name });
     try sleepOrCancel(context, milliseconds);
-    try context.sendMessage(.{ .childEnd = name });
+    try context.sendEvent(.{ .childEnd = name });
     return null;
 }
 
@@ -127,7 +127,7 @@ fn flooderTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror
     const count = ziggy.json.getInteger(data, "count") orelse 0;
     var index: i64 = 0;
     while (index < count) : (index += 1) {
-        try context.sendMessage(.{ .seq = index });
+        try context.sendEvent(.{ .seq = index });
     }
     return null;
 }
@@ -386,7 +386,7 @@ pub const app = registered: {
 };
 
 //
-// Creates a core on the fake shell.
+// Creates a core on the fake native app.
 //
 pub fn createCore(shell: *FakeShell, worker_threads: u32, max_children: u32) !*core_module.Core {
     return try core_module.Core.create(std.testing.allocator, shell.config(worker_threads, max_children), app);

@@ -1,5 +1,5 @@
-// The Ziggy test app's Android app. The Zig library per ABI and the built UI are generated into build/ziggy by
-// scripts/sync-android.sh before Gradle runs, so Gradle never runs zig.
+// The Ziggy test app's Android app. The Zig library per ABI and the built frontend are generated
+// into build/ziggy by scripts/sync-android.sh before Gradle runs, so Gradle never runs zig.
 
 apply plugin: 'com.android.application'
 

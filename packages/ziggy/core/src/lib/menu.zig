@@ -1,7 +1,7 @@
 //
-// ziggy.menu: the desktop menu an app gives ziggy.core.App as `.menu`. Each item says what it runs: a standard action the native app
-// does itself, a Zig function the core calls, or the UI, which receives the item as the app event {"type": "menu", "item": "<name>"}.
-// App checks the menu when the app is built. The core gives the native apps the same menu as JSON text, made from it at
+// ziggy.menu: the desktop menu an app gives ziggy.core.App as `.menu`. Each item names what it runs: a standard action the native app
+// does itself, a Zig function the core calls, or the frontend, which receives the item as the app event
+// {"type": "menu", "item": "<name>"}. App checks the menu when the app is built. The core gives the native apps the same menu as JSON text, made from it at
 // compile time.
 //
 
@@ -44,7 +44,7 @@ pub const Run = union(enum) {
     standard: StandardAction,
     // A Zig function the core calls.
     zig: MenuFn,
-    // The UI, which receives the app event {"type": "menu", "item": "<name>"}.
+    // The frontend, which receives the app event {"type": "menu", "item": "<name>"}.
     ui: void,
 };
 
@@ -55,7 +55,7 @@ pub const Item = struct {
     // The text the item shows. Empty for a separator.
     label: []const u8,
     // The name the core finds the item by, which a `.zig` or `.ui` item must have and a `.standard` item must not. A `.ui` item's
-    // name is the `item` of the event the UI receives.
+    // name is the `item` of the event the frontend receives.
     name: ?[]const u8 = null,
     // The keyboard shortcut, such as "CmdOrCtrl+Shift+I", or null for none.
     accelerator: ?[]const u8 = null,
@@ -86,12 +86,12 @@ pub const Menu = struct {
 };
 
 //
-// What the core does for a menu item a native app posts: call a Zig function, or send the UI the item as an app event.
+// What the core does for a menu item a native app posts: call a Zig function, or send the frontend the item as an app event.
 //
 pub const MenuTarget = union(enum) {
     // The Zig function the core calls.
     zig: MenuFn,
-    // The UI, which receives the app event {"type": "menu", "item": "<name>"}.
+    // The frontend, which receives the app event {"type": "menu", "item": "<name>"}.
     ui: void,
 };
 

@@ -1,5 +1,5 @@
 //
-// Decides whether an address is the app's own bundled UI. Written once, here, and called by every shell.
+// Decides whether an address is the app's own bundled frontend. Written once, here, and called by every native app.
 //
 
 const types = @import("types.zig");

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Builds the MacOS app with xcodebuild, after syncing its UI and Zig library. See build-macos.md.
+# Builds the MacOS app with xcodebuild, after syncing its frontend and Zig library. See build-macos.md.
 
 set -euo pipefail
 

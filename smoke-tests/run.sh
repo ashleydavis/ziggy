@@ -59,9 +59,9 @@ if ! ziggy_platform_prepare "$RUN_DIR"; then
     exit 1
 fi
 #
-# Prints the scenario directories this platform runs, one per line, in numeric order: the ones every platform runs, in a
-# native app the ones about what only a native app has (such as the address it serves the UI from), on a desktop platform
-# the ones about desktop features such as the menu, and in dev mode the ones about dev mode.
+# Prints the scenario directories this platform runs, one per line, in numeric order: the ones every platform runs, in
+# a native app the ones about what only a native app has (such as the address it serves the frontend from), on a desktop
+# platform the ones about desktop features such as the menu, and in dev mode the ones about dev mode.
 #
 list_scenarios() {
     {

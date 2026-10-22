@@ -42,7 +42,7 @@ pub fn readMessage(reader: *std.Io.Reader, allocator: std.mem.Allocator, limit: 
         const opcode: Opcode = @enumFromInt(@as(u4, @truncate(header[0])));
         const masked = header[1] & 0x80 != 0;
         if (!masked) {
-            // A browser masks every frame it sends, and the protocol says to refuse one that is not.
+            // A browser masks every frame it sends, and the protocol requires refusing one that is not.
             return error.UnmaskedFrame;
         }
         const length: u64 = switch (header[1] & 0x7f) {

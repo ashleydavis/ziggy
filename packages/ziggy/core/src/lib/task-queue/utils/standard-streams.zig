@@ -7,7 +7,7 @@ const builtin = @import("builtin");
 // On Windows, std.Io.File.stdin(), stdout() and stderr() always describe the handle as opened for
 // synchronous I/O. A handle inherited from the parent can be asynchronous (overlapped) instead: the pipes
 // that MSYS2 and Cygwin shells (Git Bash, which the CI uses) create for `a | b` are. Writing to one of those
-// through a File that says synchronous is fine while the pipe has room, but as soon as the reader falls
+// through a File marked synchronous is fine while the pipe has room, but as soon as the reader falls
 // behind, NtWriteFile returns STATUS_PENDING, which the synchronous path of std treats as unreachable, and
 // the process panics part way through its output.
 //

@@ -131,7 +131,7 @@ jobs:
           api-level: 35
           arch: x86_64
           target: google_apis
-          script: bun run test:smoke:and
+          script: bun run test:smoke:android
 
       # Saved under this platform's own key so package-release, which builds the same release app, finds the Zig part already
       # built. Always, so a job that fails part way still leaves what it compiled.

@@ -71,8 +71,8 @@ apple_zig_arch() {
     esac
 }
 
-# Bundles the template's UI and builds the Zig static library, which embeds the UI, so an Xcode build has everything it links.
-# <native_dir> gets lib/libziggy_template.a and include/ziggy.h.
+# Bundles the template's frontend and builds the Zig static library, which embeds the frontend, so an Xcode build has
+# everything it links. <native_dir> gets lib/libziggy_template.a and include/ziggy.h.
 # Usage: apple_sync_native <zig_target> <native_dir> <yes|no test hooks> <zig optimize mode>
 apple_sync_native() {
     local zig_target="$1"

@@ -1,7 +1,7 @@
 //
 // The root of every app's backend library, which addAppBackend in Ziggy's build.zig builds. The app's backend source file is
 // imported as "app-backend", and the app it declares there (`pub const app = ziggy.core.App(...)`) is the one the library serves:
-// this file exports Ziggy's C interface for it and, for an Android target, the JNI entry points of Ziggy's Android shell, so the app
+// this file exports Ziggy's C interface for it and, for an Android target, the JNI entry points of Ziggy's Android native app, so the app
 // writes neither itself.
 //
 

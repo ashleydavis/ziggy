@@ -61,7 +61,7 @@ fn fetch(allocator: std.mem.Allocator, port: u16, request: []const u8) ![]u8 {
 }
 
 //
-// Starts the media-server task, waits for its "media-server" message and returns the port in it.
+// Starts the media-server task, waits for its "media-server" event and returns the port in it.
 //
 fn startServer(shell: *FakeShell, core: *ziggy.core.Core) !u16 {
     core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"media-1\",\"taskType\":\"media-server\",\"source\":\"media\",\"data\":null,\"priority\":\"background\"}}");
@@ -106,7 +106,7 @@ test "the media server serves the image whole, the video by range, and stops whe
     defer std.testing.allocator.free(beyond);
     try std.testing.expect(std.mem.startsWith(u8, beyond, "HTTP/1.1 416 Range Not Satisfiable\r\n"));
 
-    // A client that connects and says nothing, as a browser does, must not keep the server from stopping.
+    // A client that connects and sends nothing, as a browser does, must not keep the server from stopping.
     var idle_threaded: std.Io.Threaded = .init_single_threaded;
     const idle = try (try std.Io.net.IpAddress.parseIp4("127.0.0.1", port)).connect(idle_threaded.io(), .{ .mode = .stream });
     defer idle.close(idle_threaded.io());

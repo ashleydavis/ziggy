@@ -3,7 +3,7 @@
 Ziggy's native app code for iOS, as a Swift package (swift-tools-version 5.7, iOS 14). One class, `ZiggyBridge`, serves the app. Terms are defined in the [glossary](../../../../docs/glossary.md).
 
 - `CZiggy` is a system library target whose `ziggy.h` is a link to the backend's own header (`packages/ziggy/core/src/lib/ziggy.h`).
-- `ZiggyNativeIOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards UI messages to `ziggy_post_message`, delivers the backend's messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the backend.
+- `ZiggyNativeIOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards frontend messages to `ziggy_post_message`, delivers the backend's messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the backend.
 
 The static library with the backend (`libziggy_template.a` for the template) is linked by the app project.
 
@@ -17,7 +17,7 @@ bridge.start()                          // creates the backend and loads the UI,
 bridge.shutdown()                       // ziggy_destroy, once
 ```
 
-The UI and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/core/src/lib`) are both embedded in the app's backend library, so the app bundle holds neither.
+The frontend and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/core/src/lib`) are both embedded in the app's backend library, so the app bundle holds neither.
 
 ## Test hooks
 
@@ -25,7 +25,7 @@ When the linked library has the test hooks and `ZIGGY_TEST_MODE` is set, the nat
 
 ## Failures
 
-A failure that leaves the app unusable prints to standard error and exits non-zero. A UI that fails to load, a blocked navigation and a failed delivery print to standard error and the app carries on.
+A failure that leaves the app unusable prints to standard error and exits non-zero. A frontend that fails to load, a blocked navigation and a failed delivery print to standard error and the app carries on.
 
 ## Keeping the app running
 
@@ -41,12 +41,12 @@ The backend's `keep_alive` callback reaches `ZiggyBridge`, which takes a backgro
 - Directory uses `forOpeningContentTypes: [.folder]`. The native app calls `startAccessingSecurityScopedResource` on the directory and keeps access for the rest of the process, so the directory's path and everything inside it can be listed, read and written. A path from an earlier run, or a path inside the directory used after the app restarts, is denied until the user picks the directory again, because keeping access across runs needs a bookmark.
 - Save: iOS has no dialog for choosing where to save a file, so the callback fails and the backend sends an error message response for the message.
 
-A loopback server the UI loads media from needs `NSAllowsLocalNetworking` in the app's `Info.plist`.
+A loopback server the frontend loads media from needs `NSAllowsLocalNetworking` in the app's `Info.plist`.
 
 ## The app's own native calls
 
-The app's own native calls are how the backend has the app's own code do something only the platform can do (a permission prompt, the keychain, a share sheet), named by a method. The app gives `ZiggyBridge.setHostRequestHandler` an object that conforms to `ZiggyHostRequestHandler` before `start`. The backend calls it from a worker thread with the method name and the JSON text of its argument, and the handler returns the JSON text of the result or throws `ZiggyHostRequestError` with a reason in words the user can act on. The handler may block, for instance on a permission dialog, because the backend's worker thread waits and the main thread does not. The native app knows no method names. With no handler set the backend has no `host_request` native call, and such a call fails with a message saying so.
+The app's own native calls are how the backend has the app's own code do something only the platform can do (a permission prompt, the keychain, a share sheet), named by a method. The app gives `ZiggyBridge.setHostRequestHandler` an object that conforms to `ZiggyHostRequestHandler` before `start`. The backend calls it from a worker thread with the method name and the JSON text of its argument, and the handler returns the JSON text of the result or throws `ZiggyHostRequestError` with a reason in words the user can act on. The handler may block, for instance on a permission dialog, because the backend's worker thread waits and the main thread does not. The native app knows no method names. With no handler set the backend has no `host_request` native call, and such a call fails with a message reporting that no handler is set.
 
 ## Starting work from the app
 
-When the system wakes the app with no UI on screen (a background task, for instance) the app starts work in the backend itself. `ZiggyBridge.request(name:data:completion:)` sends an app message by name as the UI's `invoke` does, and its message response goes to the completion and not to the UI. `ZiggyBridge.send(name:data:)` is the one-way form. `keepRunningChanged` is called on the main thread each time the backend says the app must be kept running or no longer must be.
+When the system wakes the app with no UI on screen (a background task, for instance) the app starts work in the backend itself. `ZiggyBridge.request(name:data:completion:)` sends an app message by name as the frontend's `invoke` does, and its message response goes to the completion and not to the frontend. `ZiggyBridge.send(name:data:)` is the one-way form. `keepRunningChanged` is called on the main thread each time the backend reports the app must be kept running or no longer must be.

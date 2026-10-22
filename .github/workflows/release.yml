@@ -24,7 +24,7 @@ on:
 
 jobs:
   zig-build:
-    # Cross-builds the template's core for every platform, with and without the test hooks, and compiles the Windows shell. Zig
+    # Cross-builds the template's core for every platform, with and without the test hooks, and compiles the Windows native app. Zig
     # cross-builds from any machine, so this runs once, on Linux.
     timeout-minutes: 40
     runs-on: ubuntu-latest
@@ -102,9 +102,9 @@ jobs:
           key: ${{ runner.os }}-${{ runner.arch }}-ziggy-zig-build-${{ github.sha }}
 
   unit-tests:
-    # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's UI) and every
-    # Zig test (`zig build test`: Ziggy's core, the task queue, the shells and the template's core) on the runner. Android runs the
-    # Zig test programs on an emulator and the Android shell's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
+    # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
+    # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
+    # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
     # simulator, because a program built for a phone cannot run on the runner.
     timeout-minutes: 50
     strategy:
@@ -149,7 +149,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
-      # The Linux shell links GTK and WebKitGTK by their runtime library files, and its build stops with "error:
+      # The Linux native app links GTK and WebKitGTK by their runtime library files, and its build stops with "error:
       # RuntimeLibraryMissing" when they are not installed.
       - name: Install the web view's runtime libraries (Linux)
         if: matrix.platform == 'linux'
@@ -178,7 +178,7 @@ jobs:
         shell: bash
         run: bun run test
 
-      # `zig build test` builds the template's UI itself before it runs the template's tests, which embed it.
+      # `zig build test` builds the template's frontend itself before it runs the template's tests, which embed it.
       - name: Run the Zig unit tests
         if: matrix.platform == 'linux' || matrix.platform == 'macos' || matrix.platform == 'windows'
         shell: bash
@@ -362,7 +362,7 @@ jobs:
         shell: bash
         run: bun run test:smoke
 
-      # Dev mode: the dev host and Vite with the UI in the runner's Chrome, and the supervisor rebuilding the dev host.
+      # Dev mode: the dev host and Vite with the frontend in the runner's Chrome, and the supervisor rebuilding the dev host.
       - name: Run the smoke tests in dev mode (desktop)
         if: matrix.platform == 'linux' || matrix.platform == 'windows' || matrix.platform == 'macos'
         timeout-minutes: 30
@@ -380,7 +380,7 @@ jobs:
           api-level: 35
           arch: x86_64
           target: google_apis
-          script: bun run test:smoke:and
+          script: bun run test:smoke:android
 
       # run.sh picks the first available iPhone simulator and boots it, and builds and installs the app with xcodebuild.
       - name: Run the smoke tests on a simulator (iOS)

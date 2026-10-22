@@ -1,7 +1,8 @@
 name: Release version
 
 # Publishes the GitHub release of a version tag when the tag is pushed: release notes listing the commits since the version tag
-# before it, and the tag's own docs/agent-quick-start.md attached. The docs tell users to point their agent at
+# before it, and the tag's own docs/agent-quick-start.md and the template pinned to the tag (ziggy-template-<tag>.zip, made by
+# scripts/package-template.sh) attached. The docs tell users to point their agent at
 # https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md, which GitHub serves only from the files
 # attached to the newest release, so a release without it leaves that address returning 404.
 
@@ -21,9 +22,31 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: "1.3.14"
+
+      # zig fetch pins the template's build.zig.zon to the tag.
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2.4.4
+        with:
+          install_args: zig
+
+      - name: Install zip and unzip
+        uses: ./.github/actions/install-apt-packages
+        with:
+          packages: zip unzip
+          verify: zip unzip
+
+      # The template, pinned to this tag, as ziggy-template-<tag>.zip, so a new app starts from a download instead of pinning Ziggy itself.
+      - name: Package the template
+        shell: bash
+        run: bun run package:ziggy-template:archive "$GITHUB_REF_NAME" "$RUNNER_TEMP/template"
+
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           bash ./apps/ziggy-template/scripts/release-notes.sh --exclude-tag "$GITHUB_REF_NAME" > release-notes.md
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md docs/agent-quick-start.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md docs/agent-quick-start.md "$RUNNER_TEMP/template/ziggy-template-$GITHUB_REF_NAME.zip"

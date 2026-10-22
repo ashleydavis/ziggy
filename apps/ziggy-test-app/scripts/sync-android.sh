@@ -83,7 +83,7 @@ if [ "$test_hooks" = "true" ]; then
     test_hooks_argument="-Dtest-hooks=true"
 fi
 
-# The UI is embedded in the library, so it is built first.
+# The frontend is embedded in the library, so it is built first.
 if [ "$skip_ui" = "false" ]; then
     echo "Building the UI..."
     (cd "$ZIGGY_EXAMPLE_DIR" && bun run bundle:ui)

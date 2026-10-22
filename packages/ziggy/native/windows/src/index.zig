@@ -1,5 +1,5 @@
 //
-// Ziggy's Windows shell.
+// Ziggy's Windows native app.
 //
 
 pub const shell = @import("lib/shell.zig");

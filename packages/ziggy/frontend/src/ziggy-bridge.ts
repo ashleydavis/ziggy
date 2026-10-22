@@ -1,5 +1,5 @@
 //
-// The UI's view of Ziggy: the methods every shell exposes as window.ziggy, and the JSON types messages are made of.
+// The frontend's view of Ziggy: the methods every native app exposes as window.ziggy, and the JSON types messages are made of.
 //
 
 //
@@ -20,17 +20,17 @@ export type IJsonValue = string | number | boolean | null | IJsonValue[] | IJson
 export type IMessageCallback<TData> = (data: TData) => void;
 
 //
-// What a task-message event carries: a message a task sent while it ran.
+// What a task-event event carries: an event a task sent while it ran.
 //
-export interface ITaskMessageEvent<TMessage> {
-    // The task that sent the message.
+export interface ITaskEvent<TData> {
+    // The task that sent the event.
     taskId: string;
 
     // The source the task was queued under.
     source: string;
 
-    // The message the task sent.
-    message: TMessage;
+    // The event the task sent.
+    data: TData;
 }
 
 //
@@ -79,7 +79,8 @@ export interface ITaskCompletedEvent {
 }
 
 //
-// The app event the onEvent listeners receive when a menu item that runs in the UI (a `.ui` item of the app's menu) is chosen.
+// The app event the onEvent listeners receive when a menu item that runs in the frontend (a `.ui` item of the app's menu) is
+// chosen.
 //
 export interface IMenuEvent {
     // Always "menu": the one event type Ziggy sends among the app's own events.
@@ -98,10 +99,11 @@ export interface ICoreErrorEvent {
 }
 
 //
-// What a test-command event carries, in a test hooks build only: a command from the test control connection for the UI to perform.
+// What a test-command event carries, in a test hooks build only: a command from the test control connection for the frontend
+// to perform.
 //
 export interface ITestCommandEvent<TCommand> {
-    // Identifies the command, so the result the UI sends with sendTestResult reaches the connection waiting for it.
+    // Identifies the command, so the result the frontend sends with sendTestResult reaches the connection waiting for it.
     requestId: number;
 
     // The command to perform.
@@ -126,7 +128,7 @@ export interface IPlatformInfo {
 // A task for addTask to queue.
 //
 export interface IAddTask {
-    // The id the UI gives the task. The task's events carry it.
+    // The id the frontend gives the task. The task's events carry it.
     taskId: string;
 
     // The task type: the name the task's handler is registered under.
@@ -143,8 +145,8 @@ export interface IAddTask {
 }
 
 //
-// What every shell injects into the UI as window.ziggy. Nothing wider than these methods is exposed, and the
-// web view's own native handle is never used by the UI directly.
+// What every native app injects into the frontend as window.ziggy. Nothing wider than these methods is exposed, and the
+// web view's own native handle is never used by the frontend directly.
 //
 export interface IZiggyBridge {
     // The app calls. These send app messages ({ kind: "app" } on the wire), which reach the app's own handlers, and receive app
@@ -164,8 +166,8 @@ export interface IZiggyBridge {
     send(name: string, data: IJsonValue): void;
 
     //
-    // Registers a callback for every event of the app's own the backend sends and for each menu item that runs in the UI, as an
-    // IMenuEvent. Ziggy's own events never reach it.
+    // Registers a callback for every event of the app's own the backend sends and for each menu item that runs in the frontend,
+    // as an IMenuEvent. Ziggy's own events never reach it.
     //
     onEvent<TData>(callback: IMessageCallback<TData>): void;
 
@@ -178,12 +180,12 @@ export interface IZiggyBridge {
     // handlers never see, and receive system events. Each names its own system message: there is no call that sends any other.
 
     //
-    // Resolves with what the backend says about the platform the app runs on.
+    // Resolves with what the backend reports about the platform the app runs on.
     //
     getPlatform(): Promise<IPlatformInfo>;
 
     //
-    // Queues a task. There is no message response: the task's events say what became of it, and a task that could not be queued is
+    // Queues a task. There is no message response: the task's events report what became of it, and a task that could not be queued is
     // reported as a core-error event.
     //
     addTask(task: IAddTask): void;
@@ -194,17 +196,17 @@ export interface IZiggyBridge {
     cancelTasks(source: string): void;
 
     //
-    // Registers a callback for the messages tasks send while they run.
+    // Registers a callback for the events tasks send while they run.
     //
-    onTaskMessage<TMessage>(callback: IMessageCallback<ITaskMessageEvent<TMessage>>): void;
+    onTaskEvent<TData>(callback: IMessageCallback<ITaskEvent<TData>>): void;
 
     //
-    // Removes a callback onTaskMessage registered.
+    // Removes a callback onTaskEvent registered.
     //
-    removeTaskMessageListener<TMessage>(callback: IMessageCallback<ITaskMessageEvent<TMessage>>): void;
+    removeTaskEventListener<TData>(callback: IMessageCallback<ITaskEvent<TData>>): void;
 
     //
-    // Registers a callback for the end of each task the UI queued.
+    // Registers a callback for the end of each task the frontend queued.
     //
     onTaskCompleted(callback: IMessageCallback<ITaskCompletedEvent>): void;
 
@@ -240,7 +242,8 @@ export interface IZiggyBridge {
     sendTestResult(requestId: number, result: IJsonValue): Promise<void>;
 
     //
-    // Tells the test control connection the UI is listening for test commands, which are held until it does. Test hooks builds only.
+    // Tells the test control connection the frontend is listening for test commands, which are held until it does. Test hooks
+    // builds only.
     //
     testUiReady(): void;
 
@@ -253,7 +256,7 @@ export interface IZiggyBridge {
 
 declare global {
     interface Window {
-        // Injected by the shell before the UI's scripts run.
+        // Injected by the native app before the frontend's scripts run.
         ziggy: IZiggyBridge;
     }
 }

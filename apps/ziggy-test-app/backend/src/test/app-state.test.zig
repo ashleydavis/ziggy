@@ -24,19 +24,19 @@ fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source
     core.postMessage(message);
 }
 
-test "task-stats counts the tasks that ended and the messages they sent, through the observers the test app gives the core" {
+test "task-stats counts the tasks that ended and the events they sent, through the observers the test app gives the core" {
     var shell: FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try createCore(&shell);
     defer core.destroy();
     core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"task-stats\"}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":{\"tasksEnded\":0,\"messagesSent\":0}}");
+    try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":{\"tasksEnded\":0,\"eventsSent\":0}}");
     try addTask(core, "s1", "hello-short", "src", "null");
     try shell.expectMessageContaining("task-completed\",\"data\":{\"taskId\":\"s1\"");
-    // The observers are called after the UI is told, so the counts are read again until they arrive.
+    // The observers are called after the frontend is told, so the counts are read again until they arrive.
     var waited_ms: u32 = 0;
-    while (shell.countContaining("\"tasksEnded\":1,\"messagesSent\":1") == 0) : (waited_ms += 10) {
+    while (shell.countContaining("\"tasksEnded\":1,\"eventsSent\":1") == 0) : (waited_ms += 10) {
         if (waited_ms > 20_000) {
             return error.CountsNeverArrived;
         }
@@ -108,7 +108,7 @@ test "describe-self replies with the task's id, type, source and child limit, an
     const core = try createCore(&shell);
     defer core.destroy();
     try addTask(core, "d1", "describe-self", "self-source", "null");
-    try shell.expectMessageContaining("\"outputs\":{\"taskId\":\"d1\",\"taskType\":\"describe-self\",\"source\":\"self-source\",\"maxConcurrentChildTasks\":4,\"stats\":{\"tasksEnded\":0,\"messagesSent\":0}}");
+    try shell.expectMessageContaining("\"outputs\":{\"taskId\":\"d1\",\"taskType\":\"describe-self\",\"source\":\"self-source\",\"maxConcurrentChildTasks\":4,\"stats\":{\"tasksEnded\":0,\"eventsSent\":0}}");
 }
 
 test "run-in-turn runs its children one after another and reports how each ended" {

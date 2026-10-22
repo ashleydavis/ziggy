@@ -2,23 +2,22 @@
 
 - **Ziggy**: this framework for building cross-platform apps.
 - **App developer**: the person building an app on Ziggy.
-- **The app**: everything the app developer builds and ships with Ziggy: the UI, the backend and the native app together.
-- **The UI**: the app's HTML, CSS and JavaScript/TypeScript, which runs in the system web view. The native menus and file dialogs are not part of it.
-- **The backend**: the app's own Zig code, which does the app's work behind the UI: it handles the UI's messages and runs tasks. It is the same code on every platform and never touches a window.
-- **Ziggy's core library**: the part of Ziggy every backend is built on: the passing of each message to the handler registered for it, the task runner and the C interface the native app calls.
-- **The native app**: the part of the app that is different on each platform. Ziggy provides it and the app developer customizes it. It opens the window, hosts the system web view, draws the menus and file dialogs and passes messages, message responses and events between the UI and the backend.
-- **The system web view**: the browser engine each platform provides for showing web content: WebKitGTK on Linux, WebView2 on Windows, the Android WebView and WKWebView on macOS and iOS. This is where Ziggy apps render their UI.
-- **Message**: a JSON object the UI sends to the backend, passed inside the app through the native app, not an HTTP request. Its `kind` field says whether it is an app message or a system message.
-- **App message**: a message of the app's own (`"kind": "app"`), sent with `window.ziggy.invoke` or `send`. It carries a message name and data the app lays out, which Ziggy parses into the type its message handler takes.
-- **System message**: one of Ziggy's own messages (`"kind": "system"`), such as the one that queues a task. Only Ziggy's UI script and the native app send one, through Ziggy's own calls on `window.ziggy` and its menu. Each part of Ziggy registers its own with Ziggy's core library, which handles it. It never reaches the app's message handlers. An app cannot send, define or register one.
-- **Message name**: the string every app message carries beside its data, such as `hello-world`, which says what the message is for. Ziggy runs the message handler registered under it. It refuses a message without one, or with one nothing is registered under, before any handler runs.
-- **Message response**: the JSON object the backend sends back to the UI for a message, or the error the message ended with.
-- **Message handler**: the Zig function the app registers for one message name, in the `.messages` of `ziggy.core.App` or with `core.registerMessage`. It takes the message's data parsed into a type of its own and returns the message response.
-- **App declaration**: `pub const app = ziggy.core.App(.{ ... })` in the backend's `app.zig`, which tells Ziggy everything the app adds to it: each message name with its message handler, each task type with its handler, the menu, the built UI and the app's optional hooks. Ziggy's build makes the backend library from it.
-- **Event**: a JSON object the backend sends to the UI when something happens. An app event (`"kind": "app"`) holds data the app lays out and goes to the `onEvent` listeners. A system event (`"kind": "system"`) is one of Ziggy's own, such as a task finishing (`task-completed`). It has a call of its own on `window.ziggy`.
-- **Handler**: the Zig function that runs for a message (the message handler) or for a task type.
-- **Task**: work that runs on a worker thread and reports back to the UI by events. Its **task type** is the name its handler is registered under.
-- **Task context**: what a running task is given to work with: the means to report back, to check whether it should stop and to queue child tasks and wait for them.
-- **Task queue**: where queued tasks wait until a worker thread is free to run them. It is part of Ziggy's core library.
-- **Native call**: a call from the backend to the native app, for something only the native app can do, such as showing a file dialog. The backend waits for it to return. Ziggy has its own, and an app can add its own.
+- **Ziggy developer**: a person working on the Ziggy framework.
+- **The app**: what the app developer builds on Ziggy: the frontend, the backend and the native app together.
+- **The frontend**: the app's HTML, CSS and JavaScript/TypeScript, which runs in the system web view.
+- **The backend**: the app's own Zig code, which does the app's work behind the frontend: it handles the frontend's messages and runs tasks.
+- **Ziggy's core library**: the part of Ziggy every backend is built on: it handles message routing, background task coordination and calls to native functions.
+- **The native app**: the part of the app that is different on each platform. Ziggy provides it and the app developer customizes it. It opens the window, hosts the system web view, draws the menus and file dialogs and passes messages, message responses and events between the frontend and the backend.
+- **The system web view**: the browser engine each platform provides for showing web content: WebKitGTK on Linux, WebView2 on Windows, the Android WebView and WKWebView on macOS and iOS. This is where Ziggy apps render their frontend.
+- **Message**: a JSON object the frontend sends to the backend to invoke handlers and trigger functionality there.
+- **App message**: app specific messages sent from the frontend to the backend.
+- **System message**: Ziggy specific messages such as queuing and cancelling background tasks.
+- **Message response**: the JSON object the backend sends back to the frontend as the reply to a message.
+- **Message handler**: the app specific Zig function that handles a named message and provides the backend features of the app.
+- **App declaration**: the declaration of the in the backend that wires up the app specific messages, backgrounds tasks, menu and other details.
+- **Event**: a JSON object the backend sends to the frontend when something happens. An app event holds data the app lays out and goes to the frontend's event listeners. A system event is one of Ziggy's own, such as a task finishing. The frontend listens for each kind of system event with a call of its own.
+- **Task**: work that runs on a worker thread and reports back to the frontend by events.
+- **Task handler**: the app specific Zig function that does background work of a particular type.
+- **Task queue**: where queued tasks wait until a worker thread is free to run them.
+- **Native call**: a call from the backend to the native app, for something only the native app can do, such as showing a file dialog. The backend waits for it to return.
 - **OS call**: a call from the native app or the backend straight to the operating system, such as reading a file or opening a window.

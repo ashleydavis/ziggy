@@ -8,7 +8,8 @@
 const std = @import("std");
 
 // The scripts the dev host puts at the start of a page's head, in order: its own dev script first, because the inject script
-// looks for the handler it sets up, and then the inject script that creates window.ziggy. Both run before any script of the UI.
+// looks for the handler it sets up, and then the inject script that creates window.ziggy. Both run before any script of the
+// frontend.
 pub const dev_scripts = "<script src=\"/__ziggy/dev.js\"></script><script src=\"/__ziggy/inject.js\"></script>";
 
 //
@@ -61,7 +62,7 @@ fn isReplacedRequestHeader(name: []const u8) bool {
 }
 
 //
-// What the head of the dev server's response says about its body.
+// What the head of the dev server's response tells about its body.
 //
 pub const ResponseHead = struct {
     // Whether the response is an HTML page, which gets Ziggy's scripts.

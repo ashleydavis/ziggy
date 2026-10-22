@@ -1,6 +1,6 @@
 //
-// The Ziggy test app's Windows shell: what is the test app's own (its name, its window and its UI) on top of Ziggy's shell.
-// The UI is embedded in the executable by build.zig.
+// The Ziggy test app's Windows native app: what is the test app's own (its name, its window and its frontend) on top of the part
+// Ziggy provides. The frontend is embedded in the executable by build.zig.
 //
 
 const std = @import("std");

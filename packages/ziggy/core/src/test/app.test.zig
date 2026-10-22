@@ -3,7 +3,7 @@ const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
 
 //
-// Fails unless the last message the shell recorded is the expected text.
+// Fails unless the last message the fake native app recorded is the expected text.
 //
 fn expectLastMessage(shell: *helpers.FakeShell, expected: []const u8) !void {
     const last = try shell.messageAt(std.testing.allocator, shell.count() - 1);
@@ -256,7 +256,7 @@ fn sentAndNowHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: 
 }
 
 //
-// later-without-reply: says it answers later but has no reply to do it with.
+// later-without-reply: returns that it answers later but has no reply to do it with.
 //
 fn laterWithoutReplyHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: helpers.GreetRequest) !ziggy.core.Answer(helpers.GreetResponse) {
     _ = core;

@@ -1,6 +1,7 @@
 //
-// What the UI does for each item of the test app's menu that runs in the UI, which reaches it as a menu event. The native apps
-// do the standard items themselves (quit, reload, developer tools, zoom, full screen and the editing commands).
+// What the frontend does for each item of the test app's menu that runs in the frontend, which reaches it as a menu
+// event. The native apps do the standard items themselves (quit, reload, developer tools, zoom, full screen and the editing
+// commands).
 //
 
 //

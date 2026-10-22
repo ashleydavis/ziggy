@@ -4,10 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the UI and Zig for everything else, using each platform's system web view. This repository holds Ziggy itself (`packages/ziggy`) and the Ziggy template (`apps/ziggy-template`), a small complete app built on it that a new app starts as a copy of. Use the terms "the UI", "the backend", "the native app" and "the system web view" as the [glossary](docs/glossary.md) defines them.
+Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the frontend and Zig for everything else, using each platform's system web view. This repository holds Ziggy itself (`packages/ziggy`) and the Ziggy template (`apps/ziggy-template`), a small complete app built on it that a new app starts as a copy of. Use the terms "the frontend", "the backend", "the native app" and "the system web view" as the [glossary](docs/glossary.md) defines them.
 
 - `packages/ziggy/core`: the core library every app links, imported as `@import("ziggy")`, with the C interface (`core/src/lib/ziggy.h`), the task queue and the script every native app injects to create `window.ziggy`.
-- `packages/ziggy/ui`: the TypeScript types of `window.ziggy` and of the messages the backend sends (the `ziggy` package).
+- `packages/ziggy/frontend`: the TypeScript types of `window.ziggy` and of the messages the backend sends (the `ziggy` package).
 - `packages/ziggy/native/<platform>`: the part of each native app that Ziggy provides.
 - `packages/ziggy/dev`: dev mode: the dev backend, which runs the app's backend in front of the app's own dev server, and the supervisor that starts them and rebuilds it. Never part of a native app or a release build.
 - `build.zig`: builds Ziggy, runs its tests and holds the functions an app's own `build.zig` calls. `Package.swift`: the MacOS and iOS native apps as one Swift package.
@@ -33,17 +33,15 @@ Ziggy and the Ziggy template are developed on Linux and delivered and tested on 
 - NEVER WRITE A FAKE TEST: one that cannot fail when the thing it names is broken. That includes a test against a UI, API, id, channel, function or file you have not verified exists, assertions invented rather than read from the code, a test that fakes the thing under test, one that skips by default or runs only when a normally unset environment variable is set, and a test you have never watched run. If a test needs real infrastructure, provision it or say it cannot be done.
 - RUN EVERY TEST YOU WRITE, AND WATCH IT FAIL FIRST by breaking the thing it covers or asserting the wrong value. If you cannot run it, say it is unverified.
 - NEVER MAKE A FAILING TEST GO AWAY WITHOUT FIXING THE CAUSE. No deleting it or its failing assertion, commenting it out, skipping it, loosening or widening an assertion, adding a wait or retry, ignoring an error line or catching the error. This covers a test you wrote minutes ago as much as an old one. "It was low value" is not a reason to delete. If it will not run, fix the runner or the import. A port of a test asserts what the original asserts. Deleting a test whose subject no longer exists is fine; for any other reason, stop, say which test and why, and wait.
-- NEVER LIE ABOUT WHAT YOU HAVE DONE OR VERIFIED. Do not say a thing works, passes, is tested, is verified or is complete unless you ran it and read the result in this session. Do not describe an intention as an outcome. Do not present a skipped test, a compile that merely succeeded or a code reading as evidence that behaviour is correct. If you are inferring rather than observing, use words that say so, and say what you did not check.
-- ALL FAILURES MUST BE NOISY. Never write a stub or path that silently does nothing, discards an error, drops data or returns success when the work did not happen. Something not implemented yet fails with a message naming what is missing. Prefer a loud crash over a quiet wrong answer.
+- NEVER LIE ABOUT WHAT YOU HAVE DONE OR VERIFIED. Do not say a thing works, passes, is tested, is verified or is complete unless you ran it and read the result in this session. Do not describe an intention as an outcome. Do not present a skipped test, a compile that merely succeeded or a code reading as evidence that behaviour is correct. If you are inferring rather than observing, use words that show it, and say what you did not check.
+- Something not implemented yet fails with a message naming what is missing.
 - WORKAROUNDS ARE NOT ACCEPTABLE. Fix the cause. Do not change an input, an expected value or a check to make a failure go away (converting backslashes to slashes, a retry, a wait, a platform special case).
 - YOU FIND A BUG, YOU FIX IT. A test that failed once and passed the next time is a bug (a race, a timeout load can exceed, a resource it does not own). "It passed on the retry", "only under load" and "unrelated to my change" are not results. Do not record a bug in a known-issues list, doc or TODO instead of fixing it. The only failures outside your reach are outside the machine (network, disk, remote service): the code must fail loudly naming them, and you tell the human and wait rather than add a retry or any other patch. Otherwise keep going, and if you have no cause yet, say what you have ruled out and what you will look at next.
-- Never use memory.
 - All Claude configuration goes in this repository only, not in the home directory.
-- Slash commands go in `.claude/commands/`, as a markdown file per command, grouped in a subdirectory where there is more than one of a kind: `.claude/commands/ux/review/create.md` is `/ux:review:create`. A request for a "skill" means one of these. Do not create a `.claude/skills/` directory or a `SKILL.md`, and do not put a command in the home directory. Give each command frontmatter carrying `description` and nothing else, then the prompt as ordinary markdown with a heading and steps. The `description` says what the command does, not when to trigger it.
-- Never write `mise exec --` in docs, READMEs, comments or script help text. Users run commands without it. It is only for commands Claude runs itself.
+- Slash commands go in `.claude/commands/`, as a markdown file per command, grouped in a subdirectory where there is more than one of a kind: `.claude/commands/ux/review/create.md` is `/ux:review:create`. A request for a "skill" means one of these. Do not create a `.claude/skills/` directory or a `SKILL.md`, and do not put a command in the home directory. Give each command frontmatter carrying `description` and nothing else, then the prompt as ordinary markdown with a heading and steps. The `description` describes what the command does, not when to trigger it.
 - Never say "you are right", "you're right" or any other agreement as a way to open a reply. Say what was wrong and what you will do about it. Never tell the human untested code can be committed now and tested later: say it is untested, and say what would test it.
 - Never use `cd` to permanently change directories within the repo. Use it on a case-by-case and temporary basis as part of a command to run the command from a particular directory.
-- Never invoke shell scripts directly (e.g. `bash ./smoke-tests/run.sh android`). Use the `bun run` equivalent from `package.json` (e.g. `bun run test:smoke:and`).
+- Never invoke shell scripts directly (e.g. `bash ./smoke-tests/run.sh android`). Use the `bun run` equivalent from `package.json` (e.g. `bun run test:smoke:android`).
 - HIGH PRIORITY: `rm -r` is banned, in every form and every flag combination that includes it (`-r`, `-R`, `--recursive`, `-rf`, `-fr`), unless I ask for that exact deletion in the message you are acting on. This covers commands you run, commands you ask me to run and any `rm -r` you write into a script, test, runner or hook. If something has to be removed recursively, stop, say what and why, and wait. Removing a single file by name is not covered by this and is fine.
 - NEVER WAIT FOR ANOTHER WORKTREE'S TESTS TO FINISH BEFORE RUNNING YOUR OWN. Do not watch or poll for other runs. If two runs contend, that is a bug.
 - EVERY TEST MUST SURVIVE RUNNING BESIDE ANOTHER COPY OF ITSELF AND BESIDE EVERY OTHER SUITE, INCLUDING ONES FROM OTHER WORKTREES. A suite that passes alone and fails in company contends on something shared: that is a bug, not flakiness. Running a second copy of the suite beside it is the cheapest way to surface a fixed port or path.
@@ -52,19 +50,18 @@ Ziggy and the Ziggy template are developed on Linux and delivered and tested on 
   - Never kill by name or command line (`pkill`, `pkill -f`, `killall`): it kills other worktrees' identical processes. Kill the pids you started and their descendants with `kill_process_tree` or `kill_process_group`.
 - When creating a new worktree, never use `EnterWorktree` with a `name` parameter. Instead: (1) run `git branch --show-current` to get the current branch, (2) run `git worktree add -b <new-branch> .claude/worktrees/<name> <current-branch>` to create the worktree explicitly branching from the current branch, (3) then use `EnterWorktree` with the `path` parameter to enter it.
 - The `run:ziggy-template:<platform>` commands build the app before they launch it, so the running app is built from current source. A code change that does not show up is never caused by a stale build. Never tell me to rebuild and never blame a missing change on the build being out of date. Find the real cause.
-- The Android emulators belong to me. The Android suites (`test:smoke:and`, `test:zig:android`) use the devices named in `ZIGGY_ANDROID_DEVICES` (adb serials, space separated), else every emulator and device adb has attached and ready, whichever project started it. Each run claims one and waits for one to come free.
+- The Android emulators belong to me. The Android suites (`test:smoke:android`, `test:zig:android`) use the devices named in `ZIGGY_ANDROID_DEVICES` (adb serials, space separated), else every emulator and device adb has attached and ready, whichever project started it. Each run claims one and waits for one to come free.
 - Never assume whether an Android emulator is attached. Run `adb devices` at the point you need the answer: a serial whose state is `device` is ready. I start and stop emulators without announcing it, so an earlier reading is stale.
 - Never start, stop, restart or repair an emulator, never create or remove a network tap or bridge and never run sudo. When an emulator is broken or none is attached, say so and leave it to me.
 - Never say something was "intentionally done" unless I explicitly asked for that exact behaviour. State what the code does and own the mistake.
 - Something you (the AI) have previously written in a plan does not mean that I approve of or accept that thing. Never use "it was in the plan" as the reason something was done. Whenever I ask "What is the reason for X?" I mean "Why was that change necessary?".
-- Plans are transient. Everything under `docs/plans/` is scratch working material that gets cleaned out of the repo once the work is finished, so never reference a plan from anything that stays: not from documentation, not from a slash command, not from code or comments, not from a commit message and not from another doc that outlives it. If a plan contains something worth keeping, copy the content itself into the thing that needs it, or into a permanent doc under `docs/`.
-- Never commit, stage, stash, push, revert or perform any other hard-to-reverse Git operation (including `git add`, `git commit`, `git push`, `git reset`, `git restore`, `git checkout` of changes, `git rebase`, `git merge`, force-push, branch creation/deletion) without an explicit direction in that message. An earlier direction does not cover later edits. When in doubt, leave the Git state alone and ask.
+- If a plan contains something worth keeping, copy the content itself into the thing that needs it, or into a permanent doc under `docs/`.
 - Expect the human to stage and commit your work as they review it, so the staging area changes under you. Use `git status` and `git diff HEAD`, not a bare `git diff`. An empty `git diff` does not mean your edit failed or was lost. Never put the Git state back how you remember it.
 - THIS REPOSITORY USES TYPESCRIPT, ZIG AND SHELL SCRIPT, plus Swift, Java and C headers only where a platform requires them. Do not add more native code than the platform forces and do not introduce another language (`python3`, perl, Ruby, Go and so on), even as an undeclared dependency.
 - A SHELL SCRIPT CONTAINS SHELL. Never embed another language in one (`python3 -c`, `bun -e`, `node -e`, a heredoc into an interpreter, an awk program), however short.
 - When a shell script needs something that looks beyond shell, find the shell answer first (`stat`, `cmp`, `uuidgen`, `od`, `jq`). Assume there is one until you have tried it and watched it fail. Only when none works does it become a TypeScript helper with a comment block and documented arguments, like `apps/ziggy-template/scripts/ios-device.ts`.
 - EVERY NEW SCRIPT COMES WITH A MARKDOWN FILE BESIDE IT, named after the script, covering what it is for, how it is invoked and what each argument means. Keep it current, and link to a fuller guide under `docs/` rather than repeating one.
-- DO NOT WRITE TESTS FOR SHELL SCRIPTS, and do not create `*.test.sh` files. Shell in this repository is the test harness itself, and the thing that proves a harness works is running the real suite it drives. If you believe a piece of shell cannot be trusted without a test, stop and ask, and wait for an answer.
+- Shell in this repository is the test harness itself, and the thing that proves a harness works is running the real suite it drives. If you believe a piece of shell cannot be trusted without a test, stop and ask, and wait for an answer.
 - TEST MARKER FILES ARE BANNED. Do not add a file whose only job is to tag a test directory so a runner treats that test differently. A marker records a judgement made once and nothing ever re-checks it. If a runner needs to know something about a test, it must read it from the test itself or work it out at the time.
 - NEVER WRITE A SCRIPT, A FILE OR A HELPER OF ANY KIND TO WORK AROUND A LIMIT OF YOUR OWN HARNESS. Your command timeout, a refusal to run a command it could not parse, a background job being killed: none of those are problems with this repository and none of them get a file committed to it. Run the command directly. If it cannot finish inside your limit, say so in one line, give me the command and wait: I will run it and tell you when it is done.
 - MacOS and iOS are built with Xcode 14.2 on macOS 12.7.6, the oldest the docs support. Never require an Xcode or macOS version newer than that. When native code needs a newer API, use an availability guard (`#available`, `#if swift(>=...)`) or a compatible approach. If a version bump seems unavoidable, stop and ask first.
@@ -74,50 +71,16 @@ Ziggy and the Ziggy template are developed on Linux and delivered and tested on 
 - Keep this file terse. It is loaded into context for every task, so state the rule and stop: no lists of examples, no worked illustrations.
 - A change to the Android or iOS native app, or to Ziggy's core library or the backend, is not tested until the suites for that mobile platform have run.
 
-## Writing
-
-- No serial comma. Write "Linux, Windows and macOS", never "Linux, Windows, and macOS". Where a list reads ambiguously without it, rephrase the sentence.
-- Never use em dashes. Use a period, comma, colon or parentheses instead.
-- Never write "by hand". Say what the reader does instead, or what it is done without: "without the command", "yourself", "from the Actions tab".
-
 ## Code Style
-- **Types**: Use interfaces with PascalCase (`IStorage`) for types, explicit return types
-- **Interface names always start with `I`**. This applies to every TypeScript interface without exception, including ones that describe plain data and ones that describe a function.
-- **Naming**: camelCase for variables/methods, PascalCase for classes/interfaces
 - **Imports**: Named imports for functions, default imports for modules
-- **Functions**: Named functions for top-level methods, arrow functions for callbacks
-- **Async**: Use async/await pattern for asynchronous code
 - **Formatting**: 4-space indentation, braces on same line as control statements
-- **Comments**: Line comments with `//` preceded by blank line, method docs above function. Use `//` comments for method docs.
-- All global symbols (functions, types, interfaces, classes, constants) must have a `//` comment block above them explaining their intent.
-- All fields in interfaces, classes and structs must have a `//` comment explaining their purpose.
-- Never use single-character variable names, including arrow function parameters (e.g. use `fileName => ...` not `f => ...`). Use long descriptive identifiers.
-- Do not introduce a constant that is used once. A value used in one place goes inline at that place, where the reader can see it. A constant earns its name when the value is used in more than one place, or when the literal does not explain itself and the name is what says why that value.
-- Avoid single line if statements. All if statements should have curly brackets around the body.
-- Never put multiple statements on one line. Each statement should be on its own line.
-- Never write an object literal on one line. Open the brace, put each property and each spread on its own line ending in a comma and close the brace on its own line. The only exception is an empty `{}`.
 - Put `else` and `catch` blocks on a new line.
 - Tests go under the directory `src/test` in each package.
-- Use `test(` not `it(` in Jest test files.
-- UI code is a thin layer. Factor non-trivial UI logic out into a plain function under a `lib/` directory (as `apps/ziggy-template/ui/src/lib` does) and unit test the plain function. Do not extract or test trivial logic only to gain a test.
-- You do not have to invent a new file to "get a test on it". When the logic belongs to something that already exists, put it there. When it belongs nowhere and is small enough to read in one go, leave it where it is with a comment saying why, and let the test that exercises the feature cover it.
-- Refrain from using the `any` type in normal code, although it's ok sometimes in test code.
-- Never use anonymous object types inline (e.g. `Promise<{ foo: number }>`). Always define a named interface instead, unless specifically asked to use an anonymous type.
-- Never use IIFE async generator pattern (`(async function* () { ... })()`). Extract to a named `async function*` instead.
-- Never use `ReturnType<typeof ...>`. Use the type directly (e.g. `NodeJS.Timeout` instead of `ReturnType<typeof setTimeout>`).
+- Frontend code is a thin layer. Factor non-trivial frontend logic out into a plain function under a `lib/` directory (as `apps/ziggy-template/frontend/src/lib` does) and unit test the plain function. Do not extract or test trivial logic only to gain a test.
+- You do not have to invent a new file to "get a test on it". When the logic belongs to something that already exists, put it there. When it belongs nowhere and is small enough to read in one go, leave it where it is with a comment explaining why, and let the test that exercises the feature cover it.
 - Never use the `unknown` type. Use the type directly.
-- Global variables are generally frowned on. Do not add one (a module-level mutable variable, a Zig top-level or struct-level `var` or a `threadlocal`) unless the human explicitly asks for it. Pass the value down from whoever owns it instead.
 
 ## Restrictions
-- TypeScript and Zig code should always compile after making changes.
-- All tests should pass after making changes.
-- Prefer to minimize the size of code changes.
 - Prefer not to update test code unless needed.
-- Add new tests for new code. Every function that is new, that you edit or that the user asks you about should have unit tests.
 - Backward compatibility is not required.
-- Use imports instead of requires.
-- All imports should be at the top of the file and not inside any functions.
-- Don't use dynamic imports.
 - Don't add exception handling unless I ask for it.
-- Don't use default or optional parameter values unless specifically asked to.
-- Never reformat or rewrite entire files. Only edit the specific lines that need to change.

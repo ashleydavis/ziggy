@@ -9,10 +9,10 @@ Run from the root of Ziggy's repository.
 | Command | What it does |
 |---|---|
 | `bun run setup` | Runs the `setup` of the template and of the test app. |
-| `bun run compile` (alias `bun run c`) | Type-checks the TypeScript: `ziggy`, the template's UI and the test app's UI. |
+| `bun run compile` (alias `bun run c`) | Type-checks the TypeScript: `ziggy`, the template's frontend and the test app's frontend. |
 | `bun run compile:zig` | Runs the `compile:zig` of the template and of the test app. |
-| `bun run test` (alias `bun run t`) | The TypeScript unit tests: `ziggy`, the template's UI and the test app's UI. |
-| `bun run test:zig` | Every Zig test (`zig build test`): Ziggy's core library and its task queue, the parts of the Linux and Windows native apps that need no platform, the dev backend, the template's backend and the test app's backend. It builds each app's UI first. `bun run test:zig -- -Dtest-filter=<text>` runs only the tests of Ziggy's core library whose names contain the text. The option may be given more than once. Every other suite still runs in full. |
+| `bun run test` (alias `bun run t`) | The TypeScript unit tests: `ziggy`, the template's frontend and the test app's frontend. |
+| `bun run test:zig` | Every Zig test (`zig build test`): Ziggy's core library and its task queue, the parts of the Linux and Windows native apps that need no platform, the dev backend, the template's backend and the test app's backend. It builds each app's frontend first. `bun run test:zig -- -Dtest-filter=<text>` runs only the tests of Ziggy's core library whose names contain the text. The option may be given more than once. Every other suite still runs in full. |
 | `bun run test:zig:android` | The Zig unit tests of Ziggy's core library and the test app's backend, on an Android emulator or device. |
 | `bun run test:zig:ios` | The Zig unit tests of Ziggy's core library and the test app's backend, on a booted iOS simulator. |
 | `bun run test:android-shell` | The JUnit tests of Ziggy's Android native app, on this machine's JVM. Needs no device. |
@@ -20,7 +20,7 @@ Run from the root of Ziggy's repository.
 | `bun run <command>:ziggy-template:<platform>` | Runs the template's `<command>:<platform>`, for `sync`, `build`, `run`, `open`, `package` and `clean`. |
 | `bun run distribute:ziggy-template:android` | Runs the template's `distribute:android`. |
 | `bun run dev:ziggy-template` | Runs the template's `dev`. |
-| `bun run test:smoke` | Ziggy's smoke tests, which drive its test app (`apps/ziggy-test-app`), on this machine's desktop platform. `test:smoke:and`, `test:smoke:ios` and `test:smoke:dev` run them on an attached Android emulator or device (the ones `ZIGGY_ANDROID_DEVICES` names, when it is set), on a connected iPhone or iPad or else the iOS simulator, and in dev mode in a headless Chrome or Chromium. `-- <number\|name>` after any of them runs one scenario. |
+| `bun run test:smoke` | Ziggy's smoke tests, which drive its test app (`apps/ziggy-test-app`), on this machine's desktop platform. `test:smoke:android`, `test:smoke:ios` and `test:smoke:dev` run them on an attached Android emulator or device (the ones `ZIGGY_ANDROID_DEVICES` names, when it is set), on a connected iPhone or iPad or else the iOS simulator, and in dev mode in a headless Chrome or Chromium. `-- <number\|name>` after any of them runs one scenario. |
 
 Any other command of the template runs from the root with `bun run --filter=ziggy-template <command>`.
 

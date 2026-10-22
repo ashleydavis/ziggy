@@ -1,4 +1,4 @@
-// The C interface to the Ziggy core. Every shell includes this one declaration.
+// The C interface to the Ziggy core. Every native app includes this one declaration.
 
 #ifndef ZIGGY_H
 #define ZIGGY_H
@@ -11,8 +11,8 @@
 extern "C" {
 #endif
 
-// Delivers a JSON message from the core to the shell. The message is valid only while the call runs, so the shell
-// copies it before returning. It may be called from any thread, so the shell moves to its UI thread before touching
+// Delivers a JSON message from the core to the native app. The message is valid only while the call runs, so the native app
+// copies it before returning. It may be called from any thread, so the native app moves to its UI thread before touching
 // the web view.
 typedef void (*ziggy_deliver_fn)(void *user_data, const char *message, size_t message_len);
 
@@ -20,34 +20,34 @@ typedef void (*ziggy_deliver_fn)(void *user_data, const char *message, size_t me
 // returns the number of bytes written, or a negative number when it cannot.
 typedef intptr_t (*ziggy_os_version_fn)(void *user_data, char *buffer, size_t capacity);
 
-// Native host callback: has the shell quit the application. Called only by the test control connection.
+// Native host callback: has the native app quit the application. Called only by the test control connection.
 typedef void (*ziggy_quit_fn)(void *user_data);
 
-// Native host callback: does a menu action as if the user had chosen its menu item, by the path the menu item takes in the shell,
-// so the shell's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
-// other action reaches the UI. The core calls it, from the thread of the test control connection, only to let a test choose a
-// menu item. The shell does the work on its UI thread and returns at once.
+// Native host callback: does a menu action as if the user had chosen its menu item, by the path the menu item takes in the native app,
+// so the native app's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
+// other action reaches the frontend. The core calls it, from the thread of the test control connection, only to let a test choose a
+// menu item. The native app does the work on its UI thread and returns at once.
 typedef void (*ziggy_menu_action_fn)(void *user_data, const char *action);
 
 // Native host callback: writes a PNG picture of the app's window to the file at the path (NUL terminated), waits until the file is
 // written, and returns 0. When it cannot it writes the text of the reason into the buffer and returns the number of bytes written,
-// negated. The core calls it, from the thread of the test control connection, only to let a test take a screenshot. The shell does
+// negated. The core calls it, from the thread of the test control connection, only to let a test take a screenshot. The native app does
 // the capture on its UI thread and waits for it.
 typedef intptr_t (*ziggy_screenshot_fn)(void *user_data, const char *output_path, char *buffer, size_t capacity);
 
-// Tells the shell whether the app must keep running because tasks marked keep-alive are queued or running: true when the first
+// Tells the native app whether the app must keep running because tasks marked keep-alive are queued or running: true when the first
 // such task is queued, false when the last one ends. Called from any thread while the core holds a lock, so it must return at
 // once and must not call back into the core.
 typedef void (*ziggy_keep_alive_fn)(void *user_data, bool keep_running);
 
 // Native host callback: does one thing only the platform can do, named by method ("exportFile", "secureStoreGet", ...). The request is
-// the JSON text of the method's argument (NUL terminated), and the shell writes the JSON text of its result into the buffer and returns
+// the JSON text of the method's argument (NUL terminated), and the native app writes the JSON text of its result into the buffer and returns
 // the number of bytes written. When it cannot do what the method names it writes the text of the reason and returns that number of bytes
-// negated. The shell may show native interface and wait for the user, so the core calls it from a worker thread, never from the one that
+// negated. The native app may show native interface and wait for the user, so the core calls it from a worker thread, never from the one that
 // handles UI messages, and it may take a long time.
 typedef intptr_t (*ziggy_host_request_fn)(void *user_data, const char *method, const char *request_json, char *buffer, size_t capacity);
 
-// The kinds of dialog a shell shows in ziggy_pick_paths_fn.
+// The kinds of dialog a native app shows in ziggy_pick_paths_fn.
 enum {
     // A dialog to choose one or more existing files to open.
     ZIGGY_PICK_OPEN_FILES = 0,
@@ -61,14 +61,14 @@ enum {
 // the core gives it, as a JSON array of path strings ("[]" when they cancelled). Returns the number of bytes written, or a
 // negative number on failure. The title is NUL terminated and may be NULL. The initial name is NUL terminated and may be NULL,
 // and is used only to save. The core calls it from a worker thread, never from the one that handles UI messages, so the
-// shell shows the dialog on its UI thread and waits.
+// native app shows the dialog on its UI thread and waits.
 typedef intptr_t (*ziggy_pick_paths_fn)(void *user_data, int32_t kind, const char *title, const char *initial_name, char *buffer, size_t capacity);
 
-// What the shell passes to ziggy_create. Every pointer is copied by the core, so it need only be valid during the call.
+// What the native app passes to ziggy_create. Every pointer is copied by the core, so it need only be valid during the call.
 typedef struct ziggy_config {
-    // The shell's own pointer, passed back on every callback.
+    // The native app's own pointer, passed back on every callback.
     void *user_data;
-    // Delivers a message to the UI. Required.
+    // Delivers a message to the frontend. Required.
     ziggy_deliver_fn deliver;
     // Native host callback: the operating system's version. NULL when the platform has none.
     ziggy_os_version_fn os_version;
@@ -85,7 +85,7 @@ typedef struct ziggy_config {
     uint32_t worker_threads;
     // The limit on child tasks in flight for any one parent task.
     uint32_t max_concurrent_child_tasks;
-    // The URL prefix of the app's own bundled UI, such as "ziggy-app://app/" or "https://ziggy-app.invalid/", the address the shell serves the UI from (NUL terminated).
+    // The URL prefix of the app's own bundled frontend, such as "ziggy-app://app/" or "https://ziggy-app.invalid/", the address the native app serves the frontend from (NUL terminated).
     const char *app_url_prefix;
     // The app's private data directory (NUL terminated).
     const char *data_dir;
@@ -94,16 +94,16 @@ typedef struct ziggy_config {
     // The file the test control connection writes its port to, or NULL for none. Used only in a test hooks build.
     const char *test_port_file;
     // Native host callback: do one thing only the platform can do, by name. NULL when the platform has none. Last in the struct so that a
-    // shell that builds it with zeroes needs no change.
+    // native app that builds it with zeroes needs no change.
     ziggy_host_request_fn host_request;
     // Native host callback: write a PNG of the app's window to a file. NULL when the platform has none. Used only by the test control
-    // connection. Last in the struct so that a shell that builds it with zeroes needs no change.
+    // connection. Last in the struct so that a native app that builds it with zeroes needs no change.
     ziggy_screenshot_fn screenshot;
 } ziggy_config;
 
 // The result of ziggy_check_url.
 enum {
-    // The address is the app's own UI.
+    // The address is the app's own frontend.
     ZIGGY_URL_ALLOW = 0,
     // The address is an external link, to open in the system browser.
     ZIGGY_URL_OPEN_EXTERNALLY = 1,
@@ -118,7 +118,7 @@ void *ziggy_create(const ziggy_config *config);
 // delivered after it returns.
 void ziggy_destroy(void *handle);
 
-// Delivers a JSON message from the UI to the core. The message is valid only while the call runs.
+// Delivers a JSON message from the frontend to the core. The message is valid only while the call runs.
 void ziggy_post_message(void *handle, const char *message, size_t message_len);
 
 // Decides what to do with an address the web view is about to load: a ZIGGY_URL_ value.
@@ -144,11 +144,11 @@ typedef struct ziggy_accelerator {
 } ziggy_accelerator;
 
 // Returns the desktop menu as JSON text, valid until ziggy_destroy: an array of menus, each {"label", "items"}, where an item
-// is {"label", "action", "accelerator"} or {"separator": true} and may hold its own "items" for a submenu. Desktop shells
-// show it, and a phone's shell never calls this. The length is written to the pointer given.
+// is {"label", "action", "accelerator"} or {"separator": true} and may hold its own "items" for a submenu. Desktop native apps
+// show it, and a phone's native app never calls this. The length is written to the pointer given.
 const char *ziggy_menu_json(void *handle, size_t *length);
 
-// A file of the app's bundled UI, as ziggy_ui_file gives it.
+// A file of the app's bundled frontend, as ziggy_ui_file gives it.
 typedef struct ziggy_ui_file_result {
     // The file's bytes, valid for as long as the library is loaded.
     const uint8_t *content;
@@ -158,29 +158,29 @@ typedef struct ziggy_ui_file_result {
     const char *content_type;
 } ziggy_ui_file_result;
 
-// Finds a file of the app's bundled UI by the path of a request, which starts with a slash ("/" is the UI itself), and
-// writes it into the struct given. Returns false, leaving the struct unchanged, when the UI has no such file. Used by the
-// shells to serve the UI, by calling it for each file.
+// Finds a file of the app's bundled frontend by the path of a request, which starts with a slash ("/" is the frontend
+// itself), and writes it into the struct given. Returns false, leaving the struct unchanged, when the frontend has no such
+// file. Used by the native apps to serve the frontend, by calling it for each file.
 bool ziggy_ui_file(void *handle, const char *path, size_t path_len, ziggy_ui_file_result *result);
 
-// The script a shell injects into the UI before the UI's own scripts, which exposes window.ziggy (NUL terminated, valid for
-// as long as the library is loaded). It is embedded in the library, so an app supplies nothing. The length, not counting the
-// terminator, is written to the pointer given.
+// The script a native app injects into the frontend before the frontend's own scripts, which exposes window.ziggy (NUL
+// terminated, valid for as long as the library is loaded). It is embedded in the library, so an app supplies nothing. The
+// length, not counting the terminator, is written to the pointer given.
 const char *ziggy_inject_script(size_t *length);
 
 // Reads keyboard shortcut text such as "CmdOrCtrl+Shift+I" into the struct given. CmdOrCtrl becomes Command on MacOS and
 // Control elsewhere. Returns false, leaving the struct unchanged, when the text is not a shortcut.
 bool ziggy_parse_accelerator(const char *text, size_t text_len, ziggy_accelerator *result);
 
-// Records the files the user dropped on the window, replacing the last drop, so the UI can get each one's path with
-// getPathForFile. The shell calls it when the drop happens, before the UI's own drop event. The paths are the JSON text of an array
+// Records the files the user dropped on the window, replacing the last drop, so the frontend can get each one's path with
+// getPathForFile. The native app calls it when the drop happens, before the frontend's own drop event. The paths are the JSON text of an array
 // of strings. Returns false, after logging why, when a path is not a readable file or the text is not such an array.
 bool ziggy_files_dropped(void *handle, const char *paths_json, size_t paths_len);
 
-// Returns the query of the UI's address, which the app supplies, as the text after the question mark (NUL terminated, empty when
-// the app has none), valid until the next call or ziggy_destroy. The shell appends a question mark and this text to the UI's
-// address and passes it through unread. The length, not counting the terminator, is written to the pointer given. Returns NULL,
-// after printing why, when the app could not make it, and the shell then does not load the UI.
+// Returns the query of the frontend's address, which the app supplies, as the text after the question mark (NUL terminated, empty
+// when the app has none), valid until the next call or ziggy_destroy. The native app appends a question mark and this text to the
+// frontend's address and passes it through unread. The length, not counting the terminator, is written to the pointer given. Returns
+// NULL, after printing why, when the app could not make it, and the native app then does not load the frontend.
 const char *ziggy_ui_query(void *handle, size_t *length);
 
 // Returns true when the library was built with the test hooks.

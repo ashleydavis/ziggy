@@ -2,9 +2,9 @@
 
 Terms are defined in the [glossary](../glossary.md).
 
-A native call is how the backend has the native app do something only native code can do, such as showing a file dialog. The UI never sees it: a task makes the call, and the native app does the work on its UI thread while the task waits.
+A native call is how the backend has the native app do something only native code can do, such as showing a file dialog. The frontend never sees it: a task makes the call, and the native app does the work on its UI thread while the task waits.
 
-Make native calls from a task, never from a message handler, because the call waits for the native app and a dialog waits for the user. To answer a message from the UI with a dialog, answer it with a task (see "A message answered by a task" in [Tasks](tasks.md#a-message-answered-by-a-task)).
+Make native calls from a task, never from a message handler, because the call waits for the native app and a dialog waits for the user. To answer a message from the frontend with a dialog, answer it with a task (see "A message answered by a task" in [Tasks](tasks.md#a-message-answered-by-a-task)).
 
 A native call the platform does not provide fails with `error.HostCallbackMissing`, so an app that runs there handles that error.
 
@@ -20,7 +20,7 @@ It returns the JSON text of an array of the paths chosen, `[]` when the user can
 
 ## The app's own native calls
 
-Most things only the platform can do (a share sheet, a permission prompt, a keychain) are not worth a native call of their own. The `host_request` native call is one function for all of them: a task names a method and passes the JSON text of its argument, and the app's own code in its native app does what the name says and returns the JSON text of its result.
+Most things only the platform can do (a share sheet, a permission prompt, a keychain) are not worth a native call of their own. The `host_request` native call is one function for all of them: a task names a method and passes the JSON text of its argument, and the app's own code in its native app does what the name asks for and returns the JSON text of its result.
 
 ```zig
 const reply = try context.hostRequest("share", request_json);

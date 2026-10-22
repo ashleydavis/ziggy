@@ -1,5 +1,5 @@
-// The Ziggy test app's Android project: the app, and Ziggy's Android shell, which is a Gradle build of its own that this one
-// includes. Gradle builds the shell from the Ziggy checkout and puts it in place of the dependency `dev.ziggy:ziggy-native-android`
+// The Ziggy test app's Android project: the app, and Ziggy's Android native app, which is a Gradle build of its own that this one
+// includes. Gradle builds the native app from the Ziggy checkout and puts it in place of the dependency `dev.ziggy:ziggy-native-android`
 // that app/build.gradle declares. An app that takes Ziggy from a version tag declares Ziggy's repository in a `sourceControl` block
 // instead.
 rootProject.name = 'ziggy-test-app-android'

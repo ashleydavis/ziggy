@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
-# A long task queues children and waits for them. Output and progress arrive from the parent and the children while the UI
-# stays responsive, the job is listed while it runs and gone when the last task ends.
+# A long task queues children and waits for them. Output and progress arrive from the parent and the children while
+# the frontend stays responsive, the job is listed while it runs and gone when the last task ends.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
@@ -10,7 +10,7 @@ type_into child-count 3
 click start-long
 wait_for_text output "long task step 2"
 wait_for_text jobs "Long job"
-# The UI replies to commands while the task runs: this very call proves it.
+# The frontend replies to commands while the task runs: this very call proves it.
 wait_for_text output "child 0 running"
 wait_for_text event-log "task-completed hello-long-1 succeeded" 60
 for child in 0 1 2; do

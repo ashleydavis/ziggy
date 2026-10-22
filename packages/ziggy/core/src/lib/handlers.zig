@@ -20,7 +20,7 @@ const MessageResult = core_lib.MessageResult;
 pub const HandlerOutcome = union(enum) {
     // What the handler returned.
     result: MessageResult,
-    // The data did not fit the handler's request type, and this says how, starting with InvalidMessageData. Allocated with the arena.
+    // The data did not fit the handler's request type, and this describes how, starting with InvalidMessageData. Allocated with the arena.
     invalid_data: []const u8,
     // The handler answered through its reply and then again, by what it returned or by failing. The message has had its answer, so
     // this is reported as a core-error system event, with no id, rather than as a second answer. Allocated with the arena.

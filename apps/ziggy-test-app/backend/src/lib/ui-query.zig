@@ -1,12 +1,12 @@
 //
-// The query of the test app UI's address.
+// The query of the test app frontend's address.
 //
 
 const std = @import("std");
 const ziggy = @import("ziggy");
 
 //
-// Says whether the test mode switch is on, which is all the test app's UI reads from its address.
+// Reports whether the test mode switch is on, which is all the test app's frontend reads from its address.
 //
 pub fn uiQuery(core: *ziggy.core.Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8 {
     _ = core;

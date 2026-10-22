@@ -37,7 +37,7 @@
         "vite": "^5.1.6",
       },
     },
-    "packages/ziggy/ui": {
+    "packages/ziggy/frontend": {
       "name": "ziggy",
       "version": "1.0.0",
       "devDependencies": {
@@ -768,7 +768,7 @@
 
     "yocto-queue": ["yocto-queue@0.1.0", "", {}, "sha512-rVksvsnNCdJ/ohGc6xgPwyN8eheCxsiLM8mxuE/t/mOVqJewPuO1miLpTHQiRgTKCLexL4MeAFVagts7HmNZ2Q=="],
 
-    "ziggy": ["ziggy@workspace:packages/ziggy/ui"],
+    "ziggy": ["ziggy@workspace:packages/ziggy/frontend"],
 
     "ziggy-template": ["ziggy-template@workspace:apps/ziggy-template"],
 

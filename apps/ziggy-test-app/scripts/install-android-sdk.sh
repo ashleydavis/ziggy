@@ -317,7 +317,7 @@ do_install() {
     echo "Add adb to your PATH (once):"
     echo "  echo 'export PATH=\$PATH:$ANDROID_HOME/platform-tools' >> ~/.zshrc"
     echo
-    echo "Run the Ziggy test app with 'bun run run:ziggy-test-app:android': it deploys to an attached emulator or"
+    echo "Run the Ziggy test app with 'bun run --filter=ziggy-test-app android': it deploys to an attached emulator or"
     echo "device (verify with 'adb devices')."
 }
 

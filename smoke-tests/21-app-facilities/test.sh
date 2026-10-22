@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
-# The app's own code in the backend reaches the UI: an error it describes, a task that reads its own context and the app's state, a task
-# that runs children one after another, tasks queued and cancelled from the app's code, the counts the app keeps by observing tasks, and an
-# event the app sends that the UI stops hearing once it removes its listeners.
+# The app's own code in the backend reaches the frontend: an error it describes, a task that reads its own context and the app's state, a
+# task that runs children one after another, tasks queued and cancelled from the app's code, the counts the app keeps by observing tasks,
+# and an event the app sends that the frontend stops hearing once it removes its listeners.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
@@ -31,7 +31,7 @@ click app-stats
 wait_for_text app-result "tasks ended "
 stats="$(text_of app-result)"
 case "$stats" in
-    *"tasks ended 0,"*|*"messages sent 0"*)
+    *"tasks ended 0,"*|*"events sent 0"*)
         fail "the app counted nothing of the tasks that ran: $stats"
         ;;
 esac

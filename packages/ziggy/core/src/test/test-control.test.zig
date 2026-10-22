@@ -3,7 +3,7 @@ const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
 
 //
-// One client conversation with the control connection, run on its own thread because the reply waits for the UI.
+// One client conversation with the control connection, run on its own thread because the reply waits for the frontend.
 //
 const Client = struct {
     // Where the reply goes.
@@ -219,7 +219,7 @@ test "a command waits until the UI says it is listening" {
         .closed_without_answer = false,
     };
     const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    // The UI has not said it is listening, so the command is not sent to it.
+    // The frontend has not reported it is listening, so the command is not sent to it.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
     core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
@@ -292,7 +292,7 @@ test "the menu command chooses the menu item through the shell's callback once t
         .closed_without_answer = false,
     };
     const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    // The UI is not listening yet, so nothing is chosen.
+    // The frontend is not listening yet, so nothing is chosen.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.chosen_actions.items.len);
     core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
@@ -330,7 +330,7 @@ test "choosing reload makes commands wait for the UI to say it is listening agai
         .closed_without_answer = false,
     };
     const next_thread = try std.Thread.spawn(.{}, Client.run, .{&next});
-    // The UI is reloading, so the next command is held back and not sent to it.
+    // The frontend is reloading, so the next command is held back and not sent to it.
     shell.sleepMs(300);
     try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
     core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");

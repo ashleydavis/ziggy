@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Runs the JUnit tests of Ziggy's Android shell, through the test app's Gradle project, which includes the shell's build. See
+# Runs the JUnit tests of Ziggy's Android native app, through the test app's Gradle project, which includes the native app's build. See
 # test-android-shell.md.
 
 set -euo pipefail

@@ -1,6 +1,6 @@
 //
-// The test hooks' system messages: test-result, which carries what the UI found for a test control request, and test-ui-ready,
-// which says the UI is listening for test commands. The core registers them only in a test hooks build.
+// The test hooks' system messages: test-result, which carries what the frontend found for a test control request, and
+// test-ui-ready, which tells the core the frontend is listening for test commands. The core registers them only in a test hooks build.
 //
 
 const std = @import("std");
@@ -24,7 +24,7 @@ pub fn register(registry: *message_registry.Registry) !void {
 const TestResultRequest = struct {
     // The test control request the result answers.
     requestId: u32,
-    // What the UI found, or null.
+    // What the frontend found, or null.
     result: std.json.Value = .null,
 };
 
@@ -39,7 +39,7 @@ const TestUiReadyRequest = struct {};
 const DoneResponse = struct {};
 
 //
-// Handles test-result: hands the result the UI computed for a test control request to the connection waiting for it.
+// Handles test-result: hands the result the frontend computed for a test control request to the connection waiting for it.
 //
 fn testResultHandler(core: *Core, arena: std.mem.Allocator, request: TestResultRequest) !DoneResponse {
     const control = core.control orelse {
@@ -50,7 +50,7 @@ fn testResultHandler(core: *Core, arena: std.mem.Allocator, request: TestResultR
 }
 
 //
-// Handles test-ui-ready: tells the test control connection the UI has loaded.
+// Handles test-ui-ready: tells the test control connection the frontend has loaded.
 //
 fn testUiReadyHandler(core: *Core, arena: std.mem.Allocator, request: TestUiReadyRequest) !DoneResponse {
     _ = arena;

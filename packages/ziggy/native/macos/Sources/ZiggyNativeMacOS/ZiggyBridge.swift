@@ -1,9 +1,9 @@
 //
-// Ziggy's shell for MacOS. It owns the WKWebView, injects window.ziggy, loads the app's bundled UI, calls the
-// core through the C interface and moves messages between the UI and the core.
+// Ziggy's native app for MacOS. It owns the WKWebView, injects window.ziggy, loads the app's bundled frontend, calls the
+// core through the C interface and moves messages between the frontend and the core.
 //
 // Messages from the core arrive on any thread, so each is copied and handed to the main queue, which delivers them to the
-// UI in the order they were handed over.
+// frontend in the order they were handed over.
 //
 
 import Foundation
@@ -11,11 +11,11 @@ import WebKit
 import CZiggy
 import AppKit
 
-// Serves the web view's requests for the bundled UI from the files embedded in the core library, calling ziggy_ui_file for
-// each file. The UI's address is ziggy-app://app/, and the core is given to the handler once it exists.
+// Serves the web view's requests for the bundled frontend from the files embedded in the core library, calling ziggy_ui_file
+// for each file. The frontend's address is ziggy-app://app/, and the core is given to the handler once it exists.
 // It runs on the main thread, as does everything that sets or clears the core.
 final class ZiggyUiSchemeHandler: NSObject, WKURLSchemeHandler {
-    // The core's handle, from start until shutdown. Null means the UI cannot be served.
+    // The core's handle, from start until shutdown. Null means the frontend cannot be served.
     var core: UnsafeMutableRawPointer?
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -57,8 +57,8 @@ final class ZiggyUiSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 }
 
-// A web view that tells its owner the files of a drop before WebKit handles the drop, so that when the UI's drop event runs the
-// files are already recorded with the core.
+// A web view that tells its owner the files of a drop before WebKit handles the drop, so that when the frontend's drop event
+// runs the files are already recorded with the core.
 final class ZiggyWebView: WKWebView {
     // Called with the paths of the files dropped on the view.
     var onFilesDropped: (([String]) -> Void)?
@@ -75,19 +75,19 @@ final class ZiggyWebView: WKWebView {
 // Hosts one web view and one Ziggy core for the app. The app creates it, puts webView on screen, calls start, and calls
 // shutdown when the app is ending.
 public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
-    // The web view that shows the app's UI. The app puts it on screen.
+    // The web view that shows the app's frontend. The app puts it on screen.
     public let webView: WKWebView
 
     // The core's handle, from start until shutdown.
     private var core: UnsafeMutableRawPointer?
 
-    // Set by shutdown. Read and written on the main thread only, so nothing is delivered to the UI after it is set.
+    // Set by shutdown. Read and written on the main thread only, so nothing is delivered to the frontend after it is set.
     private var destroyed: Bool
 
-    // Serves the web view's requests for the bundled UI, from the core.
+    // Serves the web view's requests for the bundled frontend, from the core.
     private let uiHandler = ZiggyUiSchemeHandler()
 
-    // The scheme and address of the bundled UI. The files are embedded in the core library, not in the app bundle.
+    // The scheme and address of the bundled frontend. The files are embedded in the core library, not in the app bundle.
     private static let uiScheme = "ziggy-app"
     private static let appUrlPrefix = "ziggy-app://app/"
 
@@ -107,8 +107,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The name the os_version callback gives the operating system.
     private static let operatingSystemName = "macOS"
 
-    // Creates the web view with the injected script and the message handler. The UI is not loaded and the core does not
-    // exist until start. The UI and the injected script are both embedded in the core library, so the app supplies neither.
+    // Creates the web view with the injected script and the message handler. The frontend is not loaded and the core does not
+    // exist until start. The frontend and the injected script are both embedded in the core library, so the app supplies
+    // neither.
     public init(frame: CGRect) {
         let bundle = Bundle.main
         guard let bundleIdentifier = bundle.bundleIdentifier else {
@@ -166,7 +167,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Runs on the main thread: records the files of a drop with the core, so the UI can get the path of each one it is given.
+    // Runs on the main thread: records the files of a drop with the core, so the frontend can get the path of each one it is given.
     private func filesDropped(_ paths: [String]) {
         guard let handle = core else {
             return
@@ -186,7 +187,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Creates the core and loads the app's UI.
+    // Creates the core and loads the app's frontend.
     public func start() {
         if core != nil || destroyed {
             ZiggyBridge.fail("start was called more than once")
@@ -312,7 +313,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         webView.load(URLRequest(url: uiURL))
     }
 
-    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the UI.
+    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the frontend.
     public func shutdown() {
         guard let handle = core else {
             return
@@ -330,7 +331,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         NSApplication.shared.terminate(nil)
     }
 
-    // Runs on the main thread: sends one message from the core to the UI.
+    // Runs on the main thread: sends one message from the core to the frontend.
     private func deliverToUi(_ text: String) {
         // A message queued before shutdown is dropped here, because shutdown promises nothing is delivered after it.
         if destroyed {
@@ -343,7 +344,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // A message from the UI: hands it to the core.
+    // A message from the frontend: hands it to the core.
     public func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let text = message.body as? String else {
             ZiggyBridge.fail("the UI posted a message that is not a string")
@@ -351,9 +352,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         post(text)
     }
 
-    // Gives the core a JSON message, as if the UI had posted it.
+    // Gives the core a JSON message, as if the frontend had posted it.
     func post(_ text: String) {
-        // The UI can still post while the app is ending. The core is gone by then, so there is nobody to give it to.
+        // The frontend can still post while the app is ending. The core is gone by then, so there is nobody to give it to.
         guard let handle = core else {
             return
         }
@@ -397,12 +398,12 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         return nil
     }
 
-    // Reports a UI that failed to load.
+    // Reports a frontend that failed to load.
     public func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         ZiggyBridge.report("the UI failed to load: \(error)")
     }
 
-    // Reports a UI that failed part way through loading.
+    // Reports a frontend that failed part way through loading.
     public func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         ZiggyBridge.report("the UI failed while loading: \(error)")
     }
@@ -413,7 +414,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     }
 
     // Has the core decide what to do with an address. An external link is opened in the system browser here. Returns true when
-    // the web view may load the address, which is only for the app's own UI in an existing frame.
+    // the web view may load the address, which is only for the app's own frontend in an existing frame.
     private func shouldLoad(_ url: URL?, isNewWindow: Bool) -> Bool {
         guard let handle = core else {
             return false

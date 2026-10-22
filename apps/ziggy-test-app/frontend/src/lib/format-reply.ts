@@ -11,12 +11,12 @@ export interface IPingReply {
     // The CPU architecture the backend was built for.
     arch: string;
 
-    // What the UI sent, echoed back.
+    // What the frontend sent, echoed back.
     echo: { greeting: string };
 }
 
 //
-// Formats the ping reply for display in the UI.
+// Formats the ping reply for display in the frontend.
 //
 export function formatPingReply(reply: IPingReply): string {
     return `Zig ${reply.zigVersion} on ${reply.os} ${reply.arch} says: ${reply.echo.greeting}`;

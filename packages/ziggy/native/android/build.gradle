@@ -1,6 +1,6 @@
-// Ziggy's Android shell: the Java framework code that hosts a WebView, injects window.ziggy and moves messages between
-// the UI and the core. It is a Gradle build of its own, which an app's Gradle project includes (see settings.gradle and
-// README.md), and Gradle builds it in place of the dependency `dev.ziggy:ziggy-native-android`.
+// Ziggy's Android native app: the Java framework code that hosts a WebView, injects window.ziggy and moves messages between
+// the frontend and the core. It is a Gradle build of its own, which an app's Gradle project includes (see settings.gradle
+// and README.md), and Gradle builds it in place of the dependency `dev.ziggy:ziggy-native-android`.
 
 buildscript {
     repositories {
@@ -42,6 +42,6 @@ dependencies {
     // Plain-JVM unit tests of the parts that need no platform.
     testImplementation "junit:junit:4.13.2"
 
-    // WebViewCompat.addDocumentStartJavaScript, which runs the injected script before the UI's own scripts.
+    // WebViewCompat.addDocumentStartJavaScript, which runs the injected script before the frontend's own scripts.
     implementation "androidx.webkit:webkit:1.6.1"
 }

@@ -46,7 +46,7 @@ pub fn resolveTaskPriority(requested: ?TaskPriority, parent_priority: TaskPriori
 
 //
 // Whether a task type keeps the app running when the app is not in the foreground. A task of a keep-alive type that is queued or
-// running makes the core call the shell's keep_alive callback to keep the app running, until the last such task ends.
+// running makes the core call the native app's keep_alive callback to keep the app running, until the last such task ends.
 //
 pub const TaskKind = enum {
     // An ordinary task. The platform may stop it when the app is in the background.
@@ -59,7 +59,7 @@ pub const TaskKind = enum {
 // A task type and its handler.
 //
 pub const TaskHandlerEntry = struct {
-    // The task type string the UI queues the task under.
+    // The task type string the frontend queues the task under.
     name: []const u8,
     // The function that runs the task.
     handler: TaskHandler,
@@ -68,7 +68,7 @@ pub const TaskHandlerEntry = struct {
 };
 
 //
-// Where the runner sends the events it produces (task-message and task-completed), as JSON text.
+// Where the runner sends the events it produces (task-event and task-completed), as JSON text.
 //
 pub const EventSink = struct {
     // The sink's own pointer, passed back on every call.
@@ -100,7 +100,7 @@ pub const TaskRunnerOptions = struct {
     max_concurrent_child_tasks: u32,
     // Gives the text to report for the error a task handler returned, or null to report the error's name. Null when the app has none.
     describe_error: ?types.ErrorDescriber,
-    // Told of every task that ends and every message a task sends. Null when the app has no use for them.
+    // Told of every task that ends and every event a task sends. Null when the app has no use for them.
     observer: ?types.TaskObserver,
     // Where to find a handler for a task type that has no entry in the handlers. Null when there is no such place, and such a task then
     // fails as an unknown type.
@@ -143,7 +143,7 @@ const TaskState = enum {
 };
 
 //
-// The error of a failed task in a task-completed event, laid out like the error objects the UI reads, with the fields that survive JSON.
+// The error of a failed task in a task-completed event, laid out like the error objects the frontend reads, with the fields that survive JSON.
 //
 const ErrorObject = struct {
     // The text of the error.
@@ -155,7 +155,7 @@ const ErrorObject = struct {
 // parent can await one after it has finished.
 //
 const Task = struct {
-    // The id the UI gave the task, or the parent's id with a child suffix for a child.
+    // The id the frontend gave the task, or the parent's id with a child suffix for a child.
     id: []u8,
     // The task type string.
     task_type: []u8,
@@ -186,8 +186,8 @@ const Task = struct {
     next_child: u32,
     // How the task ended, once it has.
     completion: ?Completion,
-    // For a task that handles a request from the UI: the JSON text of the request's id. When the task ends the core sends the
-    // reply to that request, instead of the task-completed event. Owned.
+    // For a task that handles a request from the frontend: the JSON text of the request's id. When the task ends the core sends
+    // the reply to that request, instead of the task-completed event. Owned.
     reply_id_json: ?[]u8,
 };
 
@@ -239,7 +239,7 @@ pub const TaskContext = struct {
     }
 
     //
-    // The configuration the shell gave the core, for host callbacks.
+    // The configuration the native app gave the core, for host callbacks.
     //
     pub fn config(self: *TaskContext) *const ZiggyConfig {
         return &self.runner.config;
@@ -269,18 +269,18 @@ pub const TaskContext = struct {
     }
 
     //
-    // Sends any value std.json can serialise to the UI as the message of a task-message event.
+    // Sends any value std.json can serialise to the frontend as the data of a task-event event.
     //
-    pub fn sendMessage(self: *TaskContext, message: anytype) !void {
-        const message_json = try json.stringify(self.arena, message);
-        try self.sendRawMessage(message_json);
+    pub fn sendEvent(self: *TaskContext, value: anytype) !void {
+        const event_json = try json.stringify(self.arena, value);
+        try self.sendRawEvent(event_json);
     }
 
     //
-    // Sends JSON text to the UI as the message of a task-message event.
+    // Sends JSON text to the frontend as the data of a task-event event.
     //
-    pub fn sendRawMessage(self: *TaskContext, message_json: []const u8) !void {
-        try self.runner.emitTaskMessage(self.task, message_json);
+    pub fn sendRawEvent(self: *TaskContext, event_json: []const u8) !void {
+        try self.runner.emitTaskEvent(self.task, event_json);
     }
 
     //
@@ -323,8 +323,8 @@ pub const TaskContext = struct {
     }
 
     //
-    // Calls the shell's host request callback to do one thing only the platform can do, by name, with the JSON text of the argument, and returns what it gave
-    // (see HostRequestFn). The shell may show native interface and wait for the user, so this must be called from a task. A platform
+    // Calls the native app's host request callback to do one thing only the platform can do, by name, with the JSON text of the argument, and returns what it gave
+    // (see HostRequestFn). The native app may show native interface and wait for the user, so this must be called from a task. A platform
     // with no such callback gives error.HostCallbackMissing, and one that cannot do what the method names gives a result that did not
     // succeed, with the reason in its text.
     //
@@ -349,7 +349,7 @@ pub const TaskContext = struct {
     }
 
     //
-    // The requester that hands the host requests of this task to code that does not know about tasks, or null when the shell gave the
+    // The requester that hands the host requests of this task to code that does not know about tasks, or null when the native app gave the
     // core no host request callback (every desktop). The storage is the caller's, and the requester is valid as long as it and this
     // task are.
     //
@@ -367,8 +367,8 @@ pub const TaskContext = struct {
     }
 
     //
-    // Shows a native file or folder dialog through the shell's native host callback, and returns what the user chose as the
-    // JSON text of an array of path strings, empty when they cancelled. The dialog is shown on the shell's UI thread while this
+    // Shows a native file or folder dialog through the native app's native host callback, and returns what the user chose as the
+    // JSON text of an array of path strings, empty when they cancelled. The dialog is shown on the native app's UI thread while this
     // waits, so it must be called from a task. A test hooks build lets a test supply the result instead, and no dialog is shown.
     //
     pub fn pickPaths(self: *TaskContext, kind: types.PickKind, title: ?[]const u8, initial_name: ?[]const u8) ![]const u8 {
@@ -392,7 +392,7 @@ pub const TaskContext = struct {
 };
 
 //
-// What a task's host requester calls: the shell's host request callback. A result that did not succeed is an error with the shell's
+// What a task's host requester calls: the native app's host request callback. A result that did not succeed is an error with the native app's
 // reason in it.
 //
 pub const TaskHostRequester = struct {
@@ -400,7 +400,7 @@ pub const TaskHostRequester = struct {
     context: *TaskContext,
 
     //
-    // Calls the shell and returns its result, allocated with the allocator. Everything it allocates is the caller's, so it may be
+    // Calls the native app and returns its result, allocated with the allocator. Everything it allocates is the caller's, so it may be
     // called from any thread of the task, which is why it does not use the task's arena.
     //
     fn request(ptr: *anyopaque, allocator: std.mem.Allocator, method: []const u8, request_json: []const u8) anyerror![]const u8 {
@@ -410,8 +410,8 @@ pub const TaskHostRequester = struct {
 };
 
 //
-// Calls the host request callback of the configuration to have the shell do one thing only the platform can do, and returns its
-// result allocated with the allocator. Fails with the shell's reason when it could not do it, and when the configuration has no
+// Calls the host request callback of the configuration to have the native app do one thing only the platform can do, and returns its
+// result allocated with the allocator. Fails with the native app's reason when it could not do it, and when the configuration has no
 // callback. It is for code that has the configuration but no task, such as the startup of the core.
 //
 pub fn askShell(config: *const ZiggyConfig, allocator: std.mem.Allocator, method: []const u8, request_json: []const u8) anyerror![]const u8 {
@@ -447,7 +447,7 @@ pub const TaskRunner = struct {
     task_types_mutex: std.Io.Mutex,
     // The runner's settings.
     options: TaskRunnerOptions,
-    // The shell's configuration, for host callbacks.
+    // The native app's configuration, for host callbacks.
     config: ZiggyConfig,
     // Guards everything below.
     mutex: std.Io.Mutex,
@@ -466,7 +466,7 @@ pub const TaskRunner = struct {
     shutting_down: bool,
     // Supplies dialogs' results for a test, when the test hooks provide it.
     pick_override: ?PickOverride,
-    // Set once shutdown has begun, so that nothing more is sent to the shell.
+    // Set once shutdown has begun, so that nothing more is sent to the native app.
     silent: std.atomic.Value(bool),
     // The number of top level keep-alive tasks that are queued or running. Guarded by the mutex.
     keep_alive_count: u32,
@@ -515,7 +515,7 @@ pub const TaskRunner = struct {
 
     //
     // Cancels every task, waits for the workers to stop and releases everything. No task runs after it returns,
-    // and nothing is sent to the shell once it has begun.
+    // and nothing is sent to the native app once it has begun.
     //
     pub fn stop(self: *TaskRunner) void {
         self.silent.store(true, .release);
@@ -541,8 +541,8 @@ pub const TaskRunner = struct {
 
     //
     // Queues a top level task and returns at once. Two live tasks may share an id, and each reports its own completion. When
-    // reply_id_json is given, the task handles the UI request with that id: its end is reported as that request's reply, and no
-    // task-completed event is sent.
+    // reply_id_json is given, the task handles the frontend request with that id: its end is reported as that request's reply,
+    // and no task-completed event is sent.
     //
     pub fn addTask(self: *TaskRunner, task_id: []const u8, task_type: []const u8, source: []const u8, data_json: []const u8, priority: TaskPriority, reply_id_json: ?[]const u8) !void {
         const task = try self.createTask(task_id, task_type, source, data_json, priority, null);
@@ -568,7 +568,7 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Holds the app running with or without a task (true), or lets it go (false). The shell is told to keep the app running when the
+    // Holds the app running with or without a task (true), or lets it go (false). The native app is told to keep the app running when the
     // hold or the first keep-alive task begins, and to stop when the hold and the last keep-alive task have both ended. Holding when
     // already held, or letting go when not held, changes nothing.
     //
@@ -637,7 +637,7 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Tells the shell to keep the app running, or that it need not. Called while the lock is held, so the shell hears the changes in
+    // Tells the native app to keep the app running, or that it need not. Called while the lock is held, so the native app hears the changes in
     // the order they happen. Nothing is sent once shutdown has begun.
     //
     fn callKeepAlive(self: *TaskRunner, keep_running: bool) void {
@@ -936,8 +936,8 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Records how a task ended, tells the UI, then tells the parent, and releases a top level task. The UI is told
-    // first because the moment the parent knows a child is done it may release that child.
+    // Records how a task ended, tells the frontend, then tells the parent, and releases a top level task. The frontend is
+    // told first because the moment the parent knows a child is done it may release that child.
     //
     fn finish(self: *TaskRunner, task: *Task, completion: Completion) void {
         const is_top_level = task.parent == null;
@@ -1106,37 +1106,38 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Tells the UI a task sent a message, then the observer.
+    // Tells the frontend a task sent an event, then the observer.
     //
-    fn emitTaskMessage(self: *TaskRunner, task: *Task, message_json: []const u8) !void {
+    fn emitTaskEvent(self: *TaskRunner, task: *Task, event_json: []const u8) !void {
         if (self.silent.load(.acquire)) {
             return;
         }
         const event = try json.stringify(self.allocator, .{
             .kind = "system",
-            .name = "task-message",
+            .name = "task-event",
             .data = .{
                 .taskId = task.id,
                 .source = task.source,
-                .message = json.Raw{
-                    .text = message_json,
+                .data = json.Raw{
+                    .text = event_json,
                 },
             },
         });
         defer self.allocator.free(event);
         self.sink.emit(self.sink.user_data, event);
         if (self.options.observer) |observer| {
-            observer.on_task_message(observer.user_data, .{
+            observer.on_task_event(observer.user_data, .{
                 .task_id = task.id,
                 .task_type = task.task_type,
                 .source = task.source,
-                .message_json = message_json,
+                .event_json = event_json,
             });
         }
     }
 
     //
-    // Sends the reply to the UI request a task was handling: the task's result on success, or an error reply saying why not.
+    // Sends the reply to the frontend request a task was handling: the task's result on success, or an error reply explaining
+    // why not.
     //
     fn emitReply(self: *TaskRunner, reply_id_json: []const u8, completion: Completion) void {
         if (self.silent.load(.acquire)) {
@@ -1161,7 +1162,7 @@ pub const TaskRunner = struct {
     }
 
     //
-    // Tells the UI a task has ended, with the payload `{taskId, result}`, where result is the
+    // Tells the frontend a task has ended, with the payload `{taskId, result}`, where result is the
     // full ITaskResult (taskId, status, errorMessage, outputs, type, inputs). TaskStatus has no cancelled, so a cancelled task is
     // reported as failed with the error message "Cancelled". The runner knows the task's type and input, so they come from it.
     //

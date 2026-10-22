@@ -51,7 +51,7 @@ pub const app = ziggy.core.App(.{
     },
     .state = app_state.state_hooks,
     .on_task_end = app_state.onTaskEnd,
-    .on_task_message = app_state.onTaskMessage,
+    .on_task_event = app_state.onTaskEvent,
     .describe_error = app_state.describeError,
     .menu = menu.menu,
     .ui_files = &ui.files,

@@ -99,8 +99,8 @@ ziggy_platform_has_control_port() {
 }
 
 #
-# Succeeds when the developer tools are showing. The web inspector docks inside the window, so the UI's area is smaller than it
-# was. Usage: ziggy_platform_devtools_visible <test_dir> <the UI's area before they opened>
+# Succeeds when the developer tools are showing. The web inspector docks inside the window, so the frontend's area is smaller
+# than it was. Usage: ziggy_platform_devtools_visible <test_dir> <the frontend's area before they opened>
 #
 ziggy_platform_devtools_visible() {
     [ "$(viewport_size)" != "$2" ]

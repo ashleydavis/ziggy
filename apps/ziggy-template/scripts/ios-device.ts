@@ -132,7 +132,7 @@ async function launch(udid: string, bundleId: string, infoFile: string, environm
         throw new Error(`debugserver could not launch ${bundleId}: ${launchResult}`);
     }
 
-    // native-run's own reader is detached, so everything debugserver says from here on goes to the client.
+    // native-run's own reader is detached, so everything debugserver sends from here on goes to the client.
     const debugserverSocket: Socket = debugserver.socket;
     debugserverSocket.removeAllListeners("data");
     const server = createServer((client: Socket) => {

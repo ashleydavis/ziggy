@@ -16,7 +16,7 @@ Every package is built for release: optimized and without the test hooks. Scenar
 | iOS | an `.xcarchive` and an `.ipa` built with code signing off | unsigned |
 | Android | an `.apk` per architecture (`x86_64` and `arm64`) | signed with the debug key, so it installs |
 
-The UI is embedded in the app's own code on every platform (the Linux and Windows executables, and the backend library inside the MacOS, iOS and Android apps), so no package carries a directory of UI files.
+The frontend is embedded in the app's own code on every platform (the Linux and Windows executables, and the backend library inside the MacOS, iOS and Android apps), so no package carries a directory of frontend files.
 
 ## Signing
 

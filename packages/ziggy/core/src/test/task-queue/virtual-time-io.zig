@@ -75,7 +75,7 @@ pub const VirtualTimeIo = struct {
     }
 
     //
-    // Starts a clock at zero that behaves as the options say. The Io is not movable once started.
+    // Starts a clock at zero that behaves as the options describe. The Io is not movable once started.
     //
     pub fn initWith(self: *VirtualTimeIo, allocator: std.mem.Allocator, options: Options) void {
         self.threaded = .init(allocator, .{});

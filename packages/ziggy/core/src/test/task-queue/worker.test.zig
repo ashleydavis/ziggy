@@ -40,11 +40,11 @@ fn throwingHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Valu
 }
 
 //
-// Ignores sent messages.
+// Ignores sent events.
 //
-fn ignoreMessage(context: ?*anyopaque, message: std.json.Value) void {
+fn ignoreEvent(context: ?*anyopaque, event: std.json.Value) void {
     _ = context;
-    _ = message;
+    _ = event;
 }
 
 test "registerHandler and getHandler" {
@@ -80,7 +80,7 @@ test "executeTaskHandler runs the registered handler with the data and context" 
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "task-7", .{ .context = null, .function = ignoreMessage }, 1);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "task-7", .{ .context = null, .function = ignoreEvent }, 1);
 
     try worker.registerHandler("worker-test-echo", echoHandler);
     const outputs = try worker.executeTaskHandler(arena.allocator(), std.testing.io, "worker-test-echo", .{ .string = "hi" }, context.taskContext());
@@ -93,7 +93,7 @@ test "executeTaskHandler propagates handler errors" {
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "t", .{ .context = null, .function = ignoreMessage }, 1);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "t", .{ .context = null, .function = ignoreEvent }, 1);
 
     try worker.registerHandler("worker-test-throw", throwingHandler);
     try std.testing.expectError(error.Thrown, worker.executeTaskHandler(arena.allocator(), std.testing.io, "worker-test-throw", .null, context.taskContext()));
@@ -105,7 +105,7 @@ test "executeTaskHandler throws when no handler is registered" {
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "t", .{ .context = null, .function = ignoreMessage }, 1);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "t", .{ .context = null, .function = ignoreEvent }, 1);
 
     try worker.registerHandler("worker-test-available", oneHandler);
     try std.testing.expectError(error.Thrown, worker.executeTaskHandler(arena.allocator(), std.testing.io, "worker-test-nope", .null, context.taskContext()));

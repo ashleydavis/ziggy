@@ -1,6 +1,6 @@
 //
-// The Ziggy template's Linux shell: what is the template's own (its name, its window and its UI) on top of Ziggy's shell.
-// The UI is embedded in the executable by build.zig.
+// The Ziggy template's Linux native app: what is the template's own (its name, its window and its frontend) on top of the part
+// Ziggy provides. The frontend is embedded in the executable by build.zig.
 //
 
 const std = @import("std");

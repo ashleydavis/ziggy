@@ -16,7 +16,7 @@ A run on another branch, or for a pull request, runs every build and test and pu
 
 ### Reading a failed run
 
-Open the run in the Actions tab. The summary shows which job failed and, for a job with a matrix, on which platform. Each step's log is in the job; a test step's log ends with the failures (`FAILED:` lines and a summary from the smoke tests, Zig's build summary from `zig build test`, Jest's summary from `bun run test`). A smoke test that ran out of time says so and names the variable that raises its limit. A step that hit its own timeout fails normally and keeps its log. Run the same command on the same platform locally to reproduce it: every step runs a `bun run` script or a `zig build` command from the root of the repository.
+Open the run in the Actions tab. The summary shows which job failed and, for a job with a matrix, on which platform. Each step's log is in the job; a test step's log ends with the failures (`FAILED:` lines and a summary from the smoke tests, Zig's build summary from `zig build test`, Jest's summary from `bun run test`). A smoke test that ran out of time reports it and names the variable that raises its limit. A step that hit its own timeout fails normally and keeps its log. Run the same command on the same platform locally to reproduce it: every step runs a `bun run` script or a `zig build` command from the root of the repository.
 
 ## Releasing a version of the package
 
@@ -30,7 +30,7 @@ An app pins Ziggy to a version tag. A version tag is `v` followed by the version
    git push origin v0.1.0
    ```
 
-   Pushing the tag starts `.github/workflows/release-version.yml`, which publishes the GitHub release on the tag, with notes listing the commits since the version tag before it and the tag's `docs/agent-quick-start.md` attached. The docs tell users to point their agent at `https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md`, which GitHub serves only from the files attached to the newest release.
+   Pushing the tag starts `.github/workflows/release-version.yml`, which publishes the GitHub release on the tag, with notes listing the commits since the version tag before it and with the tag's `docs/agent-quick-start.md` and the template archive `ziggy-template-<tag>.zip` attached. The archive is the template of the tag with every reference to Ziggy pinned to the tag and Ziggy's `mise.toml` added, made by `scripts/package-template.sh` (see [package-template.md](../../scripts/package-template.md)). A new app starts from that archive, so it needs no pinning of its own. The docs tell app developers to point their agent at `https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md`, which GitHub serves only from the files attached to the newest release.
 
 3. When an app has to change something to move to the new version, add it to the release's notes.
 

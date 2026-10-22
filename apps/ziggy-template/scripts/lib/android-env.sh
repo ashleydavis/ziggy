@@ -9,7 +9,7 @@
 # and so need the same toolchain.
 #
 # Exits non-zero with a clear message when either piece is missing, which beats the errors the tools
-# themselves give: Gradle says only "JAVA_HOME is not set", and native-run says only
+# themselves give: Gradle prints only "JAVA_HOME is not set", and native-run prints only
 # "ERR_SDK_NOT_FOUND", neither of which tells you what to install or where it looked.
 
 # True when the given path is a JDK 17 installation.

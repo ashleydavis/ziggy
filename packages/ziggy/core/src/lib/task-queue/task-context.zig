@@ -9,20 +9,20 @@ const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
 const ITimestampProvider = utils.timestamp_provider.ITimestampProvider;
 
 //
-// The function that sends a task message back to the caller. The message is only valid during the call.
+// The function that sends a task's event back to the caller. The event is only valid during the call.
 //
-pub const SendMessageFn = struct {
+pub const SendEventFn = struct {
     // The state of the function, passed to function.
     context: ?*anyopaque,
 
-    // Sends the message.
-    function: *const fn (context: ?*anyopaque, message: std.json.Value) void,
+    // Sends the event.
+    function: *const fn (context: ?*anyopaque, event: std.json.Value) void,
 
     //
     // Invokes the function.
     //
-    pub fn call(self: SendMessageFn, message: std.json.Value) void {
-        self.function(self.context, message);
+    pub fn call(self: SendEventFn, event: std.json.Value) void {
+        self.function(self.context, event);
     }
 };
 
@@ -61,9 +61,9 @@ pub const TaskContext = struct {
     _isCancelled: std.atomic.Value(bool),
 
     //
-    // Sends a message back to the caller.
+    // Sends an event back to the caller.
     //
-    sendMessageFn: SendMessageFn,
+    sendEventFn: SendEventFn,
 
     //
     // Creates the context of a task.
@@ -73,7 +73,7 @@ pub const TaskContext = struct {
         timestampProvider: ITimestampProvider,
         sessionId: []const u8,
         taskId: []const u8,
-        sendMessageFn: SendMessageFn,
+        sendEventFn: SendEventFn,
         maxConcurrentChildTasks: u32,
     ) TaskContext {
         return .{
@@ -83,7 +83,7 @@ pub const TaskContext = struct {
             .taskId = taskId,
             .maxConcurrentChildTasks = maxConcurrentChildTasks,
             ._isCancelled = std.atomic.Value(bool).init(false),
-            .sendMessageFn = sendMessageFn,
+            .sendEventFn = sendEventFn,
         };
     }
 
@@ -108,15 +108,15 @@ pub const TaskContext = struct {
     // The ITaskContext functions of this context.
     //
     const vtable: ITaskContext.VTable = .{
-        .sendMessage = sendMessageErased,
+        .sendEvent = sendEventErased,
         .isCancelled = isCancelledErased,
     };
 
     //
-    // Sends a message back to the caller via the main process.
+    // Sends an event back to the caller via the main process.
     //
-    pub fn sendMessage(self: *TaskContext, msg: std.json.Value) void {
-        self.sendMessageFn.call(msg);
+    pub fn sendEvent(self: *TaskContext, event: std.json.Value) void {
+        self.sendEventFn.call(event);
     }
 
     //
@@ -134,11 +134,11 @@ pub const TaskContext = struct {
     }
 
     //
-    // ITaskContext.sendMessage for this implementation.
+    // ITaskContext.sendEvent for this implementation.
     //
-    fn sendMessageErased(ptr: *anyopaque, message: std.json.Value) void {
+    fn sendEventErased(ptr: *anyopaque, event: std.json.Value) void {
         const self: *TaskContext = @ptrCast(@alignCast(ptr));
-        self.sendMessage(message);
+        self.sendEvent(event);
     }
 
     //

@@ -1,9 +1,9 @@
 //
-// The declarations of the GLib, GTK 3 and WebKitGTK 4.1 functions the shell calls, and the types and constants they use.
+// The declarations of the GLib, GTK 3 and WebKitGTK 4.1 functions the native app calls, and the types and constants they use.
 //
 // These are declarations of the real libraries' functions, which the build links. They are written out here because
 // Zig's C header translator cannot read GLib's headers: they use compiler pragma macros it does not understand. Only what
-// the shell uses is declared, and each is checked against the library's own header documentation.
+// the native app uses is declared, and each is checked against the library's own header documentation.
 //
 
 pub const gboolean = c_int;
@@ -219,7 +219,7 @@ pub const GErrorFields = extern struct {
     message: [*:0]const u8,
 };
 
-// WebKitSnapshotRegion: WEBKIT_SNAPSHOT_REGION_VISIBLE is the part of the UI the window shows.
+// WebKitSnapshotRegion: WEBKIT_SNAPSHOT_REGION_VISIBLE is the part of the frontend the window shows.
 pub const WEBKIT_SNAPSHOT_REGION_VISIBLE: c_uint = 0;
 
 // WebKitSnapshotOptions: WEBKIT_SNAPSHOT_OPTIONS_NONE.

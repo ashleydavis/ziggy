@@ -1,10 +1,10 @@
 //
-// What the UI shows after a file or folder picker. The pickers reply as the Electron app's do: the paths chosen, or null
-// (Electron's undefined) when the user cancelled.
+// What the frontend shows after a file or folder picker. The pickers reply as the Electron app's do: the paths chosen,
+// or null (Electron's undefined) when the user cancelled.
 //
 
 //
-// Formats a picker's reply for display: one line per path chosen, or a line saying nothing was chosen.
+// Formats a picker's reply for display: one line per path chosen, or a line reporting that nothing was chosen.
 //
 export function formatPicked(title: string, result: string | string[] | null): string {
     if (result === null) {

@@ -9,7 +9,7 @@ const TaskContext = ziggy.task_runner.TaskContext;
 const json = ziggy.json;
 
 //
-// How the test app names a job in its job-progress messages, read from the "job" field of a task's data.
+// How the test app names a job in its job-progress events, read from the "job" field of a task's data.
 //
 const JobTag = struct {
     // The job's id. Tasks sharing an id are one job.
@@ -44,13 +44,13 @@ fn readJobTag(data: std.json.Value) ?JobTag {
 }
 
 //
-// Sends a job-progress message, which has the fields of IJobProgressMessage, and does nothing when the task has no job.
+// Sends a job-progress event, which has the fields of IJobProgressEvent, and does nothing when the task has no job.
 //
 fn sendJobProgress(context: *TaskContext, job: ?JobTag, started_at: i64, progress_message: []const u8) !void {
     const tag = job orelse {
         return;
     };
-    try context.sendMessage(.{
+    try context.sendEvent(.{
         .type = "job-progress",
         .job = tag,
         .startedAt = started_at,
@@ -59,10 +59,10 @@ fn sendJobProgress(context: *TaskContext, job: ?JobTag, started_at: i64, progres
 }
 
 //
-// Sends an output message, whose text the UI shows in its output area.
+// Sends an output event, whose text the frontend shows in its output area.
 //
 fn sendOutput(context: *TaskContext, text: []const u8) !void {
-    try context.sendMessage(.{
+    try context.sendEvent(.{
         .type = "output",
         .text = text,
     });
@@ -73,7 +73,7 @@ fn nowMilliseconds(context: *TaskContext) i64 {
 }
 
 //
-// Does a small amount of work: an output message, a job-progress message, then done.
+// Does a small amount of work: an output event, a job-progress event, then done.
 //
 pub fn helloShortHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     const started_at = nowMilliseconds(context);
@@ -83,8 +83,8 @@ pub fn helloShortHandler(context: *TaskContext, data: std.json.Value) anyerror!?
 }
 
 //
-// Loops for "durationMs" in steps of "stepMs", checking for cancellation at every step and sending an output message
-// and a job-progress message at every step. While it runs it queues "children" hello-child tasks, no more than the
+// Loops for "durationMs" in steps of "stepMs", checking for cancellation at every step and sending an output event
+// and a job-progress event at every step. While it runs it queues "children" hello-child tasks, no more than the
 // child limit at a time, then waits for them all and reports each one's completion in its own output.
 //
 pub fn helloLongHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
@@ -134,7 +134,7 @@ pub fn helloLongHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
 }
 
 //
-// A child of hello-long: an output message, a job-progress message under the parent's job id, a short wait, then done.
+// A child of hello-long: an output event, a job-progress event under the parent's job id, a short wait, then done.
 //
 pub fn helloChildHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     const started_at = nowMilliseconds(context);
@@ -162,7 +162,7 @@ pub fn helloFailHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
 }
 
 //
-// Calls the shell's os_version native host callback for the operating system's version and returns it.
+// Calls the native app's os_version native host callback for the operating system's version and returns it.
 //
 pub fn osVersionHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;

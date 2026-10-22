@@ -9,7 +9,7 @@ import AppKit
 import WebKit
 import CZiggy
 
-// Builds the main menu from the core's menu JSON and carries out the actions the shell owns. Every other action is sent to
+// Builds the main menu from the core's menu JSON and carries out the actions the native app owns. Every other action is sent to
 // the core as a menu-action message.
 final class ZiggyMenu: NSObject {
     // The bridge that owns this menu and the web view the actions work on. Weak, because the bridge owns this menu.
@@ -226,7 +226,7 @@ final class ZiggyMenu: NSObject {
         return String(Character(scalar))
     }
 
-    // A menu item the shell does not hand to the responder chain was chosen, by click or by its shortcut.
+    // A menu item the native app does not hand to the responder chain was chosen, by click or by its shortcut.
     @objc private func menuItemChosen(_ sender: NSMenuItem) {
         guard let action = sender.representedObject as? String else {
             ZiggyBridge.fail("the menu item \(sender.title) has no action")
@@ -235,7 +235,7 @@ final class ZiggyMenu: NSObject {
     }
 
     // Does what choosing the menu item for the action does. A menu click and the test control connection both come here,
-    // so a test runs exactly what a click runs. An action the shell does not own goes to the core, whatever it is.
+    // so a test runs exactly what a click runs. An action the native app does not own goes to the core, whatever it is.
     func perform(action: String) {
         guard let bridge = bridge else {
             return
@@ -311,7 +311,7 @@ final class ZiggyMenu: NSObject {
         }
     }
 
-    // Sets the UI zoom, rounded to a tenth and kept within the limits.
+    // Sets the frontend's zoom, rounded to a tenth and kept within the limits.
     private func setZoom(_ webView: WKWebView, _ level: Double) {
         let limited = min(max((level * 10).rounded() / 10, ZiggyMenu.zoomRange.lowerBound), ZiggyMenu.zoomRange.upperBound)
         webView.pageZoom = CGFloat(limited)
@@ -319,7 +319,7 @@ final class ZiggyMenu: NSObject {
 
     // Shows the web inspector, or hides it when it is showing. The only way to do this programmatically on these SDKs is the
     // private WebKit interface -[WKWebView _inspector] and its show and hide, so each selector is checked first. When one is
-    // missing, the message says so and Inspect Element in the context menu still works.
+    // missing, the message reports it and Inspect Element in the context menu still works.
     private func toggleDeveloperTools(_ webView: WKWebView) {
         let inspectorSelector = NSSelectorFromString("_inspector")
         let visibleSelector = NSSelectorFromString("isVisible")

@@ -3,9 +3,9 @@ import { greetingLine, IAppEvent, IHelloWorldResponse, logLineForEvent } from ".
 import { ITestCommand, performTestCommand, testResultToJson } from "./lib/test-commands";
 
 //
-// The message the hello-world task sends while it runs.
+// The event the hello-world task sends while it runs.
 //
-interface IOutputMessage {
+interface IOutputEvent {
     // Always "output".
     type: "output";
 
@@ -66,8 +66,8 @@ function listenForTheTask(): void {
             priority: "interactive",
         });
     });
-    window.ziggy.onTaskMessage<IOutputMessage>(event => {
-        log(event.message.text);
+    window.ziggy.onTaskEvent<IOutputEvent>(event => {
+        log(event.data.text);
     });
     window.ziggy.onTaskCompleted(event => {
         log(`The task ended: ${event.result.status}`);
@@ -76,7 +76,7 @@ function listenForTheTask(): void {
 
 //
 // Logs what the Hello menu's items lead to: the event Say Hello From Zig's Zig function sends, and the menu event Say Hello From
-// the UI reaches the UI as.
+// the UI reaches the frontend as.
 //
 function listenForTheMenu(): void {
     window.ziggy.onEvent<IAppEvent>(event => {
@@ -89,8 +89,8 @@ function listenForTheMenu(): void {
 
 //
 // Handles the commands the test control connection forwards, which the smoke tests send. It does nothing unless the native app
-// started the UI in test mode, which it does only in a build with the test hooks, and it tells the backend when it is listening so
-// that no command is sent before it can be heard.
+// started the frontend in test mode, which it does only in a build with the test hooks, and it tells the backend when it is
+// listening so that no command is sent before it can be heard.
 //
 function listenForTestCommands(): void {
     if (new URLSearchParams(window.location.search).get("testMode") !== "1") {

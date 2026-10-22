@@ -7,7 +7,7 @@ set -eu
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# The test app's backend embeds the built UI, so the UI is built before anything here.
+# The test app's backend embeds the built frontend, so the frontend is built before anything here.
 (cd "$EXAMPLE_DIR" && bun run bundle:ui)
 
 ACTION="${1:-}"
@@ -24,7 +24,7 @@ case "$ACTION" in
                 (cd "$EXAMPLE_DIR" && zig build ziggy-test-app-backend -Dtarget="$target" -Dtest-hooks="$hooks" -p "backend/zig-out/cross/$target-$hooks")
             done
         done
-        # The Windows shell, which needs the WebView2 SDK, fetched once and then reused. It is only compiled here, not linked: the
+        # The Windows native app, which needs the WebView2 SDK, fetched once and then reused. It is only compiled here, not linked: the
         # link needs Microsoft's toolchain, which is on a Windows machine, and Zig has no Windows headers for that toolchain, so
         # the check uses the MinGW target, which has them.
         bash "$SCRIPT_DIR/fetch-webview2.sh"

@@ -23,9 +23,9 @@ fn register(task_type: []const u8, handler: types.TaskHandler) !void {
 
 fn echoHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = io;
-    var message: std.json.ObjectMap = .empty;
-    try message.put(allocator, "type", .{ .string = "registered-hello" });
-    context.sendMessage(.{ .object = message });
+    var event: std.json.ObjectMap = .empty;
+    try event.put(allocator, "type", .{ .string = "registered-hello" });
+    context.sendEvent(.{ .object = event });
     var outputs: std.json.ObjectMap = .empty;
     try outputs.put(allocator, "taskId", .{ .string = context.taskId });
     try outputs.put(allocator, "echo", data);
@@ -75,7 +75,7 @@ fn parentHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value,
 
 //
 // A task of the runner (not registered with the task queue) that queues a task through the backend, as a handler written against
-// task-queue does, and says which task it queued.
+// task-queue does, and returns which task it queued.
 //
 fn queueThroughBackendTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
@@ -85,7 +85,7 @@ fn queueThroughBackendTask(context: *ziggy.task_runner.TaskContext, data: std.js
 }
 
 //
-// A task of the runner that says what priority the runner reports for the task running on its thread.
+// A task of the runner that returns what priority the runner reports for the task running on its thread.
 //
 fn priorityReportTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
@@ -120,7 +120,7 @@ fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source
     core.postMessage(message);
 }
 
-test "a handler registered with the task queue runs on the runner, sends messages and returns its outputs" {
+test "a handler registered with the task queue runs on the runner, sends events and returns its outputs" {
     try register("registered-echo", echoHandler);
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
@@ -128,7 +128,7 @@ test "a handler registered with the task queue runs on the runner, sends message
     const core = try createCore(&shell, 2);
     defer core.destroy();
     try addTask(core, "r1", "registered-echo", "s", "{\"a\":1}", "background");
-    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"task-message\",\"data\":{\"taskId\":\"r1\",\"source\":\"s\",\"message\":{\"type\":\"registered-hello\"}}}");
+    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"task-event\",\"data\":{\"taskId\":\"r1\",\"source\":\"s\",\"data\":{\"type\":\"registered-hello\"}}}");
     try shell.expectMessageContaining("\"outputs\":{\"taskId\":\"r1\",\"echo\":{\"a\":1}},\"type\":\"registered-echo\",\"inputs\":{\"a\":1}");
 }
 
@@ -232,14 +232,14 @@ const Recorder = struct {
         self.record(try std.fmt.allocPrint(std.testing.allocator, "complete|{s}|{s}|{s}|{s}|{s}|{s}", .{ result.taskId, result.type, result.status.toString(), result.errorMessage orelse "no error", outputs, inputs }));
     }
 
-    fn onMessage(context: ?*anyopaque, data: types.ITaskMessageData) anyerror!void {
+    fn onEvent(context: ?*anyopaque, data: types.ITaskEventData) anyerror!void {
         const self: *Recorder = @ptrCast(@alignCast(context.?));
-        const message = try std.json.Stringify.valueAlloc(std.testing.allocator, data.message, .{});
-        defer std.testing.allocator.free(message);
-        self.record(try std.fmt.allocPrint(std.testing.allocator, "message|{s}|{s}", .{ data.taskId, message }));
+        const event = try std.json.Stringify.valueAlloc(std.testing.allocator, data.event, .{});
+        defer std.testing.allocator.free(event);
+        self.record(try std.fmt.allocPrint(std.testing.allocator, "event|{s}|{s}", .{ data.taskId, event }));
     }
 
-    fn onTypedMessage(context: ?*anyopaque, data: types.ITaskMessageData) anyerror!void {
+    fn onTypedEvent(context: ?*anyopaque, data: types.ITaskEventData) anyerror!void {
         const self: *Recorder = @ptrCast(@alignCast(context.?));
         self.record(try std.fmt.allocPrint(std.testing.allocator, "typed|{s}", .{data.taskId}));
     }
@@ -302,7 +302,7 @@ test "a task that fails or is cancelled while running is reported as failed, and
     try std.testing.expectEqual(@as(usize, 0), recorder.count("complete|queued"));
 }
 
-test "message callbacks get the messages of a type, and every message" {
+test "event callbacks get the events of a type, and every event" {
     try register("registered-echo", echoHandler);
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
@@ -312,23 +312,23 @@ test "message callbacks get the messages of a type, and every message" {
     var recorder: Recorder = .{};
     defer recorder.deinit();
     const backend = try getQueueBackend();
-    const any = try backend.onAnyTaskMessage(.{
+    const any = try backend.onAnyTaskEvent(.{
         .context = &recorder,
-        .function = Recorder.onMessage,
+        .function = Recorder.onEvent,
     });
     defer any.call();
-    const typed = try backend.onTaskMessage("registered-hello", .{
+    const typed = try backend.onTaskEvent("registered-hello", .{
         .context = &recorder,
-        .function = Recorder.onTypedMessage,
+        .function = Recorder.onTypedEvent,
     });
     defer typed.call();
-    const other = try backend.onTaskMessage("something-else", .{
+    const other = try backend.onTaskEvent("something-else", .{
         .context = &recorder,
-        .function = Recorder.onTypedMessage,
+        .function = Recorder.onTypedEvent,
     });
     defer other.call();
     try addTask(core, "m1", "registered-echo", "s", "null", "background");
-    try recorder.waitFor("message|m1|{\"type\":\"registered-hello\"}");
+    try recorder.waitFor("event|m1|{\"type\":\"registered-hello\"}");
     try recorder.waitFor("typed|m1");
     shell.sleepMs(20);
     try std.testing.expectEqual(@as(usize, 1), recorder.count("typed|"));
@@ -367,7 +367,7 @@ test "callbacks for a source fire when a task is added under it and when the sou
 }
 
 //
-// Says whether the context a handler was given has a tool runner, and which tools it handles.
+// Returns whether the context a handler was given has a tool runner, and which tools it handles.
 //
 fn toolRunnerHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = io;

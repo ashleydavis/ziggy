@@ -75,7 +75,7 @@ pub fn pathsJsonFromOutput(allocator: std.mem.Allocator, output: []const u8) ![]
 
 //
 // Shows the dialog with zenity, waits for the user and returns what they chose as a JSON array of paths, "[]" when they
-// cancelled. Fails, saying why on stderr, when zenity is not installed or reports an error.
+// cancelled. Fails with why on stderr when zenity is not installed or reports an error.
 //
 pub fn pick(io: std.Io, allocator: std.mem.Allocator, kind: Kind, title: ?[]const u8, initial_name: ?[]const u8) ![]u8 {
     var arena: std.heap.ArenaAllocator = .init(allocator);

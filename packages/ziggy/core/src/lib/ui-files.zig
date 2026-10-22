@@ -1,24 +1,25 @@
 //
-// The app's bundled UI, held in the executable on the platforms that embed it. The app's build embeds every file of
-// its built UI and hands the shell a list of them, and the shell serves the web view's requests from that list, so
-// the UI needs no files beside the executable.
+// The app's bundled frontend, held in the executable on the platforms that embed it. The app's build embeds every file of
+// its built frontend and hands the native app a list of them, and the native app serves the web view's requests from that
+// list, so the frontend needs no files beside the executable.
 //
 
 const std = @import("std");
 
 //
-// One file of the app's bundled UI.
+// One file of the app's bundled frontend.
 //
 pub const UiFile = struct {
-    // The path inside the UI, with forward slashes and no leading slash, such as "assets/main.js".
+    // The path inside the frontend, with forward slashes and no leading slash, such as "assets/main.js".
     path: []const u8,
     // The file's bytes.
     content: []const u8,
 };
 
 //
-// Finds the file a request is for. The request path is the path part of the UI's URL, so it starts with a slash, and
-// the bare root means the UI itself. The path must match a file's path exactly, so a path with ".." in it finds nothing.
+// Finds the file a request is for. The request path is the path part of the frontend's URL, so it starts with a slash,
+// and the bare root means the frontend itself. The path must match a file's path exactly, so a path with ".." in it finds
+// nothing.
 //
 pub fn findFile(files: []const UiFile, request_path: []const u8) ?*const UiFile {
     var path = request_path;

@@ -45,7 +45,7 @@ runs:
         done
         sudo apt-get update
 
-    # The cache key is a hash of what apt says it is about to install, which is a list of package
+    # The cache key is a hash of what apt reports it is about to install, which is a list of package
     # names and their exact versions. That makes the key follow the thing it is caching: adding a
     # package or an upstream version bump changes the plan, so it changes the key, and a stale cache
     # cannot be used to install something other than what was asked for.

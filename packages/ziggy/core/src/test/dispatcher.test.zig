@@ -8,7 +8,7 @@ fn lastMessage(shell: *helpers.FakeShell) ![]u8 {
 }
 
 //
-// Fails unless the last message the shell recorded is the expected text.
+// Fails unless the last message the fake native app recorded is the expected text.
 //
 fn expectLastMessage(shell: *helpers.FakeShell, expected: []const u8) !void {
     const last = try lastMessage(shell);
@@ -471,7 +471,7 @@ test "answerWithTask refuses a message with no id and queues nothing" {
     const core = try helpers.createCore(&shell, 2, 1);
     defer core.destroy();
     core.postMessage("{\"kind\":\"app\",\"name\":\"quick-request\"}");
-    // The refusal reaches the UI before postMessage returns, as a core-error event, because there is no id to answer.
+    // The refusal reaches the frontend before postMessage returns, as a core-error event, because there is no id to answer.
     try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MessageHasNoId\"}}");
     try std.testing.expectEqual(@as(usize, 0), core.runner.live.items.len);
 }
@@ -605,8 +605,8 @@ test "the core's Io can run a task concurrently" {
 const ObserverRecord = struct {
     // Each task end, as "id|type|source|input|status".
     ends: std.ArrayList([]u8),
-    // Each task message, as "id|type|message".
-    messages: std.ArrayList([]u8),
+    // Each task's event, as "id|type|event".
+    events: std.ArrayList([]u8),
     // Guards the lists, which workers append to.
     mutex: std.Io.Mutex,
 };
@@ -615,7 +615,7 @@ fn createTestState(core: *ziggy.core.Core) anyerror!*anyopaque {
     const record = try core.allocator.create(ObserverRecord);
     record.* = .{
         .ends = .empty,
-        .messages = .empty,
+        .events = .empty,
         .mutex = .init,
     };
     return record;
@@ -631,11 +631,11 @@ fn destroyTestState(core: *ziggy.core.Core, state: *anyopaque) void {
     for (record.ends.items) |text| {
         core.allocator.free(text);
     }
-    for (record.messages.items) |text| {
+    for (record.events.items) |text| {
         core.allocator.free(text);
     }
     record.ends.deinit(core.allocator);
-    record.messages.deinit(core.allocator);
+    record.events.deinit(core.allocator);
     core.allocator.destroy(record);
 }
 
@@ -655,21 +655,21 @@ fn recordTaskEnd(core: *ziggy.core.Core, end: ziggy.types.TaskEnd) void {
     record.ends.append(core.allocator, text) catch @panic("out of memory");
 }
 
-fn recordTaskMessage(core: *ziggy.core.Core, sent: ziggy.types.TaskSentMessage) void {
+fn recordTaskEvent(core: *ziggy.core.Core, sent: ziggy.types.TaskSentEvent) void {
     const record: *ObserverRecord = @ptrCast(@alignCast(core.app_state.?));
-    const text = std.fmt.allocPrint(core.allocator, "{s}|{s}|{s}", .{ sent.task_id, sent.task_type, sent.message_json }) catch @panic("out of memory");
+    const text = std.fmt.allocPrint(core.allocator, "{s}|{s}|{s}", .{ sent.task_id, sent.task_type, sent.event_json }) catch @panic("out of memory");
     record.mutex.lockUncancelable(core.io());
     defer record.mutex.unlock(core.io());
-    record.messages.append(core.allocator, text) catch @panic("out of memory");
+    record.events.append(core.allocator, text) catch @panic("out of memory");
 }
 
-test "an app observes the end of a task and the messages it sent, and keeps its own state in the core" {
+test "an app observes the end of a task and the events it sent, and keeps its own state in the core" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     var observed_app = helpers.app;
     observed_app.on_task_end = recordTaskEnd;
-    observed_app.on_task_message = recordTaskMessage;
+    observed_app.on_task_event = recordTaskEvent;
     observed_app.state = .{
         .create = createTestState,
         .stop = stopTestState,
@@ -693,8 +693,8 @@ test "an app observes the end of a task and the messages it sent, and keeps its 
     defer record.mutex.unlock(core.io());
     try std.testing.expectEqual(@as(usize, 1), record.ends.items.len);
     try std.testing.expectEqualStrings("t1|quick|src|{\"a\":1}|succeeded", record.ends.items[0]);
-    try std.testing.expectEqual(@as(usize, 1), record.messages.items.len);
-    try std.testing.expectEqualStrings("t1|quick|{\"text\":\"hello\"}", record.messages.items[0]);
+    try std.testing.expectEqual(@as(usize, 1), record.events.items.len);
+    try std.testing.expectEqualStrings("t1|quick|{\"text\":\"hello\"}", record.events.items[0]);
 }
 
 test "a task handler reaches the app's state through its context" {
@@ -718,8 +718,8 @@ test "a task handler reaches the app's state through its context" {
 }
 
 //
-// What the ordering test's state hooks do, in order, each a line delivered to the shell, so the test reads the order from the messages the
-// shell recorded.
+// What the ordering test's state hooks do, in order, each a line delivered to the fake native app, so the test reads the order from the messages the
+// fake native app recorded.
 //
 fn deliverState(core: *ziggy.core.Core, name: []const u8) void {
     const message = ziggy.json.stringify(core.allocator, .{
@@ -745,11 +745,11 @@ fn destroyOrderedState(core: *ziggy.core.Core, state: *anyopaque) void {
 }
 
 //
-// A task that runs until it is cancelled and then says it was, as the last thing it does.
+// A task that runs until it is cancelled and then reports it was, as the last thing it does.
 //
 fn sayWhenCancelledTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     _ = data;
-    try context.sendMessage(.{ .started = true });
+    try context.sendEvent(.{ .started = true });
     while (true) {
         context.checkCancelled() catch {
             // The state the test made is the core itself, which the task reads through its context as a task does.
@@ -776,7 +776,7 @@ test "the app's state is stopped before the task runner stops and destroyed afte
         .destroy = destroyOrderedState,
     };
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), ordered_app);
-    // A task that is still running when the core is destroyed, and says so each time round its loop.
+    // A task that is still running when the core is destroyed, and reports it each time round its loop.
     core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"running\",\"taskType\":\"say-when-cancelled\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
     try shell.expectMessageContaining("\"started\":true");
     core.destroy();

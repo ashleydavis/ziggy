@@ -1,6 +1,6 @@
 import type { IJsonValue, IMenuEvent } from "ziggy";
 import { formatPingReply, IPingReply } from "./lib/format-reply";
-import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobList, IJobProgressMessage } from "./lib/job-list";
+import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobList, IJobProgressEvent } from "./lib/job-list";
 import { makeLargePayload } from "./lib/large-payload";
 import { crc32 } from "./lib/crc32";
 import { ITestCommand, performDropFileCommand, performInsertCommand, performTestCommand, performViewportCommand, testResultToJson } from "./lib/test-commands";
@@ -8,9 +8,9 @@ import { aboutText, buttonForMenuAction } from "./lib/menu-actions";
 import { formatPicked } from "./lib/picked-paths";
 
 //
-// A message that tells the UI the media server is listening.
+// An event that tells the frontend the media server is listening.
 //
-interface IMediaServerMessage {
+interface IMediaServerEvent {
     // Always "media-server".
     type: "media-server";
 
@@ -19,9 +19,9 @@ interface IMediaServerMessage {
 }
 
 //
-// A message whose text the UI shows in its output area.
+// An event whose text the frontend shows in its output area.
 //
-interface IOutputMessage {
+interface IOutputEvent {
     // Always "output".
     type: "output";
 
@@ -57,15 +57,15 @@ interface ITaskStats {
     // How many tasks have ended since the app started.
     tasksEnded: number;
 
-    // How many messages tasks have sent since the app started.
-    messagesSent: number;
+    // How many events tasks have sent since the app started.
+    eventsSent: number;
 }
 
 //
 // What the backend's app event carries: its type, "queued-from-app", and the id of a task the app's own code queued.
 //
 interface IAppEvent {
-    // What the event says: always "queued-from-app" in the test app.
+    // The event's type: always "queued-from-app" in the test app.
     type: string;
 
     // The task the app queued.
@@ -219,7 +219,7 @@ function startEdgeChecks(): void {
 //
 // What the app's own code in the backend does: an error it describes, a task that reads its own context and the app's state, a task that
 // runs children one after another, tasks queued and cancelled from the app's code, the counts the app keeps by observing tasks, and an
-// event the app sends that the UI stops listening for.
+// event the app sends that the frontend stops listening for.
 //
 function startAppFacilities(): void {
     const result = element("app-result");
@@ -254,7 +254,7 @@ function startAppFacilities(): void {
     });
     element("app-stats").addEventListener("click", async () => {
         const stats = await window.ziggy.invoke<ITaskStats>("task-stats", null);
-        result.textContent = `tasks ended ${stats.tasksEnded}, messages sent ${stats.messagesSent}`;
+        result.textContent = `tasks ended ${stats.tasksEnded}, events sent ${stats.eventsSent}`;
     });
     const onAppEvent = (event: IAppEvent) => {
         if (event.type === "queued-from-app") {
@@ -270,7 +270,7 @@ function startAppFacilities(): void {
 
 //
 // The file and folder pickers. Each is a message to the backend of the type the Electron app's channel for it is named, and the
-// message response is shown in the UI. A cancelled dialog replies null.
+// message response is shown in the frontend. A cancelled dialog replies null.
 //
 function startPickers(): void {
     const picked = element("picked");
@@ -296,9 +296,9 @@ function startPickers(): void {
 
 
 //
-// Loads the test app image and video from the media server on the loopback port, and fetches a range of bytes with a
-// request from the UI's script, which the browser lets through only because the server allows the UI's origin. The
-// status shows what each of the three did.
+// Loads the test app image and video from the media server on the loopback port, and fetches a range of bytes
+// with a request from the frontend's script, which the browser lets through only because the server allows the
+// frontend's origin. The status shows what each of the three did.
 //
 function showMedia(port: number): void {
     const base = `http://127.0.0.1:${port}`;
@@ -338,7 +338,7 @@ function startMedia(): void {
 }
 
 //
-// Files dropped on the drop zone, written the way a UI written for Electron would: for each File of the drop it calls
+// Files dropped on the drop zone, written the way a frontend written for Electron would: for each File of the drop it calls
 // window.ziggy.getPathForFile for the real path. A drop anywhere else does nothing, rather than the web view navigating to the file.
 //
 function startDrop(): void {
@@ -425,7 +425,7 @@ async function describeCheck(check: () => Promise<string>): Promise<string> {
 }
 
 //
-// Loads one of the UI's own files with XMLHttpRequest and gives its status and text.
+// Loads one of the frontend's own files with XMLHttpRequest and gives its status and text.
 //
 function loadWithXhr(url: string): Promise<{ status: number; text: string }> {
     return new Promise((resolve, reject) => {
@@ -438,8 +438,8 @@ function loadWithXhr(url: string): Promise<{ status: number; text: string }> {
 }
 
 //
-// Shows the address the UI is served from and what the web view gives that address: a secure context, localStorage,
-// IndexedDB, and fetch and XMLHttpRequest of the UI's own files.
+// Shows the address the frontend is served from and what the web view gives that address: a secure context,
+// localStorage, IndexedDB, and fetch and XMLHttpRequest of the frontend's own files.
 //
 function startAddressCheck(): void {
     element("address-check").addEventListener("click", async () => {
@@ -470,17 +470,17 @@ function startAddressCheck(): void {
 }
 
 function listenForEvents(): void {
-    window.ziggy.onTaskMessage<IOutputMessage | IJobProgressMessage | IMediaServerMessage>(event => {
-        appendTo("event-log", `task-message ${event.taskId} ${JSON.stringify(event.message)}`);
-        if (event.message.type === "output") {
-            appendTo("output", event.message.text);
+    window.ziggy.onTaskEvent<IOutputEvent | IJobProgressEvent | IMediaServerEvent>(event => {
+        appendTo("event-log", `task-event ${event.taskId} ${JSON.stringify(event.data)}`);
+        if (event.data.type === "output") {
+            appendTo("output", event.data.text);
         }
-        else if (event.message.type === "job-progress") {
-            jobList = applyJobProgress(jobList, event.taskId, event.message);
+        else if (event.data.type === "job-progress") {
+            jobList = applyJobProgress(jobList, event.taskId, event.data);
             renderJobs();
         }
-        else if (event.message.type === "media-server") {
-            showMedia(event.message.port);
+        else if (event.data.type === "media-server") {
+            showMedia(event.data.port);
         }
     });
     window.ziggy.onTaskCompleted(event => {
@@ -497,9 +497,9 @@ function listenForEvents(): void {
 }
 
 //
-// Carries out the menu items that run in the UI, which arrive as menu events. It also logs the event the Send Event From Zig item's
-// function sends. A task item presses the same button the UI shows. This is a listener of its own, apart from the one the App
-// facilities section can remove, so the menu keeps working after that button is pressed.
+// Carries out the menu items that run in the frontend, which arrive as menu events. It also logs the event the Send Event From Zig
+// item's function sends. A task item presses the same button the frontend shows. This is a listener of its own, apart from the one
+// the App facilities section can remove, so the menu keeps working after that button is pressed.
 //
 function listenForMenuEvents(): void {
     window.ziggy.onEvent<IMenuEvent | IMenuZigEvent>(event => {
@@ -525,9 +525,9 @@ function listenForMenuEvents(): void {
 }
 
 //
-// Handles the commands the test control connection forwards. It does nothing unless the shell started the UI in test
-// mode, which it does only in a test hooks build, and it tells the backend when it is listening so that no command is sent
-// before it can be heard.
+// Handles the commands the test control connection forwards. It does nothing unless the native app started the frontend
+// in test mode, which it does only in a test hooks build, and it tells the backend when it is listening so that no
+// command is sent before it can be heard.
 //
 function listenForTestCommands(): void {
     if (new URLSearchParams(window.location.search).get("testMode") !== "1") {

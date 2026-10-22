@@ -6,25 +6,25 @@ const ITaskContext = types.ITaskContext;
 const sendJobProgress = task_queue_zig.job_progress.sendJobProgress;
 
 //
-// Records the messages a handler sends through a task context.
+// Records the events a handler sends through a task context.
 //
-const MessageRecorder = struct {
-    // Number of messages sent.
+const EventRecorder = struct {
+    // Number of events sent.
     calls: usize,
 
-    // The last message, serialized to JSON so it can be compared after the call returns.
-    lastMessage: []const u8,
+    // The last event, serialized to JSON so it can be compared after the call returns.
+    lastEvent: []const u8,
 
-    // Allocator for lastMessage.
+    // Allocator for lastEvent.
     allocator: std.mem.Allocator,
 
     //
-    // ITaskContext.sendMessage for the recorder.
+    // ITaskContext.sendEvent for the recorder.
     //
-    fn sendMessage(ptr: *anyopaque, message: std.json.Value) void {
-        const self: *MessageRecorder = @ptrCast(@alignCast(ptr));
+    fn sendEvent(ptr: *anyopaque, event: std.json.Value) void {
+        const self: *EventRecorder = @ptrCast(@alignCast(ptr));
         self.calls += 1;
-        self.lastMessage = std.json.Stringify.valueAlloc(self.allocator, message, .{}) catch unreachable;
+        self.lastEvent = std.json.Stringify.valueAlloc(self.allocator, event, .{}) catch unreachable;
     }
 
     //
@@ -39,7 +39,7 @@ const MessageRecorder = struct {
     // The ITaskContext functions of the recorder.
     //
     const vtable: ITaskContext.VTable = .{
-        .sendMessage = sendMessage,
+        .sendEvent = sendEvent,
         .isCancelled = isCancelled,
     };
 };
@@ -56,9 +56,9 @@ const Generators = struct {
 };
 
 //
-// Builds a task context that records the messages a handler sends through it.
+// Builds a task context that records the events a handler sends through it.
 //
-fn makeContext(recorder: *MessageRecorder, generators: *Generators) ITaskContext {
+fn makeContext(recorder: *EventRecorder, generators: *Generators) ITaskContext {
     return .{
         .uuidGenerator = generators.uuidGenerator.uuidGenerator(),
         .timestampProvider = generators.timestampProvider.timestampProvider(),
@@ -68,16 +68,16 @@ fn makeContext(recorder: *MessageRecorder, generators: *Generators) ITaskContext
         .hostRequester = null,
         .toolRunner = null,
         .ptr = recorder,
-        .vtable = &MessageRecorder.vtable,
+        .vtable = &EventRecorder.vtable,
     };
 }
 
 test "sends the whole job with every report, so a listener that joined late learns all of it" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var recorder: MessageRecorder = .{
+    var recorder: EventRecorder = .{
         .calls = 0,
-        .lastMessage = "",
+        .lastEvent = "",
         .allocator = arena.allocator(),
     };
     var generators: Generators = .{
@@ -93,15 +93,15 @@ test "sends the whole job with every report, so a listener that joined late lear
     }, 5000, "12 imported");
 
     try std.testing.expectEqual(@as(usize, 1), recorder.calls);
-    try std.testing.expectEqualStrings("{\"type\":\"job-progress\",\"job\":{\"id\":\"job-1\",\"name\":\"Importing photos\",\"cancelSource\":\"session-1\"},\"startedAt\":5000,\"progressMessage\":\"12 imported\"}", recorder.lastMessage);
+    try std.testing.expectEqualStrings("{\"type\":\"job-progress\",\"job\":{\"id\":\"job-1\",\"name\":\"Importing photos\",\"cancelSource\":\"session-1\"},\"startedAt\":5000,\"progressMessage\":\"12 imported\"}", recorder.lastEvent);
 }
 
 test "carries a job that has not said what it is doing yet" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var recorder: MessageRecorder = .{
+    var recorder: EventRecorder = .{
         .calls = 0,
-        .lastMessage = "",
+        .lastEvent = "",
         .allocator = arena.allocator(),
     };
     var generators: Generators = .{
@@ -115,17 +115,17 @@ test "carries a job that has not said what it is doing yet" {
         .name = "Syncing database",
     }, 5000, null);
 
-    // (An undefined progressMessage is left out of the message.)
+    // (An undefined progressMessage is left out of the event.)
     try std.testing.expectEqual(@as(usize, 1), recorder.calls);
-    try std.testing.expectEqualStrings("{\"type\":\"job-progress\",\"job\":{\"id\":\"job-1\",\"name\":\"Syncing database\"},\"startedAt\":5000}", recorder.lastMessage);
+    try std.testing.expectEqualStrings("{\"type\":\"job-progress\",\"job\":{\"id\":\"job-1\",\"name\":\"Syncing database\"},\"startedAt\":5000}", recorder.lastEvent);
 }
 
 test "sends nothing for a task that carries no job tag" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var recorder: MessageRecorder = .{
+    var recorder: EventRecorder = .{
         .calls = 0,
-        .lastMessage = "",
+        .lastEvent = "",
         .allocator = arena.allocator(),
     };
     var generators: Generators = .{

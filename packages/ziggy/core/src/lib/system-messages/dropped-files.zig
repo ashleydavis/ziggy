@@ -1,6 +1,6 @@
 //
-// The dropped files' system message: get-dropped-paths, which the UI script sends for the paths of the files last dropped on the
-// window.
+// The dropped files' system message: get-dropped-paths, which the frontend script sends for the paths of the files last dropped
+// on the window.
 //
 
 const std = @import("std");
@@ -23,7 +23,7 @@ pub fn register(registry: *message_registry.Registry) !void {
 const GetDroppedPathsRequest = struct {};
 
 //
-// Handles the UI's request for the paths of the files in the last drop: an array of strings, empty when nothing was dropped.
+// Handles the frontend's request for the paths of the files in the last drop: an array of strings, empty when nothing was dropped.
 //
 fn getDroppedPathsHandler(core: *Core, arena: std.mem.Allocator, request: GetDroppedPathsRequest) !json.Raw {
     _ = request;

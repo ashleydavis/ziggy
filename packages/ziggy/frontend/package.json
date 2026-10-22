@@ -1,7 +1,7 @@
 {
     "name": "ziggy",
     "version": "1.0.0",
-    "description": "Ziggy's UI side: the types of window.ziggy and of the messages the core sends.",
+    "description": "Ziggy's frontend side: the types of window.ziggy and of the messages the core sends.",
     "main": "src/index.ts",
     "type": "module",
     "private": true,

@@ -1,6 +1,6 @@
 //
-// Everything the template adds to Ziggy's core library: the messages its UI sends and the tasks it queues, each with the Zig function that
-// handles it, its menu and its built UI. Ziggy's build serves the app declared here.
+// Everything the template adds to Ziggy's core library: the messages its frontend sends and the tasks it queues, each with the Zig
+// function that handles it, its menu and its built frontend. Ziggy's build serves the app declared here.
 //
 
 const ziggy = @import("ziggy");

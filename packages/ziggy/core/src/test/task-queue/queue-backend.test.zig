@@ -37,8 +37,8 @@ const NoOpBackend = struct {
         .addTask = addTask,
         .onTaskAdded = onTaskAdded,
         .onTaskComplete = onTaskComplete,
-        .onTaskMessage = onTaskMessage,
-        .onAnyTaskMessage = onAnyTaskMessage,
+        .onTaskEvent = onTaskEvent,
+        .onAnyTaskEvent = onAnyTaskEvent,
         .cancelTasks = cancelTasks,
         .onTasksCancelled = onTasksCancelled,
         .shutdown = shutdown,
@@ -94,9 +94,9 @@ const NoOpBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onTaskMessage(ptr: *anyopaque, messageType: []const u8, callback: types.TaskMessageCallback) anyerror!types.UnsubscribeFn {
+    fn onTaskEvent(ptr: *anyopaque, eventType: []const u8, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
         countCall(ptr);
-        _ = messageType;
+        _ = eventType;
         _ = callback;
         return no_unsubscribe;
     }
@@ -104,7 +104,7 @@ const NoOpBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onAnyTaskMessage(ptr: *anyopaque, callback: types.TaskMessageCallback) anyerror!types.UnsubscribeFn {
+    fn onAnyTaskEvent(ptr: *anyopaque, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
         countCall(ptr);
         _ = callback;
         return no_unsubscribe;
@@ -177,8 +177,8 @@ test "IQueueBackend forwards the subscriptions to the implementation" {
     var backend: NoOpBackend = .{ .calls = 0 };
     const interface = backend.queueBackend();
     (try interface.onTaskAdded("s", .{ .context = null, .function = undefined })).call();
-    (try interface.onTaskMessage("progress", .{ .context = null, .function = undefined })).call();
-    (try interface.onAnyTaskMessage(.{ .context = null, .function = undefined })).call();
+    (try interface.onTaskEvent("progress", .{ .context = null, .function = undefined })).call();
+    (try interface.onAnyTaskEvent(.{ .context = null, .function = undefined })).call();
     (try interface.onTasksCancelled("s", .{ .context = null, .function = undefined })).call();
     try std.testing.expectEqual(@as(u32, 4), backend.calls);
 }

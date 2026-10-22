@@ -2,35 +2,35 @@ const std = @import("std");
 const task_queue_zig = @import("ziggy").task_queue;
 const utils = @import("ziggy").task_queue.utils;
 const TaskContext = task_queue_zig.task_context.TaskContext;
-const SendMessageFn = task_queue_zig.task_context.SendMessageFn;
+const SendEventFn = task_queue_zig.task_context.SendEventFn;
 
 //
-// Records the messages passed to the send-message function.
+// Records the events passed to the send-event function.
 //
-const MessageRecorder = struct {
+const EventRecorder = struct {
     // Number of calls.
     calls: usize,
 
-    // The type field of the last message.
+    // The type field of the last event.
     lastType: []const u8,
 
-    // The value field of the last message.
+    // The value field of the last event.
     lastValue: i64,
 
     //
-    // Records a message.
+    // Records an event.
     //
-    fn record(context: ?*anyopaque, message: std.json.Value) void {
-        const self: *MessageRecorder = @ptrCast(@alignCast(context.?));
+    fn record(context: ?*anyopaque, event: std.json.Value) void {
+        const self: *EventRecorder = @ptrCast(@alignCast(context.?));
         self.calls += 1;
-        self.lastType = message.object.get("type").?.string;
-        self.lastValue = message.object.get("value").?.integer;
+        self.lastType = event.object.get("type").?.string;
+        self.lastValue = event.object.get("value").?.integer;
     }
 
     //
-    // Gets the send-message function that records into this recorder.
+    // Gets the send-event function that records into this recorder.
     //
-    fn sendMessageFn(self: *MessageRecorder) SendMessageFn {
+    fn sendEventFn(self: *EventRecorder) SendEventFn {
         return .{ .context = self, .function = record };
     }
 };
@@ -38,8 +38,8 @@ const MessageRecorder = struct {
 test "isCancelled returns false initially" {
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var recorder: MessageRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendMessageFn(), 10);
+    var recorder: EventRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10);
 
     try std.testing.expect(!context.isCancelled());
 }
@@ -47,8 +47,8 @@ test "isCancelled returns false initially" {
 test "cancel causes isCancelled to return true" {
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var recorder: MessageRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendMessageFn(), 10);
+    var recorder: EventRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10);
 
     context.cancel();
 
@@ -56,31 +56,31 @@ test "cancel causes isCancelled to return true" {
     try std.testing.expect(context.taskContext().isCancelled());
 }
 
-test "sendMessage invokes the injected sendMessageFn with the correct argument" {
+test "sendEvent invokes the injected sendEventFn with the correct argument" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var recorder: MessageRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendMessageFn(), 10);
+    var recorder: EventRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10);
 
     const msg = try std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), "{\"type\":\"progress\",\"value\":42}", .{});
-    context.sendMessage(msg);
+    context.sendEvent(msg);
 
     try std.testing.expectEqual(@as(usize, 1), recorder.calls);
     try std.testing.expectEqualStrings("progress", recorder.lastType);
     try std.testing.expectEqual(@as(i64, 42), recorder.lastValue);
 
     // Through the ITaskContext interface too.
-    context.taskContext().sendMessage(msg);
+    context.taskContext().sendEvent(msg);
     try std.testing.expectEqual(@as(usize, 2), recorder.calls);
 }
 
 test "everything the task needs is exposed as provided" {
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var recorder: MessageRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "my-session", "my-task", recorder.sendMessageFn(), 7);
+    var recorder: EventRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "my-session", "my-task", recorder.sendEventFn(), 7);
 
     try std.testing.expect(context.uuidGenerator.ptr == @as(*anyopaque, &uuid_generator));
     try std.testing.expect(context.timestampProvider.ptr == @as(*anyopaque, &timestamp_provider));

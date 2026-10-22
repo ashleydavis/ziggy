@@ -1,7 +1,7 @@
 //
-// Ziggy's dev host: an app's core run as a program of its own for dev mode, with the UI in an ordinary browser instead of the
-// system web view. It plays the part a native app plays, through the same C interface: it creates the core, carries messages
-// between the UI and the core over a WebSocket and implements the core's native host callbacks. It also stands in front of the app's own
+// Ziggy's dev host: an app's core run as a program of its own for dev mode, with the frontend in an ordinary browser instead of
+// the system web view. It plays the part a native app plays, through the same C interface: it creates the core, carries messages
+// between the frontend and the core over a WebSocket and implements the core's native host callbacks. It also stands in front of the app's own
 // dev server: the browser opens the dev host, which serves /__ziggy itself and forwards everything else to the dev server, putting
 // its dev script and the inject script at the start of each page on the way through, and passing the dev server's own WebSockets
 // through. The dev server needs nothing of Ziggy's.
@@ -9,7 +9,7 @@
 // What only a native app can do (menus, screenshots, the app's own host requests) has no callback here, so the core fails each
 // with HostCallbackMissing. File and folder dialogs are shown by the dev host itself on Linux, through zenity (see pickers.zig), and
 // are missing on the other platforms. A dropped file is handled too: the browser hands its contents over and the dev host saves a
-// copy, whose path is what the UI gets.
+// copy, whose path is what the frontend gets.
 //
 // It listens on 127.0.0.1 only. Each connection is served on a thread of its own. Messages from the core arrive on any thread and
 // are written to the WebSocket of the page that connected last, or kept until a page connects.
@@ -27,7 +27,7 @@ const pickers = @import("pickers.zig");
 // Ziggy's dev mode script, which the dev host puts in each page before the inject script. See dev-client.js.
 const dev_script = @embedFile("dev-client.js");
 
-// The largest message the UI may send over the WebSocket. A message is held whole before it goes to the core.
+// The largest message the frontend may send over the WebSocket. A message is held whole before it goes to the core.
 const message_limit = 256 * 1024 * 1024;
 
 // The largest request body or page the dev host holds whole while it forwards it.
@@ -204,7 +204,7 @@ fn destroyCore(host: *DevHost) void {
 }
 
 //
-// Hands a message from the UI to the core.
+// Hands a message from the frontend to the core.
 //
 fn postToCore(host: *DevHost, text: []const u8) void {
     host.core_mutex.lockUncancelable(host.io);
@@ -473,7 +473,7 @@ fn respondWithScript(request: *std.http.Server.Request, script: []const u8) !voi
 
 //
 // Sends the browser to index.html with the query the app makes, as a native app loads it. A browser opened at /__ziggy/start gets
-// the UI as a native app shows it, test mode switch included.
+// the frontend as a native app shows it, test mode switch included.
 //
 fn redirectToIndex(host: *DevHost, request: *std.http.Server.Request) !void {
     var query_length: usize = 0;

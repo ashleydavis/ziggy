@@ -1,5 +1,5 @@
 //
-// The Ziggy template's iOS shell: the application delegate, which owns the window and the one view controller. Everything
+// The Ziggy template's iOS native app: the application delegate, which owns the window and the one view controller. Everything
 // else is in ZiggyNativeIOS.
 //
 

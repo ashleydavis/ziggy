@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# The UI loads, the bridge works, and the backend sends a message response to a message.
+# The frontend loads, the bridge works, and the backend sends a message response to a message.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 

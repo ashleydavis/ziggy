@@ -2,7 +2,7 @@ package dev.ziggy.nativeapp;
 
 import java.nio.charset.StandardCharsets;
 
-// How a host request's result crosses to the core: UTF-8 bytes whose first byte says whether the request succeeded (1) or failed (0),
+// How a host request's result crosses to the core: UTF-8 bytes whose first byte records whether the request succeeded (1) or failed (0),
 // followed by the JSON text of the result or the text of the reason. The core's JNI code reads the first byte and passes the rest on.
 public final class HostRequestAnswer {
     // The first byte of the result of a request that succeeded.

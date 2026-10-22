@@ -5,8 +5,8 @@
 const std = @import("std");
 
 //
-// Delivers a JSON message from the core to the shell. The message is valid only while the call runs, so the
-// shell copies it before returning. It may be called from any thread.
+// Delivers a JSON message from the core to the native app. The message is valid only while the call runs, so the
+// native app copies it before returning. It may be called from any thread.
 //
 pub const DeliverFn = *const fn (user_data: ?*anyopaque, message_ptr: [*]const u8, message_len: usize) callconv(.c) void;
 
@@ -17,12 +17,12 @@ pub const DeliverFn = *const fn (user_data: ?*anyopaque, message_ptr: [*]const u
 pub const OsVersionFn = *const fn (user_data: ?*anyopaque, buffer: [*]u8, capacity: usize) callconv(.c) isize;
 
 //
-// Has the shell quit the application. Called only by the test control connection.
+// Has the native app quit the application. Called only by the test control connection.
 //
 pub const QuitFn = *const fn (user_data: ?*anyopaque) callconv(.c) void;
 
 //
-// The kind of dialog a shell shows.
+// The kind of dialog a native app shows.
 //
 pub const PickKind = enum(i32) {
     // A dialog to choose one or more existing files to open.
@@ -38,14 +38,14 @@ pub const PickKind = enum(i32) {
 // buffer the core gives it, as a JSON array of path strings ("[]" when they cancelled). Returns the number of bytes written, or
 // a negative number on failure. The title is NUL terminated and may be null. The initial name is NUL terminated and may be
 // null: for a save dialog it is the suggested file name, and for a dialog that opens files or a folder it is the folder the dialog
-// starts in, which a shell that cannot start a dialog in a folder leaves out. The core calls it from a worker thread, never from the one that handles UI messages, so
-// the shell shows the dialog on its UI thread and waits.
+// starts in, which a native app that cannot start a dialog in a folder leaves out. The core calls it from a worker thread, never from the one that handles UI messages, so
+// the native app shows the dialog on its UI thread and waits.
 //
 //
 // A native host callback that does a menu action as if the user had chosen its menu item, by the path the menu item takes in the
-// shell, so the shell's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
+// native app, so the native app's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
 // other action reaches the core, which runs the app's item. The core calls it, from the thread of the test control connection, only to let a test choose a
-// menu item. The shell does the work on its UI thread and returns at once.
+// menu item. The native app does the work on its UI thread and returns at once.
 //
 pub const MenuActionFn = *const fn (user_data: ?*anyopaque, action: [*:0]const u8) callconv(.c) void;
 
@@ -53,14 +53,14 @@ pub const MenuActionFn = *const fn (user_data: ?*anyopaque, action: [*:0]const u
 // A native host callback that writes a PNG picture of the app's window to the file at the path (NUL terminated), waits until the
 // file is written, and returns 0. When it cannot, it writes the text of the reason into the buffer and returns the number of bytes
 // written negated. The core calls it, from the thread of the test control connection, only to let a test take a screenshot. The
-// shell does the capture on its UI thread and waits for it, so the window stays responsive.
+// native app does the capture on its UI thread and waits for it, so the window stays responsive.
 //
 pub const ScreenshotFn = *const fn (user_data: ?*anyopaque, output_path: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize;
 
 //
-// Tells the shell whether the app must keep running because tasks marked keep-alive are queued or running. Called with true when the
-// first such task is queued and with false when the last one ends, so the shell can use its platform's way of staying alive (an
-// Android foreground service or an iOS background task; a desktop shell provides none, because closing its window quits the app). Called from any
+// Tells the native app whether the app must keep running because tasks marked keep-alive are queued or running. Called with true when the
+// first such task is queued and with false when the last one ends, so the native app can use its platform's way of staying alive (an
+// Android foreground service or an iOS background task; a desktop native app provides none, because closing its window quits the app). Called from any
 // thread while the core holds a lock, so it must return at once and must not call back into the core.
 //
 pub const KeepAliveFn = *const fn (user_data: ?*anyopaque, keep_running: bool) callconv(.c) void;
@@ -69,31 +69,31 @@ pub const PickPathsFn = *const fn (user_data: ?*anyopaque, kind: i32, title: ?[*
 
 //
 // A native host callback that does one thing only the platform can do, named by `method` ("exportFile", "secureStoreGet", ...). The
-// request is the JSON text of the method's argument (NUL terminated), and the shell writes the JSON text of its result into the
+// request is the JSON text of the method's argument (NUL terminated), and the native app writes the JSON text of its result into the
 // buffer and returns the number of bytes written. When it cannot do what the method names it writes the text of the reason, in words the user
-// can act on, and returns that number of bytes negated. The shell may show native interface and wait for the user, so the core calls
+// can act on, and returns that number of bytes negated. The native app may show native interface and wait for the user, so the core calls
 // it from a worker thread, never from the one that handles UI messages, and it may take a long time.
 //
 pub const HostRequestFn = *const fn (user_data: ?*anyopaque, method: [*:0]const u8, request_json: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize;
 
 //
-// What a shell returned for a host request.
+// What a native app returned for a host request.
 //
 pub const HostReply = struct {
-    // Whether the shell did what the method names.
+    // Whether the native app did what the method names.
     succeeded: bool,
     // The JSON text of the result when it succeeded, and the text of the reason when it did not.
     text: []const u8,
 };
 
 //
-// What the shell passes to ziggy_create. Every pointer is copied by the core, so it need only be valid during the call.
+// What the native app passes to ziggy_create. Every pointer is copied by the core, so it need only be valid during the call.
 // Declared with the same fields, in the same order, in ziggy.h.
 //
 pub const ZiggyConfig = extern struct {
-    // The shell's own pointer, passed back on every callback.
+    // The native app's own pointer, passed back on every callback.
     user_data: ?*anyopaque,
-    // Delivers a message to the UI.
+    // Delivers a message to the frontend.
     deliver: ?DeliverFn,
     // Native host callback: the operating system's version. Null when the platform has none.
     os_version: ?OsVersionFn,
@@ -110,7 +110,7 @@ pub const ZiggyConfig = extern struct {
     worker_threads: u32,
     // The limit on child tasks in flight for any one parent task.
     max_concurrent_child_tasks: u32,
-    // The URL prefix of the app's own bundled UI, such as "ziggy-app://app/" or "https://ziggy-app.invalid/", the address the shell serves the UI from (NUL terminated).
+    // The URL prefix of the app's own bundled frontend, such as "ziggy-app://app/" or "https://ziggy-app.invalid/", the address the native app serves the frontend from (NUL terminated).
     app_url_prefix: [*:0]const u8,
     // The app's private data directory (NUL terminated).
     data_dir: [*:0]const u8,
@@ -119,10 +119,10 @@ pub const ZiggyConfig = extern struct {
     // The file the test control connection writes its port to, or null for none. Used only in a test hooks build.
     test_port_file: ?[*:0]const u8,
     // Native host callback: do one thing only the platform can do (a share sheet, a permission prompt, the keychain), by name. Null when
-    // the platform has none. Last in the struct so that a shell that builds it with zeroes needs no change.
+    // the platform has none. Last in the struct so that a native app that builds it with zeroes needs no change.
     host_request: ?HostRequestFn,
     // Native host callback: write a PNG of the app's window to a file. Null when the platform has none, and a screenshot is taken from
-    // outside the app instead. Used only by the test control connection. Last in the struct so that a shell that builds it with zeroes
+    // outside the app instead. Used only by the test control connection. Last in the struct so that a native app that builds it with zeroes
     // needs no change.
     screenshot: ?ScreenshotFn,
 };
@@ -131,7 +131,7 @@ pub const ZiggyConfig = extern struct {
 // The result of a URL check.
 //
 pub const UrlDecision = enum(i32) {
-    // The address is the app's own UI.
+    // The address is the app's own frontend.
     allow = 0,
     // The address is an external link, to open in the system browser.
     open_externally = 1,
@@ -149,7 +149,7 @@ pub const TaskStatus = enum {
 };
 
 //
-// The completion of a task, as reported to the UI and to a parent that awaits it.
+// The completion of a task, as reported to the frontend and to a parent that awaits it.
 //
 pub const Completion = struct {
     // How the task ended.
@@ -176,8 +176,8 @@ pub const TaskError = error{
 pub const ErrorDescriber = *const fn (err: anyerror) ?[]const u8;
 
 //
-// How a task ended, as reported to the app's observer: the task's type and input as well as its outcome, which the UI's
-// task-completed event does not carry on its own account (the UI knows what task it queued).
+// How a task ended, as reported to the app's observer: the task's type and input as well as its outcome, which the
+// frontend's task-completed event does not carry on its own account (the frontend knows what task it queued).
 //
 pub const TaskEnd = struct {
     // The id of the task.
@@ -200,29 +200,29 @@ pub const TaskEnd = struct {
 };
 
 //
-// A message a task sent, as reported to the app's observer.
+// An event a task sent, as reported to the app's observer.
 //
-pub const TaskSentMessage = struct {
+pub const TaskSentEvent = struct {
     // The id of the task.
     task_id: []const u8,
     // The task type string.
     task_type: []const u8,
     // The source the task was queued under.
     source: []const u8,
-    // The message as JSON text.
-    message_json: []const u8,
+    // The event as JSON text.
+    event_json: []const u8,
 };
 
 //
-// Lets the app see every task end and every message a task sends, through
-// onTaskComplete and onAnyTaskMessage. Both functions are called from the thread the event happened on, with no lock held, and the
+// Lets the app see every task end and every event a task sends, through
+// onTaskComplete and onAnyTaskEvent. Both functions are called from the thread the event happened on, with no lock held, and the
 // values are valid only during the call.
 //
 pub const TaskObserver = struct {
     // The observer's own pointer, passed back on every call.
     user_data: ?*anyopaque,
-    // Called when a task has ended, after the UI has been told.
+    // Called when a task has ended, after the frontend has been told.
     on_task_end: *const fn (user_data: ?*anyopaque, end: TaskEnd) void,
-    // Called when a task sends a message, after the UI has been told.
-    on_task_message: *const fn (user_data: ?*anyopaque, sent: TaskSentMessage) void,
+    // Called when a task sends an event, after the frontend has been told.
+    on_task_event: *const fn (user_data: ?*anyopaque, sent: TaskSentEvent) void,
 };

@@ -5,7 +5,7 @@ const helpers = @import("helpers.zig");
 const core_module = ziggy.core;
 
 //
-// A UI query hook that says what it was told, so a test can see that the core passed the test mode switch through.
+// A frontend query hook that returns what it was told, so a test can see that the core passed the test mode switch through.
 //
 fn sayTestMode(core: *core_module.Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8 {
     _ = core;

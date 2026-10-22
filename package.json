@@ -4,8 +4,8 @@
   "private": true,
   "description": "Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the user interface and Zig for everything else. One app runs on Linux, Windows, macOS, Android and iOS, using each platform's system web view.",
   "license": "MIT",
-  "main": "packages/ziggy/ui/src/index.ts",
-  "types": "packages/ziggy/ui/src/index.ts",
+  "main": "packages/ziggy/frontend/src/index.ts",
+  "types": "packages/ziggy/frontend/src/index.ts",
   "scripts": {
     "setup": "bun --filter '*' setup",
     "compile": "bun --filter '*' compile",
@@ -42,6 +42,7 @@
     "package:ziggy-template:macos": "bun run --filter=ziggy-template package:macos",
     "package:ziggy-template:ios": "bun run --filter=ziggy-template package:ios",
     "package:ziggy-template:android": "bun run --filter=ziggy-template package:android",
+    "package:ziggy-template:archive": "bash ./scripts/package-template.sh",
     "distribute:ziggy-template:android": "bun run --filter=ziggy-template distribute:android",
     "clean:ziggy-template:linux": "bun run --filter=ziggy-template clean:linux",
     "clean:ziggy-template:windows": "bun run --filter=ziggy-template clean:windows",
@@ -49,7 +50,7 @@
     "clean:ziggy-template:ios": "bun run --filter=ziggy-template clean:ios",
     "clean:ziggy-template:android": "bun run --filter=ziggy-template clean:android",
     "test:smoke": "bash ./smoke-tests/run-desktop.sh",
-    "test:smoke:and": "bash ./smoke-tests/run.sh android",
+    "test:smoke:android": "bash ./smoke-tests/run.sh android",
     "test:smoke:ios": "bash ./smoke-tests/run.sh ios",
     "test:smoke:dev": "bash ./smoke-tests/run.sh dev",
     "dev:ziggy-template": "bun run --filter=ziggy-template dev",
@@ -57,6 +58,6 @@
   },
   "workspaces": [
     "apps/*",
-    "packages/ziggy/ui"
+    "packages/ziggy/frontend"
   ]
 }

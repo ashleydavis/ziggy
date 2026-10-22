@@ -1,7 +1,7 @@
 //
 // Hello world example: change it into your own tests, or delete it.
 //
-// Each test starts the app's backend with a fake native app, sends it what the UI would send and checks what comes back.
+// Each test starts the app's backend with a fake native app, sends it what the frontend would send and checks what comes back.
 //
 
 const std = @import("std");

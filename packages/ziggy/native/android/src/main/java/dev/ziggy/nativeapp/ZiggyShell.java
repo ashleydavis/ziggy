@@ -44,8 +44,9 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-// Ziggy's Android shell. It configures a WebView, injects window.ziggy before the UI's own scripts, loads the app's
-// bundled UI from the APK assets, calls the core through JNI and moves messages between the UI and the core.
+// Ziggy's Android native app. It configures a WebView, injects window.ziggy before the frontend's own scripts, loads the
+// app's bundled frontend from the APK assets, calls the core through JNI and moves messages between the frontend and the
+// core.
 //
 // An activity creates one, calls start from onCreate and destroy from onDestroy. Messages from the core arrive on any
 // thread and are posted to the main thread in order before they touch the web view.
@@ -56,8 +57,8 @@ public final class ZiggyShell implements ZiggyHost {
     private static final String EXTRA_TEST_MODE = "ziggy.testMode";
     private static final String EXTRA_TEST_PORT_FILE = "ziggy.testPortFile";
 
-    // The prefix every address of the app's own UI starts with. The UI is embedded in the app's native library and each file is
-    // served from there in shouldInterceptRequest. The host name is under .invalid, which can never be looked up.
+    // The prefix every address of the app's own frontend starts with. The frontend is embedded in the app's native library and
+    // each file is served from there in shouldInterceptRequest. The host name is under .invalid, which can never be looked up.
     private static final String APP_URL_PREFIX = "https://ziggy-app.invalid/";
 
     // The values ziggy_check_url returns.
@@ -72,17 +73,17 @@ public final class ZiggyShell implements ZiggyHost {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     // Calls into the core hold the read lock and destroy holds the write lock, so the core is never released while a
-    // message or an address check is inside it. The UI's messages and the web view's request checks come in on threads
-    // of their own.
+    // message or an address check is inside it. The frontend's messages and the web view's request checks come in on
+    // threads of their own.
     private final ReentrantReadWriteLock coreLock = new ReentrantReadWriteLock();
 
     // The core's handle, or 0 before it is created and after it is destroyed. Guarded by coreLock.
     private long handle;
 
-    // True once the UI has finished loading, so window.__ziggyReceive exists. Only the main thread reads or writes it.
+    // True once the frontend has finished loading, so window.__ziggyReceive exists. Only the main thread reads or writes it.
     private boolean uiReady;
 
-    // The messages the core sent before the UI finished loading, held for the main thread to deliver when it has.
+    // The messages the core sent before the frontend finished loading, held for the main thread to deliver when it has.
     private final ArrayList<String> beforeUi = new ArrayList<String>();
 
     // Set once the core has been destroyed, so nothing queued for the main thread reaches the web view afterwards.
@@ -94,7 +95,7 @@ public final class ZiggyShell implements ZiggyHost {
     // Whether the core's last keep-alive call was true.
     private boolean keepAliveWanted;
 
-    // Whether the system refused the last start of the keep-alive service, so the shell starts it again when the activity resumes.
+    // Whether the system refused the last start of the keep-alive service, so the native app starts it again when the activity resumes.
     private boolean keepAliveRefused;
 
     // Handles the core's host requests, or null when the app gave none.
@@ -120,7 +121,7 @@ public final class ZiggyShell implements ZiggyHost {
     // returns. Written by onActivityResult before it releases the waiting thread.
     private volatile boolean lastActivityResultOk;
 
-    // What a picker returns when it is dismissed with no choice, or the shell is being destroyed under it.
+    // What a picker returns when it is dismissed with no choice, or the native app is being destroyed under it.
     private static final Intent NOTHING_PICKED = new Intent();
 
     public ZiggyShell(Activity activity, WebView webView, String nativeLibraryName, int workerThreads, int maxConcurrentChildTasks) {
@@ -131,7 +132,7 @@ public final class ZiggyShell implements ZiggyHost {
         this.maxConcurrentChildTasks = maxConcurrentChildTasks;
     }
 
-    // Creates the core, configures the web view and loads the UI. Call it once, on the main thread.
+    // Creates the core, configures the web view and loads the frontend. Call it once, on the main thread.
     public void start() {
         System.loadLibrary(nativeLibraryName);
         Intent intent = activity.getIntent();
@@ -161,7 +162,7 @@ public final class ZiggyShell implements ZiggyHost {
         webView.loadUrl(APP_URL_PREFIX + "index.html" + (query.isEmpty() ? "" : "?" + query));
     }
 
-    // Destroys the core once. After it returns nothing more is delivered to the UI. Call it from onDestroy.
+    // Destroys the core once. After it returns nothing more is delivered to the frontend. Call it from onDestroy.
     public void destroy() {
         destroyed = true;
         // Destroying the core waits for its worker threads, and one may be waiting on a picker that will now never return.
@@ -184,11 +185,11 @@ public final class ZiggyShell implements ZiggyHost {
     }
 
     private void configureWebView() {
-        // The UI is a classic script bundle served from the APK assets. File access is off, because the assets load
-        // without it, and nothing else on the file system is the UI's to read.
+        // The frontend is a classic script bundle served from the APK assets. File access is off, because the assets load
+        // without it, and nothing else on the file system is the frontend's to read.
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
-        // localStorage and IndexedDB are off in a web view until this is set, and a UI expects them to work.
+        // localStorage and IndexedDB are off in a web view until this is set, and a frontend expects them to work.
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowFileAccessFromFileURLs(false);
@@ -201,18 +202,18 @@ public final class ZiggyShell implements ZiggyHost {
             WebView.setWebContentsDebuggingEnabled(true);
         }
 
-        // The script has to run before the UI's own scripts, and only the document start API guarantees that: running it
-        // when the UI starts loading races the UI's first script. So a web view without the API is refused here, loudly,
-        // and there is no fallback that could quietly lose the race.
+        // The script has to run before the frontend's own scripts, and only the document start API guarantees that: running
+        // it when the frontend starts loading races the frontend's first script. So a web view without the API is refused
+        // here, loudly, and there is no fallback that could quietly lose the race.
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
             throw new IllegalStateException("This WebView cannot run a script at document start (WebViewFeature.DOCUMENT_START_SCRIPT), which Ziggy needs to expose window.ziggy before the UI's scripts.");
         }
         WebViewCompat.addDocumentStartJavaScript(webView, new String(ZiggyNative.injectScript(), StandardCharsets.UTF_8), Collections.singleton("*"));
 
         // An app targeting Android 15 or later is drawn edge to edge, with the web view running under the status bar, the
-        // navigation bar and the keyboard. The UI is shared with platforms that have no such bars, so the shell keeps the web
-        // view's content clear of them by giving it margins of the insets the window reports, which also keeps working once the
-        // platform stops letting an app opt out of edge to edge.
+        // navigation bar and the keyboard. The frontend is shared with platforms that have no such bars, so the native app keeps
+        // the web view's content clear of them by giving it margins of the insets the window reports, which also keeps working
+        // once the platform stops letting an app opt out of edge to edge.
         // Before Android 11 the window insets have no per-bar types, and before Android 15 the system keeps an app inside the
         // bars by itself, so there is nothing to do there.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -240,8 +241,8 @@ public final class ZiggyShell implements ZiggyHost {
         });
     }
 
-    // Serves a request to the app's own UI from the files embedded in the core library: the file's bytes with its content
-    // type, or a 404 when the UI has no such file. Any request after the core is destroyed is refused.
+    // Serves a request to the app's own frontend from the files embedded in the core library: the file's bytes with its
+    // content type, or a 404 when the frontend has no such file. Any request after the core is destroyed is refused.
     private WebResourceResponse uiResponse(String url) {
         String path = url.substring(APP_URL_PREFIX.length());
         int pathEnd = path.length();
@@ -316,11 +317,11 @@ public final class ZiggyShell implements ZiggyHost {
     }
 
 
-    // What the keep-alive service's notification says, as the app supplied it. Null until the app calls setKeepAliveNotification, in
+    // What the keep-alive service's notification shows, as the app supplied it. Null until the app calls setKeepAliveNotification, in
     // which case the service uses wording of its own.
     private String[] keepAliveNotificationText;
 
-    // Sets what the keep-alive service's ongoing notification says, which is the app's to word because only it knows what its background
+    // Sets what the keep-alive service's ongoing notification shows, which is the app's to word because only it knows what its background
     // work is. Call it before start. The channel name and description are what the system settings show for the notification.
     public void setKeepAliveNotification(String channelName, String channelDescription, String title, String text) {
         keepAliveNotificationText = new String[] { channelName, channelDescription, title, text };
@@ -373,7 +374,7 @@ public final class ZiggyShell implements ZiggyHost {
         }
     }
 
-    // Tells the shell the activity has resumed, which is a moment the system allows a foreground service to start. If the system
+    // Tells the native app the activity has resumed, which is a moment the system allows a foreground service to start. If the system
     // refused the keep-alive service earlier, and the core still wants it, it is started now. The activity calls this from onResume.
     public void onResume() {
         synchronized (keepAliveMutex) {
@@ -391,8 +392,8 @@ public final class ZiggyShell implements ZiggyHost {
         }
     }
 
-    // Gives the shell the object that handles the core's host requests. Call it before start. Without one, every host request
-    // fails with a reason that says so.
+    // Gives the native app the object that handles the core's host requests. Call it before start. Without one, every host request
+    // fails with a reason that reports it.
     public void setHostRequestHandler(HostRequestHandler handler) {
         hostRequestHandler = handler;
     }
@@ -442,7 +443,7 @@ public final class ZiggyShell implements ZiggyHost {
     }
 
     // Starts an activity for the app's own host request handlers and waits for it to finish, from a thread that is not the main
-    // thread. Returns the activity's result data, or null when the user backed out, the activity gave no data or the shell is being
+    // thread. Returns the activity's result data, or null when the user backed out, the activity gave no data or the native app is being
     // destroyed. It shares the one slot the pickers use, so only one such activity is on screen at a time.
     public Intent startActivityAndWait(final Intent request) throws InterruptedException, ActivityNotFoundException {
         synchronized (pickMutex) {
@@ -479,7 +480,7 @@ public final class ZiggyShell implements ZiggyHost {
 
     // Starts a system confirmation given as an IntentSender (a PendingIntent's) and waits for the user to answer it, from a thread that
     // is not the main thread. Returns whether the user accepted it (RESULT_OK), and false when they declined, the confirmation could
-    // not be shown or the shell is being destroyed. It shares the one slot the pickers use.
+    // not be shown or the native app is being destroyed. It shares the one slot the pickers use.
     public boolean startIntentSenderAndWait(final IntentSender sender) throws InterruptedException {
         synchronized (pickMutex) {
             final int requestCode = ACTIVITY_REQUEST_CODE;
@@ -639,7 +640,7 @@ public final class ZiggyShell implements ZiggyHost {
         return file.getAbsolutePath();
     }
 
-    // The object the UI reaches as window.ZiggyAndroid. Its one method is how the injected script posts a message.
+    // The object the frontend reaches as window.ZiggyAndroid. Its one method is how the injected script posts a message.
     private final class UiBridge {
         @JavascriptInterface
         public void postMessage(String message) {
@@ -656,7 +657,7 @@ public final class ZiggyShell implements ZiggyHost {
         }
     }
 
-    // Decides every navigation and request with the core's origin check: the app's own UI loads, http, https and mailto
+    // Decides every navigation and request with the core's origin check: the app's own frontend loads, http, https and mailto
     // links open in the system browser, and everything else is blocked.
     private final class ZiggyWebViewClient extends WebViewClient {
         @Override
@@ -665,7 +666,7 @@ public final class ZiggyShell implements ZiggyHost {
         }
 
         // The injected script ran at document start, so window.__ziggyReceive exists now: the messages the core sent while the
-        // UI was loading are delivered in the order they were sent.
+        // frontend was loading are delivered in the order they were sent.
         @Override
         public void onPageFinished(WebView view, String url) {
             uiReady = true;
@@ -700,7 +701,8 @@ public final class ZiggyShell implements ZiggyHost {
             if (url.startsWith(APP_URL_PREFIX)) {
                 return uiResponse(url);
             }
-            // Only a navigation is checked, as on every other platform. The UI loads media from a server on the loopback address.
+            // Only a navigation is checked, as on every other platform. The frontend loads media from a server on the loopback
+            // address.
             if (!request.isForMainFrame() || checkUrl(url) == URL_ALLOW) {
                 return null;
             }

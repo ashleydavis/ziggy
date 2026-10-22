@@ -1,5 +1,5 @@
 //
-// Zig backends copy task data, results and messages (std.json.Value trees) explicitly with
+// Zig backends copy task data, results and events (std.json.Value trees) explicitly with
 // cloneJsonValue when they have to keep them.
 //
 

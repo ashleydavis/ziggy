@@ -6,7 +6,7 @@ import android.os.Bundle;
 import android.webkit.WebView;
 import dev.ziggy.nativeapp.ZiggyShell;
 
-// The Ziggy test app's one screen: a web view run by Ziggy's shell. What is the test app's own is the name of its backend library
+// The Ziggy test app's one screen: a web view run by Ziggy's native app. What is the test app's own is the name of its backend library
 // and the mobile limits on the backend's threads.
 public final class MainActivity extends Activity {
     private ZiggyShell shell;

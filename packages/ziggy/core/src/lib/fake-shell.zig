@@ -1,5 +1,5 @@
 //
-// A stand-in for a shell, for the unit tests of an app built on Ziggy. It records every message the core delivers and
+// A fake native app, for the unit tests of an app built on Ziggy. It records every message the core delivers and
 // implements the native host callbacks. Nothing in a shipped app uses it, so it is never compiled into one.
 //
 
@@ -8,7 +8,7 @@ const types = @import("types.zig");
 const host_reply = @import("host-reply.zig");
 
 //
-// A stand-in for a shell. It records every message the core delivers, and implements the native host callbacks.
+// A fake native app. It records every message the core delivers, and implements the native host callbacks.
 //
 pub const FakeShell = struct {
     // Allocates the recorded messages.
@@ -85,7 +85,7 @@ pub const FakeShell = struct {
         }
         var text_buffer: [1024]u8 = undefined;
         const answer = std.fmt.bufPrint(&text_buffer, "{{\"method\":\"{s}\",\"request\":{s}}}", .{ method_name, std.mem.span(request_json) }) catch {
-            return host_reply.writeHostReply(false, method_name, "The stand-in shell's answer is too long for its buffer.", buffer, capacity);
+            return host_reply.writeHostReply(false, method_name, "The fake native app's answer is too long for its buffer.", buffer, capacity);
         };
         return host_reply.writeHostReply(true, method_name, answer, buffer, capacity);
     }
@@ -171,7 +171,7 @@ pub const FakeShell = struct {
     }
 
     //
-    // The configuration to give a core, with this shell's callbacks.
+    // The configuration to give a core, with this fake native app's callbacks.
     //
     pub fn config(self: *FakeShell, worker_threads: u32, max_children: u32) types.ZiggyConfig {
         return .{

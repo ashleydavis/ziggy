@@ -4,11 +4,11 @@ An AppKit app: a window holding Ziggy's `WKWebView`, under the backend's menu. A
 
 ## Web view API used
 
-`WKWebView`, `WKUserScript` (document start, main frame), `WKScriptMessageHandler` named `ziggy`, `evaluateJavaScript`, `WKURLSchemeHandler` (which serves the bundled UI), `WKNavigationDelegate`, `WKUIDelegate` and `NSWorkspace.open` for external links.
+`WKWebView`, `WKUserScript` (document start, main frame), `WKScriptMessageHandler` named `ziggy`, `evaluateJavaScript`, `WKURLSchemeHandler` (which serves the bundled frontend), `WKNavigationDelegate`, `WKUIDelegate` and `NSWorkspace.open` for external links.
 
 ## Building
 
-The project links `libziggy_template.a` from the directory in the `ZIGGY_NATIVE_DIR` build setting (default `zig-out` beside the project) (which has the UI embedded in it, so the app has no UI files of its own). Fill that directory first with `scripts/sync-macos.sh`. The build and run scripts (`build-macos.sh`, `run-macos.sh`, `package-macos.sh`, `open-macos.sh`, `clean-macos.sh`) do it for you.
+The project links `libziggy_template.a` from the directory in the `ZIGGY_NATIVE_DIR` build setting (default `zig-out` beside the project) (which has the frontend embedded in it, so the app has no frontend files of its own). Fill that directory first with `scripts/sync-macos.sh`. The build and run scripts (`build-macos.sh`, `run-macos.sh`, `package-macos.sh`, `open-macos.sh`, `clean-macos.sh`) do it for you.
 
 ## What you do on the Mac
 
@@ -36,9 +36,9 @@ The pick-files, pick-folder and pick-file messages open `NSOpenPanel` (files, or
 In a test hooks build the backend can choose a menu item by action through the `menu_action` callback (the control connection's `menu` command). The native app copies the action, moves to the main thread and runs `ZiggyMenu.perform(action:)`, the same function a click on the item runs for every action the native app owns, so a test runs what a click runs. An action the native app does not own goes to the backend as a menu-action system message, whatever it is. iOS leaves the callback unset.
 
 - The edit actions (undo, redo, cut, copy, paste, select-all) normally reach the web view because a click leaves it first responder. A test choice first makes the window key and the web view first responder (`makeKeyAndOrderFront`, `makeFirstResponder`), then sends the selector to the responder chain with `sendAction(_:to: nil:from:)`. If nothing handles the selector, the native app prints that to standard error. Whether WKWebView handles `undo:` and `redo:` is untested.
-- The window sets `.fullScreenPrimary` so toggle-fullscreen works. The change animates, so a test should wait for the UI's size to settle.
-- Zoom uses `pageZoom`, which changes the UI's viewport size like browser zoom does.
-- The developer tools toggle uses the private inspector. Whether it docks inside the window (which shrinks the UI's viewport height) or opens a separate window is untested and may depend on a saved inspector setting.
+- The window sets `.fullScreenPrimary` so toggle-fullscreen works. The change animates, so a test should wait for the frontend's size to settle.
+- Zoom uses `pageZoom`, which changes the frontend's viewport size like browser zoom does.
+- The developer tools toggle uses the private inspector. Whether it docks inside the window (which shrinks the frontend's viewport height) or opens a separate window is untested and may depend on a saved inspector setting.
 - Quit calls `NSApplication.terminate`, which runs `applicationWillTerminate` (destroying the backend) and ends the process. It would wait if a modal panel were open.
 
 Dropped files are read from the drag pasteboard by the web view subclass in ZiggyNativeMacOS.

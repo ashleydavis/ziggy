@@ -35,7 +35,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# The test app's backend embeds the built UI, so the UI is built before anything here.
+# The test app's backend embeds the built frontend, so the frontend is built before anything here.
 (cd "$EXAMPLE_DIR" && bun run bundle:ui)
 
 packages="$EXAMPLE_DIR/backend"
@@ -137,7 +137,7 @@ else
         # and _dyld_image_path_containing_address for stack traces, which the iOS simulator SDK's libSystem does not export, and the
         # link failed with "undefined symbol: __dyld_get_image_header_containing_address" (run 37464567354, job
         # ziggy-test-app-zig-unit-tests (ios, macos-latest)). The size build leaves out the stack trace code, so the calls go too.
-        # Reproduced with a stand-in sysroot on Linux: the symbols are undefined for the debug, fast and safe builds and not for this one.
+        # Reproduced with a fake sysroot on Linux: the symbols are undefined for the debug, fast and safe builds and not for this one.
         (cd "$(build_dir_of "$package_dir")" && zig build "test-binary-$step_name" -Dtarget=aarch64-ios.14.0-simulator -Doptimize=ReleaseSmall --sysroot "$sdk_path" -p "$work_dir/$name") || {
             # The build failed with "unable to find libSystem system library" with the sysroot given too (run 37458283805, job
             # ziggy-test-app-zig-unit-tests (ios, macos-latest), log line 526), so what the SDK holds is printed to show why.

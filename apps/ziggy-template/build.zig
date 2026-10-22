@@ -3,16 +3,16 @@ const ziggy_build = @import("ziggy");
 
 //
 // Builds the Ziggy template, an app built on Ziggy the way every app is: it takes Ziggy as the dependency named "ziggy" in
-// build.zig.zon, builds its backend as a library with the `ziggy-template-backend` step, and its Linux and Windows shells with the
+// build.zig.zon, builds its backend as a library with the `ziggy-template-backend` step, and its Linux and Windows native apps with the
 // `ziggy-template-linux` and `ziggy-template-windows` steps. The Xcode projects and the Android project are built by the app's scripts,
-// which run the `ziggy-template-backend` step to build the backend's library. `ziggy-template-dev` runs it in dev mode, with the UI in a browser, which comes
-// with the backend. `test` runs the unit tests of the template's backend.
+// which run the `ziggy-template-backend` step to build the backend's library. `ziggy-template-dev` runs it in dev mode, with the
+// frontend in a browser, which comes with the backend. `test` runs the unit tests of the template's backend.
 //
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
     // Whether the test hooks (the test control connection) are built into the app. Never for a release.
     const test_hooks = b.option(bool, "test-hooks", "Build the test hooks (the test control connection) into the app (never for a release)") orelse false;
-    // Whether the Windows shell is compiled without linking WebView2's loader, to check it on a machine that cannot link.
+    // Whether the Windows native app is compiled without linking WebView2's loader, to check it on a machine that cannot link.
     const compile_only = b.option(bool, "compile-only", "Compile the Windows shell without linking the WebView2 loader, to check it on a machine that cannot link") orelse false;
     // Whether the desktop executables leave out their debug information. Only the release packages do: a dev or test build keeps it, so
     // a panic there prints where it happened.

@@ -1,5 +1,5 @@
 //
-// The Ziggy template's MacOS shell: a window and Ziggy's web view in the window. Everything else is
+// The Ziggy template's MacOS native app: a window and Ziggy's web view in the window. Everything else is
 // in ZiggyNativeMacOS.
 //
 

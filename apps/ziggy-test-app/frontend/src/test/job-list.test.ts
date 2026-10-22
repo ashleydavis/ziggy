@@ -1,6 +1,6 @@
-import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobProgressMessage } from "../lib/job-list";
+import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobProgressEvent } from "../lib/job-list";
 
-function progress(jobId: string, progressMessage: string): IJobProgressMessage {
+function progress(jobId: string, progressMessage: string): IJobProgressEvent {
     return {
         type: "job-progress",
         job: {
@@ -14,7 +14,7 @@ function progress(jobId: string, progressMessage: string): IJobProgressMessage {
 }
 
 describe("job list", () => {
-    test("a first job-progress message adds the job", () => {
+    test("a first job-progress event adds the job", () => {
         const list = applyJobProgress(emptyJobList(), "task-1", progress("a", "starting"));
         expect(list.jobs).toEqual([
             {
@@ -27,7 +27,7 @@ describe("job list", () => {
         ]);
     });
 
-    test("a later message updates what the job is doing without adding a second job", () => {
+    test("a later event updates what the job is doing without adding a second job", () => {
         let list = applyJobProgress(emptyJobList(), "task-1", progress("a", "starting"));
         list = applyJobProgress(list, "task-1", progress("a", "halfway"));
         expect(list.jobs.length).toBe(1);

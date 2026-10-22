@@ -2,7 +2,7 @@
 
 import PackageDescription
 
-// Ziggy's Apple shells as one Swift package at the root of the repository, which is where Swift Package Manager looks for a package
+// Ziggy's Apple native apps as one Swift package at the root of the repository, which is where Swift Package Manager looks for a package
 // it fetches from a git URL. An app that takes Ziggy from a version tag adds this repository as a package and links the product for
 // its platform: ZiggyNativeMacOS for a MacOS app, ZiggyNativeIOS for an iOS app. An app that takes Ziggy from a checkout adds
 // packages/ziggy/native/macos or packages/ziggy/native/ios as a local package instead; those hold the same sources. The Zig static

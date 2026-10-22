@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Builds the template's UI and its Linux shell, which embeds the UI in the executable. See sync-linux.md.
+# Builds the template's frontend and its Linux native app, which embeds the frontend in the executable. See sync-linux.md.
 
 set -eu
 

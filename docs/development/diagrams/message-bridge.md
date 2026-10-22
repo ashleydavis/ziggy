@@ -1,6 +1,6 @@
 # message-bridge.svg
 
-The diagram under "The message bridge" in the architecture guide: how a message from the UI reaches the backend through the native app and how its message response comes back.
+The diagram under "The message bridge" in the architecture guide: how a message from the frontend reaches the backend through the native app and how its message response comes back.
 
 ## How it is made
 

@@ -1,10 +1,10 @@
 //
-// Keeps the running list of jobs from the job-progress messages tasks send, the way the real frontend does: a task
+// Keeps the running list of jobs from the job-progress events tasks send, the way the real frontend does: a task
 // that reports a job id counts towards that job, and the job is dropped when the last task carrying its id completes.
 //
 
 //
-// A job's identity, as a task reports it in a job-progress message.
+// A job's identity, as a task reports it in a job-progress event.
 //
 export interface IJobTag {
     // The job's id. Tasks sharing an id are one job.
@@ -18,13 +18,13 @@ export interface IJobTag {
 }
 
 //
-// A job-progress message, with the fields of IJobProgressMessage.
+// A job-progress event, with the fields of the core's IJobProgressEvent.
 //
-export interface IJobProgressMessage {
+export interface IJobProgressEvent {
     // Always "job-progress".
     type: "job-progress";
 
-    // The job the message is about.
+    // The job the event is about.
     job: IJobTag;
 
     // When the job started, in milliseconds since the Unix epoch.
@@ -35,7 +35,7 @@ export interface IJobProgressMessage {
 }
 
 //
-// A job as the UI lists it.
+// A job as the frontend lists it.
 //
 export interface IJob {
     // The job's id.
@@ -50,7 +50,7 @@ export interface IJob {
     // When the job started.
     startedAt: number;
 
-    // The latest thing the job said it was doing.
+    // The latest thing the job reported it was doing.
     progressMessage?: string;
 }
 
@@ -76,29 +76,29 @@ export function emptyJobList(): IJobList {
 }
 
 //
-// Applies a job-progress message sent by a task. A first message from a job adds it, and a later one updates what it
-// says it is doing.
+// Applies a job-progress event sent by a task. A first event from a job adds it, and a later one updates what it
+// reports it is doing.
 //
-export function applyJobProgress(list: IJobList, taskId: string, message: IJobProgressMessage): IJobList {
-    const taskJobIds = { ...list.taskJobIds, [taskId]: message.job.id };
-    const existing = list.jobs.find(job => job.id === message.job.id);
+export function applyJobProgress(list: IJobList, taskId: string, event: IJobProgressEvent): IJobList {
+    const taskJobIds = { ...list.taskJobIds, [taskId]: event.job.id };
+    const existing = list.jobs.find(job => job.id === event.job.id);
     if (!existing) {
         return {
             jobs: [
                 ...list.jobs,
                 {
-                    id: message.job.id,
-                    name: message.job.name,
-                    cancelSource: message.job.cancelSource,
-                    startedAt: message.startedAt,
-                    progressMessage: message.progressMessage,
+                    id: event.job.id,
+                    name: event.job.name,
+                    cancelSource: event.job.cancelSource,
+                    startedAt: event.startedAt,
+                    progressMessage: event.progressMessage,
                 },
             ],
             taskJobIds,
         };
     }
     return {
-        jobs: list.jobs.map(job => job.id === message.job.id ? { ...job, progressMessage: message.progressMessage } : job),
+        jobs: list.jobs.map(job => job.id === event.job.id ? { ...job, progressMessage: event.progressMessage } : job),
         taskJobIds,
     };
 }

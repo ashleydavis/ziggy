@@ -136,22 +136,22 @@ test "the fail message replies with an error" {
     try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"ExampleFailure\"}");
 }
 
-test "hello-short sends an output message and a job-progress message then completes" {
+test "hello-short sends an output event and a job-progress event then completes" {
     var shell: FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     const core = try createCore(&shell, "/tmp");
     defer core.destroy();
     try addTask(core, "t1", "hello-short", "{\"job\":{\"id\":\"job-1\",\"name\":\"Short job\",\"cancelSource\":\"src\"}}");
-    const output = try indexOfMessage(&shell, "\"message\":{\"type\":\"output\",\"text\":\"hello from a short task\"}");
-    const progress = try indexOfMessage(&shell, "\"message\":{\"type\":\"job-progress\",\"job\":{\"id\":\"job-1\",\"name\":\"Short job\",\"cancelSource\":\"src\"},\"startedAt\":");
+    const output = try indexOfMessage(&shell, "\"source\":\"src\",\"data\":{\"type\":\"output\",\"text\":\"hello from a short task\"}");
+    const progress = try indexOfMessage(&shell, "\"source\":\"src\",\"data\":{\"type\":\"job-progress\",\"job\":{\"id\":\"job-1\",\"name\":\"Short job\",\"cancelSource\":\"src\"},\"startedAt\":");
     const completed = try indexOfMessage(&shell, "\"status\":\"succeeded\",\"outputs\":\"short task done\"");
     try std.testing.expect(output < progress);
     try std.testing.expect(progress < completed);
     try shell.expectMessageContaining("\"progressMessage\":\"short task working\"}");
 }
 
-test "a job-progress message leaves out the cancel source when the job has none" {
+test "a job-progress event leaves out the cancel source when the job has none" {
     var shell: FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
@@ -161,7 +161,7 @@ test "a job-progress message leaves out the cancel source when the job has none"
     try shell.expectMessageContaining("\"job\":{\"id\":\"job-1\",\"name\":\"Short job\"},\"startedAt\"");
 }
 
-test "a task with no job sends no job-progress message" {
+test "a task with no job sends no job-progress event" {
     var shell: FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
@@ -180,11 +180,11 @@ test "hello-long sends output and progress at every step, starts its children an
     defer core.destroy();
     try addTask(core, "long", "hello-long", "{\"durationMs\":200,\"stepMs\":50,\"children\":3,\"job\":{\"id\":\"job-1\",\"name\":\"Long job\",\"cancelSource\":\"src\"}}");
     try shell.expectMessageContaining("\"result\":{\"taskId\":\"long\",\"status\":\"succeeded\",\"outputs\":{\"steps\":4,\"children\":3}");
-    try std.testing.expectEqual(@as(usize, 4), shell.countContaining("\"taskId\":\"long\",\"source\":\"src\",\"message\":{\"type\":\"output\",\"text\":\"long task step"));
+    try std.testing.expectEqual(@as(usize, 4), shell.countContaining("\"taskId\":\"long\",\"source\":\"src\",\"data\":{\"type\":\"output\",\"text\":\"long task step"));
     try std.testing.expectEqual(@as(usize, 3), shell.countContaining("child long.c"));
     try std.testing.expectEqual(@as(usize, 3), shell.countContaining("\"status\":\"succeeded\",\"outputs\":{\"index\":"));
     // The children report under the parent's job id.
-    try std.testing.expect(shell.countContaining("\"taskId\":\"long.c0\",\"source\":\"src\",\"message\":{\"type\":\"job-progress\",\"job\":{\"id\":\"job-1\"") == 1);
+    try std.testing.expect(shell.countContaining("\"taskId\":\"long.c0\",\"source\":\"src\",\"data\":{\"type\":\"job-progress\",\"job\":{\"id\":\"job-1\"") == 1);
     // The parent's completion is the last thing that happens.
     try std.testing.expect(shell.indexOfContaining("\"result\":{\"taskId\":\"long\",\"status\"").? > shell.indexOfContaining("\"result\":{\"taskId\":\"long.c2\",\"status\"").?);
 }
@@ -211,7 +211,7 @@ test "cancelling hello-long stops it early and its children are cancelled" {
     try shell.expectMessageContaining("long task step 3");
     core.postMessage("{\"kind\":\"system\",\"name\":\"cancel-tasks\",\"data\":\"src\"}");
     try shell.expectMessageContaining("\"status\":\"failed\",\"error\":{\"message\":\"Cancelled\"},\"errorMessage\":\"Cancelled\"");
-    try std.testing.expect(shell.countContaining("\"taskId\":\"long\",\"source\":\"src\",\"message\":{\"type\":\"output\",\"text\":\"long task step") < 100);
+    try std.testing.expect(shell.countContaining("\"taskId\":\"long\",\"source\":\"src\",\"data\":{\"type\":\"output\",\"text\":\"long task step") < 100);
 }
 
 test "hello-fail completes as failed" {

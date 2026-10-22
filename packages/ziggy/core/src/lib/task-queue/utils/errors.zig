@@ -2,7 +2,7 @@ const std = @import("std");
 
 //
 // Zig errors cannot carry a message, but the CLI prints one. This file records the message of the most recent error
-// thrown on the current thread, so that code can say `return errors.throwError(...)` and the message is
+// thrown on the current thread, so that code can use `return errors.throwError(...)` and the message is
 // available to whoever handles the error.
 //
 

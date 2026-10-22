@@ -1,6 +1,6 @@
 # open-macos
 
-Runs `sync-macos.sh`, then opens `native/macos/ZiggyTemplate.xcodeproj` in Xcode, so a build from Xcode finds the library and the UI.
+Runs `sync-macos.sh`, then opens `native/macos/ZiggyTemplate.xcodeproj` in Xcode, so a build from Xcode finds the library and the frontend.
 
 Run it on a Mac: `bash apps/ziggy-template/scripts/open-macos.sh`.
 

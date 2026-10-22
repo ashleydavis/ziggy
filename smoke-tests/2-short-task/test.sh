@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# A short task sends its output text and a progress message, completes, and its job goes away.
+# A short task sends its output text and a progress event, completes, and its job goes away.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
@@ -13,7 +13,7 @@ case "$event_log" in
     *'"progressMessage":"short task working"'*)
         ;;
     *)
-        fail "no job-progress message in the event log: $event_log"
+        fail "no job-progress event in the event log: $event_log"
         ;;
 esac
 wait_for_empty jobs

@@ -63,7 +63,7 @@ fi
 # been uploaded.
 RELEASE_NOTES="$(bash "$SCRIPT_DIR/release-notes.sh" --limit 20)"
 
-# The version name says which build a tester is on. The version code is a whole number
+# The version name shows which build a tester is on. The version code is a whole number
 # that only goes up, which Android needs to treat a new build as an update: minutes since the epoch always increases.
 APP_VERSION="$(jq -r '.version' "$EXAMPLE_DIR/package.json")-dev.$(date -u +%Y%m%d%H%M%S)"
 VERSION_CODE=$(( $(date +%s) / 60 ))

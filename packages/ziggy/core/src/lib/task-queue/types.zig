@@ -2,11 +2,11 @@
 // Shared types for task queue system
 // These types are used by both the main task queue and worker code
 //
-// Task data, task outputs and task messages are JSON-serializable values. They are
+// Task data, task outputs and task events are JSON-serializable values. They are
 // `std.json.Value`, so that handlers and backends stay
 // generic; typed code converts with std.json.parseFromValueLeaky and std.json.Stringify.
 //
-// Memory: a value passed to a callback (a result, a message, the data given to a handler) is only
+// Memory: a value passed to a callback (a result, an event, the data given to a handler) is only
 // valid for the duration of the call. A callee that keeps any of it must copy it with its own
 // allocator. Callbacks may be invoked from any thread unless stated otherwise.
 //
@@ -51,7 +51,7 @@ pub const ITaskContext = struct {
     maxConcurrentChildTasks: u32,
 
     //
-    // Has the program hosting the app (the phone's shell) do what only it can do, such as the device keychain and photo library.
+    // Has the program hosting the app (the native app) do what only it can do, such as the device keychain and photo library.
     // Null where there is no such program, which is every desktop and the command line.
     //
     hostRequester: ?utils.host_requester.IHostRequester,
@@ -62,7 +62,7 @@ pub const ITaskContext = struct {
     //
     toolRunner: ?utils.in_process_tools.InProcessRunner,
 
-    // Pointer to the implementation of sendMessage and isCancelled.
+    // Pointer to the implementation of sendEvent and isCancelled.
     ptr: *anyopaque,
 
     // The implementation's functions.
@@ -72,19 +72,19 @@ pub const ITaskContext = struct {
     // The functions an implementation of ITaskContext provides.
     //
     pub const VTable = struct {
-        // Sends a message from the task handler back to the caller.
-        sendMessage: *const fn (ptr: *anyopaque, message: std.json.Value) void,
+        // Sends an event from the task handler back to the caller.
+        sendEvent: *const fn (ptr: *anyopaque, event: std.json.Value) void,
 
         // Returns true if this task has been cancelled and should stop as soon as possible.
         isCancelled: *const fn (ptr: *anyopaque) bool,
     };
 
     //
-    // Sends a message from the task handler back to the caller.
-    // The message only has to stay valid during the call (it is copied if it has to be kept).
+    // Sends an event from the task handler back to the caller.
+    // The event only has to stay valid during the call (it is copied if it has to be kept).
     //
-    pub fn sendMessage(self: ITaskContext, message: std.json.Value) void {
-        self.vtable.sendMessage(self.ptr, message);
+    pub fn sendEvent(self: ITaskContext, event: std.json.Value) void {
+        self.vtable.sendEvent(self.ptr, event);
     }
 
     //
@@ -294,35 +294,35 @@ pub const WorkerTaskCompletionCallback = struct {
 };
 
 //
-// Task message data structure passed to message callbacks.
+// A task's event, as passed to event callbacks.
 //
-pub const ITaskMessageData = struct {
+pub const ITaskEventData = struct {
     //
-    // The ID of the task that sent this message.
+    // The ID of the task that sent this event.
     //
     taskId: []const u8,
 
     //
-    // The message payload.
+    // The event payload.
     //
-    message: std.json.Value,
+    event: std.json.Value,
 };
 
 //
-// Callback invoked when a task sends an arbitrary message to the client.
+// Callback invoked when a task sends an arbitrary event to the client.
 // (A Zig closure: `function` is called with `context`. Errors are caught and logged by the caller.)
 //
-pub const TaskMessageCallback = struct {
+pub const TaskEventCallback = struct {
     // The state of the callback, passed to function.
     context: ?*anyopaque,
 
     // The callback function. The data is only valid during the call.
-    function: *const fn (context: ?*anyopaque, data: ITaskMessageData) anyerror!void,
+    function: *const fn (context: ?*anyopaque, data: ITaskEventData) anyerror!void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: TaskMessageCallback, data: ITaskMessageData) anyerror!void {
+    pub fn call(self: TaskEventCallback, data: ITaskEventData) anyerror!void {
         return self.function(self.context, data);
     }
 };
@@ -362,7 +362,7 @@ pub const TaskCompletionCallback = WorkerTaskCompletionCallback;
 // Whatever queues the task puts this in the task's input data, and the task's handler echoes it back
 // in the progress it reports. That echo is how the interface finds out about work it did not queue
 // itself: a background sync is queued by the desktop's main process and by the mobile app's native
-// sync driver, and the only thing either of those sends the interface is the task's own messages.
+// sync driver, and the only thing either of those sends the interface is the task's own events.
 // (The `= null` default lets std.json parse a tag that leaves cancelSource out.)
 //
 pub const IJobTag = struct {
@@ -381,7 +381,7 @@ pub const IJobTag = struct {
     // The task source to cancel to stop this job, which is what the Cancel button passes to
     // cancelTasks(). Left out when the job cannot be cancelled from the interface: a background sync
     // is queued under a source chosen by the host, which the task that plans the sync does not know,
-    // so it says so by leaving this out rather than by guessing at one.
+    // so it shows that by leaving this out rather than by guessing at one.
     //
     cancelSource: ?[]const u8 = null,
 };
@@ -393,9 +393,9 @@ pub const IJobTag = struct {
 // not listening when the job started still learns all of it from the next one. That happens on a
 // phone, where the system suspends the interface while the work carries on.
 //
-pub const IJobProgressMessage = struct {
+pub const IJobProgressEvent = struct {
     //
-    // Discriminates this from every other task message ("job-progress").
+    // Discriminates this from every other task event ("job-progress").
     //
     type: []const u8,
 
@@ -424,18 +424,18 @@ pub const IJobProgressMessage = struct {
 };
 
 //
-// A registered task message callback entry pairing a message type filter with its callback.
+// A registered task event callback entry pairing an event type filter with its callback.
 //
-pub const IMessageCallbackEntry = struct {
+pub const IEventCallbackEntry = struct {
     //
-    // The message type this callback is registered for.
+    // The event type this callback is registered for.
     //
-    messageType: []const u8,
+    eventType: []const u8,
 
     //
-    // The callback to invoke when a message with the matching type is received.
+    // The callback to invoke when an event with the matching type is received.
     //
-    callback: TaskMessageCallback,
+    callback: TaskEventCallback,
 };
 
 //
@@ -475,11 +475,11 @@ pub const TasksCancelledCallback = struct {
 };
 
 //
-// Returns the `type` of a task message, or null when the message is not an object with a string
-// `type` (only string types can equal a registered message type).
+// Returns the `type` of a task's event, or null when the event is not an object with a string
+// `type` (only string types can equal a registered event type).
 //
-pub fn messageTypeOf(message: std.json.Value) ?[]const u8 {
-    switch (message) {
+pub fn eventTypeOf(event: std.json.Value) ?[]const u8 {
+    switch (event) {
         .object => |object| {
             const type_value = object.get("type") orelse return null;
             return switch (type_value) {

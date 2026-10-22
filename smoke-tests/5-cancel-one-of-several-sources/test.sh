@@ -6,9 +6,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 
 start_test_app
 click start-many
-wait_for_text event-log "task-message hello-long-1 "
-wait_for_text event-log "task-message hello-long-2 "
-wait_for_text event-log "task-message hello-long-3 "
+wait_for_text event-log "task-event hello-long-1 "
+wait_for_text event-log "task-event hello-long-2 "
+wait_for_text event-log "task-event hello-long-3 "
 click cancel-many-first
 wait_for_text event-log "task-completed hello-long-1 failed Cancelled"
 wait_for_text event-log "task-completed hello-long-2 succeeded" 60

@@ -1,6 +1,6 @@
 # sync-linux.sh
 
-Builds the template's UI (`bun run bundle:ui`) and its Linux native app (the `ziggy-template-linux` step of the template's `build.zig`, installed to `native/linux/zig-out`). The native app's build embeds every file of the built UI in the executable, so `native/linux/zig-out/bin/ziggy-template` is the whole app and needs no files beside it. Runs on Linux.
+Builds the template's frontend (`bun run bundle:ui`) and its Linux native app (the `ziggy-template-linux` step of the template's `build.zig`, installed to `native/linux/zig-out`). The native app's build embeds every file of the built frontend in the executable, so `native/linux/zig-out/bin/ziggy-template` is the whole app and needs no files beside it. Runs on Linux.
 
 ## Usage
 

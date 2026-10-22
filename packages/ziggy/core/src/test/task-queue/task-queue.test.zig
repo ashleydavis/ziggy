@@ -256,12 +256,12 @@ fn receivedJson(allocator: std.mem.Allocator) ![]const u8 {
 }
 
 //
-// A handler that sends a "test-message" and returns "done".
+// A handler that sends a "test-event" and returns "done".
 //
-fn messageSendingHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn eventSendingHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = io;
     _ = data;
-    context.sendMessage(try json(allocator, "{\"type\":\"test-message\",\"data\":\"test\"}"));
+    context.sendEvent(try json(allocator, "{\"type\":\"test-event\",\"data\":\"test\"}"));
     return .{ .string = "done" };
 }
 
@@ -275,9 +275,9 @@ fn setFlagOnComplete(context: ?*anyopaque, result: ITaskResult) anyerror!void {
 }
 
 //
-// Sets a boolean flag (used as a message callback that must not be called).
+// Sets a boolean flag (used as an event callback that must not be called).
 //
-fn setFlagOnMessage(context: ?*anyopaque, data: types.ITaskMessageData) anyerror!void {
+fn setFlagOnEvent(context: ?*anyopaque, data: types.ITaskEventData) anyerror!void {
     _ = data;
     const flag: *bool = @ptrCast(@alignCast(context.?));
     flag.* = true;
@@ -840,14 +840,14 @@ test "should prevent callbacks from being called after shutdown" {
     try std.testing.expect(!callbackCalled);
 }
 
-test "should prevent task messages from being received after shutdown" {
+test "should prevent task events from being received after shutdown" {
     var fixture: Fixture = undefined;
     try fixture.init(2);
     defer fixture.deinit();
-    try registerHandler("test-task", messageSendingHandler);
+    try registerHandler("test-task", eventSendingHandler);
 
     var callbackCalled = false;
-    _ = try fixture.queue.onTaskMessage("test-message", .{ .context = &callbackCalled, .function = setFlagOnMessage });
+    _ = try fixture.queue.onTaskEvent("test-event", .{ .context = &callbackCalled, .function = setFlagOnEvent });
 
     // Shutdown the queue.
     fixture.queue.shutdown();
@@ -887,8 +887,8 @@ const RecordingBackend = struct {
     // Set when the onTaskComplete subscription is removed.
     onTaskCompleteUnsubscribeCalled: bool,
 
-    // Set when the onAnyTaskMessage subscription is removed.
-    onAnyTaskMessageUnsubscribeCalled: bool,
+    // Set when the onAnyTaskEvent subscription is removed.
+    onAnyTaskEventUnsubscribeCalled: bool,
 
     //
     // Gets the IQueueBackend interface for this backend.
@@ -904,8 +904,8 @@ const RecordingBackend = struct {
         .addTask = addTask,
         .onTaskAdded = onTaskAdded,
         .onTaskComplete = onTaskComplete,
-        .onTaskMessage = onTaskMessage,
-        .onAnyTaskMessage = onAnyTaskMessage,
+        .onTaskEvent = onTaskEvent,
+        .onAnyTaskEvent = onAnyTaskEvent,
         .cancelTasks = cancelTasks,
         .onTasksCancelled = onTasksCancelled,
         .shutdown = shutdown,
@@ -928,14 +928,14 @@ const RecordingBackend = struct {
     }
 
     //
-    // Records which subscription was removed (the key says which one).
+    // Records which subscription was removed (the key names which one).
     //
     fn unsubscribe(context: ?*anyopaque, key: usize) void {
         const self: *RecordingBackend = @ptrCast(@alignCast(context.?));
         switch (key) {
             1 => self.onTaskAddedUnsubscribeCalled = true,
             2 => self.onTaskCompleteUnsubscribeCalled = true,
-            3 => self.onAnyTaskMessageUnsubscribeCalled = true,
+            3 => self.onAnyTaskEventUnsubscribeCalled = true,
             else => {},
         }
     }
@@ -960,16 +960,16 @@ const RecordingBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onTaskMessage(ptr: *anyopaque, messageType: []const u8, callback: types.TaskMessageCallback) anyerror!types.UnsubscribeFn {
-        _ = messageType;
+    fn onTaskEvent(ptr: *anyopaque, eventType: []const u8, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
+        _ = eventType;
         _ = callback;
         return .{ .context = ptr, .key = 0, .function = unsubscribe };
     }
 
     //
-    // Returns the unsubscribe function for onAnyTaskMessage.
+    // Returns the unsubscribe function for onAnyTaskEvent.
     //
-    fn onAnyTaskMessage(ptr: *anyopaque, callback: types.TaskMessageCallback) anyerror!types.UnsubscribeFn {
+    fn onAnyTaskEvent(ptr: *anyopaque, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
         _ = callback;
         return .{ .context = ptr, .key = 3, .function = unsubscribe };
     }
@@ -1013,7 +1013,7 @@ test "should unsubscribe from all backend events on shutdown" {
     testQueue.shutdown();
 
     try std.testing.expect(mockTestBackend.onTaskCompleteUnsubscribeCalled);
-    try std.testing.expect(mockTestBackend.onAnyTaskMessageUnsubscribeCalled);
+    try std.testing.expect(mockTestBackend.onAnyTaskEventUnsubscribeCalled);
     try std.testing.expect(mockTestBackend.onTaskAddedUnsubscribeCalled);
     testQueue.deinit();
 }
@@ -1166,7 +1166,7 @@ test "should preserve error messages" {
 }
 
 //
-// Records the progress strings of "replicate-progress" messages (like replicateDatabase's onProgress).
+// Records the progress strings of "replicate-progress" events (like replicateDatabase's onProgress).
 //
 const ProgressRecorder = struct {
     // Allocator for the copies.
@@ -1176,34 +1176,34 @@ const ProgressRecorder = struct {
     progress: std.ArrayList([]const u8),
 
     //
-    // The message callback.
+    // The event callback.
     //
-    fn record(context: ?*anyopaque, data: types.ITaskMessageData) anyerror!void {
+    fn record(context: ?*anyopaque, data: types.ITaskEventData) anyerror!void {
         const self: *ProgressRecorder = @ptrCast(@alignCast(context.?));
-        try self.progress.append(self.allocator, try self.allocator.dupe(u8, data.message.object.get("progress").?.string));
+        try self.progress.append(self.allocator, try self.allocator.dupe(u8, data.event.object.get("progress").?.string));
     }
 };
 
 //
-// A handler that sends two progress messages and a message of another type, then returns.
+// A handler that sends two progress events and an event of another type, then returns.
 //
 fn progressHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = io;
     _ = data;
-    context.sendMessage(try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"one\"}"));
-    context.sendMessage(try json(allocator, "{\"type\":\"other\",\"progress\":\"ignored\"}"));
-    context.sendMessage(try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"two\"}"));
+    context.sendEvent(try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"one\"}"));
+    context.sendEvent(try json(allocator, "{\"type\":\"other\",\"progress\":\"ignored\"}"));
+    context.sendEvent(try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"two\"}"));
     return json(allocator, "{\"filesCopied\":2}");
 }
 
-test "onTaskMessage delivers only messages of the registered type, in order, before awaitTask returns" {
+test "onTaskEvent delivers only events of the registered type, in order, before awaitTask returns" {
     var fixture: Fixture = undefined;
     try fixture.init(2);
     defer fixture.deinit();
     try registerHandler("progress-task", progressHandler);
 
     var recorder: ProgressRecorder = .{ .allocator = fixture.allocator(), .progress = .empty };
-    const unsubscribe = try fixture.queue.onTaskMessage("replicate-progress", .{ .context = &recorder, .function = ProgressRecorder.record });
+    const unsubscribe = try fixture.queue.onTaskEvent("replicate-progress", .{ .context = &recorder, .function = ProgressRecorder.record });
 
     const taskId = try fixture.queue.addTask("progress-task", .null, null, null);
     const result = (try fixture.queue.awaitTask(taskId)).?;
@@ -1214,7 +1214,7 @@ test "onTaskMessage delivers only messages of the registered type, in order, bef
     try std.testing.expectEqualStrings("one", recorder.progress.items[0]);
     try std.testing.expectEqualStrings("two", recorder.progress.items[1]);
 
-    // After unsubscribing no more messages are delivered.
+    // After unsubscribing no more events are delivered.
     unsubscribe.call();
     const secondTaskId = try fixture.queue.addTask("progress-task", .null, null, null);
     _ = try fixture.queue.awaitTask(secondTaskId);
@@ -1245,71 +1245,71 @@ test "TaskQueue.init throws when no backend is registered" {
 }
 
 //
-// Records the type of every message it receives (the callback of onAnyTaskMessage).
+// Records the type of every event it receives (the callback of onAnyTaskEvent).
 //
-const MessageTypeRecorder = struct {
+const EventTypeRecorder = struct {
     // Allocator for the copies.
     allocator: std.mem.Allocator,
 
-    // The type of each message received, in order.
-    messageTypes: std.ArrayList([]const u8),
+    // The type of each event received, in order.
+    eventTypes: std.ArrayList([]const u8),
 
     //
-    // The message callback.
+    // The event callback.
     //
-    fn record(context: ?*anyopaque, data: types.ITaskMessageData) anyerror!void {
-        const self: *MessageTypeRecorder = @ptrCast(@alignCast(context.?));
-        try self.messageTypes.append(self.allocator, try self.allocator.dupe(u8, data.message.object.get("type").?.string));
+    fn record(context: ?*anyopaque, data: types.ITaskEventData) anyerror!void {
+        const self: *EventTypeRecorder = @ptrCast(@alignCast(context.?));
+        try self.eventTypes.append(self.allocator, try self.allocator.dupe(u8, data.event.object.get("type").?.string));
     }
 };
 
 //
-// onAnyTaskMessage is what addPaths counts an import's
+// onAnyTaskEvent is what addPaths counts an import's
 // progress with, so what it does is pinned here.
 //
-test "onAnyTaskMessage delivers every message of a tracked task, whatever its type, in order" {
+test "onAnyTaskEvent delivers every event of a tracked task, whatever its type, in order" {
     var fixture: Fixture = undefined;
     try fixture.init(2);
     defer fixture.deinit();
     try registerHandler("progress-task", progressHandler);
 
-    var recorder: MessageTypeRecorder = .{
+    var recorder: EventTypeRecorder = .{
         .allocator = fixture.allocator(),
-        .messageTypes = .empty,
+        .eventTypes = .empty,
     };
-    const unsubscribe = try fixture.queue.onAnyTaskMessage(.{
+    const unsubscribe = try fixture.queue.onAnyTaskEvent(.{
         .context = &recorder,
-        .function = MessageTypeRecorder.record,
+        .function = EventTypeRecorder.record,
     });
 
     const taskId = try fixture.queue.addTask("progress-task", .null, null, null);
     _ = try fixture.queue.awaitTask(taskId);
 
-    try std.testing.expectEqual(@as(usize, 3), recorder.messageTypes.items.len);
-    try std.testing.expectEqualStrings("replicate-progress", recorder.messageTypes.items[0]);
-    try std.testing.expectEqualStrings("other", recorder.messageTypes.items[1]);
-    try std.testing.expectEqualStrings("replicate-progress", recorder.messageTypes.items[2]);
+    try std.testing.expectEqual(@as(usize, 3), recorder.eventTypes.items.len);
+    try std.testing.expectEqualStrings("replicate-progress", recorder.eventTypes.items[0]);
+    try std.testing.expectEqualStrings("other", recorder.eventTypes.items[1]);
+    try std.testing.expectEqualStrings("replicate-progress", recorder.eventTypes.items[2]);
 
-    // After unsubscribing no more messages are delivered.
+    // After unsubscribing no more events are delivered.
     unsubscribe.call();
     const secondTaskId = try fixture.queue.addTask("progress-task", .null, null, null);
     _ = try fixture.queue.awaitTask(secondTaskId);
-    try std.testing.expectEqual(@as(usize, 3), recorder.messageTypes.items.len);
+    try std.testing.expectEqual(@as(usize, 3), recorder.eventTypes.items.len);
 }
 
-test "onAnyTaskMessage callbacks receive nothing after shutdown" {
+test "onAnyTaskEvent callbacks receive nothing after shutdown" {
     var fixture: Fixture = undefined;
     try fixture.init(2);
     defer fixture.deinit();
     try registerHandler("progress-task", progressHandler);
 
-    var recorder: MessageTypeRecorder = .{
+    var recorder: EventTypeRecorder = .{
         .allocator = fixture.allocator(),
-        .messageTypes = .empty,
+        .eventTypes = .empty,
     };
-    _ = try fixture.queue.onAnyTaskMessage(.{
+    _ = try fixture.queue.onAnyTaskEvent(.{
         .context = &recorder,
-        .function = MessageTypeRecorder.record,
+        .function = EventTypeRecorder.record,
     });
 
     fixture.queue.shutdown();
@@ -1318,7 +1318,7 @@ test "onAnyTaskMessage callbacks receive nothing after shutdown" {
     sleepMs(100);
     try fixture.queue.awaitAllTasks();
 
-    try std.testing.expectEqual(@as(usize, 0), recorder.messageTypes.items.len);
+    try std.testing.expectEqual(@as(usize, 0), recorder.eventTypes.items.len);
 }
 
 //
@@ -1331,12 +1331,12 @@ fn failOnComplete(context: ?*anyopaque, result: ITaskResult) anyerror!void {
 }
 
 //
-// A message callback that fails.
+// An event callback that fails.
 //
-fn failOnMessage(context: ?*anyopaque, data: types.ITaskMessageData) anyerror!void {
+fn failOnEvent(context: ?*anyopaque, data: types.ITaskEventData) anyerror!void {
     _ = context;
     _ = data;
-    return error.MessageCallbackFailed;
+    return error.EventCallbackFailed;
 }
 
 test "callbacks that fail are logged and the other callbacks still run" {
@@ -1353,12 +1353,12 @@ test "callbacks that fail are logged and the other callbacks still run" {
     defer utils.console.setCapture(null, null);
 
     _ = try fixture.queue.onTaskComplete(.{ .context = null, .function = failOnComplete });
-    _ = try fixture.queue.onTaskMessage("replicate-progress", .{ .context = null, .function = failOnMessage });
-    _ = try fixture.queue.onAnyTaskMessage(.{ .context = null, .function = failOnMessage });
+    _ = try fixture.queue.onTaskEvent("replicate-progress", .{ .context = null, .function = failOnEvent });
+    _ = try fixture.queue.onAnyTaskEvent(.{ .context = null, .function = failOnEvent });
     var completed = false;
     _ = try fixture.queue.onTaskComplete(.{ .context = &completed, .function = setFlagOnComplete });
     var progress: ProgressRecorder = .{ .allocator = fixture.allocator(), .progress = .empty };
-    _ = try fixture.queue.onTaskMessage("replicate-progress", .{ .context = &progress, .function = ProgressRecorder.record });
+    _ = try fixture.queue.onTaskEvent("replicate-progress", .{ .context = &progress, .function = ProgressRecorder.record });
 
     const taskId = try fixture.queue.addTask("progress-task", .null, null, null);
     const result = (try fixture.queue.awaitTask(taskId)).?;
@@ -1368,8 +1368,8 @@ test "callbacks that fail are logged and the other callbacks still run" {
 
     const logged = stderrCapture.written();
     try std.testing.expect(std.mem.indexOf(u8, logged, "Error in task completion callback") != null);
-    try std.testing.expect(std.mem.indexOf(u8, logged, "Error in task message callback") != null);
-    try std.testing.expect(std.mem.indexOf(u8, logged, "Error in any task message callback") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "Error in task event callback") != null);
+    try std.testing.expect(std.mem.indexOf(u8, logged, "Error in any task event callback") != null);
 }
 
 test "unsubscribing leaves the other callbacks, and unsubscribing twice does nothing" {
@@ -1382,26 +1382,26 @@ test "unsubscribing leaves the other callbacks, and unsubscribing twice does not
     var secondCompleted = false;
     _ = try fixture.queue.onTaskComplete(.{ .context = &firstCompleted, .function = setFlagOnComplete });
     const unsubscribeCompletion = try fixture.queue.onTaskComplete(.{ .context = &secondCompleted, .function = setFlagOnComplete });
-    var firstMessaged = false;
-    var secondMessaged = false;
-    _ = try fixture.queue.onTaskMessage("replicate-progress", .{ .context = &firstMessaged, .function = setFlagOnMessage });
-    const unsubscribeMessage = try fixture.queue.onTaskMessage("replicate-progress", .{ .context = &secondMessaged, .function = setFlagOnMessage });
-    var firstAnyMessaged = false;
-    var secondAnyMessaged = false;
-    _ = try fixture.queue.onAnyTaskMessage(.{ .context = &firstAnyMessaged, .function = setFlagOnMessage });
-    const unsubscribeAnyMessage = try fixture.queue.onAnyTaskMessage(.{ .context = &secondAnyMessaged, .function = setFlagOnMessage });
+    var firstNotified = false;
+    var secondNotified = false;
+    _ = try fixture.queue.onTaskEvent("replicate-progress", .{ .context = &firstNotified, .function = setFlagOnEvent });
+    const unsubscribeEvent = try fixture.queue.onTaskEvent("replicate-progress", .{ .context = &secondNotified, .function = setFlagOnEvent });
+    var firstAnyNotified = false;
+    var secondAnyNotified = false;
+    _ = try fixture.queue.onAnyTaskEvent(.{ .context = &firstAnyNotified, .function = setFlagOnEvent });
+    const unsubscribeAnyEvent = try fixture.queue.onAnyTaskEvent(.{ .context = &secondAnyNotified, .function = setFlagOnEvent });
 
     for (0..2) |_| {
         unsubscribeCompletion.call();
-        unsubscribeMessage.call();
-        unsubscribeAnyMessage.call();
+        unsubscribeEvent.call();
+        unsubscribeAnyEvent.call();
     }
 
     const taskId = try fixture.queue.addTask("progress-task", .null, null, null);
     _ = try fixture.queue.awaitTask(taskId);
     try std.testing.expect(firstCompleted and !secondCompleted);
-    try std.testing.expect(firstMessaged and !secondMessaged);
-    try std.testing.expect(firstAnyMessaged and !secondAnyMessaged);
+    try std.testing.expect(firstNotified and !secondNotified);
+    try std.testing.expect(firstAnyNotified and !secondAnyNotified);
 }
 
 test "callers awaiting different tasks each resolve when their own task completes" {

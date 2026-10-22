@@ -19,7 +19,7 @@ const std = @import("std");
 const utils = @import("utils.zig");
 const types = @import("types.zig");
 const WorkerTaskCompletionCallback = types.WorkerTaskCompletionCallback;
-const TaskMessageCallback = types.TaskMessageCallback;
+const TaskEventCallback = types.TaskEventCallback;
 const UnsubscribeFn = types.UnsubscribeFn;
 const TaskAddedCallback = types.TaskAddedCallback;
 const TasksCancelledCallback = types.TasksCancelledCallback;
@@ -50,11 +50,11 @@ pub const IQueueBackend = struct {
         // Registers a callback that fires when any task completes (success or failure).
         onTaskComplete: *const fn (ptr: *anyopaque, callback: WorkerTaskCompletionCallback) anyerror!UnsubscribeFn,
 
-        // Registers a callback for task messages of a specific type.
-        onTaskMessage: *const fn (ptr: *anyopaque, messageType: []const u8, callback: TaskMessageCallback) anyerror!UnsubscribeFn,
+        // Registers a callback for task events of a specific type.
+        onTaskEvent: *const fn (ptr: *anyopaque, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn,
 
-        // Registers a callback for every task message regardless of type.
-        onAnyTaskMessage: *const fn (ptr: *anyopaque, callback: TaskMessageCallback) anyerror!UnsubscribeFn,
+        // Registers a callback for every task event regardless of type.
+        onAnyTaskEvent: *const fn (ptr: *anyopaque, callback: TaskEventCallback) anyerror!UnsubscribeFn,
 
         // Signals running tasks with the given source to cancel and drops pending tasks with that source.
         cancelTasks: *const fn (ptr: *anyopaque, source: []const u8) void,
@@ -73,7 +73,7 @@ pub const IQueueBackend = struct {
     // The priority decides which pending task is dispatched next. Leaving it out means "whatever is
     // right for this task": a task queued from inside a running task runs at its parent's priority,
     // so an import's children can never overtake something the user is waiting on, and anything else
-    // runs at DEFAULT_TASK_PRIORITY. Pass it explicitly to say the user is waiting (Interactive), or
+    // runs at DEFAULT_TASK_PRIORITY. Pass it explicitly to mark that the user is waiting (Interactive), or
     // to opt a child back down to Background when it is long-running work its parent only kicked off.
     //
     // The backend copies `data` (it only has to be valid during the call).
@@ -99,19 +99,19 @@ pub const IQueueBackend = struct {
     }
 
     //
-    // Registers a callback for task messages of a specific type.
+    // Registers a callback for task events of a specific type.
     // Returns an unsubscribe function.
     //
-    pub fn onTaskMessage(self: IQueueBackend, messageType: []const u8, callback: TaskMessageCallback) anyerror!UnsubscribeFn {
-        return self.vtable.onTaskMessage(self.ptr, messageType, callback);
+    pub fn onTaskEvent(self: IQueueBackend, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn {
+        return self.vtable.onTaskEvent(self.ptr, eventType, callback);
     }
 
     //
-    // Registers a callback for every task message regardless of type.
+    // Registers a callback for every task event regardless of type.
     // Returns an unsubscribe function.
     //
-    pub fn onAnyTaskMessage(self: IQueueBackend, callback: TaskMessageCallback) anyerror!UnsubscribeFn {
-        return self.vtable.onAnyTaskMessage(self.ptr, callback);
+    pub fn onAnyTaskEvent(self: IQueueBackend, callback: TaskEventCallback) anyerror!UnsubscribeFn {
+        return self.vtable.onAnyTaskEvent(self.ptr, callback);
     }
 
     //

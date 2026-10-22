@@ -1,7 +1,7 @@
 import type { IJsonObject } from "ziggy";
 
 //
-// The commands the test control connection forwards to the UI, performed on the UI's DOM by data-id. The UI
+// The commands the test control connection forwards to the frontend, performed on the frontend's DOM by data-id. The frontend
 // replies to each with a result. These exist only so the smoke tests can drive the real app, and the backend sends them only in
 // a test hooks build.
 //
@@ -27,7 +27,7 @@ export interface ITestCommand {
 }
 
 //
-// What the UI replies to a command with.
+// What the frontend replies to a command with.
 //
 export interface ITestResult {
     // Whether the command succeeded.
@@ -41,7 +41,7 @@ export interface ITestResult {
 }
 
 //
-// What a command needs to find and act on elements. The UI gives the real document and a test gives a stand-in.
+// What a command needs to find and act on elements. The frontend gives the real document and a test gives a fake.
 //
 export interface IElementFinder {
     // Finds the element with the data-id, or null.
@@ -108,7 +108,7 @@ export function performTestCommand(finder: IElementFinder, command: ITestCommand
 }
 
 //
-// Converts a result to the JSON the UI sends back with window.ziggy.sendTestResult. A field with no value is left out.
+// Converts a result to the JSON the frontend sends back with window.ziggy.sendTestResult. A field with no value is left out.
 //
 export function testResultToJson(result: ITestResult): IJsonObject {
     const json: IJsonObject = { ok: result.ok };
@@ -121,45 +121,3 @@ export function testResultToJson(result: ITestResult): IJsonObject {
     return json;
 }
 
-//
-// Handles the viewport command: the size in pixels of the area the UI is drawn in, as "<width>x<height>". Zooming, docking the
-// developer tools and going full screen all change it, which is how a test sees the View menu's items do their work.
-//
-export function performViewportCommand(width: number, height: number): ITestResult {
-    return { ok: true, value: `${width}x${height}` };
-}
-
-//
-// Handles the insert command: puts focus in the element and inserts the text at its cursor the way typing does, so the browser
-// records it for undo, which setting a value does not. The UI gives the function that does the insertion.
-//
-export function performInsertCommand(finder: IElementFinder, command: ITestCommand, insertText: (text: string) => boolean): ITestResult {
-    if (command.dataId === undefined || command.text === undefined) {
-        return { ok: false, error: "The insert command needs a dataId and text." };
-    }
-    const element = finder.find(command.dataId);
-    if (element === null) {
-        return { ok: false, error: `No element has the data-id ${command.dataId}.` };
-    }
-    element.focus();
-    if (!insertText(command.text)) {
-        return { ok: false, error: "The browser refused to insert the text." };
-    }
-    return { ok: true };
-}
-
-//
-// Handles the drop-file command: drops a file of the given name and size on the element, as the browser does when the user drops a
-// file there, so the UI's drop handling runs. The UI gives the function that makes the drop event, which carries a File.
-//
-export function performDropFileCommand(finder: IElementFinder, command: ITestCommand, makeDropEvent: (fileName: string, fileSize: number) => Event): ITestResult {
-    if (command.dataId === undefined || command.fileName === undefined || command.fileSize === undefined) {
-        return { ok: false, error: "The drop-file command needs a dataId, a fileName and a fileSize." };
-    }
-    const element = finder.find(command.dataId);
-    if (element === null) {
-        return { ok: false, error: `No element has the data-id ${command.dataId}.` };
-    }
-    element.dispatchEvent(makeDropEvent(command.fileName, command.fileSize));
-    return { ok: true };
-}

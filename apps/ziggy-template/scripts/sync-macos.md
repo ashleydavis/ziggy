@@ -1,6 +1,6 @@
 # sync-macos
 
-Builds the template's UI (`bun run bundle:ui`) and puts what the MacOS Xcode project needs into a native directory: `lib/libziggy_template.a` and `include/ziggy.h` (built with Zig for the macOS target, deployment target 11.0). The UI is embedded in the library, so the app has no UI files of its own.
+Builds the template's frontend (`bun run bundle:ui`) and puts what the MacOS Xcode project needs into a native directory: `lib/libziggy_template.a` and `include/ziggy.h` (built with Zig for the macOS target, deployment target 11.0). The frontend is embedded in the library, so the app has no frontend files of its own.
 
 Run it on a Mac: `bash apps/ziggy-template/scripts/sync-macos.sh`.
 

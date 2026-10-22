@@ -124,10 +124,10 @@ ziggy_platform_has_control_port() {
 }
 
 #
-# Succeeds when the developer tools are showing. WebView2 opens them as a window of their own, so the UI's area does not change and
-# they are found by their window's title, "DevTools - " and the UI's address. Only the WebView2 processes' titles are read, because reading
-# the window title of every process takes many seconds.
-# Usage: ziggy_platform_devtools_visible <test_dir> <the UI's area before they opened>
+# Succeeds when the developer tools are showing. WebView2 opens them as a window of their own, so the frontend's area does not change
+# and they are found by their window's title, "DevTools - " and the frontend's address. Only the WebView2 processes' titles are read,
+# because reading the window title of every process takes many seconds.
+# Usage: ziggy_platform_devtools_visible <test_dir> <the frontend's area before they opened>
 #
 ziggy_platform_devtools_visible() {
     local windows

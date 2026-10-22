@@ -13,7 +13,7 @@
 #                            passes the tag it is building, so a tagged release reports what changed
 #                            since the tag before it rather than nothing at all.
 #   --empty-message <text>   What to print when no commit matches (default: "- No changes found").
-#   --limit <n>              Keep only the newest n bullets and say how many were left out. Firebase
+#   --limit <n>              Keep only the newest n bullets and report how many were left out. Firebase
 #                            App Distribution rejects long release notes outright, so the Android
 #                            tester builds pass one; a GitHub release has no such limit and does not.
 set -euo pipefail
@@ -111,7 +111,7 @@ if [ -z "$NOTES" ]; then
     exit 0
 fi
 
-# Truncating says how much was cut rather than trailing off, so a reader can tell the notes are a
+# Truncating reports how much was cut rather than trailing off, so a reader can tell the notes are a
 # window on the changes and not the whole of them.
 if [ -n "$LIMIT" ]; then
     TOTAL="$(printf '%s' "$NOTES" | wc -l)"

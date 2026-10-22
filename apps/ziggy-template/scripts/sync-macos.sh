@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Puts what the MacOS Xcode project needs into its native directory: the bundled UI and the Zig static library. See sync-macos.md.
+# Puts what the MacOS Xcode project needs into its native directory: the bundled frontend and the Zig static library. See sync-macos.md.
 
 set -euo pipefail
 

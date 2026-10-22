@@ -16,12 +16,12 @@ const insertTaskByPriority = pending_task_queue.insertTaskByPriority;
 const resolveTaskPriority = pending_task_queue.resolveTaskPriority;
 const ITaskResult = types.ITaskResult;
 const ITaskContext = types.ITaskContext;
-const ITaskMessageData = types.ITaskMessageData;
+const ITaskEventData = types.ITaskEventData;
 const TaskStatus = types.TaskStatus;
 const TaskPriority = types.TaskPriority;
 const WorkerTaskCompletionCallback = types.WorkerTaskCompletionCallback;
-const TaskMessageCallback = types.TaskMessageCallback;
-const IMessageCallbackEntry = types.IMessageCallbackEntry;
+const TaskEventCallback = types.TaskEventCallback;
+const IEventCallbackEntry = types.IEventCallbackEntry;
 const UnsubscribeFn = types.UnsubscribeFn;
 const TaskAddedCallback = types.TaskAddedCallback;
 const TasksCancelledCallback = types.TasksCancelledCallback;
@@ -38,7 +38,7 @@ const pool_allocator = std.heap.smp_allocator;
 
 //
 // The parts of the task context shared by every task
-// (everything but sendMessage, isCancelled and taskId).
+// (everything but sendEvent, isCancelled and taskId).
 //
 pub const IBaseContext = struct {
     // Generates unique identifiers.
@@ -107,11 +107,11 @@ pub const MockWorkerPool = struct {
     // Callbacks invoked when any task completes.
     completionCallbacks: std.ArrayList(Registration(WorkerTaskCompletionCallback)),
 
-    // Callbacks invoked for task messages of a specific type.
-    messageCallbacks: std.ArrayList(Registration(IMessageCallbackEntry)),
+    // Callbacks invoked for task events of a specific type.
+    eventCallbacks: std.ArrayList(Registration(IEventCallbackEntry)),
 
-    // Callbacks invoked for all task messages.
-    anyMessageCallbacks: std.ArrayList(Registration(TaskMessageCallback)),
+    // Callbacks invoked for all task events.
+    anyEventCallbacks: std.ArrayList(Registration(TaskEventCallback)),
 
     // Per-source callbacks fired when a task is added.
     taskAddedCallbacks: std.ArrayList(Registration(TaskAddedCallback)),
@@ -154,8 +154,8 @@ pub const MockWorkerPool = struct {
         self.* = .{
             .io = io,
             .completionCallbacks = .empty,
-            .messageCallbacks = .empty,
-            .anyMessageCallbacks = .empty,
+            .eventCallbacks = .empty,
+            .anyEventCallbacks = .empty,
             .taskAddedCallbacks = .empty,
             .tasksCancelledCallbacks = .empty,
             .activeTaskCount = 0,
@@ -190,8 +190,8 @@ pub const MockWorkerPool = struct {
 
         self.shutdown();
         self.completionCallbacks.deinit(pool_allocator);
-        self.messageCallbacks.deinit(pool_allocator);
-        self.anyMessageCallbacks.deinit(pool_allocator);
+        self.eventCallbacks.deinit(pool_allocator);
+        self.anyEventCallbacks.deinit(pool_allocator);
         self.taskAddedCallbacks.deinit(pool_allocator);
         self.tasksCancelledCallbacks.deinit(pool_allocator);
         self.pendingTasks.deinit(pool_allocator);
@@ -217,8 +217,8 @@ pub const MockWorkerPool = struct {
         .addTask = addTaskErased,
         .onTaskAdded = onTaskAddedErased,
         .onTaskComplete = onTaskCompleteErased,
-        .onTaskMessage = onTaskMessageErased,
-        .onAnyTaskMessage = onAnyTaskMessageErased,
+        .onTaskEvent = onTaskEventErased,
+        .onAnyTaskEvent = onAnyTaskEventErased,
         .cancelTasks = cancelTasksErased,
         .onTasksCancelled = onTasksCancelledErased,
         .shutdown = shutdownErased,
@@ -370,19 +370,19 @@ pub const MockWorkerPool = struct {
     // The ITaskContext functions of a task.
     //
     const task_context_vtable: ITaskContext.VTable = .{
-        .sendMessage = taskSendMessage,
+        .sendEvent = taskSendEvent,
         .isCancelled = taskIsCancelled,
     };
 
     //
-    // ITaskContext.sendMessage of a task: forwards the message to the message callbacks.
+    // ITaskContext.sendEvent of a task: forwards the event to the event callbacks.
     //
-    fn taskSendMessage(ptr: *anyopaque, message: std.json.Value) void {
+    fn taskSendEvent(ptr: *anyopaque, event: std.json.Value) void {
         const task: *IMockTask = @ptrCast(@alignCast(ptr));
         const self = task.pool;
         self.lock();
         defer self.unlock();
-        self.notifyMessageCallbacks(task.id, message);
+        self.notifyEventCallbacks(task.id, event);
     }
 
     //
@@ -411,17 +411,17 @@ pub const MockWorkerPool = struct {
     }
 
     //
-    // Registers a callback for task messages of a specific type.
+    // Registers a callback for task events of a specific type.
     //
-    pub fn onTaskMessage(self: *MockWorkerPool, messageType: []const u8, callback: TaskMessageCallback) !UnsubscribeFn {
-        return self.register(IMessageCallbackEntry, &self.messageCallbacks, "", .{ .messageType = messageType, .callback = callback });
+    pub fn onTaskEvent(self: *MockWorkerPool, eventType: []const u8, callback: TaskEventCallback) !UnsubscribeFn {
+        return self.register(IEventCallbackEntry, &self.eventCallbacks, "", .{ .eventType = eventType, .callback = callback });
     }
 
     //
-    // Registers a callback for all task messages.
+    // Registers a callback for all task events.
     //
-    pub fn onAnyTaskMessage(self: *MockWorkerPool, callback: TaskMessageCallback) !UnsubscribeFn {
-        return self.register(TaskMessageCallback, &self.anyMessageCallbacks, "", callback);
+    pub fn onAnyTaskEvent(self: *MockWorkerPool, callback: TaskEventCallback) !UnsubscribeFn {
+        return self.register(TaskEventCallback, &self.anyEventCallbacks, "", callback);
     }
 
     //
@@ -433,7 +433,7 @@ pub const MockWorkerPool = struct {
 
     //
     // Adds a registration to a callback list and returns the function that removes it
-    // (the source and the message type of an entry are expected to outlive the registration).
+    // (the source and the event type of an entry are expected to outlive the registration).
     //
     fn register(self: *MockWorkerPool, comptime CallbackT: type, list: *std.ArrayList(Registration(CallbackT)), source: []const u8, callback: CallbackT) !UnsubscribeFn {
         self.lock();
@@ -453,8 +453,8 @@ pub const MockWorkerPool = struct {
         defer self.unlock();
         removeKey(TaskAddedCallback, &self.taskAddedCallbacks, key);
         removeKey(WorkerTaskCompletionCallback, &self.completionCallbacks, key);
-        removeKey(IMessageCallbackEntry, &self.messageCallbacks, key);
-        removeKey(TaskMessageCallback, &self.anyMessageCallbacks, key);
+        removeKey(IEventCallbackEntry, &self.eventCallbacks, key);
+        removeKey(TaskEventCallback, &self.anyEventCallbacks, key);
         removeKey(TasksCancelledCallback, &self.tasksCancelledCallbacks, key);
     }
 
@@ -516,8 +516,8 @@ pub const MockWorkerPool = struct {
         }
         self.pendingTasks.clearRetainingCapacity();
         self.completionCallbacks.clearRetainingCapacity();
-        self.messageCallbacks.clearRetainingCapacity();
-        self.anyMessageCallbacks.clearRetainingCapacity();
+        self.eventCallbacks.clearRetainingCapacity();
+        self.anyEventCallbacks.clearRetainingCapacity();
         self.taskAddedCallbacks.clearRetainingCapacity();
         self.tasksCancelledCallbacks.clearRetainingCapacity();
         self.condition.broadcast(self.io);
@@ -535,25 +535,25 @@ pub const MockWorkerPool = struct {
     }
 
     //
-    // Invokes the message callbacks that match the message type, then the callbacks for any message
+    // Invokes the event callbacks that match the event type, then the callbacks for any event
     // (the lock must be held). Callback errors are logged.
     //
-    fn notifyMessageCallbacks(self: *MockWorkerPool, taskId: []const u8, message: std.json.Value) void {
-        const messageType = types.messageTypeOf(message);
-        const data: ITaskMessageData = .{ .taskId = taskId, .message = message };
+    fn notifyEventCallbacks(self: *MockWorkerPool, taskId: []const u8, event: std.json.Value) void {
+        const eventType = types.eventTypeOf(event);
+        const data: ITaskEventData = .{ .taskId = taskId, .event = event };
 
-        for (self.messageCallbacks.items) |registration| {
-            if (messageType == null or !std.mem.eql(u8, messageType.?, registration.callback.messageType)) {
+        for (self.eventCallbacks.items) |registration| {
+            if (eventType == null or !std.mem.eql(u8, eventType.?, registration.callback.eventType)) {
                 continue;
             }
             registration.callback.callback.call(data) catch |err| {
-                log.exception("Error in task message callback", err);
+                log.exception("Error in task event callback", err);
             };
         }
 
-        for (self.anyMessageCallbacks.items) |registration| {
+        for (self.anyEventCallbacks.items) |registration| {
             registration.callback.call(data) catch |err| {
-                log.exception("Error in any task message callback", err);
+                log.exception("Error in any task event callback", err);
             };
         }
     }
@@ -583,19 +583,19 @@ pub const MockWorkerPool = struct {
     }
 
     //
-    // IQueueBackend.onTaskMessage for this implementation.
+    // IQueueBackend.onTaskEvent for this implementation.
     //
-    fn onTaskMessageErased(ptr: *anyopaque, messageType: []const u8, callback: TaskMessageCallback) anyerror!UnsubscribeFn {
+    fn onTaskEventErased(ptr: *anyopaque, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn {
         const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        return self.onTaskMessage(messageType, callback);
+        return self.onTaskEvent(eventType, callback);
     }
 
     //
-    // IQueueBackend.onAnyTaskMessage for this implementation.
+    // IQueueBackend.onAnyTaskEvent for this implementation.
     //
-    fn onAnyTaskMessageErased(ptr: *anyopaque, callback: TaskMessageCallback) anyerror!UnsubscribeFn {
+    fn onAnyTaskEventErased(ptr: *anyopaque, callback: TaskEventCallback) anyerror!UnsubscribeFn {
         const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        return self.onAnyTaskMessage(callback);
+        return self.onAnyTaskEvent(callback);
     }
 
     //

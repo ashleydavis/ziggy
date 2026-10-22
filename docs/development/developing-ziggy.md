@@ -1,10 +1,10 @@
 # Developing Ziggy
 
-This guide is for working on Ziggy itself. To build an app on Ziggy, see the [quick start](../quick-start.md) and the [user guide](../user-guide.md).
+This guide is for [Ziggy developers](../glossary.md), the people working on Ziggy itself. To build an app on Ziggy, see the [quick start](../quick-start.md) and the [user guide](../user-guide.md).
 
 ## What is in this repository
 
-- **Ziggy**, the package an app is built on, in `packages/ziggy`: Ziggy's core library with its task queue, the native app for each platform and the TypeScript types of `window.ziggy` for the UI. See [Packages](packages.md).
+- **Ziggy**, the package an app is built on, in `packages/ziggy`: Ziggy's core library with its task queue, the native app for each platform and the TypeScript types of `window.ziggy` for the frontend. See [Packages](packages.md).
 - **The Ziggy template**, in `apps/ziggy-template`: the hello world app a new app starts as a copy of. See its [README](../../apps/ziggy-template/README.md).
 - **Ziggy's test app**, in `apps/ziggy-test-app`: an app nobody copies, with a feature for each part of Ziggy. Ziggy's smoke tests, in `smoke-tests`, drive it on every platform, its unit tests check those features, and `scripts` holds the runners of Ziggy's mobile and Android native app tests.
 
@@ -14,11 +14,11 @@ Nothing is published to npm or any other registry. An app uses Ziggy either from
 
 The tools are pinned in `mise.toml`. Install them with `mise trust` and `mise install`, then the dependencies with `bun install`, then the platform toolchains with `bun run setup` (the Android SDK and NDK on Linux and macOS, the WebView2 SDK and WiX Toolset on Windows and a check of Xcode on macOS).
 
-Working on Ziggy needs everything an app needs, listed in [Dependencies](../user-guide/dependencies.md), and these as well:
+A Ziggy developer needs everything an app developer needs, listed in [Dependencies](../user-guide/dependencies.md), and these as well:
 
 | Dependency | What it is | Why it is needed | Where it comes from |
 |---|---|---|---|
-| Chrome or Chromium | A web browser | Ziggy's dev mode smoke tests run the UI in it without a window, and `bun run diagrams` draws the docs' diagrams in it | Install it yourself |
+| Chrome or Chromium | A web browser | Ziggy's dev mode smoke tests run the frontend in it without a window, and `bun run diagrams` draws the docs' diagrams in it | Install it yourself |
 | Mermaid CLI (`@mermaid-js/mermaid-cli`) | The command line tool that draws Mermaid diagrams | `bun run diagrams` draws the docs' diagrams with it | Fetched by `bunx`, at the version `scripts/render-diagrams.sh` pins |
 
 ## Using Ziggy from a local path
@@ -39,7 +39,7 @@ The template and the test app take Ziggy from this repository by a local path. A
 
   ```json
   "dependencies": {
-      "ziggy": "file:../ziggy/packages/ziggy/ui"
+      "ziggy": "file:../ziggy/packages/ziggy/frontend"
   }
   ```
 

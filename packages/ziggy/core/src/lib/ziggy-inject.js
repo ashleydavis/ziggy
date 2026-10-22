@@ -1,24 +1,24 @@
-// The script every shell injects into the UI before its own scripts run. It exposes window.ziggy and nothing else
-// that a UI should use, and it finds the web view's own native handle so the UI never has to:
+// The script every native app injects into the frontend before its own scripts run. It exposes window.ziggy and nothing
+// else that a frontend should use, and it finds the web view's own native handle so the frontend never has to:
 // WebKitGTK and WKWebView post through window.webkit.messageHandlers.ziggy, WebView2 through window.chrome.webview,
 // and the Android WebView through the interface object named ZiggyAndroid.
 //
-// There are two kinds of message, kept apart from end to end. An app message belongs to the app: the UI sends it with invoke or
-// send, the core hands it to the app's handler for its name and the app sends app events back. A system message belongs to Ziggy
+// There are two kinds of message, kept apart from end to end. An app message belongs to the app: the frontend sends it with invoke
+// or send, the core hands it to the app's handler for its name and the app sends app events back. A system message belongs to Ziggy
 // itself (tasks, the platform, menu actions, dropped files, core errors and the test hooks): only this script and the native app
 // send one, the core handles it without the app ever seeing it, and window.ziggy has no call that sends an arbitrary one.
 //
-// Every message posted to the core is the JSON text of an object whose "kind" says which it is:
+// Every message posted to the core is the JSON text of an object whose "kind" names which it is:
 //   { "kind": "app", "id", "name", "data" }      an app message that gets a message response (invoke)
 //   { "kind": "app", "name", "data" }            an app message that does not (send)
 //   { "kind": "system", "id", "name", "data" }   a system message that gets a message response
 //   { "kind": "system", "name", "data" }         a system message that does not
 // The core refuses a message with no "kind", or any other value, as InvalidMessage, reported as a core-error system event.
 //
-// The shell delivers a message from the core by calling window.__ziggyReceive with the message as an object:
+// The native app delivers a message from the core by calling window.__ziggyReceive with the message as an object:
 //   { "id", "ok": true, "data" } or { "id", "ok": false, "error" }   a message response, of either kind, matched by id
-//   { "kind": "app", "data" }                                        an app event, for the onEvent listeners (a menu item the UI
-//                                                                    runs is one: { "type": "menu", "item" })
+//   { "kind": "app", "data" }                                        an app event, for the onEvent listeners (a menu item the
+//                                                                    frontend runs is one: { "type": "menu", "item" })
 //   { "kind": "system", "name", "data" }                             a system event, for Ziggy's listeners for that name
 (function () {
     if (window.ziggy) {
@@ -146,18 +146,18 @@
         };
     }
 
-    var taskMessage = systemEvent("task-message");
+    var taskEvent = systemEvent("task-event");
     var taskCompleted = systemEvent("task-completed");
     var coreError = systemEvent("core-error");
     var testCommand = systemEvent("test-command");
 
-    // Dropped files. A web view does not give the UI the real paths of the files dropped on it: WebKitGTK lists file addresses as a
-    // type of the drop and gives no way to read them, and no File objects, and the others give Files that have no path readable by the
-    // UI. The shell reads the paths natively and records them with the core. This catches every drop of files before the UI does,
-    // sends the core a get-dropped-paths message for the paths of the last drop, and fires the drop again holding one File per path, which it makes itself and
-    // remembers the path of. getPathForFile then returns the path from that memory, as Electron's does, so a UI written for Electron runs
-    // unchanged. The Files are empty: a UI that wants a dropped file's contents reads the path. WebView2 hands the shell the Files
-    // themselves, so there the shell reads their paths first. A drop of something else, such as a link, is left alone.
+    // Dropped files. A web view does not give the frontend the real paths of the files dropped on it: WebKitGTK lists file addresses
+    // as a type of the drop and gives no way to read them, and no File objects, and the others give Files that have no path readable by
+    // the frontend. The native app reads the paths natively and records them with the core. This catches every drop of files before the
+    // frontend does, sends the core a get-dropped-paths message for the paths of the last drop, and fires the drop again holding one File per path, which it makes itself and
+    // remembers the path of. getPathForFile then returns the path from that memory, as Electron's does, so a frontend written for
+    // Electron runs unchanged. The Files are empty: a frontend that wants a dropped file's contents reads the path. WebView2 hands the native app the Files
+    // themselves, so there the native app reads their paths first. A drop of something else, such as a link, is left alone.
     var redispatchedDrops = new WeakSet();
     var pathsOfDroppedFiles = new WeakMap();
 
@@ -256,8 +256,8 @@
             cancelTasks: function (source) {
                 postSystem("cancel-tasks", source);
             },
-            onTaskMessage: taskMessage.on,
-            removeTaskMessageListener: taskMessage.remove,
+            onTaskEvent: taskEvent.on,
+            removeTaskEventListener: taskEvent.remove,
             onTaskCompleted: taskCompleted.on,
             removeTaskCompletedListener: taskCompleted.remove,
             onCoreError: coreError.on,

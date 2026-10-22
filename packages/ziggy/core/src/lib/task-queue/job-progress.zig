@@ -8,7 +8,7 @@ const IJobTag = types.IJobTag;
 const ITaskContext = types.ITaskContext;
 
 //
-// Converts a job tag to the JSON object sent in a task message (cancelSource is left out when the
+// Converts a job tag to the JSON object sent in a task's event (cancelSource is left out when the
 // tag has none, as JSON.stringify leaves out an undefined property).
 //
 fn jobTagToJson(allocator: std.mem.Allocator, job: IJobTag) !std.json.Value {
@@ -29,7 +29,7 @@ fn jobTagToJson(allocator: std.mem.Allocator, job: IJobTag) !std.json.Value {
 // matters: it is the same handler as a manual import, and it runs for as long as the setting is on,
 // so a row for it would never go away.
 //
-// (Zig: the IJobProgressMessage is sent as its JSON object; progressMessage is left out when there is
+// (Zig: the IJobProgressEvent is sent as its JSON object; progressMessage is left out when there is
 // none, as JSON.stringify leaves out an undefined property.)
 //
 pub fn sendJobProgress(allocator: std.mem.Allocator, context: ITaskContext, job: ?IJobTag, startedAt: i64, progressMessage: ?[]const u8) !void {
@@ -37,12 +37,12 @@ pub fn sendJobProgress(allocator: std.mem.Allocator, context: ITaskContext, job:
         return;
     };
 
-    var message: std.json.ObjectMap = .empty;
-    try message.put(allocator, "type", .{ .string = "job-progress" });
-    try message.put(allocator, "job", try jobTagToJson(allocator, jobTag));
-    try message.put(allocator, "startedAt", .{ .integer = startedAt });
+    var event: std.json.ObjectMap = .empty;
+    try event.put(allocator, "type", .{ .string = "job-progress" });
+    try event.put(allocator, "job", try jobTagToJson(allocator, jobTag));
+    try event.put(allocator, "startedAt", .{ .integer = startedAt });
     if (progressMessage) |text| {
-        try message.put(allocator, "progressMessage", .{ .string = text });
+        try event.put(allocator, "progressMessage", .{ .string = text });
     }
-    context.sendMessage(.{ .object = message });
+    context.sendEvent(.{ .object = event });
 }

@@ -3,9 +3,9 @@
 // commands to the running app over a loopback connection.
 //
 // A script connects to the port found in the port file and sends one line per command: a JSON object with a "command"
-// field. The core forwards the command to the UI as a test-command event, the UI performs it and replies with
-// Ziggy's own test-result message, and the reply is written back as one line. A line that is not a command gets an
-// error as its reply.
+// field. The core forwards the command to the frontend as a test-command event, the frontend performs it and replies
+// with Ziggy's own test-result message, and the reply is written back as one line. A line that is not a command gets
+// an error as its reply.
 //
 
 const std = @import("std");
@@ -14,7 +14,7 @@ const types = @import("types.zig");
 const json = @import("json.zig");
 
 //
-// How long the UI has to reply to a command, in milliseconds.
+// How long the frontend has to reply to a command, in milliseconds.
 //
 const answer_timeout_ms: i64 = 30_000;
 
@@ -36,13 +36,13 @@ pub const TestControl = struct {
     allocator: std.mem.Allocator,
     // For the socket, the mutex and the condition.
     io: std.Io,
-    // The shell's configuration, for the quit callback.
+    // The native app's configuration, for the quit callback.
     config: types.ZiggyConfig,
-    // Sends an event to the UI.
+    // Sends an event to the frontend.
     deliver: *const fn (user_data: ?*anyopaque, message: []const u8) void,
     // The pointer passed to deliver.
     deliver_user_data: ?*anyopaque,
-    // Records the files of a drop, as the shell does when the user drops them. Called with deliver_user_data.
+    // Records the files of a drop, as the native app does when the user drops them. Called with deliver_user_data.
     files_dropped: *const fn (user_data: ?*anyopaque, paths_json: []const u8) anyerror!void,
     // The listening socket.
     server: std.Io.net.Server,
@@ -54,7 +54,7 @@ pub const TestControl = struct {
     // Runs the connection tasks. The core's Io is single threaded and ignores cancel requests, and cancelling is the only way
     // to end a read that is waiting on a connection: on Windows shutting the socket down does not wake the read.
     connection_threaded: std.Io.Threaded,
-    // Held while a command is with the UI, so only one is waiting for a reply at a time.
+    // Held while a command is with the frontend, so only one is waiting for a reply at a time.
     command_mutex: std.Io.Mutex,
     // The thread that accepts connections.
     thread: std.Thread,
@@ -68,9 +68,9 @@ pub const TestControl = struct {
     waiting_request: ?u64,
     // The reply to the waiting command, as JSON text.
     answer: ?[]u8,
-    // Set when the UI has said it is listening for test commands.
+    // Set when the frontend has reported it is listening for test commands.
     ui_ready: std.atomic.Value(bool),
-    // What a test has said the next native dialog returns, as the JSON text of an array of paths, until a dialog takes it. Guarded
+    // What a test has set the next native dialog to return, as the JSON text of an array of paths, until a dialog takes it. Guarded
     // by mutex.
     pick_answer: ?[]u8,
 
@@ -160,7 +160,7 @@ pub const TestControl = struct {
     }
 
     //
-    // Called when the UI replies to a command with Ziggy's own test-result message.
+    // Called when the frontend replies to a command with Ziggy's own test-result message.
     //
     //
     // Called by a task that is about to show a native dialog: takes the result a test gave for it, copied with the allocator, or
@@ -179,15 +179,15 @@ pub const TestControl = struct {
     }
 
     //
-    // Called when the UI says it is listening for test commands. A command sent before that would reach a UI that is
-    // not there to hear it, so commands wait for this.
+    // Called when the frontend reports it is listening for test commands. A command sent before that would reach a frontend
+    // that is not there to hear it, so commands wait for this.
     //
     pub fn markUiReady(self: *TestControl) void {
         self.ui_ready.store(true, .release);
     }
 
     //
-    // Waits until the UI has said it is listening, or fails with UiDidNotAnswer when it never does.
+    // Waits until the frontend has reported it is listening, or fails with UiDidNotAnswer when it never does.
     //
     fn waitForUi(self: *TestControl) !void {
         const deadline = std.Io.Clock.awake.now(self.io).addDuration(.fromMilliseconds(answer_timeout_ms));
@@ -301,8 +301,8 @@ pub const TestControl = struct {
             return try self.allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "menu")) {
-            // Chooses a menu item as a user would, through the shell, so the shell's own actions really happen. Reloading unloads the
-            // UI, which is not listening again until it says so, so commands wait for that.
+            // Chooses a menu item as a user would, through the native app, so the native app's own actions really happen. Reloading unloads the
+            // frontend, which is not listening again until it reports it is, so commands wait for that.
             const action = json.getString(command, "action") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
@@ -318,8 +318,8 @@ pub const TestControl = struct {
             return try self.allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "screenshot")) {
-            // Writes a PNG of the app's window to the command's "outputPath" through the shell, which captures what is on screen.
-            // The UI must be showing first, or the picture would be of a window with nothing in it.
+            // Writes a PNG of the app's window to the command's "outputPath" through the native app, which captures what is on screen.
+            // The frontend must be showing first, or the picture would be of a window with nothing in it.
             const output_path = json.getString(command, "outputPath") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
@@ -338,7 +338,7 @@ pub const TestControl = struct {
             return try self.allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "drop")) {
-            // Records a drop of files, as the shell does when the user drops files on the window, so a test can use getPathForFile
+            // Records a drop of files, as the native app does when the user drops files on the window, so a test can use getPathForFile
             // without dragging anything. The files are the command's "paths", an array of strings.
             const paths = command.object.get("paths") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
@@ -349,8 +349,8 @@ pub const TestControl = struct {
                     .@"error" = @errorName(err),
                 });
             };
-            // A drop that names a "dataId" is also a drop on that element of the UI, so the command is also sent to the UI, which drops
-            // the same files on it, and its reply is the reply.
+            // A drop that names a "dataId" is also a drop on that element of the frontend, so the command is also sent to the
+            // frontend, which drops the same files on it, and its reply is the reply.
             if (command.object.get("dataId") != null) {
                 try self.waitForUi();
                 return try self.askUi(arena, command_json);
@@ -358,7 +358,7 @@ pub const TestControl = struct {
             return try self.allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "pick-answer")) {
-            // Says what the next native dialog returns, so a test can use the pickers without a dialog being shown. The result is
+            // Sets what the next native dialog returns, so a test can use the pickers without a dialog being shown. The result is
             // the command's "paths", an array of strings, and is used for one dialog.
             const paths = command.object.get("paths") orelse {
                 return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
@@ -385,7 +385,7 @@ pub const TestControl = struct {
     }
 
     //
-    // Sends a command to the UI and waits for its reply.
+    // Sends a command to the frontend and waits for its reply.
     //
     fn askUi(self: *TestControl, arena: std.mem.Allocator, command_json: []const u8) ![]u8 {
         self.command_mutex.lockUncancelable(self.io);

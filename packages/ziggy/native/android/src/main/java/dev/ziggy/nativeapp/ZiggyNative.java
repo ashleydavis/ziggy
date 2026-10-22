@@ -22,25 +22,25 @@ final class ZiggyNative {
     // Cancels every running task, waits for the workers to stop and releases the core. Nothing is delivered after it returns.
     static native void destroy(long handle);
 
-    // Delivers a message from the UI, as UTF-8 JSON, to the core.
+    // Delivers a message from the frontend, as UTF-8 JSON, to the core.
     static native void postMessage(long handle, byte[] message);
 
     // Decides what to do with an address the web view is about to load: 0 to load it, 1 to open it in the system browser,
     // 2 to block it.
     static native int checkUrl(long handle, byte[] url);
 
-    // The script that exposes window.ziggy, as UTF-8, which the shell runs in the UI before the UI's own scripts. It is
-    // embedded in the core library, so the app supplies nothing.
+    // The script that exposes window.ziggy, as UTF-8, which the native app runs in the frontend before the frontend's own
+    // scripts. It is embedded in the core library, so the app supplies nothing.
     static native byte[] injectScript();
 
-    // The query of the UI's address as UTF-8, which the app supplies: the text after the question mark, empty when the app has none.
-    // The shell appends it to the UI's address unread. Throws when the app could not make it.
+    // The query of the frontend's address as UTF-8, which the app supplies: the text after the question mark, empty when the app
+    // has none. The native app appends it to the frontend's address unread. Throws when the app could not make it.
     static native byte[] uiQuery(long handle);
 
-    // The bytes of the app's bundled UI file for a request path as UTF-8 (such as "/index.html"), or null when the UI has
-    // no such file.
+    // The bytes of the app's bundled frontend file for a request path as UTF-8 (such as "/index.html"), or null when the
+    // frontend has no such file.
     static native byte[] uiFileContent(long handle, byte[] path);
 
-    // The content type of that file, such as "text/html; charset=utf-8", or null when the UI has no such file.
+    // The content type of that file, such as "text/html; charset=utf-8", or null when the frontend has no such file.
     static native String uiFileContentType(long handle, byte[] path);
 }

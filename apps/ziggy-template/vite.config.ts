@@ -1,8 +1,8 @@
 import { defineConfig, Plugin } from 'vite';
 
 //
-// A UI loaded from a file address cannot load module scripts in every web view, so the built UI uses an ordinary
-// deferred script instead of a module script.
+// A frontend loaded from a file address cannot load module scripts in every web view, so the built frontend uses
+// an ordinary deferred script instead of a module script.
 //
 function classicScript(): Plugin {
     return {
@@ -16,7 +16,7 @@ function classicScript(): Plugin {
 
 export default defineConfig({
     plugins: [classicScript()],
-    root: 'ui',
+    root: 'frontend',
     base: './',
     build: {
         outDir: '../dist',

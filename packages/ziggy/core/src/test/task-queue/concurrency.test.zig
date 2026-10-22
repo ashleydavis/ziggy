@@ -11,7 +11,7 @@ const TaskQueue = task_queue_zig.task_queue.TaskQueue;
 const types = task_queue_zig.types;
 const ITaskResult = types.ITaskResult;
 const ITaskContext = types.ITaskContext;
-const ITaskMessageData = types.ITaskMessageData;
+const ITaskEventData = types.ITaskEventData;
 const TaskStatus = types.TaskStatus;
 const registerHandler = task_queue_zig.worker.registerHandler;
 const setQueueBackend = task_queue_zig.queue_backend.setQueueBackend;
@@ -117,7 +117,7 @@ var ran_names: [8][32]u8 = undefined;
 var ran_count: std.atomic.Value(usize) = .init(0);
 
 //
-// Whether the cancellation-checking task reported what isCancelled said when it finished. The test
+// Whether the cancellation-checking task reported what isCancelled returned when it finished. The test
 // reads it only after awaitAllTasks, which returns after the task's result has been dispatched, so
 // these need no synchronisation of their own.
 //
@@ -125,10 +125,10 @@ var cancellation_was_reported = false;
 var cancellation_saw_true = false;
 
 //
-// The names of the tasks that sent a message.
+// The names of the tasks that sent an event.
 //
-var messaged_names: [8][32]u8 = undefined;
-var messaged_count: std.atomic.Value(usize) = .init(0);
+var event_sender_names: [8][32]u8 = undefined;
+var event_sender_count: std.atomic.Value(usize) = .init(0);
 
 //
 // Records a name in one of the buffers above and returns how many are recorded.
@@ -140,7 +140,7 @@ fn recordName(buffer: [][32]u8, counter: *std.atomic.Value(usize), name: []const
 }
 
 //
-// A handler that records the task's name, holds the slot when its data says to, and returns "done".
+// A handler that records the task's name, holds the slot when its data asks it to, and returns "done".
 //
 fn recordingTaskHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = allocator;
@@ -154,13 +154,13 @@ fn recordingTaskHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json
 }
 
 //
-// A handler that records the task's name, sends a message and returns "done".
+// A handler that records the task's name, sends an event and returns "done".
 //
-fn messagingTaskHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn eventSendingTaskHandler(allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = io;
     const name = data.object.get("name").?.string;
-    _ = recordName(&messaged_names, &messaged_count, name);
-    context.sendMessage(try json(allocator, "{\"type\":\"note\"}"));
+    _ = recordName(&event_sender_names, &event_sender_count, name);
+    context.sendEvent(try json(allocator, "{\"type\":\"note\"}"));
     return .{ .string = "done" };
 }
 
@@ -214,9 +214,9 @@ const StatusRecorder = struct {
 };
 
 //
-// Records the task ID of every message it is given.
+// Records the task ID of every event it is given.
 //
-const MessageIdRecorder = struct {
+const EventIdRecorder = struct {
     // The task IDs, in order.
     taskIds: std.ArrayList([]const u8),
 
@@ -224,10 +224,10 @@ const MessageIdRecorder = struct {
     allocator: std.mem.Allocator,
 
     //
-    // The message callback.
+    // The event callback.
     //
-    fn record(context: ?*anyopaque, data: ITaskMessageData) anyerror!void {
-        const self: *MessageIdRecorder = @ptrCast(@alignCast(context.?));
+    fn record(context: ?*anyopaque, data: ITaskEventData) anyerror!void {
+        const self: *EventIdRecorder = @ptrCast(@alignCast(context.?));
         try self.taskIds.append(self.allocator, data.taskId);
     }
 };
@@ -315,8 +315,8 @@ const CountingBackend = struct {
         .addTask = addTask,
         .onTaskAdded = onTaskAdded,
         .onTaskComplete = onTaskComplete,
-        .onTaskMessage = onTaskMessage,
-        .onAnyTaskMessage = onAnyTaskMessage,
+        .onTaskEvent = onTaskEvent,
+        .onAnyTaskEvent = onAnyTaskEvent,
         .cancelTasks = cancelTasks,
         .onTasksCancelled = onTasksCancelled,
         .shutdown = shutdown,
@@ -371,9 +371,9 @@ const CountingBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onTaskMessage(ptr: *anyopaque, messageType: []const u8, callback: types.TaskMessageCallback) anyerror!types.UnsubscribeFn {
+    fn onTaskEvent(ptr: *anyopaque, eventType: []const u8, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
         _ = ptr;
-        _ = messageType;
+        _ = eventType;
         _ = callback;
         return no_unsubscribe;
     }
@@ -381,7 +381,7 @@ const CountingBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onAnyTaskMessage(ptr: *anyopaque, callback: types.TaskMessageCallback) anyerror!types.UnsubscribeFn {
+    fn onAnyTaskEvent(ptr: *anyopaque, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
         _ = ptr;
         _ = callback;
         return no_unsubscribe;
@@ -698,12 +698,12 @@ test "deinit on a queue that was never shut down cancels the source once" {
     setQueueBackend(null);
 }
 
-test "a message sent by a task of another source is not delivered" {
+test "an event sent by a task of another source is not delivered" {
     var fixture: Fixture = undefined;
-    try registerHandler("concurrency-message-task", messagingTaskHandler);
-    messaged_count.store(0, .release);
+    try registerHandler("concurrency-event-task", eventSendingTaskHandler);
+    event_sender_count.store(0, .release);
 
-    var queue = try fixture.init(2, "message-source");
+    var queue = try fixture.init(2, "event-source");
     var other_queue = try TaskQueue.init(fixture.allocator, std.testing.io, fixture.uuidGenerator.uuidGenerator(), "other-source");
     defer {
         queue.deinit();
@@ -713,23 +713,23 @@ test "a message sent by a task of another source is not delivered" {
         fixture.arena.deinit();
     }
 
-    var recorder: MessageIdRecorder = .{
+    var recorder: EventIdRecorder = .{
         .taskIds = .empty,
         .allocator = fixture.allocator,
     };
-    _ = try queue.onAnyTaskMessage(.{ .context = &recorder, .function = MessageIdRecorder.record });
+    _ = try queue.onAnyTaskEvent(.{ .context = &recorder, .function = EventIdRecorder.record });
 
-    _ = try other_queue.addTask("concurrency-message-task", try json(fixture.allocator, "{\"name\":\"other\"}"), null, null);
+    _ = try other_queue.addTask("concurrency-event-task", try json(fixture.allocator, "{\"name\":\"other\"}"), null, null);
     try other_queue.awaitAllTasks();
     try queue.awaitAllTasks();
 
-    // The task ran, but it belongs to a queue that did not add it, so its messages are not this
+    // The task ran, but it belongs to a queue that did not add it, so its events are not this
     // queue's business.
-    try std.testing.expectEqual(@as(usize, 1), messaged_count.load(.acquire));
+    try std.testing.expectEqual(@as(usize, 1), event_sender_count.load(.acquire));
     try std.testing.expectEqual(@as(usize, 0), recorder.taskIds.items.len);
 
     // The queue's own task does deliver.
-    const ownTaskId = try queue.addTask("concurrency-message-task", try json(fixture.allocator, "{\"name\":\"own\"}"), null, null);
+    const ownTaskId = try queue.addTask("concurrency-event-task", try json(fixture.allocator, "{\"name\":\"own\"}"), null, null);
     _ = try queue.awaitTask(ownTaskId);
     try std.testing.expectEqual(@as(usize, 1), recorder.taskIds.items.len);
     try std.testing.expectEqualStrings(ownTaskId, recorder.taskIds.items[0]);

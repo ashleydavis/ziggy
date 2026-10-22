@@ -63,7 +63,7 @@ pub fn build(b: *std.Build) !void {
     run_console_stdout.expectStdOutEqual("logged to stdout\ndebugged to stdout\n");
     test_step.dependOn(&run_console_stdout.step);
 
-    // The unit tests of the parts of the shells that do not need the platform's libraries.
+    // The unit tests of the parts of the native apps that do not need the platform's libraries.
     const linux_tests_module = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/native/linux/src/tests.zig"),
         .target = target,
@@ -93,8 +93,8 @@ pub fn build(b: *std.Build) !void {
     })).step);
 
     // The tests of the Ziggy template and of Ziggy's test app, each a build of its own that takes Ziggy as a dependency, as every app
-    // does. Each backend embeds its built UI, which its build reads when it starts, so the UI is built first and the app's build is then
-    // run as a program of its own.
+    // does. Each backend embeds its built frontend, which its build reads when it starts, so the frontend is built first and the app's
+    // build is then run as a program of its own.
     for ([_][]const u8{ "apps/ziggy-template", "apps/ziggy-test-app" }) |app_directory| {
         const bundle_app_ui = b.addSystemCommand(&.{ "bun", "run", "bundle:ui" });
         bundle_app_ui.setCwd(b.path(app_directory));
@@ -122,7 +122,7 @@ fn configureCore(
     options.addOption(bool, "test_hooks", test_hooks);
     module.addOptions("build_options", options);
 
-    // The Android shell reaches the core through JNI, written in Zig against the NDK's own jni.h. Only an Android target has that
+    // The Android native app reaches the core through JNI, written in Zig against the NDK's own jni.h. Only an Android target has that
     // header, so the import exists only for one.
     if (target.result.abi.isAndroid()) {
         const jni_translate_c = b.addTranslateC(.{
@@ -174,7 +174,7 @@ pub const IAppBackend = struct {
     title: []const u8,
     // The app's backend source file, relative to the app's folder: the file that declares `pub const app = ziggy.core.App(.{ ... });`.
     backend_source_file: []const u8,
-    // The directory of the app's built UI, relative to the app's build root, which is embedded in the core as "ui-files".
+    // The directory of the app's built frontend, relative to the app's build root, which is embedded in the core as "ui-files".
     ui_directory: []const u8,
     // The modules the app's backend imports besides "ziggy" and "ui-files".
     imports: []const IImport,
@@ -184,15 +184,15 @@ pub const IAppBackend = struct {
 // The libraries addAppBackend builds.
 //
 pub const IAppBackendLibraries = struct {
-    // The static library, which the shells link (the Linux and Windows shells here, and the Xcode projects).
+    // The static library, which the native apps link (the Linux and Windows native apps here, and the Xcode projects).
     static_library: *std.Build.Step.Compile,
-    // The shared library, for an Android target only, which the Android shell loads.
+    // The shared library, for an Android target only, which the Android native app loads.
     shared_library: ?*std.Build.Step.Compile,
 };
 
 //
 // Builds an app's backend for the target, installed by the `<name>-backend` step: a static library with ziggy.h installed beside it or,
-// for Android, a shared one. The platform shells that are not Zig (the Xcode projects and the Android project) are built by the app's
+// for Android, a shared one. The platform native apps that are not Zig (the Xcode projects and the Android project) are built by the app's
 // scripts, which run this step to build the libraries. It also adds the app's dev mode, the `<name>-dev` and `<name>-dev-host` steps (see
 // addDevMode), so an app gets dev mode with nothing more to do.
 //
@@ -240,8 +240,8 @@ pub fn addAppBackend(
 //
 // Makes the module an app's backend library is built from. Its root is Ziggy's app-root.zig, which exports Ziggy's C interface (and,
 // for Android, the JNI entry points) for the `app` the app's backend source file declares, so the app writes no exports of its own.
-// The backend source file is imported as "app-backend", and it imports Ziggy's core, the module of the app's UI (its built UI, or
-// none for the dev host) and the app's own modules.
+// The backend source file is imported as "app-backend", and it imports Ziggy's core, the module of the app's frontend
+// (its built frontend, or none for the dev host) and the app's own modules.
 //
 fn createAppBackendModule(
     b: *std.Build,
@@ -284,12 +284,13 @@ fn appPath(b: *std.Build, directory: []const u8, sub_path: []const u8) []const u
 }
 
 //
-// Makes the module that holds an app's built UI, a list of every file under the UI's directory (a path relative to the root of
-// the repository), each embedded with @embedFile. Pass the module to the app's backend, which gives the list to the `ui_files` field of its ziggy.core.App.
-// The directory is read every time the build runs, so whatever the UI build produced is what gets embedded, with no list of files
-// to keep up to date. A changed file rebuilds the executable. When the directory is missing or has no index.html, which means the
-// UI was not built first, the module does not compile and says so: the build of anything that does not use the UI is not
-// affected.
+// Makes the module that holds an app's built frontend, a list of every file under the frontend's directory (a path relative
+// to the root of the repository), each embedded with @embedFile. Pass the module to the app's backend, which gives the list to
+// the `ui_files` field of its ziggy.core.App.
+// The directory is read every time the build runs, so whatever the frontend build produced is what gets embedded, with no list
+// of files to keep up to date. A changed file rebuilds the executable. When the directory is missing or has no index.html,
+// which means the frontend was not built first, the module does not compile and reports why: the build of anything that does
+// not use the frontend is not affected.
 //
 pub fn embedUi(b: *std.Build, shell_module: *std.Build.Module, shell_import_name: []const u8, ui_directory: []const u8) !*std.Build.Module {
     const io = b.graph.io;
@@ -321,8 +322,8 @@ pub fn embedUi(b: *std.Build, shell_module: *std.Build.Module, shell_import_name
         }
         try source.appendSlice(b.allocator, "};\n");
     } else |err| {
-        // A UI directory that is missing means the UI was not built, which the compile error below says. Any other failure is
-        // reported as it is.
+        // A frontend directory that is missing means the frontend was not built, which the compile error below reports. Any
+        // other failure is reported as it is.
         if (err != error.FileNotFound) {
             return err;
         }
@@ -364,7 +365,7 @@ const library_directories = [_][]const u8{
 };
 
 //
-// Finds an installed runtime library by its file name and returns its full path. Fails the build, saying which library is missing and
+// Finds an installed runtime library by its file name and returns its full path. Fails the build, naming the missing library and
 // where it looked, when it is in none of the usual directories.
 //
 fn findRuntimeLibrary(b: *std.Build, file_name: []const u8) ![]const u8 {
@@ -477,7 +478,7 @@ pub const IImport = struct {
 //
 
 //
-// The shared libraries the Linux shell links, by their full file names, which is what a program built against the development packages
+// The shared libraries the Linux native app links, by their full file names, which is what a program built against the development packages
 // ends up needing at run time anyway. Nothing but the runtime libraries has to be installed.
 //
 const linux_runtime_libraries = [_][]const u8{
@@ -495,26 +496,26 @@ const linux_runtime_libraries = [_][]const u8{
 };
 
 //
-// What differs between the apps that Ziggy's Linux and Windows shells are built for.
+// What differs between the apps that Ziggy's Linux and Windows native apps are built for.
 //
 pub const IShellApp = struct {
     // The name of the app, which names its executable and its steps (`<name>-linux`, `<name>-windows`, `<name>-windows-check`).
     name: []const u8,
     // The name the steps' descriptions use for the app, such as "the Ziggy template".
     title: []const u8,
-    // The directory of the app relative to the app's build root ("." for the build root itself), under which its shells
+    // The directory of the app relative to the app's build root ("." for the build root itself), under which its native apps
     // (`native/linux/src/main.zig`, `native/windows/src/main.zig`) and the WebView2 SDK
     // (`webview2-sdk`) are.
     directory: []const u8,
-    // The PNG file of the app's window icon on Linux, which the shell's `app-icon` import gives to the app's main file, or null for none.
+    // The PNG file of the app's window icon on Linux, which the native app's `app-icon` import gives to the app's main file, or null for none.
     linux_icon: ?[]const u8,
     // The Windows resource script of the app's executable icon, or null for none.
     windows_resource: ?[]const u8,
 };
 
 //
-// Builds an app's Linux shell, installed to zig-out/bin/<name> by the `<name>-linux` step. The shell is Zig that talks to GTK 3 and
-// WebKitGTK 4.1 through their C headers, and to the core through ziggy.h. The built UI (made by `bun run bundle:ui`) is embedded in
+// Builds an app's Linux native app, installed to zig-out/bin/<name> by the `<name>-linux` step. The native app is Zig that talks to GTK 3 and
+// WebKitGTK 4.1 through their C headers, and to the core through ziggy.h. The built frontend (made by `bun run bundle:ui`) is embedded in
 // the executable, so the executable is the whole app.
 //
 pub fn addLinuxShell(
@@ -587,12 +588,12 @@ pub fn addLinuxShell(
 }
 
 //
-// Builds an app's Windows shell, installed to zig-out/<name>/<name>.exe by the `<name>-windows` step. The shell is Zig that talks to
-// Win32 and to WebView2 through their C headers. The executable is the whole app: the built UI is embedded in it and WebView2's
-// loader is linked into it. The UI is expected in the app's UI directory (bun run bundle:ui) and the loader's static library in the
-// app's webview2-sdk directory (the setup script), and the build fails when either is missing. The `<name>-windows-check` step
-// compiles the shell without linking it, for a machine that cannot link a Windows executable. With compile_only the loader is not
-// linked, which is how that machine checks the shell.
+// Builds an app's Windows native app, installed to zig-out/<name>/<name>.exe by the `<name>-windows` step. The native app is Zig that talks to
+// Win32 and to WebView2 through their C headers. The executable is the whole app: the built frontend is embedded in it and WebView2's
+// loader is linked into it. The frontend is expected in the app's frontend directory (bun run bundle:ui) and the loader's static
+// library in the app's webview2-sdk directory (the setup script), and the build fails when either is missing. The `<name>-windows-check` step
+// compiles the native app without linking it, for a machine that cannot link a Windows executable. With compile_only the loader is not
+// linked, which is how that machine checks the native app.
 //
 pub fn addWindowsShell(
     b: *std.Build,
@@ -647,7 +648,7 @@ pub fn addWindowsShell(
     shell_module.linkSystemLibrary("uuid", .{});
     // The WebView2 static loader reads the registry and writes event traces, which live in advapi32.
     shell_module.linkSystemLibrary("advapi32", .{});
-    // Without the library the module still compiles, which is how a machine that cannot link a Windows executable checks the shell, but
+    // Without the library the module still compiles, which is how a machine that cannot link a Windows executable checks the native app, but
     // nothing built from it links.
     if (!compile_only) {
         shell_module.addObjectFile(b.path(appPath(b, app.directory, b.fmt("webview2-sdk/{s}/WebView2LoaderStatic.lib", .{sdk_architecture}))));
@@ -678,7 +679,7 @@ pub fn addWindowsShell(
         .symbol_name = "mainCRTStartup",
     };
 
-    // Compiles the shell without linking it, for a machine that cannot link a Windows executable. The link needs Microsoft's toolchain
+    // Compiles the native app without linking it, for a machine that cannot link a Windows executable. The link needs Microsoft's toolchain
     // because the SDK's static loader is built with it.
     // The core library is not linked into the object: a COFF object cannot hold the library's objects, and the check has no link to
     // resolve.
@@ -706,14 +707,15 @@ pub fn addWindowsShell(
 }
 
 //
-// Adds an app's dev mode, for addAppBackend. In dev mode the UI runs in an ordinary browser and the core runs in the dev host: Ziggy's
-// dev host linked with the app's backend, which runs the core as a program of its own. The browser opens the dev host, which serves
-// /__ziggy itself, carries the page's messages to the core and forwards everything else to the app's own dev server, putting Ziggy's
-// scripts in each page on the way through. The `<name>-dev-host` step builds the dev host, installed to bin/<name>-dev-host. Its
-// core embeds no UI, because the dev server serves the UI, so dev mode needs no UI built. The `<name>-dev` step runs the supervisor,
-// which starts the app's dev server (its `dev:ui` package script), builds and starts the dev host, opens the browser and rebuilds and
-// restarts the dev host when a Zig file of the app or of Ziggy changes. Options after `--` go to the supervisor: `--no-open` leaves
-// the browser closed, `--port <port>` serves the app on that port and `--test-hooks` builds the dev host with the test hooks.
+// Adds an app's dev mode, for addAppBackend. In dev mode the frontend runs in an ordinary browser and the core runs in the dev
+// host: Ziggy's dev host linked with the app's backend, which runs the core as a program of its own. The browser opens the
+// dev host, which serves /__ziggy itself, carries the page's messages to the core and forwards everything else to the app's
+// own dev server, putting Ziggy's scripts in each page on the way through. The `<name>-dev-host` step builds the dev host,
+// installed to bin/<name>-dev-host. Its core embeds no frontend, because the dev server serves the frontend, so dev mode needs
+// no frontend built. The `<name>-dev` step runs the supervisor, which starts the app's dev server (its `dev:ui` package script),
+// builds and starts the dev host, opens the browser and rebuilds and restarts the dev host when a Zig file of the app or of Ziggy
+// changes. Options after `--` go to the supervisor: `--no-open` leaves the browser closed, `--port <port>` serves the app on that
+// port and `--test-hooks` builds the dev host with the test hooks.
 // Nothing else links the dev host, so no native app and no release build includes it.
 //
 fn addDevMode(
@@ -727,7 +729,7 @@ fn addDevMode(
     const host_step = b.step(host_name, b.fmt("Build {s}'s dev host for dev mode, installed to bin/{s}", .{ app.title, host_name }));
     const dev_step = b.step(b.fmt("{s}-dev", .{app.name}), b.fmt("Run {s} in dev mode: its dev server and dev host, in the browser, rebuilt as its files change", .{app.title}));
 
-    // The app's core with no UI embedded in it.
+    // The app's core with no frontend embedded in it.
     const no_ui = b.addWriteFiles();
     const no_ui_module = b.createModule(.{
         .root_source_file = no_ui.add("ui-files.zig", "const ziggy = @import(\"ziggy\");\n\npub const files = [_]ziggy.UiFile{};\n"),

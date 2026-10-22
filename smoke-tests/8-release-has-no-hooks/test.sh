@@ -21,7 +21,8 @@ for file in $(ziggy_platform_artifact_files release); do
     if grep -a -q "InvalidCommand" "$file"; then
         fail "the release build $file contains the control connection"
     fi
-    # The UI names the event too, and it is embedded in the executable, so this looks for an error name that only the backend's test command code has.
+    # The frontend names the event too, and it is embedded in the executable, so this looks for an error name that only the backend's
+    # test command code has.
     if grep -a -q "UiDidNotAnswer" "$file"; then
         fail "the release build $file contains the test command channel"
     fi

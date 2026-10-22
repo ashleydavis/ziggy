@@ -59,8 +59,8 @@ pub const PayloadStatsResponse = struct {
 };
 
 //
-// Replies with the length in bytes and the CRC-32 of the "text" field, so the UI can check a large payload
-// arrived whole without the payload coming back.
+// Replies with the length in bytes and the CRC-32 of the "text" field, so the frontend can check a large
+// payload arrived whole without the payload coming back.
 //
 pub fn payloadStatsHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: PayloadStatsRequest) !PayloadStatsResponse {
     _ = core;
@@ -115,7 +115,7 @@ pub fn fileRoundtripHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, re
 pub const FailRequest = struct {};
 
 //
-// Always fails, so the UI can check that an error reply reaches it.
+// Always fails, so the frontend can check that an error reply reaches it.
 //
 pub fn failHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: FailRequest) !void {
     _ = core;

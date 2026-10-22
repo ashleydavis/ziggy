@@ -9,7 +9,7 @@ Invoked as `bash scripts/release-notes.sh [options]` from the app's directory, o
 - `--prefix <word>` keeps only commits whose subject starts with `<word>:` and strips that prefix from the bullet. Without it every commit is listed.
 - `--exclude-tag <tag>` ignores that tag when looking for the last version tag.
 - `--empty-message <text>` is printed when no commit matches, instead of empty output (default: `- No changes found`).
-- `--limit <n>` keeps only the newest n bullets and adds a final one saying how many older changes were left out. The Android tester distribution passes one, because Firebase App Distribution rejects long release notes.
+- `--limit <n>` keeps only the newest n bullets and adds a final one giving the number of older changes left out. The Android tester distribution passes one, because Firebase App Distribution rejects long release notes.
 
 ## What counts as the last version tag
 

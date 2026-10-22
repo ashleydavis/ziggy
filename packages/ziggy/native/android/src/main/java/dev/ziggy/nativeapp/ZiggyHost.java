@@ -3,7 +3,7 @@ package dev.ziggy.nativeapp;
 // What the core calls back into. The Zig side (the JNI entry points in Ziggy's core library) holds an object of this type
 // and calls these methods, from any thread.
 public interface ZiggyHost {
-    // A message from the core to the UI, as UTF-8 JSON. Called from any thread, and the array belongs to the callee.
+    // A message from the core to the frontend, as UTF-8 JSON. Called from any thread, and the array belongs to the callee.
     void onCoreMessage(byte[] message);
 
     // The operating system's version, as the text of a JSON string, such as "Android 16 (API 36)".
@@ -12,7 +12,7 @@ public interface ZiggyHost {
     // Quits the application. Called by the test control connection, from its own thread.
     void quit();
 
-    // Keeps the application running (true) or says it need not be (false), because tasks the app must be kept running for are queued
+    // Keeps the application running (true) or reports it need not be (false), because tasks the app must be kept running for are queued
     // or running. Called from any thread, while the core holds a lock, so it must return at once.
     void keepAlive(boolean keepRunning);
 

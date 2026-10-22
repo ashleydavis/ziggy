@@ -31,8 +31,8 @@ const DoneResponse = struct {};
 
 //
 // A menu item was chosen, by the user or by a keyboard shortcut. The native app passes its action on. The core runs the item: it
-// calls a `.zig` item's function, whose error is this message's error. It sends a `.ui` item to the UI as the app event
-// {"type": "menu", "item": "<name>"}. A name the app's menu does not have fails with UnknownMenuItem. So does a standard action,
+// calls a `.zig` item's function, whose error is this message's error. It sends a `.ui` item to the frontend as the app
+// event {"type": "menu", "item": "<name>"}. A name the app's menu does not have fails with UnknownMenuItem. So does a standard action,
 // which the native apps do themselves and never post.
 //
 fn menuActionHandler(core: *Core, arena: std.mem.Allocator, request: MenuActionRequest) !DoneResponse {

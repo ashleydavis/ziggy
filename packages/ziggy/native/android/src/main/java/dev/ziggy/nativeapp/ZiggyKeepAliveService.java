@@ -10,9 +10,9 @@ import android.os.Build;
 import android.os.IBinder;
 
 // A foreground service that does nothing but exist while the core has tasks the app must be kept running for. A process with a
-// running foreground service is not stopped when the app leaves the foreground, so those tasks go on running. The shell starts it
+// running foreground service is not stopped when the app leaves the foreground, so those tasks go on running. The native app starts it
 // when the core calls the keep-alive callback with true, which is while the app is in the foreground, as Android requires, and stops it
-// when the core says the last such task has ended. What its notification says is the app's to supply (see
+// when the core reports the last such task has ended. What its notification shows is the app's to supply (see
 // ZiggyShell.setKeepAliveNotification); an app that supplies nothing gets generic wording.
 public final class ZiggyKeepAliveService extends Service {
     // The Intent extra holding the name of the notification channel, as the system settings show it.

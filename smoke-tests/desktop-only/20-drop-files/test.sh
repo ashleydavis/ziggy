@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 
-# A file dropped on the window reaches the UI with its real path from window.ziggy.getPathForFile, and a drop the shell reported no
-# files for gives the UI no files.
+# A file dropped on the window reaches the frontend with its real path from window.ziggy.getPathForFile, and a drop the native app
+# reported no files for gives the frontend no files.
 #
-# No tool can drag a file into the window of an app running on a virtual display, so the scenario does what a drop does in two
-# steps: the drop command records the file with the backend, as the shell does when the files are dropped, and the drop-file command
-# makes the UI receive a drop event carrying a File. The shell's own reading of a real drop is not covered by any automatic test.
+# No tool can drag a file into the window of an app running on a virtual display, so the scenario does what a drop does in two steps:
+# the drop command records the file with the backend, as the native app does when the files are dropped, and the drop-file command makes
+# the frontend receive a drop event carrying a File. The native app's own reading of a real drop is not covered by any automatic test.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 
 start_test_app
 
-# A drop the shell recorded no files for gives the UI no files.
+# A drop the native app recorded no files for gives the frontend no files.
 answer="$(control '{"command":"drop-file","dataId":"drop-zone","fileName":"two words.txt","fileSize":5}')"
 if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
     fail "the drop-file command failed: $answer"

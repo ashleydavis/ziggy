@@ -1,7 +1,7 @@
 //
 // What the test app keeps while it runs, and the parts of Ziggy that reach it: the state the backend holds for the app, the observers the
-// backend calls when a task ends or sends a message, the describer that turns an error into the text of its reply, and messages that
-// queue, cancel and announce work from the app's own code rather than from the UI.
+// backend calls when a task ends or sends an event, the describer that turns an error into the text of its reply, and messages that
+// queue, cancel and announce work from the app's own code rather than from the frontend.
 //
 
 const std = @import("std");
@@ -21,8 +21,8 @@ pub const ExampleState = struct {
     io: std.Io,
     // How many tasks have ended.
     tasks_ended: u64,
-    // How many messages tasks have sent.
-    messages_sent: u64,
+    // How many events tasks have sent.
+    events_sent: u64,
     // Whether the backend has stopped the state, which it does before the task runner stops.
     stopped: bool,
 
@@ -47,8 +47,8 @@ pub const ExampleState = struct {
 const TaskStats = struct {
     // How many tasks have ended.
     tasksEnded: u64,
-    // How many messages tasks have sent.
-    messagesSent: u64,
+    // How many events tasks have sent.
+    eventsSent: u64,
 };
 
 //
@@ -69,7 +69,7 @@ fn create(core: *Core) anyerror!*anyopaque {
         .mutex = .init,
         .io = core.io(),
         .tasks_ended = 0,
-        .messages_sent = 0,
+        .events_sent = 0,
         .stopped = false,
     };
     return state;
@@ -109,7 +109,7 @@ fn readStats(state: *ExampleState) TaskStats {
     defer state.unlock();
     return .{
         .tasksEnded = state.tasks_ended,
-        .messagesSent = state.messages_sent,
+        .eventsSent = state.events_sent,
     };
 }
 
@@ -125,14 +125,14 @@ pub fn onTaskEnd(core: *Core, end: ziggy.types.TaskEnd) void {
 }
 
 //
-// The backend's observer of a message a task sent: counts it.
+// The backend's observer of an event a task sent: counts it.
 //
-pub fn onTaskMessage(core: *Core, sent: ziggy.types.TaskSentMessage) void {
+pub fn onTaskEvent(core: *Core, sent: ziggy.types.TaskSentEvent) void {
     _ = sent;
     const state = fromCore(core);
     state.lock();
     defer state.unlock();
-    state.messages_sent += 1;
+    state.events_sent += 1;
 }
 
 //
@@ -141,7 +141,7 @@ pub fn onTaskMessage(core: *Core, sent: ziggy.types.TaskSentMessage) void {
 pub const NoRequest = struct {};
 
 //
-// Replies with how many tasks have ended and how many messages tasks have sent since the app started.
+// Replies with how many tasks have ended and how many events tasks have sent since the app started.
 //
 pub fn taskStatsHandler(core: *Core, arena: std.mem.Allocator, request: NoRequest) !TaskStats {
     _ = arena;
@@ -150,7 +150,7 @@ pub fn taskStatsHandler(core: *Core, arena: std.mem.Allocator, request: NoReques
 }
 
 //
-// Always fails with an error the test app's describer has a sentence for, so the UI can check the sentence is what reaches it.
+// Always fails with an error the test app's describer has a sentence for, so the frontend can check the sentence is what reaches it.
 //
 pub fn refuseHandler(core: *Core, arena: std.mem.Allocator, request: NoRequest) !void {
     _ = core;
@@ -179,8 +179,8 @@ pub const SourceRequest = struct {
 };
 
 //
-// Queues a hello-short task from the app's own code, under the source given in "source", and tells the UI with an app event of the
-// type "queued-from-app" that it did. The reply is the id of the task.
+// Queues a hello-short task from the app's own code, under the source given in "source", and tells the frontend with an app event
+// of the type "queued-from-app" that it did. The reply is the id of the task.
 //
 pub fn queueFromAppHandler(core: *Core, arena: std.mem.Allocator, request: SourceRequest) ![]const u8 {
     const task_id = try std.fmt.allocPrint(arena, "from-app-{s}", .{request.source});
@@ -224,7 +224,7 @@ pub fn describeSelfHandler(context: *TaskContext, data: std.json.Value) anyerror
 
 //
 // Runs "children" hello-child tasks one after another, each freed as soon as it ends, and stops starting them once the task is cancelled,
-// saying in an output message how many it ran. Replies with how many ran and how each ended.
+// reporting in an output event how many it ran. Replies with how many ran and how each ended.
 //
 pub fn runInTurnHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
     const children = json.getInteger(data, "children") orelse 0;
@@ -241,7 +241,7 @@ pub fn runInTurnHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
         try statuses.append(context.arena, @tagName(completion.status));
     }
     if (context.isCancelled()) {
-        try context.sendMessage(.{
+        try context.sendEvent(.{
             .type = "output",
             .text = try std.fmt.allocPrint(context.arena, "run-in-turn stopped after {d} children", .{statuses.items.len}),
         });

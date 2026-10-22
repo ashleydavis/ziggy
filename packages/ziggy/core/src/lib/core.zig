@@ -1,6 +1,6 @@
 //
 // The core: everything behind one handle. It owns the task runner, knows the app's message handlers and the host callbacks,
-// and routes every message from the UI: a system message (Ziggy's own) to Ziggy's handlers and an app message to the app's handler for its name.
+// and routes every message from the frontend: a system message (Ziggy's own) to Ziggy's handlers and an app message to the app's handler for its name.
 //
 
 const std = @import("std");
@@ -23,17 +23,17 @@ const menu_lib = @import("menu.zig");
 const ZiggyConfig = types.ZiggyConfig;
 
 //
-// One app message from the UI, unparsed, as the core hands it to a message handler whose request is ziggy.core.Message (see App).
+// One app message from the frontend, unparsed, as the core hands it to a message handler whose request is ziggy.core.Message (see App).
 //
 pub const Message = struct {
-    // The message's id, which its message response carries back to the UI, or null for a message sent with send, which gets no
-    // message response. A handler that answers with a task passes the message on to answerWithTask unread.
+    // The message's id, which its message response carries back to the frontend, or null for a message sent with send, which
+    // gets no message response. A handler that answers with a task passes the message on to answerWithTask unread.
     id: ?std.json.Value,
-    // The message's name, which the UI gave as the first argument of invoke or send and which chose the handler. It is never
-    // empty: the core refuses a message without one, with MissingMessageName, before any handler runs. It lives in the arena the
-    // handler is given.
+    // The message's name, which the frontend gave as the first argument of invoke or send and which chose the handler. It is
+    // never empty: the core refuses a message without one, with MissingMessageName, before any handler runs. It lives in the
+    // arena the handler is given.
     name: []const u8,
-    // The data the UI sent, the app's own to lay out, or null when it sent none. It lives in the arena the handler is given.
+    // The data the frontend sent, the app's own to lay out, or null when it sent none. It lives in the arena the handler is given.
     data: std.json.Value,
 };
 
@@ -43,8 +43,8 @@ pub const Message = struct {
 pub const MessageResult = union(enum) {
     // The JSON text of the message response, allocated with the arena. It is sent when the message has an id.
     response: []const u8,
-    // There is nothing to say. A message with an id still gets a successful message response holding null, so the UI's invoke
-    // never waits for ever.
+    // There is nothing to send back. A message with an id still gets a successful message response holding null, so the
+    // frontend's invoke never waits for ever.
     none,
     // The message is answered elsewhere, so nothing is sent now: by a task answerWithTask queued, whose result is sent when the
     // task ends, or (for a handler App wrapped) later through the handler's Reply.
@@ -92,38 +92,39 @@ pub const RegisteredApp = struct {
     // The app's task types.
     tasks: []const task_runner.TaskHandlerEntry,
     // The desktop menu as JSON, which App makes from the app's `.menu` (see menuJson in menu.zig). "[]" for an app with no menu.
-    // Shells show it on desktop only. See "Menus" in the architecture document.
+    // Native apps show it on desktop only. See "Menus" in the architecture document.
     menu_json: []const u8,
     // What the core does for each menu item a native app posts as menu-action, by the item's name, which App makes from the app's
     // `.menu` (see menuTargets in menu.zig).
     menu_targets: menu_lib.MenuTargets,
-    // The files of the app's bundled UI, embedded in the app's library, for a shell that serves the UI by calling the core
-    // for each file (the MacOS, iOS and Android shells). Empty for an app whose shell embeds the UI itself.
+    // The files of the app's bundled frontend, embedded in the app's library, for a native app that serves the frontend by
+    // calling the core for each file (the MacOS, iOS and Android native apps). Empty for an app whose native app embeds the
+    // frontend itself.
     ui_files: []const ui_files.UiFile,
     // Turns the error the message handler returned into the text of the error reply, for an app whose code reports the reason for
     // a failure somewhere other than the error's name (a Zig error carries no message). It returns null when it has nothing to
-    // say about the error, and the reply then carries the error's name. It is called on the thread that handled the message,
+    // add about the error, and the reply then carries the error's name. It is called on the thread that handled the message,
     // straight after the handler failed, and the text is used before the call returns.
     describe_error: ?ErrorDescriber = null,
     // Where the app keeps what it remembers while it runs, which the core holds and hands back to the app's handlers through
     // `Core.app_state`. Null for an app that keeps nothing.
     state: ?AppState = null,
-    // Called when a task has ended, after the UI has been told, from the thread that ran it, with no lock held. The values are
-    // valid only during the call.
+    // Called when a task has ended, after the frontend has been told, from the thread that ran it, with no lock held. The
+    // values are valid only during the call.
     on_task_end: ?*const fn (core: *Core, end: types.TaskEnd) void = null,
-    // Called when a task has sent a message, after the UI has been told, from the thread that sent it, with no lock held. The values
-    // are valid only during the call.
-    on_task_message: ?*const fn (core: *Core, sent: types.TaskSentMessage) void = null,
-    // Gives the query text the shell appends to the address of the UI, after the question mark, so the UI's first render already
-    // holds what the app tells it at start-up. Null for an app whose UI needs no query. See `UiQuery`.
+    // Called when a task has sent an event, after the frontend has been told, from the thread that sent it, with no lock held.
+    // The values are valid only during the call.
+    on_task_event: ?*const fn (core: *Core, sent: types.TaskSentEvent) void = null,
+    // Gives the query text the native app appends to the address of the frontend, after the question mark, so the frontend's
+    // first render already holds what the app tells it at start-up. Null for an app whose frontend needs no query. See `UiQuery`.
     ui_query: ?UiQuery = null,
 };
 
 //
-// An app's function for the query of the UI's address. The core calls it when the shell calls ziggy_ui_query (the shell calls it once the core exists,
-// before it loads the UI), with whether the test mode switch is on, which the app says in the query however it likes. It returns
+// An app's function for the query of the frontend's address. The core calls it when the native app calls ziggy_ui_query (the native app calls it once the core exists,
+// before it loads the frontend), with whether the test mode switch is on, which the app puts in the query however it likes. It returns
 // the text after the question mark, such as `restApiUrl=...&testMode=1`, or an empty string for no query, allocated with the
-// allocator given, which is an arena that is released when the call returns. Ziggy passes the text through unread, so no shell
+// allocator given, which is an arena that is released when the call returns. Ziggy passes the text through unread, so no native app
 // composes a query and Ziggy names none of its parts.
 //
 pub const UiQuery = *const fn (core: *Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8;
@@ -162,13 +163,13 @@ pub const Core = struct {
     // owns, held untyped so that nothing an app reaches from the core names the registry of system messages.
     system_messages: *anyopaque,
     // The number of messages answered by a task so far, which names the next one's task. A message's own id cannot name it: the
-    // UI numbers its messages from 1 again when it reloads, while a task of the last page can still be running.
+    // frontend numbers its messages from 1 again when it reloads, while a task of the last page can still be running.
     next_request_task: std.atomic.Value(u64),
     // The desktop menu as JSON, owned by the app.
     menu_json: []const u8,
     // What the core does for each menu item a native app posts, by the item's name, owned by the app.
     menu_targets: menu_lib.MenuTargets,
-    // The files of the app's bundled UI, owned by the app.
+    // The files of the app's bundled frontend, owned by the app.
     ui_files: []const ui_files.UiFile,
     // Gives the text of an error reply, or null to use the error's name. Owned by the app.
     describe_error: ?ErrorDescriber,
@@ -178,13 +179,13 @@ pub const Core = struct {
     app_state: ?*anyopaque,
     // The app's function for a task that ended, or null.
     on_task_end: ?*const fn (core: *Core, end: types.TaskEnd) void,
-    // The app's function for a message a task sent, or null.
-    on_task_message: ?*const fn (core: *Core, sent: types.TaskSentMessage) void,
-    // The app's function for the query of the UI's address, or null.
+    // The app's function for an event a task sent, or null.
+    on_task_event: ?*const fn (core: *Core, sent: types.TaskSentEvent) void,
+    // The app's function for the query of the frontend's address, or null.
     ui_query: ?UiQuery,
     // The text the last call to `uiQuery` returned, owned by the core, or null before the first call.
     ui_query_text: ?[:0]u8,
-    // The shell's configuration. The strings in it are copies owned by the core.
+    // The native app's configuration. The strings in it are copies owned by the core.
     config: ZiggyConfig,
     // The owned copy of the app's URL prefix.
     app_url_prefix: [:0]u8,
@@ -196,7 +197,7 @@ pub const Core = struct {
     queue_backend: *queue_backend.ZiggyQueueBackend,
     // The files the user last dropped on the window, for getPathForFile.
     dropped: dropped_files.DroppedFiles,
-    // The test control connection, only in a test hooks build and only when the shell is in test mode.
+    // The test control connection, only in a test hooks build and only when the native app is in test mode.
     control: ?*test_control.TestControl,
     // The messages whose handlers took a Reply and have not answered yet, by the serial each Reply carries.
     later_replies: std.AutoHashMapUnmanaged(u64, LaterReply),
@@ -243,7 +244,7 @@ pub const Core = struct {
         core.state_hooks = app.state;
         core.app_state = null;
         core.on_task_end = app.on_task_end;
-        core.on_task_message = app.on_task_message;
+        core.on_task_event = app.on_task_event;
         core.ui_query = app.ui_query;
         core.ui_query_text = null;
         core.config = config;
@@ -251,7 +252,7 @@ pub const Core = struct {
         errdefer allocator.free(core.app_url_prefix);
         core.data_dir = try allocator.dupeZ(u8, std.mem.span(config.data_dir));
         errdefer allocator.free(core.data_dir);
-        // The shell's own strings are valid only during the call, so everything that keeps the configuration keeps it pointing at the copies.
+        // The native app's own strings are valid only during the call, so everything that keeps the configuration keeps it pointing at the copies.
         core.config.app_url_prefix = core.app_url_prefix.ptr;
         core.config.data_dir = core.data_dir.ptr;
         core.dropped = dropped_files.DroppedFiles.init(allocator);
@@ -274,7 +275,7 @@ pub const Core = struct {
             .observer = .{
                 .user_data = core,
                 .on_task_end = observeTaskEnd,
-                .on_task_message = observeTaskMessage,
+                .on_task_event = observeTaskEvent,
             },
         }, core.config);
         errdefer core.runner.stop();
@@ -345,9 +346,9 @@ pub const Core = struct {
     }
 
     //
-    // Calls the app's function for the query of the UI's address and returns the text after the question mark, empty when the app has none. The
-    // text is owned by the core and stays valid until the next call or until the core is destroyed. The shell calls it once the core
-    // exists, before it loads the UI.
+    // Calls the app's function for the query of the frontend's address and returns the text after the question mark, empty when the app has none. The
+    // text is owned by the core and stays valid until the next call or until the core is destroyed. The native app calls it once the core
+    // exists, before it loads the frontend.
     //
     pub fn uiQuery(self: *Core) ![:0]const u8 {
         const ui_query = self.ui_query orelse {
@@ -366,15 +367,15 @@ pub const Core = struct {
     }
 
     //
-    // Finds the bundled UI's file for the path of a request, or null when the UI has no such file. See ui-files.zig.
+    // Finds the bundled frontend's file for the path of a request, or null when the frontend has no such file. See ui-files.zig.
     //
     pub fn uiFile(self: *Core, request_path: []const u8) ?*const ui_files.UiFile {
         return ui_files.findFile(self.ui_files, request_path);
     }
 
     //
-    // Records the files the user dropped on the window, replacing the last drop. The shell calls it when the drop happens, before the
-    // UI's own drop event, with the paths as the JSON text of an array of strings.
+    // Records the files the user dropped on the window, replacing the last drop. The native app calls it when the drop happens, before the
+    // frontend's own drop event, with the paths as the JSON text of an array of strings.
     //
     pub fn filesDropped(self: *Core, paths_json: []const u8) !void {
         try self.dropped.replace(self.io(), paths_json);
@@ -388,7 +389,7 @@ pub const Core = struct {
     }
 
     //
-    // Sends a JSON message to the shell, and so to the UI.
+    // Sends a JSON message to the native app, and so to the frontend.
     //
     pub fn deliver(self: *Core, message: []const u8) void {
         const deliver_fn = self.config.deliver.?;
@@ -396,9 +397,9 @@ pub const Core = struct {
     }
 
     //
-    // Handles one message from the UI or the native app: the one entry point into the core for both kinds of message. It parses
-    // the envelope and passes it on by its kind, "app" to postAppMessage and "system" to postSystemMessage, and does nothing
-    // else. A message that is not a JSON object, or has no kind or any other kind, is refused as InvalidMessage, reported as a
+    // Handles one message from the frontend or the native app: the one entry point into the core for both kinds of message. It
+    // parses the envelope and passes it on by its kind, "app" to postAppMessage and "system" to postSystemMessage, and does
+    // nothing else. A message that is not a JSON object, or has no kind or any other kind, is refused as InvalidMessage, reported as a
     // core-error system event.
     //
     pub fn postMessage(self: *Core, message: []const u8) void {
@@ -626,7 +627,7 @@ pub const Core = struct {
     }
 
     //
-    // Reports every message whose handler said it would answer later and never did, each as a core-error event naming
+    // Reports every message whose handler chose to answer later and never did, each as a core-error event naming
     // MessageNotAnswered and the message's name, and releases them. The core calls it when it is destroyed.
     //
     fn reportUnansweredReplies(self: *Core) void {
@@ -662,7 +663,8 @@ pub const Core = struct {
     }
 
     //
-    // Sends the UI an event of the app's own, whose data is the JSON text data_json, which the UI's onEvent listeners receive.
+    // Sends the frontend an event of the app's own, whose data is the JSON text data_json, which the frontend's onEvent listeners
+    // receive.
     //
     pub fn sendEvent(self: *Core, arena: std.mem.Allocator, data_json: []const u8) !void {
         const event = try json.stringify(arena, .{
@@ -736,18 +738,18 @@ fn observeTaskEnd(user_data: ?*anyopaque, end: types.TaskEnd) void {
 }
 
 //
-// The runner calls this when a task has sent a message: tells the queue backend, then the app.
+// The runner calls this when a task has sent an event: tells the queue backend, then the app.
 //
-fn observeTaskMessage(user_data: ?*anyopaque, sent: types.TaskSentMessage) void {
+fn observeTaskEvent(user_data: ?*anyopaque, sent: types.TaskSentEvent) void {
     const core: *Core = @ptrCast(@alignCast(user_data.?));
-    core.queue_backend.messageSent(sent);
-    if (core.on_task_message) |on_task_message| {
-        on_task_message(core, sent);
+    core.queue_backend.eventSent(sent);
+    if (core.on_task_event) |on_task_event| {
+        on_task_event(core, sent);
     }
 }
 
 //
-// Delivers a message the runner or the test control connection produced to the shell.
+// Delivers a message the runner or the test control connection produced to the native app.
 //
 fn emitFromRunner(user_data: ?*anyopaque, message: []const u8) void {
     const core: *Core = @ptrCast(@alignCast(user_data.?));
@@ -755,7 +757,7 @@ fn emitFromRunner(user_data: ?*anyopaque, message: []const u8) void {
 }
 
 //
-// What the test control connection calls for its drop command: records the files as the shell does when the user drops them.
+// What the test control connection calls for its drop command: records the files as the native app does when the user drops them.
 //
 fn filesDroppedFromControl(user_data: ?*anyopaque, paths_json: []const u8) anyerror!void {
     const core: *Core = @ptrCast(@alignCast(user_data.?));

@@ -1,5 +1,5 @@
 //
-// How a shell hands the core the result of a host request (see HostRequestFn): the text goes into the buffer the core gave, and the
+// How a native app hands the core the result of a host request (see HostRequestFn): the text goes into the buffer the core gave, and the
 // number returned is its length, negated when the request failed and the text is the reason.
 //
 
