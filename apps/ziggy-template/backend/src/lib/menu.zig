@@ -8,7 +8,7 @@
 // "Building your app".
 //
 
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const hello_world = @import("hello-world.zig");
 
 //

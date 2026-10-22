@@ -39,7 +39,7 @@ A handler is a Zig function that takes the task's context and the data the UI qu
 
 ```zig
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 
 const TaskContext = ziggy.task_runner.TaskContext;
 
@@ -180,7 +180,7 @@ A task type registered with `kind = .keep_alive` keeps a mobile app running in t
 
 ## Code written against the task queue
 
-The core library implements the task queue's `IQueueBackend` on its own runner, so code written against `TaskQueue` and `IQueueBackend` (`@import("ziggy-core").task_queue`) runs on it unchanged.
+The core library implements the task queue's `IQueueBackend` on its own runner, so code written against `TaskQueue` and `IQueueBackend` (`@import("ziggy").task_queue`) runs on it unchanged.
 
 - A handler registered with `worker.registerHandler` runs for any task type the app has no entry of its own for. Register handlers before queuing work.
 - A task queued through the backend runs at the priority of the task running on that thread, unless the code passes one.

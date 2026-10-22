@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
 
 fn lastMessage(shell: *helpers.FakeShell) ![]u8 {

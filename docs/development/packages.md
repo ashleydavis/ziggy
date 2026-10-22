@@ -4,8 +4,8 @@ Ziggy is in `packages/ziggy`, in three sides: the UI, the core library and the n
 
 | Side | Name | Subdirectory | Language | What it holds | How an app uses it |
 |---|---|---|---|---|---|
-| UI | `ziggy-ui`, the only npm package | [`packages/ziggy/ui`](../../packages/ziggy/ui) | TypeScript | The types of `window.ziggy`, the JSON types and the types of the task events the backend sends | `import type { ITaskCompletedEvent } from "ziggy-ui"` |
-| Core | `ziggy-core` | [`packages/ziggy/core`](../../packages/ziggy/core) | Zig, with C headers (`ziggy.h`, `jni-c.h`) and JavaScript (`ziggy-inject.js`) | The C interface, the message dispatcher, the task runner, the origin check, the native call plumbing, the test hooks, the task queue and the helpers it is written with, and `ziggy-inject.js`, the script that creates `window.ziggy`, which the core library embeds so an app supplies nothing for it | `@import("ziggy-core")` |
+| UI | `ziggy`, the only npm package | [`packages/ziggy/ui`](../../packages/ziggy/ui) | TypeScript | The types of `window.ziggy`, the JSON types and the types of the task events the backend sends | `import type { ITaskCompletedEvent } from "ziggy"` |
+| Core | `ziggy` (the Zig module) | [`packages/ziggy/core`](../../packages/ziggy/core) | Zig, with C headers (`ziggy.h`, `jni-c.h`) and JavaScript (`ziggy-inject.js`) | The C interface, the message dispatcher, the task runner, the origin check, the native call plumbing, the test hooks, the task queue and the helpers it is written with, and `ziggy-inject.js`, the script that creates `window.ziggy`, which the core library embeds so an app supplies nothing for it | `@import("ziggy-core")` |
 | Native app, Linux | `ziggy-native-linux` | [`packages/ziggy/native/linux`](../../packages/ziggy/native/linux) | Zig, with a C header (`c.h`) | The host built on GTK 3 and WebKitGTK 4.1 | Built by the app's `build.zig` |
 | Native app, Windows | `ziggy-native-windows` | [`packages/ziggy/native/windows`](../../packages/ziggy/native/windows) | Zig, with a C header (`c.h`) | The WebView2 host | Built by the app's `build.zig` |
 | Native app, MacOS | `ZiggyNativeMacOS` | [`packages/ziggy/native/macos`](../../packages/ziggy/native/macos) | Swift | The WKWebView host, as a Swift package | Linked by the app's Xcode project |
@@ -15,7 +15,7 @@ Ziggy is in `packages/ziggy`, in three sides: the UI, the core library and the n
 
 Each native app hosts the system web view, draws the menu, handles shortcuts and developer tools, shows the file and directory dialogs and moves messages between the UI and the backend.
 
-The tests of `ziggy-inject.js` and of the dev backend's `dev-client.js` are in `ziggy-ui` (`packages/ziggy/ui/src/test`), which reads each script from where it is.
+The tests of `ziggy-inject.js` and of the dev backend's `dev-client.js` are in `ziggy` (`packages/ziggy/ui/src/test`), which reads each script from where it is.
 
 Two files at the root of the repository build these:
 

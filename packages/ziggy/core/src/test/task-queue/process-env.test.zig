@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const process_env = utils.process_env;
 
 test "getEnv returns null until an environment is set" {

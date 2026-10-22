@@ -16,7 +16,7 @@ Everything an app built on Ziggy depends on, what each one is and why it is need
 | TypeScript | JavaScript with types | Type-checks the UI (`bun run compile`) | npm (`package.json`) |
 | Vite | A bundler and dev server for web pages | Builds the template's UI into `dist` and serves it in dev mode. Any other bundler can take its place | npm (`package.json`) |
 | Jest and ts-jest | A test runner for JavaScript and its TypeScript support | Runs the UI's unit tests (`bun run test`) | npm (`package.json`) |
-| ziggy-ui | Ziggy's TypeScript types of `window.ziggy` | Types the UI's calls to the backend | Ziggy's repository, at the app's Ziggy version |
+| ziggy | Ziggy's TypeScript types of `window.ziggy` | Types the UI's calls to the backend | Ziggy's repository, at the app's Ziggy version |
 | native-run | Ionic's library for installing and starting apps on phones | Installs and starts the app on an Android device or emulator and on a connected iPhone or iPad | npm (`package.json`) |
 
 ## Linux

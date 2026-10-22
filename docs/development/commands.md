@@ -9,9 +9,9 @@ Run from the root of Ziggy's repository.
 | Command | What it does |
 |---|---|
 | `bun run setup` | Runs the `setup` of the template and of the test app. |
-| `bun run compile` (alias `bun run c`) | Type-checks the TypeScript: `ziggy-ui`, the template's UI and the test app's UI. |
+| `bun run compile` (alias `bun run c`) | Type-checks the TypeScript: `ziggy`, the template's UI and the test app's UI. |
 | `bun run compile:zig` | Runs the `compile:zig` of the template and of the test app. |
-| `bun run test` (alias `bun run t`) | The TypeScript unit tests: `ziggy-ui`, the template's UI and the test app's UI. |
+| `bun run test` (alias `bun run t`) | The TypeScript unit tests: `ziggy`, the template's UI and the test app's UI. |
 | `bun run test:zig` | Every Zig test (`zig build test`): Ziggy's core library and its task queue, the parts of the Linux and Windows native apps that need no platform, the dev backend, the template's backend and the test app's backend. It builds each app's UI first. `bun run test:zig -- -Dtest-filter=<text>` runs only the tests of Ziggy's core library whose names contain the text. The option may be given more than once. Every other suite still runs in full. |
 | `bun run test:zig:android` | The Zig unit tests of Ziggy's core library and the test app's backend, on an Android emulator or device. |
 | `bun run test:zig:ios` | The Zig unit tests of Ziggy's core library and the test app's backend, on a booted iOS simulator. |

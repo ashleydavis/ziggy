@@ -3,7 +3,7 @@
 // handles it, its menu and its built UI. Ziggy's build serves the app declared here.
 //
 
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const hello_world = @import("lib/hello-world.zig");
 const menu = @import("lib/menu.zig");
 const ui_query = @import("lib/ui-query.zig");

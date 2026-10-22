@@ -1,5 +1,5 @@
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 
 const writeHostReply = ziggy.host_reply.writeHostReply;
 

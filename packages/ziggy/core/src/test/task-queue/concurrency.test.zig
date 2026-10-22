@@ -5,8 +5,8 @@
 //
 
 const std = @import("std");
-const task_queue_zig = @import("ziggy-core").task_queue;
-const utils = @import("ziggy-core").task_queue.utils;
+const task_queue_zig = @import("ziggy").task_queue;
+const utils = @import("ziggy").task_queue.utils;
 const TaskQueue = task_queue_zig.task_queue.TaskQueue;
 const types = task_queue_zig.types;
 const ITaskResult = types.ITaskResult;

@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const log_module = utils.log;
 const errors = utils.errors;
 const console = utils.console;

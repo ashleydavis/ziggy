@@ -8,7 +8,7 @@
 // architecture document.
 //
 
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const menu_functions = @import("menu-functions.zig");
 
 //

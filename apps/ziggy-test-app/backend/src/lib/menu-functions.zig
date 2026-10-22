@@ -3,7 +3,7 @@
 //
 
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 
 //
 // Send Event From Zig: sends the UI the app event {"type": "menu-zig-event"}, which shows that a `.zig` item ran in the core and that

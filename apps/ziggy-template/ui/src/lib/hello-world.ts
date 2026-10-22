@@ -4,7 +4,7 @@
 // Plain functions the UI uses, kept out of main.ts so they can be unit tested on their own.
 //
 
-import type { IMenuEvent } from "ziggy-ui";
+import type { IMenuEvent } from "ziggy";
 
 //
 // The backend's message response to the hello-world message.

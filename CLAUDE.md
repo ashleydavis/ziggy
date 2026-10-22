@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the UI and Zig for everything else, using each platform's system web view. This repository holds Ziggy itself (`packages/ziggy`) and the Ziggy template (`apps/ziggy-template`), a small complete app built on it that a new app starts as a copy of. Use the terms "the UI", "the backend", "the native app" and "the system web view" as the [glossary](docs/glossary.md) defines them.
 
-- `packages/ziggy/core`: the core library every app links, `ziggy-core`, imported as `@import("ziggy-core")`, with the C interface (`core/src/lib/ziggy.h`), the task queue and the script every native app injects to create `window.ziggy`.
-- `packages/ziggy/ui`: the TypeScript types of `window.ziggy` and of the messages the backend sends (the `ziggy-ui` package).
+- `packages/ziggy/core`: the core library every app links, imported as `@import("ziggy")`, with the C interface (`core/src/lib/ziggy.h`), the task queue and the script every native app injects to create `window.ziggy`.
+- `packages/ziggy/ui`: the TypeScript types of `window.ziggy` and of the messages the backend sends (the `ziggy` package).
 - `packages/ziggy/native/<platform>`: the part of each native app that Ziggy provides.
 - `packages/ziggy/dev`: dev mode: the dev backend, which runs the app's backend in front of the app's own dev server, and the supervisor that starts them and rebuilds it. Never part of a native app or a release build.
 - `build.zig`: builds Ziggy, runs its tests and holds the functions an app's own `build.zig` calls. `Package.swift`: the MacOS and iOS native apps as one Swift package.

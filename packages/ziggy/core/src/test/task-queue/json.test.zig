@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 
 test "stringify writes a struct as compact JSON with its fields in order" {
     const text = try utils.json.stringify(std.testing.allocator, .{

@@ -3,7 +3,7 @@ const android_libc = @import("build/android-libc.zig");
 
 //
 // Builds Ziggy and registers its tests. As a dependency of an app's build it gives the app the
-// module "ziggy-core" (the core, with its task queue, which the app's code imports as @import("ziggy-core")), built for the target,
+// module "ziggy" (the core, with its task queue, which the app's code imports as @import("ziggy")), built for the target,
 // optimize mode and test hooks the app passes in. The functions below that are `pub` are what an app's build.zig calls to build its
 // core library and its Linux and Windows native apps; it reaches them with @import("ziggy") in its build.zig.
 //
@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) !void {
     // ReleaseSafe by default: the tests keep the safety checks.
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Prioritize performance, safety, or binary size (default: ReleaseSafe)") orelse .ReleaseSafe;
 
-    const core = b.addModule("ziggy-core", .{
+    const core = b.addModule("ziggy", .{
         .root_source_file = b.path("packages/ziggy/core/src/index.zig"),
         .target = target,
         .optimize = optimize,
@@ -34,7 +34,7 @@ pub fn build(b: *std.Build) !void {
     const core_test_binary_step = b.step("test-binary-ziggy-core", "Build the unit test program of Ziggy's core and install it to test-bin without running it");
     try addDirectoryTests(b, test_step, "packages/ziggy/core", &.{
         .{
-            .name = "ziggy-core",
+            .name = "ziggy",
             .module = test_core,
         },
         // The Windows native app's list of the actions it does itself, which the menu's tests compare with the core's list.
@@ -55,7 +55,7 @@ pub fn build(b: *std.Build) !void {
         .target = target,
         .optimize = optimize,
     });
-    console_stdout_module.addImport("ziggy-core", test_core);
+    console_stdout_module.addImport("ziggy", test_core);
     const run_console_stdout = b.addRunArtifact(b.addExecutable(.{
         .name = "console-stdout",
         .root_module = console_stdout_module,
@@ -143,7 +143,7 @@ pub const IZiggy = struct {
     // The dependency named "ziggy" in the app's build.zig.zon.
     dependency: *std.Build.Dependency,
 
-    // The core, with its task queue, which the app's code imports as @import("ziggy-core").
+    // The core, with its task queue, which the app's code imports as @import("ziggy").
     module: *std.Build.Module,
 };
 
@@ -160,7 +160,7 @@ pub fn dependency(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
     });
     return .{
         .dependency = ziggy_dependency,
-        .module = ziggy_dependency.module("ziggy-core"),
+        .module = ziggy_dependency.module("ziggy"),
     };
 }
 
@@ -176,7 +176,7 @@ pub const IAppBackend = struct {
     backend_source_file: []const u8,
     // The directory of the app's built UI, relative to the app's build root, which is embedded in the core as "ui-files".
     ui_directory: []const u8,
-    // The modules the app's backend imports besides "ziggy-core" and "ui-files".
+    // The modules the app's backend imports besides "ziggy" and "ui-files".
     imports: []const IImport,
 };
 
@@ -208,7 +208,7 @@ pub fn addAppBackend(
     std.mem.replaceScalar(u8, library_name, '-', '_');
     const static_library = b.addLibrary(.{
         .name = library_name,
-        .root_module = try createAppBackendModule(b, ziggy, app, target, optimize, try embedUi(b, ziggy.module, "ziggy-core", app.ui_directory)),
+        .root_module = try createAppBackendModule(b, ziggy, app, target, optimize, try embedUi(b, ziggy.module, "ziggy", app.ui_directory)),
         .linkage = .static,
     });
     // The Xcode linker is not Zig's, so the compiler runtime (for example ___zig_probe_stack) must travel inside the archive.
@@ -221,7 +221,7 @@ pub fn addAppBackend(
     else {
         const library = b.addLibrary(.{
             .name = library_name,
-            .root_module = try createAppBackendModule(b, ziggy, app, target, optimize, try embedUi(b, ziggy.module, "ziggy-core", app.ui_directory)),
+            .root_module = try createAppBackendModule(b, ziggy, app, target, optimize, try embedUi(b, ziggy.module, "ziggy", app.ui_directory)),
             .linkage = .dynamic,
         });
         // Android 15 and later can run with 16 KiB memory pages, and a library is loaded only when its segments are aligned to the page
@@ -257,7 +257,7 @@ fn createAppBackendModule(
         .optimize = optimize,
         .link_libc = true,
     });
-    backend.addImport("ziggy-core", ziggy.module);
+    backend.addImport("ziggy", ziggy.module);
     backend.addImport("ui-files", ui_files_module);
     for (app.imports) |import| {
         backend.addImport(import.name, import.module);
@@ -268,7 +268,7 @@ fn createAppBackendModule(
         .optimize = optimize,
         .link_libc = true,
     });
-    module.addImport("ziggy-core", ziggy.module);
+    module.addImport("ziggy", ziggy.module);
     module.addImport("app-backend", backend);
     return module;
 }
@@ -730,9 +730,9 @@ fn addDevMode(
     // The app's core with no UI embedded in it.
     const no_ui = b.addWriteFiles();
     const no_ui_module = b.createModule(.{
-        .root_source_file = no_ui.add("ui-files.zig", "const ziggy = @import(\"ziggy-core\");\n\npub const files = [_]ziggy.UiFile{};\n"),
+        .root_source_file = no_ui.add("ui-files.zig", "const ziggy = @import(\"ziggy\");\n\npub const files = [_]ziggy.UiFile{};\n"),
     });
-    no_ui_module.addImport("ziggy-core", ziggy.module);
+    no_ui_module.addImport("ziggy", ziggy.module);
     const core_library = b.addLibrary(.{
         .name = b.fmt("{s}-dev-host-backend", .{app.name}),
         .root_module = try createAppBackendModule(b, ziggy, app, target, optimize, no_ui_module),

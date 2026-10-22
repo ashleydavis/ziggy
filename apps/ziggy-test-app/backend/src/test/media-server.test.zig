@@ -1,5 +1,5 @@
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const template = @import("ziggy-test-app-backend");
 const media_server = template.media_server;
 

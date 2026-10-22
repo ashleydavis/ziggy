@@ -13,7 +13,7 @@ The `/ziggy:add-message` Claude Code command adds a message to an app by followi
 An app declares itself to Ziggy in one file, `backend/src/app.zig` in the template, with `ziggy.core.App`. It lists every message with its handler, every task type with its task handler and what else the app gives Ziggy. This is the template's:
 
 ```zig
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const hello_world = @import("lib/hello-world.zig");
 const menu = @import("lib/menu.zig");
 const ui_query = @import("lib/ui-query.zig");
@@ -158,7 +158,7 @@ const response = await window.ziggy.invoke<IHelloWorldResponse>("hello-world", {
 });
 ```
 
-`window.ziggy.send(name, data)` sends a message that gets no message response, and takes the same arguments. The types of `window.ziggy` come from the `ziggy-ui` package.
+`window.ziggy.send(name, data)` sends a message that gets no message response, and takes the same arguments. The types of `window.ziggy` come from the `ziggy` package.
 
 ## When a handler fails
 
@@ -206,7 +206,7 @@ window.ziggy.onEvent<IAppEvent>(event => {
 });
 ```
 
-Ziggy sends one app event of its own: when the user chooses a menu item that runs in the UI (a `.ui` item), the `onEvent` listeners receive `{"type": "menu", "item": "<name>"}`, typed as `IMenuEvent` in `ziggy-ui`, where `item` is the item's `.name`. An app must not send an event of its own with `type` set to `"menu"`. See [the menu](building-your-app.md#the-menu-and-the-window-icon).
+Ziggy sends one app event of its own: when the user chooses a menu item that runs in the UI (a `.ui` item), the `onEvent` listeners receive `{"type": "menu", "item": "<name>"}`, typed as `IMenuEvent` in `ziggy`, where `item` is the item's `.name`. An app must not send an event of its own with `type` set to `"menu"`. See [the menu](building-your-app.md#the-menu-and-the-window-icon).
 
 ## Ziggy's own calls
 

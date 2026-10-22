@@ -1,6 +1,6 @@
 package dev.ziggy.nativeapp;
 
-// The native methods of Ziggy's core. They are implemented in Zig, in the app's core library (see jni.zig in ziggy-core),
+// The native methods of Ziggy's core. They are implemented in Zig, in the app's core library (see jni.zig in packages/ziggy/core),
 // which must be loaded with System.loadLibrary before any of them is called. A handle is the address of what create made.
 final class ZiggyNative {
     private ZiggyNative() {

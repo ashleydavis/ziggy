@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const console = utils.console;
 
 test "log and debug write lines to stdout, error and warn to stderr" {

@@ -5,7 +5,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 
 //
 // The message response to ping.

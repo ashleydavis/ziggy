@@ -4,7 +4,7 @@
 //
 
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const messages = @import("lib/messages.zig");
 const hello_tasks = @import("lib/hello-tasks.zig");
 pub const media_server = @import("lib/media-server.zig");

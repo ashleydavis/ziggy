@@ -1,5 +1,5 @@
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 
 const DroppedFiles = ziggy.dropped_files.DroppedFiles;
 

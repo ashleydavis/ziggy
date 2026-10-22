@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const errors = utils.errors;
 const wrapped_error = utils.wrapped_error;
 const WrappedError = wrapped_error.WrappedError;

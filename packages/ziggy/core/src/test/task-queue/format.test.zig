@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 
 test "formatFileSize formats zero bytes" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);

@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const RandomUuidGenerator = utils.random_uuid_generator.RandomUuidGenerator;
 
 //

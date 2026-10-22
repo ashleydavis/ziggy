@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const in_process_tools = utils.in_process_tools;
 const exec = utils.exec.exec;
 

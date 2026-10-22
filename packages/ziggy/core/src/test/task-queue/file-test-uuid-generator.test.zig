@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const TestUuidGenerator = utils.file_test_uuid_generator.TestUuidGenerator;
 const virtual_time_io = @import("virtual-time-io.zig");
 

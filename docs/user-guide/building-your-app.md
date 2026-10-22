@@ -109,7 +109,7 @@ To do it yourself:
      ```
 
      The dependency must keep the name `ziggy`, because Ziggy's build functions look it up by that name. Delete the `.fingerprint` line; `zig build` then prints a new one, which goes back in.
-   - `package.json`: replace `workspace:*` for `ziggy-ui` with `"git+https://github.com/ashleydavis/ziggy.git#<tag>"`.
+   - `package.json`: replace `workspace:*` for `ziggy` with `"git+https://github.com/ashleydavis/ziggy.git#<tag>"`.
    - `native/android/app/build.gradle`: set the version of `dev.ziggy:ziggy-native-android` to the tag:
 
      ```groovy
@@ -202,7 +202,7 @@ The `/ziggy:upgrade` Claude Code command follows these steps for an app.
 
 ## The parts of an app
 
-- **The UI** (`ui/`): the user interface, in TypeScript and HTML, built by Vite (`vite.config.ts`) into `dist`, which must hold an `index.html`. The template's Vite config writes relative paths (`base: './'`) and a classic script instead of a module script, and another bundler must do the same. It talks to the backend through `window.ziggy`, whose types are in `ziggy-ui`. `ui/src/lib` holds plain functions with unit tests. The UI is served from `ziggy-app://app/` on Linux, macOS and iOS and from `https://ziggy-app.invalid/` on Windows and Android, so it must not depend on its address, and a Content-Security-Policy names both (see [the bundled UI](../development/architecture.md#the-bundled-ui)).
+- **The UI** (`ui/`): the user interface, in TypeScript and HTML, built by Vite (`vite.config.ts`) into `dist`, which must hold an `index.html`. The template's Vite config writes relative paths (`base: './'`) and a classic script instead of a module script, and another bundler must do the same. It talks to the backend through `window.ziggy`, whose types are in `ziggy`. `ui/src/lib` holds plain functions with unit tests. The UI is served from `ziggy-app://app/` on Linux, macOS and iOS and from `https://ziggy-app.invalid/` on Windows and Android, so it must not depend on its address, and a Content-Security-Policy names both (see [the bundled UI](../development/architecture.md#the-bundled-ui)).
 - **The backend** (`backend/`): the app's Zig library. `backend/src/app.zig` declares the app to Ziggy with `ziggy.core.App`: each message the UI sends with its handler, each task type with its handler, the menu, the built UI and the UI's query (see [Declaring the app](messages.md#declaring-the-app)). `backend/src/lib` holds the handlers themselves. `app.zig` is the `backend_source_file` the app's `build.zig` gives `addAppBackend`, and Ziggy's build exports Ziggy's C interface for the app it declares, so the native app can call it. The app writes no exports of its own. It is built with Ziggy's core library into one library: a static library on every platform except Android, and a shared library on Android. The backend embeds the built UI, so `dist` must be built before the backend, and a changed UI file rebuilds the backend.
 - **The handlers**: a message handler runs for each message of its name from the UI on the thread that handles the UI's messages, so it must be quick. Anything slow is a task, which runs on the backend's pool of threads, reports progress with task messages and can be cancelled.
 - **The native apps** (`native/<platform>/`): the app's native project for each platform, built on the part Ziggy provides for that platform: its name, window, icon, permissions and anything only the operating system can do. The Linux and Windows native apps are Zig, built by `build.zig`. The MacOS and iOS native apps are Xcode projects, the Android native app a Gradle project, each built by the app's scripts after the backend library is built for that platform. The Android project must use the same version of the Android Gradle plugin as Ziggy's Android native app (see `packages/ziggy/native/android/build.gradle`), because Gradle does not allow two versions of it in one build, and its `minSdkVersion` must be at least Ziggy's.
@@ -215,7 +215,7 @@ The `/ziggy:upgrade` Claude Code command follows these steps for an app.
 The app gives Ziggy its desktop menu as a Zig constant, a `[]const ziggy.menu.Menu`, passed to its `ziggy.core.App` as `.menu` (`&.{}` for none). Each menu has a `label` and its `items`. An item is `ziggy.menu.separator`, a submenu with a `label` and its own `items` or an item with a `label`, an optional `accelerator` (its shortcut) and what it runs in `run`. The template's is in `backend/src/lib/menu.zig`. A small one:
 
 ```zig
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const menu_functions = @import("menu-functions.zig");
 
 pub const menu: []const ziggy.menu.Menu = &.{
@@ -252,7 +252,7 @@ An item runs one of three things:
 
 - **`.standard`**: an action the native app does itself. The actions are `quit`, `close-window`, `reload`, `toggle-devtools`, `toggle-fullscreen`, `zoom-in`, `zoom-out`, `zoom-reset`, `undo`, `redo`, `cut`, `copy`, `paste`, `select-all` and `focus-window` (the `ziggy.menu.StandardAction` enum). The developer tools open with `toggle-devtools` in every build, release included. A standard item has no `.name`.
 - **`.zig`**: a Zig function of the app's, `fn (core: *ziggy.core.Core, arena: std.mem.Allocator) anyerror!void`, which the core calls. It runs on the thread that handles messages, like a message handler, so it must be quick: slow work queues a task from it. An error it returns is reported as a `core-error` system event, which the UI hears through `window.ziggy.onCoreError`.
-- **`.ui`**: the UI, which receives the app event `{"type": "menu", "item": "<name>"}` through `window.ziggy.onEvent` (typed as `IMenuEvent` in `ziggy-ui`) and decides what it means. An app must not send an event of its own with `type` set to `"menu"`: the UI could not tell it from a menu item.
+- **`.ui`**: the UI, which receives the app event `{"type": "menu", "item": "<name>"}` through `window.ziggy.onEvent` (typed as `IMenuEvent` in `ziggy`) and decides what it means. An app must not send an event of its own with `type` set to `"menu"`: the UI could not tell it from a menu item.
 
 Every `.zig` and `.ui` item must have a `.name`. It is how the core finds the item when the native app passes on the choice. A `.ui` item's name is the `item` of its event.
 

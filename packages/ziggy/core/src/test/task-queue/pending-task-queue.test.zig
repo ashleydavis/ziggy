@@ -1,5 +1,5 @@
 const std = @import("std");
-const task_queue_zig = @import("ziggy-core").task_queue;
+const task_queue_zig = @import("ziggy").task_queue;
 const types = task_queue_zig.types;
 const ITask = types.ITask;
 const TaskPriority = types.TaskPriority;

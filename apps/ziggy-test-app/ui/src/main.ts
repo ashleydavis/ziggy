@@ -1,4 +1,4 @@
-import type { IJsonValue, IMenuEvent } from "ziggy-ui";
+import type { IJsonValue, IMenuEvent } from "ziggy";
 import { formatPingReply, IPingReply } from "./lib/format-reply";
 import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobList, IJobProgressMessage } from "./lib/job-list";
 import { makeLargePayload } from "./lib/large-payload";

@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const TestTimestampProvider = utils.test_timestamp_provider.TestTimestampProvider;
 
 test "now() starts at 2022-01-01 and advances by one millisecond per call" {

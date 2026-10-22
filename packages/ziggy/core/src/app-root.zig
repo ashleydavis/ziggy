@@ -6,7 +6,7 @@
 //
 
 const builtin = @import("builtin");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const app_backend = @import("app-backend");
 
 //

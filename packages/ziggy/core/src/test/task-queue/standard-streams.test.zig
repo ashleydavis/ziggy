@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const standard_streams = utils.standard_streams;
 
 //

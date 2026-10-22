@@ -1,6 +1,6 @@
 const std = @import("std");
-const task_queue_zig = @import("ziggy-core").task_queue;
-const utils = @import("ziggy-core").task_queue.utils;
+const task_queue_zig = @import("ziggy").task_queue;
+const utils = @import("ziggy").task_queue.utils;
 const TaskContext = task_queue_zig.task_context.TaskContext;
 const SendMessageFn = task_queue_zig.task_context.SendMessageFn;
 

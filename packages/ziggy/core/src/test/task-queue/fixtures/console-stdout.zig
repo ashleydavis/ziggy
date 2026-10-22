@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 
 //
 // Writes through console.log and console.debug with nothing captured, so the lines go to the real stdout, which the

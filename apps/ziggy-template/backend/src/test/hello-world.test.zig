@@ -5,7 +5,7 @@
 //
 
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const app = @import("ziggy-template-backend");
 
 const FakeShell = ziggy.fake_shell.FakeShell;

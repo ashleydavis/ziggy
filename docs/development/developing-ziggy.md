@@ -39,11 +39,11 @@ The template and the test app take Ziggy from this repository by a local path. A
 
   ```json
   "dependencies": {
-      "ziggy-ui": "file:../ziggy/packages/ziggy/ui"
+      "ziggy": "file:../ziggy/packages/ziggy/ui"
   }
   ```
 
-  Inside this repository the template uses `"ziggy-ui": "workspace:*"`, because `ziggy-ui` is a workspace of the same repository.
+  Inside this repository the template uses `"ziggy": "workspace:*"`, because `ziggy` is a workspace of the same repository.
 
 - `native/android/settings.gradle`: include Ziggy's Android build in place of the `sourceControl` block. Gradle builds it from the checkout in place of the dependency `app/build.gradle` declares, whatever version that names:
 

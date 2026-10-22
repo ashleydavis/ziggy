@@ -1,5 +1,5 @@
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 
 test "a Raw is written as it is, without being parsed and written again" {
     const text = try ziggy.json.stringify(std.testing.allocator, .{

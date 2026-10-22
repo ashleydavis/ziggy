@@ -1,5 +1,5 @@
 const std = @import("std");
-const utils = @import("ziggy-core").task_queue.utils;
+const utils = @import("ziggy").task_queue.utils;
 const timestamp_provider = utils.timestamp_provider;
 
 test "TimestampProvider.now returns the current wall-clock time" {

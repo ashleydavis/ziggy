@@ -1,5 +1,5 @@
 const std = @import("std");
-const ziggy = @import("ziggy-core");
+const ziggy = @import("ziggy");
 const windows_actions = @import("ziggy-native-windows-actions");
 
 //
