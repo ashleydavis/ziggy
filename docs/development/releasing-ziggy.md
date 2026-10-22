@@ -35,3 +35,5 @@ An app pins Ziggy to a version tag. A version tag is `v` followed by the version
 3. When an app has to change something to move to the new version, add it to the release's notes.
 
 A version tag is never moved or deleted once pushed: an app that pinned it, and the hash in its `build.zig.zon`, depend on it staying the same. A mistake is fixed by releasing the next version.
+
+When the workflow failed for a reason outside the tag, such as a broken step, fix the workflow on `main` and start it again with `gh workflow run release-version.yml --ref main -f tag=<tag>`. That run takes the workflow and its actions from `main` and publishes everything else from the tag.

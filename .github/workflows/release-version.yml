@@ -11,13 +11,23 @@ on:
     tags:
       - "v*"
 
+  # Publishes the release of a tag that is already pushed, for a tag whose own run failed. A version tag is never moved, so the run
+  # takes this workflow and its actions from the branch it is started on and everything it publishes from the tag.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The version tag to publish the release of, such as v0.1.0.
+        required: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
     steps:
-      - name: Check out the tag
+      - name: Check out the repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -39,14 +49,19 @@ jobs:
           packages: zip unzip
           verify: zip unzip
 
+      # Everything from here on comes from the tag, including when the run was started on a branch.
+      - name: Check out the tag
+        shell: bash
+        run: git checkout --detach "refs/tags/$RELEASE_TAG"
+
       # The template, pinned to this tag, as ziggy-template-<tag>.zip, so a new app starts from a download instead of pinning Ziggy itself.
       - name: Package the template
         shell: bash
-        run: bun run package:ziggy-template:archive "$GITHUB_REF_NAME" "$RUNNER_TEMP/template"
+        run: bun run package:ziggy-template:archive "$RELEASE_TAG" "$RUNNER_TEMP/template"
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          bash ./apps/ziggy-template/scripts/release-notes.sh --exclude-tag "$GITHUB_REF_NAME" > release-notes.md
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md docs/agent-quick-start.md "$RUNNER_TEMP/template/ziggy-template-$GITHUB_REF_NAME.zip"
+          bash ./apps/ziggy-template/scripts/release-notes.sh --exclude-tag "$RELEASE_TAG" > release-notes.md
+          gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" --notes-file release-notes.md docs/agent-quick-start.md "$RUNNER_TEMP/template/ziggy-template-$RELEASE_TAG.zip"
