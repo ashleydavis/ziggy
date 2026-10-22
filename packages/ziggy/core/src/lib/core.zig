@@ -106,9 +106,6 @@ pub const RegisteredApp = struct {
     // add about the error, and the reply then carries the error's name. It is called on the thread that handled the message,
     // straight after the handler failed, and the text is used before the call returns.
     describe_error: ?ErrorDescriber = null,
-    // Where the app keeps what it remembers while it runs, which the core holds and hands back to the app's handlers through
-    // `Core.app_state`. Null for an app that keeps nothing.
-    state: ?AppState = null,
     // Called when a task has ended, after the frontend has been told, from the thread that ran it, with no lock held. The
     // values are valid only during the call.
     on_task_end: ?*const fn (core: *Core, end: types.TaskEnd) void = null,
@@ -118,6 +115,23 @@ pub const RegisteredApp = struct {
     // Gives the query text the native app appends to the address of the frontend, after the question mark, so the frontend's
     // first render already holds what the app tells it at start-up. Null for an app whose frontend needs no query. See `UiQuery`.
     ui_query: ?UiQuery = null,
+    // Called twice while the core is destroyed, on the thread that destroys it: with `.before_tasks_stop` while tasks can still
+    // be queued, so the app can stop its own threads, and with `.after_tasks_stopped` once every task has ended, so the app can free
+    // its own resources. The core is destroyed whenever the native app ends the backend, which is not only when the app quits (an
+    // Android activity's onDestroy, for one), and in tests. Null for an app with nothing to do then. See `DestroyPhase`.
+    on_destroy: ?*const fn (core: *Core, phase: DestroyPhase) void = null,
+};
+
+//
+// The point of the core's destruction at which the app's `on_destroy` is called.
+//
+pub const DestroyPhase = enum {
+    // First, before the task runner stops: tasks can still be queued and the ones running are still running. For stopping the
+    // app's own threads, which may still queue tasks or use the core.
+    before_tasks_stop,
+    // Second, after the task runner has stopped: every task has ended and no task can be queued, but the core is not yet freed.
+    // For freeing what the app's own code allocated, now that no task can use it.
+    after_tasks_stopped,
 };
 
 //
@@ -128,21 +142,6 @@ pub const RegisteredApp = struct {
 // composes a query and Ziggy names none of its parts.
 //
 pub const UiQuery = *const fn (core: *Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8;
-
-//
-// The state an app keeps in the core. The core makes it when it is created, after the task runner is running. When the core is
-// destroyed it stops the state first, before the task runner stops, so what the state owns that runs by itself (a timer thread, say)
-// can end while tasks can still be queued, and destroys the state last, after the task runner has stopped, so nothing a running task
-// reads (the state itself, a log file) is gone while a task can still run.
-//
-pub const AppState = struct {
-    // Makes the app's state. The core's `app_state` is null until this returns.
-    create: *const fn (core: *Core) anyerror!*anyopaque,
-    // Stops what the state owns that runs by itself. The state stays valid, because tasks that are still running read it.
-    stop: *const fn (core: *Core, state: *anyopaque) void,
-    // Releases the state `create` made, after the task runner has stopped and no task can read it.
-    destroy: *const fn (core: *Core, state: *anyopaque) void,
-};
 
 //
 // A function that gives the text of the error reply for an error a handler returned, or null to use the error's name.
@@ -173,16 +172,14 @@ pub const Core = struct {
     ui_files: []const ui_files.UiFile,
     // Gives the text of an error reply, or null to use the error's name. Owned by the app.
     describe_error: ?ErrorDescriber,
-    // The app's way of making and destroying its state, or null.
-    state_hooks: ?AppState,
-    // The app's state, made by `state_hooks.create`, or null when the app has none.
-    app_state: ?*anyopaque,
     // The app's function for a task that ended, or null.
     on_task_end: ?*const fn (core: *Core, end: types.TaskEnd) void,
     // The app's function for an event a task sent, or null.
     on_task_event: ?*const fn (core: *Core, sent: types.TaskSentEvent) void,
     // The app's function for the query of the frontend's address, or null.
     ui_query: ?UiQuery,
+    // The app's function called before tasks stop and after they have stopped when the core is destroyed, or null.
+    on_destroy: ?*const fn (core: *Core, phase: DestroyPhase) void,
     // The text the last call to `uiQuery` returned, owned by the core, or null before the first call.
     ui_query_text: ?[:0]u8,
     // The native app's configuration. The strings in it are copies owned by the core.
@@ -241,11 +238,10 @@ pub const Core = struct {
         core.menu_targets = app.menu_targets;
         core.ui_files = app.ui_files;
         core.describe_error = app.describe_error;
-        core.state_hooks = app.state;
-        core.app_state = null;
         core.on_task_end = app.on_task_end;
         core.on_task_event = app.on_task_event;
         core.ui_query = app.ui_query;
+        core.on_destroy = app.on_destroy;
         core.ui_query_text = null;
         core.config = config;
         core.app_url_prefix = try allocator.dupeZ(u8, std.mem.span(config.app_url_prefix));
@@ -282,14 +278,6 @@ pub const Core = struct {
         try system_messages.tasks.register(system);
         task_queue.queue_backend.setQueueBackend(core.queue_backend.queueBackend());
         errdefer task_queue.queue_backend.setQueueBackend(null);
-        if (app.state) |hooks| {
-            core.app_state = try hooks.create(core);
-            core.runner.app_state = core.app_state;
-        }
-        errdefer if (core.app_state) |state| {
-            core.state_hooks.?.stop(core, state);
-            core.state_hooks.?.destroy(core, state);
-        };
         if (build_options.test_hooks) {
             if (config.test_mode) {
                 const control = try allocator.create(test_control.TestControl);
@@ -306,11 +294,12 @@ pub const Core = struct {
     }
 
     //
-    // Cancels every running task, waits for the workers to stop and releases everything.
+    // Cancels every running task, waits for the workers to stop and releases everything. Calls the app's `on_destroy` with
+    // `.before_tasks_stop` first and with `.after_tasks_stopped` once the runner has stopped.
     //
     pub fn destroy(self: *Core) void {
-        if (self.app_state) |state| {
-            self.state_hooks.?.stop(self, state);
+        if (self.on_destroy) |on_destroy| {
+            on_destroy(self, .before_tasks_stop);
         }
         if (self.control) |control| {
             control.stop();
@@ -318,8 +307,8 @@ pub const Core = struct {
         }
         self.runner.stop();
         self.reportUnansweredReplies();
-        if (self.app_state) |state| {
-            self.state_hooks.?.destroy(self, state);
+        if (self.on_destroy) |on_destroy| {
+            on_destroy(self, .after_tasks_stopped);
         }
         task_queue.queue_backend.setQueueBackend(null);
         self.queue_backend.destroy();

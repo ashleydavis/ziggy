@@ -16,7 +16,7 @@ This diagram shows the main parts of a Ziggy app and how they interact:
   - Draws the menus.
   - Shows dialogs.
   - Reads files dropped on the window.
-- **The backend** (`backend/`): the app's own Zig code, declared to Ziggy in `backend/src/app.zig`. Its message handlers and task handlers do the work on local files, network sockets, processes and so on, so heavy work never blocks the frontend's thread. See [Messages](../user-guide/messages.md) and [Tasks](../user-guide/tasks.md).
+- **The backend** (`backend/`): the app's own Zig code, declared to Ziggy in `backend/src/app.zig`. Its message handlers and task handlers do the work on local files, network sockets, processes and so on. Message handlers run on the native app's main thread, so slow work goes in tasks, which run on worker threads and never block the window. See [Messages](../user-guide/messages.md) and [Tasks](../user-guide/tasks.md).
 - **The scripts** (`scripts/`): set up, build, run, package and clean the app for each platform. See [Scripts](../user-guide/scripts.md).
 - **The tests**: the frontend's unit tests (`frontend/src/test`), the backend's unit tests (`backend/src/test`) and the smoke tests (`smoke-tests`). See [Testing your app](../user-guide/testing.md).
 - **The workflows** (`.github/workflows`): GitHub Actions workflows that test the app and publish a release for each platform. See [Distributing your app](../user-guide/distributing-your-app.md).
@@ -120,6 +120,7 @@ The system events, each with its own listener on `window.ziggy`:
 ## Tasks
 
 - Background tasks run on a pool of worker threads in the backend, so slow work never blocks the frontend.
+- Message handlers and menu functions run on the native app's main thread. No thread touches another thread's state and they talk only by JSON messages, so the app's own state needs no locks. See [Threads and state](../user-guide/tasks.md#threads-and-state).
 - The frontend queues a task with `window.ziggy.addTask`, can cancel it with `cancelTasks` and hears back through `onTaskEvent` and `onTaskCompleted`.
 - A keep-alive task keeps a mobile app running in the background until it ends.
 - The [Tasks](../user-guide/tasks.md) guide explains how to write, queue and cancel one.

@@ -51,14 +51,15 @@ interface IFileRoundtrip {
     text: string;
 }
 //
-// The message response of the task-stats message.
+// The app event the backend's task observers send: "task-ended" when a task has ended and "task-event-sent" when a task has sent an
+// event, with the task's id.
 //
-interface ITaskStats {
-    // How many tasks have ended since the app started.
-    tasksEnded: number;
+interface IObservedEvent {
+    // "task-ended" or "task-event-sent", or the type of another app event, which the counts ignore.
+    type: string;
 
-    // How many events tasks have sent since the app started.
-    eventsSent: number;
+    // The task the observer was called for.
+    taskId: string;
 }
 
 //
@@ -217,11 +218,11 @@ function startEdgeChecks(): void {
     });
 }
 //
-// What the app's own code in the backend does: an error it describes, a task that reads its own context and the app's state, a task that
-// runs children one after another, tasks queued and cancelled from the app's code, the counts the app keeps by observing tasks, and an
+// What the app's own code in the backend does: an error it describes, a task that reads its own context, a task that runs children one
+// after another, tasks queued and cancelled from the app's code, the tasks the app observes ending and sending events, and an
 // event the app sends that the frontend stops listening for.
 //
-function startAppFacilities(): void {
+function startAppOwnCode(): void {
     const result = element("app-result");
     element("app-refuse").addEventListener("click", async () => {
         try {
@@ -252,9 +253,18 @@ function startAppFacilities(): void {
             source: "app-cancel-source",
         });
     });
-    element("app-stats").addEventListener("click", async () => {
-        const stats = await window.ziggy.invoke<ITaskStats>("task-stats", null);
-        result.textContent = `tasks ended ${stats.tasksEnded}, events sent ${stats.eventsSent}`;
+    let tasksEnded = 0;
+    let eventsSent = 0;
+    window.ziggy.onEvent<IObservedEvent>(event => {
+        if (event.type === "task-ended") {
+            tasksEnded += 1;
+        }
+        else if (event.type === "task-event-sent") {
+            eventsSent += 1;
+        }
+    });
+    element("app-stats").addEventListener("click", () => {
+        result.textContent = `tasks ended ${tasksEnded}, events sent ${eventsSent}`;
     });
     const onAppEvent = (event: IAppEvent) => {
         if (event.type === "queued-from-app") {
@@ -499,7 +509,7 @@ function listenForEvents(): void {
 //
 // Carries out the menu items that run in the frontend, which arrive as menu events. It also logs the event the Send Event From Zig
 // item's function sends. A task item presses the same button the frontend shows. This is a listener of its own, apart from the one
-// the App facilities section can remove, so the menu keeps working after that button is pressed.
+// the section for the app's own code can remove, so the menu keeps working after that button is pressed.
 //
 function listenForMenuEvents(): void {
     window.ziggy.onEvent<IMenuEvent | IMenuZigEvent>(event => {
@@ -562,7 +572,7 @@ listenForMenuEvents();
 listenForTestCommands();
 startTasks();
 startEdgeChecks();
-startAppFacilities();
+startAppOwnCode();
 startPickers();
 startMedia();
 startStorage();

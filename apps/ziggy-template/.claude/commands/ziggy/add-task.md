@@ -10,7 +10,7 @@ Read Ziggy's guide [Tasks](https://github.com/ashleydavis/ziggy/blob/main/docs/u
 
 ## Add it
 
-1. Write the handler in `backend/src/lib`, following the guide's "Writing a handler". Report progress as the work goes, and check for cancellation between steps that take a while.
+1. Write the handler in a file in `backend/src/lib`, following the guide's "Writing a handler". Report progress as the work goes, and check for cancellation between steps that take a while.
 2. Split work that has many independent pieces into child tasks, following the guide's "Child tasks".
 3. Register the handler under its task type in `.tasks` of the app's `ziggy.core.App` in `backend/src/app.zig`, or with `core.registerTask` for a task type registered only while the app runs, following the guide's "Registering a handler".
 4. Write the handler's unit tests in `backend/src/test`, and watch each one fail with the handler broken.

@@ -231,14 +231,6 @@ pub const TaskContext = struct {
     }
 
     //
-    // The app's state, which the app's state hooks made, or null for an app that keeps none. The handler casts it back to the type
-    // the app gave it.
-    //
-    pub fn appState(self: *TaskContext) ?*anyopaque {
-        return self.runner.app_state;
-    }
-
-    //
     // The configuration the native app gave the core, for host callbacks.
     //
     pub fn config(self: *TaskContext) *const ZiggyConfig {
@@ -472,9 +464,6 @@ pub const TaskRunner = struct {
     keep_alive_count: u32,
     // Whether the app has asked, through holdKeepAlive, for the app to be kept running with or without a task. Guarded by the mutex.
     keep_alive_held: bool,
-    // The app's state, which the core sets once the app has made it, for the task handlers to reach through their context. Null until
-    // then and for an app with none.
-    app_state: ?*anyopaque,
 
     //
     // Creates a runner and starts its worker threads. It must stay where it is: the threads hold its address.
@@ -499,7 +488,6 @@ pub const TaskRunner = struct {
             .silent = .init(false),
             .keep_alive_count = 0,
             .keep_alive_held = false,
-            .app_state = null,
         };
         errdefer self.freeTaskTypes();
         for (handlers) |entry| {

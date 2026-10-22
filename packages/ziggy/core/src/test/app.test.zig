@@ -160,45 +160,14 @@ test "App makes the task table from the task types, each with its handler and ki
 }
 
 //
-// What the answering app's handlers keep between a message and the test: the reply of the last message that answers later.
+// The reply the later handler was given for the first message that answers later in a new core. The core numbers those messages from 0,
+// so the test holds the same handle as the handler, which a handler would hand to another thread.
 //
-const LaterState = struct {
-    // The reply the later handler kept, or null before it ran.
-    reply: ?ziggy.core.Reply(helpers.GreetResponse),
-};
-
-//
-// Makes the answering app's state.
-//
-fn createLaterState(core: *ziggy.core.Core) anyerror!*anyopaque {
-    const state = try core.allocator.create(LaterState);
-    state.* = .{
-        .reply = null,
+fn firstLaterReply(core: *ziggy.core.Core) ziggy.core.Reply(helpers.GreetResponse) {
+    return .{
+        .core = core,
+        .serial = 0,
     };
-    return state;
-}
-
-//
-// Stops the answering app's state, which runs nothing by itself.
-//
-fn stopLaterState(core: *ziggy.core.Core, state: *anyopaque) void {
-    _ = core;
-    _ = state;
-}
-
-//
-// Releases the answering app's state.
-//
-fn destroyLaterState(core: *ziggy.core.Core, state: *anyopaque) void {
-    const later: *LaterState = @ptrCast(@alignCast(state));
-    core.allocator.destroy(later);
-}
-
-//
-// The answering app's state, from the core.
-//
-fn laterState(core: *ziggy.core.Core) *LaterState {
-    return @ptrCast(@alignCast(core.app_state.?));
 }
 
 //
@@ -228,12 +197,14 @@ fn answerTaskHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: 
 }
 
 //
-// later: keeps its reply in the app's state for the test to answer, and answers later.
+// later: answers later, leaving the test to answer through the reply (see firstLaterReply).
 //
 fn answerLaterHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: helpers.GreetRequest, reply: ziggy.core.Reply(helpers.GreetResponse)) !ziggy.core.Answer(helpers.GreetResponse) {
     _ = arena;
     _ = request;
-    laterState(core).reply = reply;
+    if (reply.core != core or reply.serial != 0) {
+        std.debug.panic("the later handler was given reply {d}, and the tests answer reply 0", .{reply.serial});
+    }
     return .later;
 }
 
@@ -280,11 +251,6 @@ const answering_app = registered: {
         .tasks = .{},
         .menu = &.{},
         .ui_files = &[_]ziggy.ui_files.UiFile{},
-        .state = ziggy.core.AppState{
-            .create = createLaterState,
-            .stop = stopLaterState,
-            .destroy = destroyLaterState,
-        },
     });
     registered.tasks = &helpers.task_handlers;
     break :registered registered;
@@ -319,7 +285,7 @@ test "a handler that answers later is answered when its reply is sent, from anot
     defer core.destroy();
     core.postMessage("{\"kind\":\"app\",\"id\":\"x\",\"name\":\"later\",\"data\":{\"name\":\"Ada\"}}");
     try std.testing.expectEqual(@as(usize, 0), shell.count());
-    const reply = laterState(core).reply.?;
+    const reply = firstLaterReply(core);
     const sender = try std.Thread.spawn(.{}, sendLater, .{reply});
     sender.join();
     try expectLastMessage(&shell, "{\"id\":\"x\",\"ok\":true,\"data\":{\"text\":\"Later\",\"times\":5}}");
@@ -350,7 +316,7 @@ test "a reply that fails gives the message an error response" {
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), answering_app);
     defer core.destroy();
     core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"later\",\"data\":{\"name\":\"Ada\"}}");
-    try laterState(core).reply.?.fail(error.LaterFailure);
+    try firstLaterReply(core).fail(error.LaterFailure);
     try expectLastMessage(&shell, "{\"id\":2,\"ok\":false,\"error\":\"LaterFailure\"}");
 }
 

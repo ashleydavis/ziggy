@@ -44,11 +44,11 @@ const app_fields = [_]AppField{
         .required = false,
     },
     .{
-        .name = "state",
+        .name = "on_task_end",
         .required = false,
     },
     .{
-        .name = "on_task_end",
+        .name = "on_destroy",
         .required = false,
     },
     .{
@@ -69,7 +69,7 @@ const app_fields = [_]AppField{
 //                     the app is kept running for
 //   .menu             the desktop menu, a []const ziggy.menu.Menu (see menu.zig), checked when the app is built
 //   .ui_files         the files of the app's bundled frontend
-//   .describe_error, .state, .on_task_end, .on_task_event, .ui_query   optional, as RegisteredApp describes them
+//   .describe_error, .on_task_end, .on_task_event, .on_destroy, .ui_query   optional, as RegisteredApp describes them
 //
 // Every field and every handler is checked when the app is built: a field App does not know, a missing one or a handler of the wrong
 // type fails the build with a message that names it. Ziggy's build exports the C interface and the Android entry points for the
@@ -84,7 +84,7 @@ pub fn App(comptime definition: anytype) core_lib.RegisteredApp {
         }
         for (@typeInfo(Definition).@"struct".fields) |field| {
             if (!isAppField(field.name)) {
-                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, ui_files, describe_error, state, on_task_end, on_task_event and ui_query.");
+                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, ui_files, describe_error, on_task_end, on_task_event, on_destroy and ui_query.");
             }
         }
         for (app_fields) |field| {
@@ -101,9 +101,9 @@ pub fn App(comptime definition: anytype) core_lib.RegisteredApp {
         .menu_targets = comptime menu_lib.menuTargets(definition.menu),
         .ui_files = definition.ui_files,
         .describe_error = if (@hasField(Definition, "describe_error")) definition.describe_error else null,
-        .state = if (@hasField(Definition, "state")) definition.state else null,
         .on_task_end = if (@hasField(Definition, "on_task_end")) definition.on_task_end else null,
         .on_task_event = if (@hasField(Definition, "on_task_event")) definition.on_task_event else null,
+        .on_destroy = if (@hasField(Definition, "on_destroy")) definition.on_destroy else null,
         .ui_query = if (@hasField(Definition, "ui_query")) definition.ui_query else null,
     };
 }

@@ -30,13 +30,14 @@ Complete apps built on Ziggy:
 Read the guides in this order:
 
 1. [Building your app](user-guide/building-your-app.md): how to build your app on Ziggy.
-2. [Dev mode](user-guide/dev-mode.md): how to run your app's frontend in a browser that reloads as you save.
-3. [Messages](user-guide/messages.md): how to send JSON messages between frontend and backend.
-4. [Menus](user-guide/menus.md): the desktop menu, its keyboard shortcuts and how a chosen item reaches the backend or the frontend.
-5. [Tasks](user-guide/tasks.md): how to run background tasks that don't block the frontend.
-6. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
-7. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the test hooks.
-8. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
+2. [The app declaration](user-guide/app-declaration.md): how the backend gives Ziggy its messages, tasks, menu and frontend, and what it does when the backend is destroyed.
+3. [Dev mode](user-guide/dev-mode.md): how to run your app's frontend in a browser that reloads as you save.
+4. [Messages](user-guide/messages.md): how to send JSON messages between frontend and backend.
+5. [Menus](user-guide/menus.md): the desktop menu, its keyboard shortcuts and how a chosen item reaches the backend or the frontend.
+6. [Tasks](user-guide/tasks.md): how to run background tasks that don't block the frontend.
+7. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
+8. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the test hooks.
+9. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
 
 Also:
 

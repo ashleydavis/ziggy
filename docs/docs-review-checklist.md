@@ -19,6 +19,7 @@ Every tracked markdown doc in the repo outside `docs/plans/`. Regenerate the lis
 - [x] [diagrams/task-queue.md](development/diagrams/task-queue.md)
 - [ ] [dev-mode.md](development/dev-mode.md)
 - [ ] [user-guide/dev-mode.md](user-guide/dev-mode.md)
+- [ ] [app-declaration.md](user-guide/app-declaration.md)
 - [ ] [messages.md](user-guide/messages.md)
 - [ ] [menus.md](user-guide/menus.md)
 - [ ] [tasks.md](user-guide/tasks.md)

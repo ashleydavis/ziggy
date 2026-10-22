@@ -8,49 +8,19 @@ This guide is about app messages and app events, the app's own. Every app messag
 
 The `/ziggy:add-message` Claude Code command adds a message to an app by following this guide.
 
-## Declaring the app
+## Registering message handlers
 
-An app declares itself to Ziggy in one file, `backend/src/app.zig` in the template, with `ziggy.core.App`. It lists every message with its handler, every task type with its task handler and what else the app gives Ziggy. This is the template's:
+The app registers a handler for each of its messages in the `.messages` field of its [app declaration](app-declaration.md), `ziggy.core.App` in `backend/src/app.zig` in the template. Each field is a message name and its handler, in any of the forms under "What a handler returns" below. This is the template's:
 
 ```zig
-const ziggy = @import("ziggy");
-const hello_world = @import("lib/hello-world.zig");
-const menu = @import("lib/menu.zig");
-const ui_query = @import("lib/ui-query.zig");
-const ui = @import("ui-files");
-
 pub const app = ziggy.core.App(.{
     // Each message name the frontend sends, with the function that handles it.
     .messages = .{
         .@"hello-world" = hello_world.helloWorldHandler,
     },
-
-    // Each task type the frontend queues, with the function that runs it.
-    .tasks = .{
-        .@"hello-world-task" = hello_world.helloWorldTaskHandler,
-    },
-    .menu = menu.menu,
-    .ui_files = &ui.files,
-    .ui_query = ui_query.uiQuery,
+    // ...
 });
 ```
-
-The fields of `ziggy.core.App`:
-
-| Field | Required | What it is for |
-|---|---|---|
-| `messages` | Yes | Each field is a message name and its handler, in any of the forms under "What a handler returns" below. `.{}` for an app with none. |
-| `tasks` | Yes | Each field is a task type and its task handler, or `.{ .handler = ..., .kind = .keep_alive }` for a keep-alive task type. See [Tasks](tasks.md#registering-a-handler). |
-| `menu` | Yes | The desktop menu, a `[]const ziggy.menu.Menu`, `&.{}` for none. It is checked when the app is built. See [Menus](menus.md). |
-| `ui_files` | Yes | The files of the app's built frontend, `&ui.files` from the `ui-files` module the build makes. |
-| `ui_query` | No | A function that gives the query the native app adds to the frontend's address, so the frontend's first render already holds what the backend tells it at start-up. |
-| `describe_error` | No | A function that turns an error a handler returned into the text of the error response (see "When a handler fails" below). |
-| `state` | No | Where the app keeps what it remembers while it runs. |
-| `on_task_end`, `on_task_event` | No | Functions told of every task that ends and every event a task sends. |
-
-`ziggy.core.App` checks every field and every handler when the app is built. A field it does not know, a required field that is missing or a handler of the wrong type fails the build with a message that names it.
-
-The app writes nothing else for Ziggy. Its `build.zig` names this file as `backend_source_file` in `addAppBackend`. Ziggy's build makes the backend library from it: the library exports Ziggy's C interface for the app's `app` and, for Android, the JNI entry points of Ziggy's Android native app.
 
 ## A message handler
 
@@ -98,7 +68,7 @@ pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, reque
 
 Allocate from `arena`. It is freed once the handler has returned and the message response has been sent.
 
-The handler runs on the thread that handles every message from the frontend, so it must be quick. Anything slow, such as reading many files, hashing or waiting on the network, is a task instead.
+The handler runs on the native app's main thread on every platform, the thread that handles every message from the frontend, in the order the messages arrived (in dev mode, the dev backend handles them on the thread serving the page's connection). It must be quick, because the window waits while it runs. Anything slow, such as reading many files, hashing or waiting on the network, is a task instead. A task never touches the state the main thread keeps: see [Threads and state](tasks.md#threads-and-state).
 
 ## What a handler returns
 
@@ -140,7 +110,7 @@ pub fn lookUpHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: 
 
 ## Taking the message unparsed
 
-A handler can take the message as Ziggy received it, with `ziggy.core.Message` as its third parameter, and return a `ziggy.core.MessageResult`. Ziggy's test app answers its `ping` message this way, in `apps/ziggy-test-app/backend/src/lib/messages.zig`, because it echoes data of any kind without parsing it.
+A handler can take the message as Ziggy received it, with `ziggy.core.Message` as its third parameter, and return a `ziggy.core.MessageResult`. Ziggy's test app answers its `ping` message this way, in `apps/ziggy-test-app/backend/src/lib/handlers.zig`, because it echoes data of any kind without parsing it.
 
 - `message.name` is the message name the frontend sent.
 - `message.data` is the data the frontend sent, as a `std.json.Value`, null when it sent none.

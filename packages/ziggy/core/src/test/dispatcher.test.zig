@@ -599,193 +599,81 @@ test "the core's Io can run a task concurrently" {
 }
 
 //
-// What the observer test's app records, kept in the core's app state. The test allocator reports it as a leak when the core does
-// not destroy it, which is how the test knows the state was destroyed.
+// The observer test's observer of a task that ended: delivers it to the fake native app as `{ "observedEnd": "id|type|source|input|status" }`,
+// so the test reads it from the messages the fake native app recorded.
 //
-const ObserverRecord = struct {
-    // Each task end, as "id|type|source|input|status".
-    ends: std.ArrayList([]u8),
-    // Each task's event, as "id|type|event".
-    events: std.ArrayList([]u8),
-    // Guards the lists, which workers append to.
-    mutex: std.Io.Mutex,
-};
-
-fn createTestState(core: *ziggy.core.Core) anyerror!*anyopaque {
-    const record = try core.allocator.create(ObserverRecord);
-    record.* = .{
-        .ends = .empty,
-        .events = .empty,
-        .mutex = .init,
-    };
-    return record;
-}
-
-fn stopTestState(core: *ziggy.core.Core, state: *anyopaque) void {
-    _ = core;
-    _ = state;
-}
-
-fn destroyTestState(core: *ziggy.core.Core, state: *anyopaque) void {
-    const record: *ObserverRecord = @ptrCast(@alignCast(state));
-    for (record.ends.items) |text| {
-        core.allocator.free(text);
-    }
-    for (record.events.items) |text| {
-        core.allocator.free(text);
-    }
-    record.ends.deinit(core.allocator);
-    record.events.deinit(core.allocator);
-    core.allocator.destroy(record);
-}
-
-fn readStateTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    const record: *ObserverRecord = @ptrCast(@alignCast(context.appState().?));
-    return try ziggy.json.stringify(context.arena, .{
-        .ends = record.ends.items.len,
-    });
-}
-
 fn recordTaskEnd(core: *ziggy.core.Core, end: ziggy.types.TaskEnd) void {
-    const record: *ObserverRecord = @ptrCast(@alignCast(core.app_state.?));
-    const text = std.fmt.allocPrint(core.allocator, "{s}|{s}|{s}|{s}|{s}", .{ end.task_id, end.task_type, end.source, end.input_json, @tagName(end.status) }) catch @panic("out of memory");
-    record.mutex.lockUncancelable(core.io());
-    defer record.mutex.unlock(core.io());
-    record.ends.append(core.allocator, text) catch @panic("out of memory");
+    var arena_state = std.heap.ArenaAllocator.init(core.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const text = std.fmt.allocPrint(arena, "{s}|{s}|{s}|{s}|{s}", .{ end.task_id, end.task_type, end.source, end.input_json, @tagName(end.status) }) catch @panic("out of memory");
+    const message = ziggy.json.stringify(arena, .{
+        .observedEnd = text,
+    }) catch @panic("out of memory");
+    core.deliver(message);
 }
 
+//
+// The observer test's observer of an event a task sent: delivers it to the fake native app as `{ "observedEvent": "id|type|event" }`.
+//
 fn recordTaskEvent(core: *ziggy.core.Core, sent: ziggy.types.TaskSentEvent) void {
-    const record: *ObserverRecord = @ptrCast(@alignCast(core.app_state.?));
-    const text = std.fmt.allocPrint(core.allocator, "{s}|{s}|{s}", .{ sent.task_id, sent.task_type, sent.event_json }) catch @panic("out of memory");
-    record.mutex.lockUncancelable(core.io());
-    defer record.mutex.unlock(core.io());
-    record.events.append(core.allocator, text) catch @panic("out of memory");
+    var arena_state = std.heap.ArenaAllocator.init(core.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const text = std.fmt.allocPrint(arena, "{s}|{s}|{s}", .{ sent.task_id, sent.task_type, sent.event_json }) catch @panic("out of memory");
+    const message = ziggy.json.stringify(arena, .{
+        .observedEvent = text,
+    }) catch @panic("out of memory");
+    core.deliver(message);
 }
 
-test "an app observes the end of a task and the events it sent, and keeps its own state in the core" {
+test "an app observes the end of a task and the events it sent" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
     var observed_app = helpers.app;
     observed_app.on_task_end = recordTaskEnd;
     observed_app.on_task_event = recordTaskEvent;
-    observed_app.state = .{
-        .create = createTestState,
-        .stop = stopTestState,
-        .destroy = destroyTestState,
-    };
     const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), observed_app);
-    defer core.destroy();
-    const record: *ObserverRecord = @ptrCast(@alignCast(core.app_state.?));
     core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"src\",\"data\":{\"a\":1},\"priority\":\"background\"}}");
-    var waited_ms: u32 = 0;
-    while (waited_ms < 20_000) : (waited_ms += 2) {
-        record.mutex.lockUncancelable(core.io());
-        const seen = record.ends.items.len;
-        record.mutex.unlock(core.io());
-        if (seen > 0) {
-            break;
-        }
-        shell.sleepMs(2);
-    }
-    record.mutex.lockUncancelable(core.io());
-    defer record.mutex.unlock(core.io());
-    try std.testing.expectEqual(@as(usize, 1), record.ends.items.len);
-    try std.testing.expectEqualStrings("t1|quick|src|{\"a\":1}|succeeded", record.ends.items[0]);
-    try std.testing.expectEqual(@as(usize, 1), record.events.items.len);
-    try std.testing.expectEqualStrings("t1|quick|{\"text\":\"hello\"}", record.events.items[0]);
-}
-
-test "a task handler reaches the app's state through its context" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const state_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
-        .{ .name = "read-state", .handler = readStateTask },
-    };
-    var state_app = helpers.app;
-    state_app.tasks = &state_tasks;
-    state_app.state = .{
-        .create = createTestState,
-        .stop = stopTestState,
-        .destroy = destroyTestState,
-    };
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), state_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t2\",\"taskType\":\"read-state\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("\"outputs\":{\"ends\":");
+    try shell.expectMessageContaining("{\"observedEnd\":\"t1|quick|src|{\\\"a\\\":1}|succeeded\"}");
+    // Destroying the core waits for the workers, so every observer call has been made before the counts are read.
+    core.destroy();
+    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("\"observedEnd\""));
+    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("\"observedEvent\""));
+    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("{\"observedEvent\":\"t1|quick|{\\\"text\\\":\\\"hello\\\"}\"}"));
 }
 
 //
-// What the ordering test's state hooks do, in order, each a line delivered to the fake native app, so the test reads the order from the messages the
+// The destroy test's on_destroy: tries to queue a task and delivers the phase and the outcome to the fake native app as
+// `{ "destroyPhase": "phase|accepted" }` or `{ "destroyPhase": "phase|<error name>" }`, so the test reads them from the messages the
 // fake native app recorded.
 //
-fn deliverState(core: *ziggy.core.Core, name: []const u8) void {
-    const message = ziggy.json.stringify(core.allocator, .{
-        .stateHook = name,
+fn recordDestroyPhase(core: *ziggy.core.Core, phase: ziggy.core.DestroyPhase) void {
+    var arena_state = std.heap.ArenaAllocator.init(core.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var outcome: []const u8 = "accepted";
+    core.runner.addTask(@tagName(phase), "quick", "destroy-test", "{}", .background, null) catch |err| {
+        outcome = @errorName(err);
+    };
+    const text = std.fmt.allocPrint(arena, "{s}|{s}", .{ @tagName(phase), outcome }) catch @panic("out of memory");
+    const message = ziggy.json.stringify(arena, .{
+        .destroyPhase = text,
     }) catch @panic("out of memory");
-    defer core.allocator.free(message);
     core.deliver(message);
 }
 
-fn createOrderedState(core: *ziggy.core.Core) anyerror!*anyopaque {
-    deliverState(core, "created");
-    return core;
-}
-
-fn stopOrderedState(core: *ziggy.core.Core, state: *anyopaque) void {
-    _ = state;
-    deliverState(core, "stopped");
-}
-
-fn destroyOrderedState(core: *ziggy.core.Core, state: *anyopaque) void {
-    _ = state;
-    deliverState(core, "destroyed");
-}
-
-//
-// A task that runs until it is cancelled and then reports it was, as the last thing it does.
-//
-fn sayWhenCancelledTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    try context.sendEvent(.{ .started = true });
-    while (true) {
-        context.checkCancelled() catch {
-            // The state the test made is the core itself, which the task reads through its context as a task does.
-            const core: *ziggy.core.Core = @ptrCast(@alignCast(context.appState().?));
-            deliverState(core, "task-ended");
-            return error.Cancelled;
-        };
-        try context.io().sleep(.fromMilliseconds(1), .awake);
-    }
-}
-
-test "the app's state is stopped before the task runner stops and destroyed after it, so a running task never reads a state that is gone" {
+test "an app's on_destroy is called before tasks stop, while a task can still be queued, and again after the runner has stopped" {
     var shell: helpers.FakeShell = undefined;
     shell.init(std.testing.allocator);
     defer shell.deinit();
-    const ordered_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
-        .{ .name = "say-when-cancelled", .handler = sayWhenCancelledTask },
-    };
-    var ordered_app = helpers.app;
-    ordered_app.tasks = &ordered_tasks;
-    ordered_app.state = .{
-        .create = createOrderedState,
-        .stop = stopOrderedState,
-        .destroy = destroyOrderedState,
-    };
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), ordered_app);
-    // A task that is still running when the core is destroyed, and reports it each time round its loop.
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"running\",\"taskType\":\"say-when-cancelled\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("\"started\":true");
+    var destroyed_app = helpers.app;
+    destroyed_app.on_destroy = recordDestroyPhase;
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), destroyed_app);
     core.destroy();
-    const created = shell.indexOfContaining("\"stateHook\":\"created\"").?;
-    const stopped = shell.indexOfContaining("\"stateHook\":\"stopped\"").?;
-    const destroyed = shell.indexOfContaining("\"stateHook\":\"destroyed\"").?;
-    try std.testing.expect(created < stopped);
-    // The task is cancelled when the task runner stops, which is after the state was stopped and before it is destroyed.
-    const task_ended = shell.indexOfContaining("\"stateHook\":\"task-ended\"").?;
-    try std.testing.expect(stopped < task_ended);
-    try std.testing.expect(task_ended < destroyed);
+    const before = shell.indexOfContaining("{\"destroyPhase\":\"before_tasks_stop|accepted\"}") orelse return error.BeforeTasksStopNotCalled;
+    const after = shell.indexOfContaining("{\"destroyPhase\":\"after_tasks_stopped|ShuttingDown\"}") orelse return error.AfterTasksStoppedNotCalled;
+    try std.testing.expect(before < after);
+    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("\"destroyPhase\""));
 }

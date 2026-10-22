@@ -1,17 +1,11 @@
 //
-// Everything the test app adds to Ziggy's core library: its messages, each with the handler for it, its task types, and the state,
+// Everything the test app adds to Ziggy's core library: its messages, each with the handler for it, its task types and the
 // observers and error describer it gives the backend. Ziggy's build serves the app declared here.
 //
 
 const std = @import("std");
 const ziggy = @import("ziggy");
-const messages = @import("lib/messages.zig");
-const hello_tasks = @import("lib/hello-tasks.zig");
-pub const media_server = @import("lib/media-server.zig");
-const menu = @import("lib/menu.zig");
-const ui_query = @import("lib/ui-query.zig");
-const pickers = @import("lib/pickers.zig");
-const app_state = @import("lib/app-state.zig");
+pub const handlers = @import("lib/handlers.zig");
 const ui = @import("ui-files");
 
 //
@@ -19,41 +13,39 @@ const ui = @import("ui-files");
 //
 pub const app = ziggy.core.App(.{
     .messages = .{
-        .ping = messages.pingHandler,
-        .@"payload-stats" = messages.payloadStatsHandler,
-        .@"file-roundtrip" = messages.fileRoundtripHandler,
-        .fail = messages.failHandler,
-        .refuse = app_state.refuseHandler,
-        .@"task-stats" = app_state.taskStatsHandler,
-        .@"queue-from-app" = app_state.queueFromAppHandler,
-        .@"cancel-from-app" = app_state.cancelFromAppHandler,
-        .@"pick-folder" = pickers.pickFolderMessageHandler,
-        .@"pick-files" = pickers.pickFilesMessageHandler,
-        .@"pick-file" = pickers.pickFileMessageHandler,
+        .ping = handlers.pingHandler,
+        .@"payload-stats" = handlers.payloadStatsHandler,
+        .@"file-roundtrip" = handlers.fileRoundtripHandler,
+        .fail = handlers.failHandler,
+        .refuse = handlers.refuseHandler,
+        .@"queue-from-app" = handlers.queueFromAppHandler,
+        .@"cancel-from-app" = handlers.cancelFromAppHandler,
+        .@"pick-folder" = handlers.pickFolderMessageHandler,
+        .@"pick-files" = handlers.pickFilesMessageHandler,
+        .@"pick-file" = handlers.pickFileMessageHandler,
     },
     .tasks = .{
-        .@"hello-short" = hello_tasks.helloShortHandler,
-        .@"hello-long" = hello_tasks.helloLongHandler,
-        .@"hello-child" = hello_tasks.helloChildHandler,
-        .@"hello-fail" = hello_tasks.helloFailHandler,
-        .@"os-version" = hello_tasks.osVersionHandler,
-        .@"describe-self" = app_state.describeSelfHandler,
-        .@"run-in-turn" = app_state.runInTurnHandler,
-        .@"media-server" = media_server.mediaServerHandler,
+        .@"hello-short" = handlers.helloShortHandler,
+        .@"hello-long" = handlers.helloLongHandler,
+        .@"hello-child" = handlers.helloChildHandler,
+        .@"hello-fail" = handlers.helloFailHandler,
+        .@"os-version" = handlers.osVersionHandler,
+        .@"describe-self" = handlers.describeSelfHandler,
+        .@"run-in-turn" = handlers.runInTurnHandler,
+        .@"media-server" = handlers.mediaServerHandler,
         .@"background-keep-alive" = .{
-            .handler = hello_tasks.backgroundCountHandler,
+            .handler = handlers.backgroundCountHandler,
             .kind = .keep_alive,
         },
-        .@"background-normal" = hello_tasks.backgroundCountHandler,
-        .@"pick-folder" = pickers.pickFolderHandler,
-        .@"pick-files" = pickers.pickFilesHandler,
-        .@"pick-file" = pickers.pickFileHandler,
+        .@"background-normal" = handlers.backgroundCountHandler,
+        .@"pick-folder" = handlers.pickFolderHandler,
+        .@"pick-files" = handlers.pickFilesHandler,
+        .@"pick-file" = handlers.pickFileHandler,
     },
-    .state = app_state.state_hooks,
-    .on_task_end = app_state.onTaskEnd,
-    .on_task_event = app_state.onTaskEvent,
-    .describe_error = app_state.describeError,
-    .menu = menu.menu,
+    .on_task_end = handlers.onTaskEnd,
+    .on_task_event = handlers.onTaskEvent,
+    .describe_error = handlers.describeError,
+    .menu = handlers.menu,
     .ui_files = &ui.files,
-    .ui_query = ui_query.uiQuery,
+    .ui_query = handlers.uiQuery,
 });

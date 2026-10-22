@@ -75,7 +75,6 @@ What the context gives a handler:
 | `runChild(allocator, type, data, priority)` | Runs one child to its end and frees it, for a task that runs children one after another for as long as it lives. |
 | `io()` | The `std.Io` for sleeping and file access. |
 | `config()` | The configuration the native app gave the backend, including its native calls and the app's data directory. |
-| `appState()` | The app's own state, when it keeps any. |
 | `taskId()`, `taskType()` and `source()` | The task's id, its task type (for a handler that serves several) and the source it was queued under. |
 | `maxConcurrentChildTasks()` | The limit on this task's child tasks in flight. |
 | `hostRequest(method, request_json)` | Calls the native app's `host_request` native call to do one thing only the platform can do, by name, and returns its result. A platform with no `host_request` native call gives `error.HostCallbackMissing`. |
@@ -84,7 +83,7 @@ What the context gives a handler:
 
 ## Registering a handler
 
-The app lists its task types in the `.tasks` field of its `ziggy.core.App` (see [Declaring the app](messages.md#declaring-the-app)), in `backend/src/app.zig` in the template. Each field is a task type and its handler:
+The app lists its task types in the `.tasks` field of its `ziggy.core.App` (see [The app declaration](app-declaration.md)), in `backend/src/app.zig` in the template. Each field is a task type and its handler:
 
 ```zig
 .tasks = .{
@@ -149,7 +148,7 @@ Cancelling a source cancels its queued and running tasks, children included. A r
 
 ## Child tasks
 
-A handler can split its work into child tasks with `queueChild` and wait for them with `awaitTask` or `awaitAllTasks`. Ziggy's test app does this in `hello-long`, in `apps/ziggy-test-app/backend/src/lib/hello-tasks.zig`.
+A handler can split its work into child tasks with `queueChild` and wait for them with `awaitTask` or `awaitAllTasks`. Ziggy's test app does this in `hello-long`, in `apps/ziggy-test-app/backend/src/lib/handlers.zig`.
 
 - Children run on the same pool as their parent. A parent that waits gives up its worker thread while it waits, so the pool cannot deadlock when every thread is held by a waiting parent.
 - A child runs at the priority passed to `queueChild` or `runChild`, and otherwise at its parent's.
@@ -157,7 +156,7 @@ A handler can split its work into child tasks with `queueChild` and wait for the
 
 ## A message answered by a task
 
-A message the frontend sends with `window.ziggy.invoke` is handled by its message handler on the thread that handles the frontend's messages, so it must be quick. When the message response takes time, the handler answers it with a task instead: it returns a `ziggy.core.Answer(Response)` holding `.task`, with the task type and the task's input as JSON text. Ziggy queues a task of that type. The task's result is the message response. A task that fails or is cancelled gives an error message response. Ziggy's test app answers its file and directory pickers this way, because they wait on a native dialog, in `apps/ziggy-test-app/backend/src/lib/pickers.zig`:
+A message the frontend sends with `window.ziggy.invoke` is handled by its message handler on the thread that handles the frontend's messages, so it must be quick. When the message response takes time, the handler answers it with a task instead: it returns a `ziggy.core.Answer(Response)` holding `.task`, with the task type and the task's input as JSON text. Ziggy queues a task of that type. The task's result is the message response. A task that fails or is cancelled gives an error message response. Ziggy's test app answers its file and directory pickers this way, because they wait on a native dialog, in `apps/ziggy-test-app/backend/src/lib/handlers.zig`:
 
 ```zig
 pub fn pickFolderMessageHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: PickFolderRequest) !ziggy.core.Answer(?[]const u8) {
@@ -176,6 +175,40 @@ pub fn pickFolderMessageHandler(core: *ziggy.core.Core, arena: std.mem.Allocator
 - A message sent with `send` has no id and so nothing to answer: it fails with `MessageHasNoId` and nothing is queued.
 - The task is not one the frontend queued, so it sends no `task-completed` event of its own: its result reaches the frontend only as the message response.
 - A handler that takes the message unparsed (see [Messages](messages.md#taking-the-message-unparsed)) does the same by returning `core.answerWithTask(message, task_type, data_json)`.
+
+## Threads and state
+
+Message handlers and menu functions run on the native app's main thread, on every platform. Tasks run on worker threads. Each thread keeps its own state and never touches anything that belongs to another thread, so the app's own state needs no locks.
+
+- The main thread's state can be a variable at the top level of the backend, read and changed only by message handlers and menu functions.
+- A task's state lives in the task: its handler's local variables and `context.arena`.
+- Only the handlers and task handlers Ziggy calls keep state. The functions they call keep nothing of their own and take what they need as arguments.
+- Threads talk only by JSON messages. The frontend sends messages to the main thread. A task gets its input as JSON data when it is queued (`data` in `window.ziggy.addTask`, or `.data` of a `.task` answer), reports with `context.sendEvent` and ends with its result, all JSON.
+- `on_task_end` and `on_task_event` (see [The app declaration](app-declaration.md)) run on the worker thread that ran the task, so they do not touch the main thread's state either.
+- In dev mode the dev backend handles messages one at a time on the thread serving the page's connection, which is a new thread when the page reloads. Keep the main thread's state in an ordinary top-level `var`, not a `threadlocal`, so it carries over.
+
+It works like an Electron app: the main thread is like the main process, and each task is like a worker that shares nothing with it and talks to it only by messages.
+
+Here a message handler keeps a count on the main thread and answers with a task. The task never reads `greeting_count`: it gets the count in its JSON input and sends its greeting back as its result, which reaches the frontend as the message response.
+
+```zig
+// The main thread's state: how many greetings have been asked for. Only message handlers read or change it.
+var greeting_count: u32 = 0;
+
+pub fn greetMessageHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: GreetRequest) !ziggy.core.Answer([]const u8) {
+    _ = core;
+    greeting_count += 1;
+    return .{
+        .task = .{
+            .task_type = "write-greeting",
+            .data = try ziggy.json.stringify(arena, .{
+                .name = request.name,
+                .count = greeting_count,
+            }),
+        },
+    };
+}
+```
 
 ## Keep-alive tasks
 
@@ -203,7 +236,7 @@ The core library implements the task queue's `IQueueBackend` on its own runner, 
 | `packages/ziggy/core/src/lib/handlers.zig` | `Answer`, whose `.task` answers a message with a task. |
 | `packages/ziggy/core/src/lib/task-queue` | The task queue that Ziggy's core library implements its queue backend for. |
 | `apps/ziggy-template/backend/src/lib/hello-world.zig` | The template's hello world task. |
-| `apps/ziggy-test-app/backend/src/lib/hello-tasks.zig` | The test app's task handlers: long tasks, child tasks, cancelling, failing and keep-alive. |
+| `apps/ziggy-test-app/backend/src/lib/handlers.zig` | Everything the test app registers, including its task handlers: long tasks, child tasks, cancelling, failing and keep-alive. |
 | `apps/ziggy-template/frontend/src/main.ts` | How the template's frontend queues tasks and handles their events. |
 
 ## See also

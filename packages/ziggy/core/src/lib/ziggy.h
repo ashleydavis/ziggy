@@ -118,7 +118,8 @@ void *ziggy_create(const ziggy_config *config);
 // delivered after it returns.
 void ziggy_destroy(void *handle);
 
-// Delivers a JSON message from the frontend to the core. The message is valid only while the call runs.
+// Delivers a JSON message from the frontend to the core. The message is valid only while the call runs. Each native app calls it
+// on its main thread, in the order the messages arrived, and the message's handler runs on that thread before it returns.
 void ziggy_post_message(void *handle, const char *message, size_t message_len);
 
 // Decides what to do with an address the web view is about to load: a ZIGGY_URL_ value.
