@@ -115,6 +115,10 @@ pub const RegisteredApp = struct {
     // Gives the query text the native app appends to the address of the frontend, after the question mark, so the frontend's
     // first render already holds what the app tells it at start-up. Null for an app whose frontend needs no query. See `UiQuery`.
     ui_query: ?UiQuery = null,
+    // Called once at the end of `Core.create`, on the thread that creates the core, when the core is otherwise ready and before any
+    // message or task can reach the app, so the app can make what its handlers and tasks need. An error fails `Core.create` with
+    // that error after the core has released what it made. Null for an app with nothing to do then. The counterpart of `on_destroy`.
+    on_create: ?*const fn (core: *Core) anyerror!void = null,
     // Called twice while the core is destroyed, on the thread that destroys it: with `.before_tasks_stop` while tasks can still
     // be queued, so the app can stop its own threads, and with `.after_tasks_stopped` once every task has ended, so the app can free
     // its own resources. The core is destroyed whenever the native app ends the backend, which is not only when the app quits (an
@@ -289,6 +293,13 @@ pub const Core = struct {
                     .take = test_control.TestControl.takePickAnswer,
                 };
             }
+        }
+        errdefer if (core.control) |control| {
+            control.stop();
+            allocator.destroy(control);
+        };
+        if (app.on_create) |on_create| {
+            try on_create(core);
         }
         return core;
     }

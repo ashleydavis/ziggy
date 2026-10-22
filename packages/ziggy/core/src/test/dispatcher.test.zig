@@ -677,3 +677,42 @@ test "an app's on_destroy is called before tasks stop, while a task can still be
     try std.testing.expect(before < after);
     try std.testing.expectEqual(@as(usize, 2), shell.countContaining("\"destroyPhase\""));
 }
+
+//
+// The create test's on_create: queues a task, which shows the runner is ready, and delivers `{ "created": true }` to the fake native
+// app, so the test reads it from the messages the fake native app recorded.
+//
+fn recordCreate(core: *ziggy.core.Core) anyerror!void {
+    try core.runner.addTask("created", "quick", "create-test", "{}", .background, null);
+    core.deliver("{\"created\":true}");
+}
+
+test "an app's on_create is called once while the core is created, when a task can already be queued" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    var created_app = helpers.app;
+    created_app.on_create = recordCreate;
+    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), created_app);
+    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("{\"created\":true}"));
+    core.destroy();
+    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("{\"created\":true}"));
+}
+
+//
+// The failed create test's on_create: fails, as an app's would when it cannot make what its handlers need.
+//
+fn failCreate(core: *ziggy.core.Core) anyerror!void {
+    _ = core;
+    return error.AppCouldNotStart;
+}
+
+test "an app's on_create that fails makes the core's create fail with its error, and releases what the core made" {
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    var failing_app = helpers.app;
+    failing_app.on_create = failCreate;
+    // The testing allocator fails the test if anything the core made is left unreleased.
+    try std.testing.expectError(error.AppCouldNotStart, ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), failing_app));
+}

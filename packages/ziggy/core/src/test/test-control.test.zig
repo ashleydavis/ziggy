@@ -50,6 +50,31 @@ fn startControlledCore(shell: *helpers.FakeShell, tmp: *std.testing.TmpDir) !*zi
     return try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
 }
 
+//
+// The failed create test's on_create: fails, as an app's would when it cannot make what its handlers need.
+//
+fn failCreate(core: *ziggy.core.Core) anyerror!void {
+    _ = core;
+    return error.AppCouldNotStart;
+}
+
+test "an app's on_create that fails in test mode stops the control connection the core started" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var shell: helpers.FakeShell = undefined;
+    shell.init(std.testing.allocator);
+    defer shell.deinit();
+    var config = shell.config(1, 1);
+    var port_file_buffer: [256]u8 = undefined;
+    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
+    config.test_mode = true;
+    config.test_port_file = port_file.ptr;
+    var failing_app = helpers.app;
+    failing_app.on_create = failCreate;
+    // The testing allocator fails the test if the control connection the core started is left unreleased.
+    try std.testing.expectError(error.AppCouldNotStart, ziggy.core.Core.create(std.testing.allocator, config, failing_app));
+}
+
 test "a command reaches the UI and its answer comes back" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();

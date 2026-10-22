@@ -42,11 +42,32 @@ The fields of `ziggy.core.App`:
 | `ui_query` | No | A function that gives the query the native app adds to the frontend's address, so the frontend's first render already holds what the backend tells it at start-up. |
 | `describe_error` | No | A function that turns an error a handler returned into the text of the error response (see [When a handler fails](messages.md#when-a-handler-fails)). |
 | `on_task_end`, `on_task_event` | No | Functions told of every task that ends and every event a task sends. |
+| `on_create` | No | A function called once when the backend is created, before any message or task reaches the app, so the app can make what its handlers and tasks need. See [When the backend is created](#when-the-backend-is-created). |
 | `on_destroy` | No | A function called twice when the backend is destroyed, so the app can stop its own threads and then free its own resources. See [When the backend is destroyed](#when-the-backend-is-destroyed). |
 
 `ziggy.core.App` checks every field and every handler when the app is built. A field it does not know, a required field that is missing or a handler of the wrong type fails the build with a message that names it.
 
 The app writes nothing else for Ziggy. Its `build.zig` names this file as `backend_source_file` in `addAppBackend`. Ziggy's build makes the backend library from it: the library exports Ziggy's C interface for the app's `app` and, for Android, the JNI entry points of Ziggy's Android native app.
+
+## When the backend is created
+
+An app that has to make something before its handlers and tasks run (its own state, a log file, task handlers it registers with the task queue) gives `on_create` a function. Ziggy calls it once, on the thread that creates the backend, when the backend is otherwise ready: tasks can be queued, but no message or task has reached the app yet. If it returns an error, creating the backend fails with that error, Ziggy releases what it made and the native app reports the error. `on_destroy` is not called then, so `on_create` must release what it made itself before it returns the error. Ziggy keeps nothing for the app, so the app keeps what it makes where its handlers can reach it.
+
+```zig
+//
+// Opens the app's cache before any handler can use it.
+//
+fn onCreate(core: *ziggy.core.Core) anyerror!void {
+    try cache.init(core.allocator);
+}
+
+pub const app = ziggy.core.App(.{
+    // ...
+    .on_create = onCreate,
+});
+```
+
+Here `cache` stands for the app's own code.
 
 ## When the backend is destroyed
 
