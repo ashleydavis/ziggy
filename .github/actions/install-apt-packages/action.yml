@@ -48,8 +48,10 @@ runs:
         APT_PACKAGES: ${{ inputs.packages }}
       run: |
         set -uo pipefail
-        # Word splitting is intended: the input is a space-separated list.
-        plan="$(apt-get install --simulate $APT_PACKAGES | grep '^Inst ' | sort)"
+        # Word splitting is intended: the input is a space-separated list. grep exits 1 when apt plans
+        # no installs because every package is already on the runner, which is an empty plan and not a
+        # failure; any other non-zero exit still fails the step.
+        plan="$(apt-get install --simulate $APT_PACKAGES | { grep '^Inst ' || [ $? -eq 1 ]; } | sort)"
         echo "key=$(printf '%s' "$plan" | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
 
     - name: Restore the downloaded packages
