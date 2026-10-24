@@ -761,14 +761,9 @@ fn addDevMode(
         .link_libc = true,
     });
     dev_host.addImport("c", translate_c.createModule());
-    // The core's queue of messages and its wait for a socket, which the dev host's threads talk and wait with too.
+    // The core's queue of messages, which the dev host's threads talk with too.
     dev_host.addImport("message-queue", b.createModule(.{
         .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/message-queue.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
-    dev_host.addImport("socket-wait", b.createModule(.{
-        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/socket-wait.zig"),
         .target = target,
         .optimize = optimize,
     }));

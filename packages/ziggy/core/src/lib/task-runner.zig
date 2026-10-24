@@ -200,6 +200,14 @@ pub const TaskServices = struct {
     }
 
     //
+    // Waits until the task's source is cancelled, for a task whose own work runs elsewhere until then. The timers given run as they
+    // come due while it waits.
+    //
+    pub fn waitUntilCancelled(self: TaskServices, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+        self.task.worker.waitFor(io, allocator, timers, .cancelled);
+    }
+
+    //
     // Sends any value std.json can serialise to the frontend as the data of a task-event event.
     //
     pub fn sendEvent(self: TaskServices, io: std.Io, allocator: std.mem.Allocator, value: anytype) !void {

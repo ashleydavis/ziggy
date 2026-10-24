@@ -85,6 +85,7 @@ The task services are what the task reaches outside its worker through. Each cal
 | `sendEvent(value)` | Sends any value `std.json` can serialise to the frontend as a `task-event` system event. |
 | `isCancelled()` | Whether the task's source has been cancelled. |
 | `checkCancelled()` | Returns `error.Cancelled` when the source has been cancelled. Call it at the top of every loop. |
+| `waitUntilCancelled(timers)` | Waits until the source is cancelled, for a task whose work runs on threads of its own until then. |
 | `queueChild(type, data, priority)` | Queues a child task and returns its id. It waits while the child limit is reached. |
 | `awaitTask(child_id)` | Waits for one child and returns how it ended. A failed child is returned as a failure. |
 | `runChild(allocator, type, data, priority)` | Runs one child to its end and frees it, for a task that runs children one after another for as long as it lives. |

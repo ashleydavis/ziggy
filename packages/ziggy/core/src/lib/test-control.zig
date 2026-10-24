@@ -12,16 +12,17 @@
 //
 // The main thread opens the listening socket and hands it to the accepting thread, which accepts each connection and hands it to a
 // thread of its own. None of these threads shares anything with another: each is given copies of what it needs when it starts and
-// owns its socket, makes its own Io, and talks to the others only by message. Each waits on its socket for no longer than
-// `poll_interval_ms`, so it reads its messages, including stop, every time that passes.
+// makes its own Io, and talks to the others only by message. The accepting thread blocks in accept, and the main thread wakes it to
+// read "stop" with a connection of its own. A connection thread blocks reading its socket, which the accepting thread accepted and
+// closes once the connection thread has ended, and on stop the accepting thread ends its read by shutting the socket down.
 //
 
 const std = @import("std");
+const builtin = @import("builtin");
 const types = @import("types.zig");
 const json = @import("json.zig");
 const message_queue = @import("message-queue.zig");
 const dropped_files = @import("dropped-files.zig");
-const socket_wait = @import("socket-wait.zig");
 
 const MessageQueue = message_queue.MessageQueue;
 const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
@@ -37,11 +38,6 @@ pub const from_test_control: u32 = 0xFFFF_FFF2;
 // How long the frontend has to reply to a command, in milliseconds.
 //
 pub const answer_timeout_ms: u64 = 30_000;
-
-//
-// How long the accepting thread and the connection threads wait on their sockets before they read their messages, in milliseconds.
-//
-const poll_interval_ms: i32 = 100;
 
 //
 // The number the main thread's messages reach the accepting thread's queue under, and the accepting thread's reach a connection
@@ -116,6 +112,12 @@ pub const TestControl = struct {
     //
     pub fn beginStop(self: *TestControl, io: std.Io) void {
         self.queue.post(io, from_main, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the test control connection");
+        // The accepting thread blocks in accept, so a connection made here wakes it to read "stop".
+        const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", self.port) catch unreachable;
+        if (address.connect(io, .{ .mode = .stream })) |stream| {
+            stream.close(io);
+        }
+        else |_| {}
     }
 
     //
@@ -167,6 +169,11 @@ const ConnectionThread = struct {
     queue: *MessageQueue,
     // The connection's thread.
     thread: std.Thread,
+    // The connection's socket, which the accepting thread accepted and closes once the connection thread has ended. The connection
+    // thread reads and writes it and never closes it.
+    stream: std.Io.net.Stream,
+    // Whether the socket was closed already, to end the connection thread's read on Windows when stopping (wakeConnection).
+    closed: bool,
 };
 
 //
@@ -187,26 +194,22 @@ fn acceptConnections(given: AcceptStart) void {
     var next_number: u32 = 1;
     var stop_requested = false;
     while (!stop_requested) {
+        const stream = start.server.accept(io) catch {
+            continue;
+        };
         while (start.queue.tryTake(io, allocator)) |message| {
             defer allocator.free(message.text);
             if (message.from == from_main) {
                 stop_requested = true;
                 continue;
             }
-            endConnection(allocator, &connections, message.from);
+            endConnection(io, allocator, &connections, message.from);
         }
         if (stop_requested) {
+            // The connection that woke this thread to read "stop".
+            stream.close(io);
             break;
         }
-        const readable = socket_wait.waitReadable(start.server.socket.handle, poll_interval_ms) catch {
-            continue;
-        };
-        if (!readable) {
-            continue;
-        }
-        const stream = start.server.accept(io) catch {
-            continue;
-        };
         const connection_queue = allocator.create(MessageQueue) catch @panic("out of memory serving a test control connection");
         connection_queue.* = MessageQueue.init();
         const number = next_number;
@@ -229,10 +232,13 @@ fn acceptConnections(given: AcceptStart) void {
             .number = number,
             .queue = connection_queue,
             .thread = thread,
+            .stream = stream,
+            .closed = false,
         }) catch @panic("out of memory serving a test control connection");
     }
-    for (connections.items) |connection| {
+    for (connections.items) |*connection| {
         connection.queue.post(io, from_main, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the test control connection");
+        wakeConnection(io, connection);
     }
     while (connections.items.len > 0) {
         const message = start.queue.take(io, allocator, .none) orelse {
@@ -240,7 +246,7 @@ fn acceptConnections(given: AcceptStart) void {
         };
         defer allocator.free(message.text);
         if (message.from != from_main) {
-            endConnection(allocator, &connections, message.from);
+            endConnection(io, allocator, &connections, message.from);
         }
     }
     start.server.deinit(io);
@@ -248,12 +254,32 @@ fn acceptConnections(given: AcceptStart) void {
 }
 
 //
-// Waits for the thread of the connection that reported it ended, and releases its queue.
+// Ends a connection thread's read of its socket, so it reads "stop" and ends. Shutting the receiving side down wakes the read on
+// Linux, macOS and Android. On Windows it does not, and closing the socket does, so there the socket is closed here and not again
+// when the thread has ended.
 //
-fn endConnection(allocator: std.mem.Allocator, connections: *std.ArrayList(ConnectionThread), number: u32) void {
+fn wakeConnection(io: std.Io, connection: *ConnectionThread) void {
+    if (builtin.os.tag == .windows) {
+        connection.stream.close(io);
+        connection.closed = true;
+        return;
+    }
+    connection.stream.shutdown(io, .recv) catch |err| switch (err) {
+        error.ConnectionAborted, error.ConnectionResetByPeer, error.SocketUnconnected => {},
+        else => @panic("test control: could not shut a connection down"),
+    };
+}
+
+//
+// Waits for the thread of the connection that reported it ended, closes its socket and releases its queue.
+//
+fn endConnection(io: std.Io, allocator: std.mem.Allocator, connections: *std.ArrayList(ConnectionThread), number: u32) void {
     for (connections.items, 0..) |connection, index| {
         if (connection.number == number) {
             connection.thread.join();
+            if (!connection.closed) {
+                connection.stream.close(io);
+            }
             connection.queue.deinit();
             allocator.destroy(connection.queue);
             _ = connections.swapRemove(index);
@@ -276,7 +302,7 @@ const ConnectionStart = struct {
     accept_queue: *MessageQueue,
     // The connection thread's messages: "stop" from the accepting thread.
     queue: *MessageQueue,
-    // The connection's socket, which the thread closes when it ends.
+    // The connection's socket, which the thread reads and writes. The accepting thread closes it once the thread has ended.
     stream: std.Io.net.Stream,
 };
 
@@ -303,7 +329,7 @@ fn serveConnection(given: ConnectionStart) void {
     var reader = connection.start.stream.reader(io, &read_buffer);
     var writer = connection.start.stream.writer(io, &write_buffer);
     connection.serve(io, allocator, &reader.interface, &writer.interface);
-    connection.start.stream.close(io);
+    // The accepting thread closes the socket once this thread has ended.
     connection.start.accept_queue.post(io, connection.start.number, "{\"type\":\"ended\"}") catch @panic("out of memory ending a test control connection");
 }
 
@@ -321,18 +347,10 @@ const Connection = struct {
     //
     fn serve(self: *Connection, io: std.Io, allocator: std.mem.Allocator, reader: *std.Io.Reader, writer: *std.Io.Writer) void {
         while (true) {
-            // A whole command may already be read into the buffer, and then the socket has nothing more for it.
-            if (std.mem.indexOfScalar(u8, reader.buffered(), '\n') == null) {
-                if (self.stopRequested(io, allocator)) {
-                    return;
-                }
-                const readable = socket_wait.waitReadable(self.start.stream.socket.handle, poll_interval_ms) catch {
-                    return;
-                };
-                if (!readable) {
-                    continue;
-                }
+            if (self.stopRequested(io, allocator)) {
+                return;
             }
+            // Blocks until a command comes. On stop the accepting thread ends the read, which then fails or finds the end.
             const line = reader.takeDelimiter('\n') catch {
                 return;
             } orelse {

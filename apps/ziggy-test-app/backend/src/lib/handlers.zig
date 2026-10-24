@@ -639,37 +639,68 @@ pub fn findAsset(request_path: []const u8) ?*const Asset {
 }
 
 //
-// How long the accepting loop waits for a connection before it looks for a cancel again, in milliseconds.
-//
-const accept_wait_ms: i32 = 50;
-
-//
-// The task: listens, tells the frontend the port and serves connections until the task is cancelled. It waits for each connection
-// no longer than accept_wait_ms, and looks for a cancel each time the wait ends, so it needs no other thread to watch for one. A
-// connection is served on a thread of its own that owns everything it uses, because a browser opens connections it never sends a
-// request on and a thread waiting on one cannot be woken. Such a thread ends when the browser closes the connection, and the task
-// does not wait for it.
+// The task: listens, tells the frontend the port and serves connections until the task is cancelled. The connections are accepted
+// on a thread of its own (acceptConnections), which owns the listening socket, while the task waits for its cancel. On the cancel
+// the task sends that thread "stop" and makes one connection to the port, which wakes it from accept to read it. A connection is
+// served on a thread of its own that owns everything it uses, because a browser opens connections it never sends a request on and
+// a thread waiting on one cannot be woken. Such a thread ends when the browser closes the connection, and the task does not wait
+// for it.
 //
 pub fn mediaServerHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
-    _ = timers;
     _ = context;
     _ = payload;
     const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", 0);
-    var listener = try address.listen(io, .{});
-    defer listener.deinit(io);
+    const listener = try address.listen(io, .{});
     const port = listener.socket.address.getPort();
+    var accept_queue = ziggy.message_queue.MessageQueue.init();
+    defer accept_queue.deinit();
+    const accepting = std.Thread.spawn(.{}, acceptConnections, .{ listener, &accept_queue }) catch |err| {
+        var unused = listener;
+        unused.deinit(io);
+        return err;
+    };
+    defer {
+        accept_queue.post(io, 0, "stop") catch @panic("out of memory stopping the media server");
+        const wake_address = std.Io.net.IpAddress.parseIp4("127.0.0.1", port) catch unreachable;
+        if (wake_address.connect(io, .{ .mode = .stream })) |stream| {
+            stream.close(io);
+        }
+        else |_| {}
+        accepting.join();
+    }
     try services.sendEvent(io, allocator, .{
         .type = "media-server",
         .port = port,
     });
-    while (!services.isCancelled(io, allocator)) {
-        if (!try ziggy.socket_wait.waitReadable(listener.socket.handle, accept_wait_ms)) {
-            continue;
-        }
+    services.waitUntilCancelled(io, allocator, timers);
+    return error.Cancelled;
+}
+
+//
+// Accepts connections on the listening socket it is given, which it owns and closes, and serves each on a thread of its own, until
+// it is sent "stop" on its queue. It blocks in accept and reads its queue after each connection, so the task wakes it with a
+// connection of its own after sending "stop".
+//
+fn acceptConnections(given: std.Io.net.Server, queue: *ziggy.message_queue.MessageQueue) void {
+    var listener = given;
+    var thread_allocator: ziggy.thread_allocator.ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    threaded.allocator = allocator;
+    defer threaded.deinit();
+    const io = threaded.io();
+    defer listener.deinit(io);
+    while (true) {
         const stream = listener.accept(io) catch |err| {
             std.debug.print("media server: accept failed: {s}\n", .{@errorName(err)});
             continue;
         };
+        if (queue.tryTake(io, allocator)) |message| {
+            allocator.free(message.text);
+            stream.close(io);
+            return;
+        }
         const thread = std.Thread.spawn(.{}, serveConnection, .{stream}) catch |err| {
             std.debug.print("media server: could not serve a connection: {s}\n", .{@errorName(err)});
             stream.close(io);
@@ -677,7 +708,6 @@ pub fn mediaServerHandler(services: TaskServices, timers: Timers, io: std.Io, al
         };
         thread.detach();
     }
-    return error.Cancelled;
 }
 
 //
