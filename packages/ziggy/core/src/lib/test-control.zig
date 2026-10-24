@@ -174,9 +174,6 @@ const ConnectionThread = struct {
     stream: std.Io.net.Stream,
     // Whether the socket was closed already, to end the connection thread's read on Windows when stopping (wakeConnection).
     closed: bool,
-    // Whether the connection thread is answering a command, as its last "answering" or "answered" message said. Stopping does not end
-    // the read of a connection that is answering, so its reply is not lost: it reads its "stop" when it has answered.
-    answering: bool,
 };
 
 //
@@ -206,7 +203,7 @@ fn acceptConnections(given: AcceptStart) void {
                 stop_requested = true;
                 continue;
             }
-            handleConnectionMessage(io, allocator, &connections, message, false);
+            endConnection(io, allocator, &connections, message.from);
         }
         if (stop_requested) {
             // The connection that woke this thread to read "stop".
@@ -237,14 +234,11 @@ fn acceptConnections(given: AcceptStart) void {
             .thread = thread,
             .stream = stream,
             .closed = false,
-            .answering = false,
         }) catch @panic("out of memory serving a test control connection");
     }
     for (connections.items) |*connection| {
         connection.queue.post(io, from_main, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the test control connection");
-        if (!connection.answering) {
-            wakeConnection(io, connection);
-        }
+        wakeConnection(io, connection);
     }
     while (connections.items.len > 0) {
         const message = start.queue.take(io, allocator, .none) orelse {
@@ -252,34 +246,11 @@ fn acceptConnections(given: AcceptStart) void {
         };
         defer allocator.free(message.text);
         if (message.from != from_main) {
-            handleConnectionMessage(io, allocator, &connections, message, true);
+            endConnection(io, allocator, &connections, message.from);
         }
     }
     start.server.deinit(io);
     start.main_queue.post(io, from_test_control, "{\"type\":\"test-control-stopped\"}") catch @panic("out of memory stopping the test control connection");
-}
-
-//
-// Reads one message from a connection thread: "answering" and "answered" around each command it answers, and "ended" when it has
-// ended. Once stopping, a connection that has answered its command is woken from its next read to read its "stop", since stopping
-// left it alone while it answered. On Windows closing the socket would have thrown its reply away: the Windows smoke job of Photosphere
-// reported "No answer from the control connection to quit" when every connection was woken at once.
-//
-fn handleConnectionMessage(io: std.Io, allocator: std.mem.Allocator, connections: *std.ArrayList(ConnectionThread), message: message_queue.Message, stopping: bool) void {
-    if (std.mem.indexOf(u8, message.text, "\"ended\"") != null) {
-        endConnection(io, allocator, connections, message.from);
-        return;
-    }
-    for (connections.items) |*connection| {
-        if (connection.number != message.from) {
-            continue;
-        }
-        connection.answering = std.mem.indexOf(u8, message.text, "\"answering\"") != null;
-        if (stopping and !connection.answering) {
-            wakeConnection(io, connection);
-        }
-        return;
-    }
 }
 
 //
@@ -288,9 +259,6 @@ fn handleConnectionMessage(io: std.Io, allocator: std.mem.Allocator, connections
 // when the thread has ended.
 //
 fn wakeConnection(io: std.Io, connection: *ConnectionThread) void {
-    if (connection.closed) {
-        return;
-    }
     if (builtin.os.tag == .windows) {
         connection.stream.close(io);
         connection.closed = true;
@@ -388,10 +356,8 @@ const Connection = struct {
             } orelse {
                 return;
             };
-            // Tells the accepting thread a command is being answered, so stopping leaves the connection alone until it has.
-            self.start.accept_queue.post(io, self.start.number, "{\"type\":\"answering\"}") catch @panic("out of memory serving a test control connection");
-            defer self.start.accept_queue.post(io, self.start.number, "{\"type\":\"answered\"}") catch @panic("out of memory serving a test control connection");
-            const reply_line = self.handleLine(io, allocator, line) catch |err| blk: {
+            var quit_after_reply = false;
+            const reply_line = self.handleLine(io, allocator, line, &quit_after_reply) catch |err| blk: {
                 const text = json.stringify(allocator, .{
                     .@"error" = @errorName(err),
                 }) catch {
@@ -409,6 +375,12 @@ const Connection = struct {
             writer.flush() catch {
                 return;
             };
+            if (quit_after_reply) {
+                // The app is asked to quit only once the reply has gone. Quitting stops test control, which on Windows ends this
+                // thread's read by closing the socket, and a reply still to be written was lost with it: Photosphere's Windows smoke
+                // job reported "No answer from the control connection to quit".
+                self.start.native.app.call(io, allocator, .quit, null) catch @panic("out of memory asking the native app to quit");
+            }
         }
     }
 
@@ -425,9 +397,10 @@ const Connection = struct {
 
     //
     // Runs one command, a line holding a JSON object with a "command" field, and returns the reply line, allocated with
-    // the allocator. A line that is not such an object gets an InvalidCommand error as its reply and nothing is run.
+    // the allocator. A line that is not such an object gets an InvalidCommand error as its reply and nothing is run. A quit is not
+    // run here: it sets `quit_after_reply`, and the caller asks the native app to quit once the reply is written.
     //
-    fn handleLine(self: *Connection, io: std.Io, allocator: std.mem.Allocator, line: []const u8) ![]u8 {
+    fn handleLine(self: *Connection, io: std.Io, allocator: std.mem.Allocator, line: []const u8, quit_after_reply: *bool) ![]u8 {
         const native = self.start.native;
         const command_json = line;
         var arena_state = std.heap.ArenaAllocator.init(allocator);
@@ -443,7 +416,7 @@ const Connection = struct {
             if (!native.has_quit) {
                 return try allocator.dupe(u8, "{\"error\":\"NativeCallMissing\"}");
             }
-            try native.app.call(io, arena, .quit, null);
+            quit_after_reply.* = true;
             return try allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "menu")) {
