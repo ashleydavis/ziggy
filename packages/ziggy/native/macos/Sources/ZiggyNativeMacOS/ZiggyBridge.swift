@@ -261,8 +261,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         webView.load(URLRequest(url: uiURL))
     }
 
-    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the frontend. Any picker the core
-    // requested is closed first with no result, because destroying the core gives every call not finished yet its result.
+    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the frontend. The picker showing
+    // is closed first and its pick ends as cancelled, while the core can still take the result; destroying the core gives every other
+    // call not finished yet its result.
     public func shutdown() {
         guard let handle = core else {
             return
