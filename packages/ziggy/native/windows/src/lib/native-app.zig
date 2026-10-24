@@ -739,11 +739,18 @@ fn destroyCore(native_app: *NativeApp) void {
 // the UI thread handles.
 //
 fn wake(wake_data: ?*anyopaque) callconv(.c) void {
-    const window: c.HWND = @ptrCast(@alignCast(wake_data));
-    if (c.PostMessageW(window, WM_ZIGGY_NATIVE, 0, 0) == 0) {
+    if (PostMessageW(wake_data, WM_ZIGGY_NATIVE, 0, 0) == 0) {
         fatal("could not wake the UI thread, error {d}", .{c.GetLastError()});
     }
 }
+
+//
+// PostMessageW, taking the window as the untyped pointer the wake data is. The translated c.HWND points to a struct holding a c_int,
+// so casting the wake data to it checks for 4-byte alignment, but a window handle is only 2-byte aligned: the cast panicked with
+// "incorrect alignment" on the core's thread whenever the handle was not a multiple of 4, which crashed the app at its first message in
+// 9 of the 23 Windows smoke scenarios. Passed through untyped, the handle reaches Windows as it came.
+//
+extern "user32" fn PostMessageW(window: ?*anyopaque, message: c_uint, wparam: usize, lparam: isize) callconv(.winapi) c_int;
 
 //
 // Runs on the UI thread: takes every message the core has posted for the native app, passing each message for the frontend to the web
