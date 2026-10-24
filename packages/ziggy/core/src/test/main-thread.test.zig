@@ -260,7 +260,9 @@ test "a drop of a path that is not a readable file is refused on the calling thr
 }
 
 //
-// The number of threads the process has, read from /proc/self/task, which Linux and Android have.
+// The number of threads the process has that are not ending, read from /proc/self/task, which Linux and Android have. A thread that has
+// been joined is still listed there for a moment while the kernel finishes ending it, so a thread that is ending is not counted: the
+// Linux unit-test job failed with "expected 1, found 3" when two of the threads stop had joined were still listed.
 //
 fn threadCount() !usize {
     var directory = try std.Io.Dir.cwd().openDir(std.testing.io, "/proc/self/task", .{
@@ -269,10 +271,46 @@ fn threadCount() !usize {
     defer directory.close(std.testing.io);
     var iterator = directory.iterate();
     var count: usize = 0;
-    while (try iterator.next(std.testing.io)) |_| {
-        count += 1;
+    while (try iterator.next(std.testing.io)) |entry| {
+        if (!threadEnding(entry.name)) {
+            count += 1;
+        }
     }
     return count;
+}
+
+//
+// Whether the thread with the id given is ending or gone: the kernel sets PF_EXITING (0x4) in the flags of /proc/self/task/<id>/stat
+// before a joined thread's join returns. Read with the Linux system calls, because reading the file of a thread that is gone fails with
+// ESRCH, which std.Io reports as an unexpected error with a stack trace.
+//
+fn threadEnding(id: []const u8) bool {
+    var path_buffer: [64]u8 = undefined;
+    const path = std.fmt.bufPrintZ(&path_buffer, "/proc/self/task/{s}/stat", .{id}) catch @panic("thread id too long");
+    const opened = std.os.linux.open(path.ptr, .{ .CLOEXEC = true }, 0);
+    if (std.os.linux.errno(opened) != .SUCCESS) {
+        return true;
+    }
+    const fd: i32 = @intCast(opened);
+    defer _ = std.os.linux.close(fd);
+    var stat_buffer: [1024]u8 = undefined;
+    const read = std.os.linux.read(fd, &stat_buffer, stat_buffer.len);
+    if (std.os.linux.errno(read) != .SUCCESS) {
+        return true;
+    }
+    const stat = stat_buffer[0..read];
+    // The thread's name is in parentheses and may hold spaces, so the fields are counted from the last closing parenthesis: state,
+    // ppid, pgrp, session, tty_nr, tpgid, then flags.
+    const name_end = std.mem.lastIndexOfScalar(u8, stat, ')') orelse @panic("a thread's stat has no name");
+    var fields = std.mem.tokenizeScalar(u8, stat[name_end + 1 ..], ' ');
+    var index: usize = 0;
+    while (fields.next()) |field| : (index += 1) {
+        if (index == 6) {
+            const flags = std.fmt.parseInt(u64, field, 10) catch @panic("a thread's flags are not a number");
+            return flags & 0x4 != 0;
+        }
+    }
+    @panic("a thread's stat has no flags");
 }
 
 test "destroying a core with tasks still running stops the main thread, every worker and the test control connection" {
