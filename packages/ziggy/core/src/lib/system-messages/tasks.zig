@@ -1,28 +1,17 @@
 //
-// The task runner's system messages: add-task, which queues a task the frontend names, and cancel-tasks, which cancels the
+// The worker pool's system messages: add-task, which queues a task the frontend names, and cancel-tasks, which cancels the
 // tasks queued under a source.
 //
 
 const std = @import("std");
 const json = @import("../json.zig");
 const task_runner = @import("../task-runner.zig");
-const core_lib = @import("../core.zig");
-const message_registry = @import("../message-registry.zig");
-
-const Core = core_lib.Core;
-
-//
-// Registers the task runner's system messages. The core calls it once the task runner is running.
-//
-pub fn register(registry: *message_registry.Registry) !void {
-    try registry.register("add-task", addTaskHandler);
-    try registry.register("cancel-tasks", cancelTasksHandler);
-}
+const worker_pool = @import("../worker-pool.zig");
 
 //
 // The data of add-task: the task the frontend queues.
 //
-const AddTaskRequest = struct {
+pub const AddTaskRequest = struct {
     // The task's id, which its events carry.
     taskId: []const u8,
     // The task type, which names its handler.
@@ -38,22 +27,22 @@ const AddTaskRequest = struct {
 //
 // The message response to add-task and to cancel-tasks, an empty object.
 //
-const DoneResponse = struct {};
+pub const DoneResponse = struct {};
 
 //
 // Handles add-task: queues the task the frontend's add-task message names.
 //
-fn addTaskHandler(core: *Core, arena: std.mem.Allocator, request: AddTaskRequest) !DoneResponse {
-    const data_json = try json.stringify(arena, request.data);
-    try core.runner.addTask(request.taskId, request.taskType, request.source, data_json, request.priority orelse .background, null);
+pub fn addTask(pool: *worker_pool.WorkerPool, io: std.Io, allocator: std.mem.Allocator, request: AddTaskRequest) !DoneResponse {
+    const data_json = try json.stringify(allocator, request.data);
+    defer allocator.free(data_json);
+    try pool.addTask(io, allocator, request.taskId, request.taskType, request.source, data_json, request.priority orelse .background, null);
     return .{};
 }
 
 //
 // Handles cancel-tasks: cancels the tasks queued under the source, which the frontend sends as a bare string.
 //
-fn cancelTasksHandler(core: *Core, arena: std.mem.Allocator, source: []const u8) !DoneResponse {
-    _ = arena;
-    core.runner.cancelSource(source);
+pub fn cancelTasks(pool: *worker_pool.WorkerPool, io: std.Io, allocator: std.mem.Allocator, source: []const u8) DoneResponse {
+    pool.cancelSource(io, allocator, source);
     return .{};
 }

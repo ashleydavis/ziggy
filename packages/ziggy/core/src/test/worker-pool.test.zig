@@ -1,0 +1,530 @@
+const std = @import("std");
+const ziggy = @import("ziggy");
+
+const MessageQueue = ziggy.message_queue.MessageQueue;
+const WorkerPool = ziggy.worker_pool.WorkerPool;
+const TaskContext = ziggy.task_runner.TaskContext;
+const TaskServices = ziggy.task_runner.TaskServices;
+const Timers = ziggy.timers.Timers;
+const TimerList = ziggy.timers.TimerList;
+const utils = ziggy.task_queue.utils;
+
+//
+// Returns the task's data as its result, after sending the event {"type":"note"}.
+//
+fn echoTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !std.json.Value {
+    _ = timers;
+    _ = context;
+    try services.sendEvent(io, allocator, .{ .type = "note" });
+    return payload;
+}
+
+//
+// Waits, looking for a cancel every millisecond, until its task is cancelled.
+//
+fn waitForCancelTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = timers;
+    _ = context;
+    _ = payload;
+    while (true) {
+        try services.checkCancelled(io, allocator);
+        try io.sleep(.fromMilliseconds(1), .awake);
+    }
+}
+
+//
+// Queues waitForCancelTask as a child and waits for it, and then fails as cancelled when it has been.
+//
+fn parentOfWaiterTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
+    _ = context;
+    _ = payload;
+    const child = try services.queueChild(io, allocator, timers, "wait-for-cancel", .{}, null);
+    const completion = try services.awaitTask(io, allocator, timers, child);
+    try services.checkCancelled(io, allocator);
+    return @tagName(completion.status);
+}
+
+//
+// Queues echoTask as a child, waits for it and returns its result.
+//
+fn parentOfEchoTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !ziggy.json.Raw {
+    _ = context;
+    _ = payload;
+    const child = try services.queueChild(io, allocator, timers, "echo", .{ .from = "child" }, null);
+    const completion = try services.awaitTask(io, allocator, timers, child);
+    return .{
+        .text = completion.result_json.?,
+    };
+}
+
+//
+// Writes a line to its worker's log and one to its worker's console, which reach the main thread's output.
+//
+fn logTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = context;
+    _ = payload;
+    utils.log.log.info("logged on a worker");
+    utils.console.@"error"("written to a worker's console");
+}
+
+//
+// Logs an error with its cause on its worker's log.
+//
+fn logExceptionTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = context;
+    _ = payload;
+    utils.log.log.exception("failed on a worker", error.Boom);
+}
+
+//
+// Reads the operating system's version through the native app.
+//
+fn osVersionTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !ziggy.json.Raw {
+    _ = context;
+    _ = payload;
+    return .{
+        .text = try services.osVersion(io, allocator, timers),
+    };
+}
+
+//
+// Shows a file dialog through the native app.
+//
+fn pickTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !ziggy.json.Raw {
+    _ = context;
+    _ = payload;
+    return .{
+        .text = try services.pickPaths(io, allocator, timers, .open_files, null, null),
+    };
+}
+
+//
+// The task types of these tests.
+//
+const tasks = [_]ziggy.task_runner.TaskHandlerEntry{
+    .{ .name = "echo", .handler = ziggy.task_runner.wrapTask("echo", echoTask) },
+    .{ .name = "wait-for-cancel", .handler = ziggy.task_runner.wrapTask("wait-for-cancel", waitForCancelTask) },
+    .{ .name = "parent-of-waiter", .handler = ziggy.task_runner.wrapTask("parent-of-waiter", parentOfWaiterTask) },
+    .{ .name = "parent-of-echo", .handler = ziggy.task_runner.wrapTask("parent-of-echo", parentOfEchoTask) },
+    .{ .name = "log", .handler = ziggy.task_runner.wrapTask("log", logTask) },
+    .{ .name = "log-exception", .handler = ziggy.task_runner.wrapTask("log-exception", logExceptionTask) },
+    .{ .name = "os-version", .handler = ziggy.task_runner.wrapTask("os-version", osVersionTask) },
+    .{ .name = "pick", .handler = ziggy.task_runner.wrapTask("pick", pickTask) },
+};
+
+//
+// A pool run by the test's thread, as its main thread, with what it tells the frontend and its observer recorded.
+//
+const Fixture = struct {
+    // The queue the workers send their messages to.
+    queue: MessageQueue,
+    // The pool.
+    pool: WorkerPool,
+    // Every message the pool sent the frontend, and every line the observer was given, in order.
+    seen: std.ArrayList([]u8),
+
+    fn init(self: *Fixture, workers: u32, native: bool) void {
+        self.queue = MessageQueue.init();
+        self.seen = .empty;
+        self.pool = WorkerPool.init(&self.queue, .{
+            .max_workers = workers,
+            .tasks = &tasks,
+            .worker_options = .{
+                .workerId = 0,
+                .sessionId = "pool-test",
+                .maxConcurrentChildTasks = 4,
+                .hasOsVersion = true,
+            },
+            .sink = .{
+                .user_data = self,
+                .emit = emit,
+            },
+            .observe = true,
+            .native_request = if (native) .{
+                .user_data = self,
+                .handle = respondNative,
+            } else null,
+        });
+    }
+
+    fn deinit(self: *Fixture, timers: Timers) void {
+        self.pool.shutdown(std.testing.io, std.testing.allocator, timers, null);
+        self.queue.deinit();
+        for (self.seen.items) |text| {
+            std.testing.allocator.free(text);
+        }
+        self.seen.deinit(std.testing.allocator);
+    }
+
+    fn record(self: *Fixture, text: []const u8) void {
+        self.seen.append(std.testing.allocator, std.testing.allocator.dupe(u8, text) catch @panic("out of memory")) catch @panic("out of memory");
+    }
+
+    fn emit(user_data: ?*anyopaque, io: std.Io, message: []const u8) void {
+        _ = io;
+        const self: *Fixture = @ptrCast(@alignCast(user_data.?));
+        self.record(message);
+    }
+
+    //
+    // Hands a message from the queue to the pool, as the main thread does, then records the notices it kept. Returns false when no
+    // worker of the pool sent it.
+    //
+    fn receive(self: *Fixture, timers: Timers, message: ziggy.message_queue.Message) bool {
+        const received = self.pool.receive(std.testing.io, std.testing.allocator, timers, message);
+        self.takeNotices();
+        return received;
+    }
+
+    //
+    // Records the notices the pool kept of tasks that ended and events tasks sent, as the main thread hands them to the app.
+    //
+    fn takeNotices(self: *Fixture) void {
+        while (self.pool.takeNotice()) |notice| {
+            defer notice.deinit(std.testing.allocator);
+            switch (notice) {
+                .task_end => |end| self.observeEnd(end),
+                .task_event => |sent| self.observeEvent(sent),
+            }
+        }
+    }
+
+    fn observeEnd(self: *Fixture, end: ziggy.types.TaskEnd) void {
+        var buffer: [512]u8 = undefined;
+        self.record(std.fmt.bufPrint(&buffer, "end|{s}|{s}|{s}|started={}", .{ end.task_id, end.task_type, @tagName(end.status), end.started }) catch unreachable);
+    }
+
+    fn observeEvent(self: *Fixture, sent: ziggy.types.TaskSentEvent) void {
+        var buffer: [512]u8 = undefined;
+        self.record(std.fmt.bufPrint(&buffer, "event|{s}|{s}", .{ sent.task_id, sent.event_json }) catch unreachable);
+    }
+
+    //
+    // Responds to a native app request as a native app would: the operating system's version, or "[]" for a dialog.
+    //
+    fn respondNative(user_data: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, worker: *ziggy.worker.Worker, request_json: []const u8) void {
+        const self: *Fixture = @ptrCast(@alignCast(user_data.?));
+        self.record(request_json);
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
+        defer arena_state.deinit();
+        const request = ziggy.worker_messages.decode(ziggy.worker_messages.INativeAppRequestMessage, arena_state.allocator(), request_json) catch @panic("bad request");
+        const result = if (std.mem.eql(u8, request.function, "os-version")) "\"Test OS 2\"" else "[]";
+        const response = ziggy.json.stringify(arena_state.allocator(), .{
+            .type = "native-app-response",
+            .requestId = request.requestId,
+            .result = result,
+        }) catch @panic("out of memory");
+        worker.postMessage(io, response) catch @panic("out of memory");
+    }
+
+    //
+    // Reads the workers' messages until something the pool sent or the observer was given contains the text. A pool that never gets
+    // there fails the test after ten seconds with no message, rather than leaving it running.
+    //
+    fn waitFor(self: *Fixture, timers: Timers, text: []const u8) !void {
+        while (self.indexOf(text) == null) {
+            const message = self.queue.take(std.testing.io, std.testing.allocator, .{
+                .duration = .{
+                    .raw = .fromMilliseconds(10_000),
+                    .clock = .awake,
+                },
+            }) orelse {
+                return error.TimedOut;
+            };
+            defer std.testing.allocator.free(message.text);
+            if (!self.receive(timers, message)) {
+                @panic("a message came from no worker of the pool");
+            }
+        }
+    }
+
+    fn indexOf(self: *Fixture, text: []const u8) ?usize {
+        for (self.seen.items, 0..) |seen, index| {
+            if (std.mem.indexOf(u8, seen, text) != null) {
+                return index;
+            }
+        }
+        return null;
+    }
+};
+
+test "a task sent to a worker ends, and the frontend and the observer are told how" {
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "t1", "echo", "s", "{\"a\":1}", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|t1|echo|succeeded|started=true");
+    try std.testing.expect(fixture.indexOf("{\"kind\":\"system\",\"name\":\"task-completed\",\"data\":{\"taskId\":\"t1\",\"result\":{\"taskId\":\"t1\",\"status\":\"succeeded\",\"outputs\":{\"a\":1},\"type\":\"echo\",\"inputs\":{\"a\":1}}}}") != null);
+}
+
+test "a task's event reaches the frontend, then the observer" {
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "t1", "echo", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|t1|echo|succeeded");
+    const frontend = fixture.indexOf("{\"kind\":\"system\",\"name\":\"task-event\",\"data\":{\"taskId\":\"t1\",\"source\":\"s\",\"data\":{\"type\":\"note\"}}}") orelse return error.NotSeen;
+    const observer = fixture.indexOf("event|t1|{\"type\":\"note\"}") orelse return error.NotSeen;
+    try std.testing.expect(frontend < observer);
+}
+
+test "a task that replies to a message ends as that message's reply" {
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "r1", "echo", "request", "\"hi\"", .interactive, "7");
+    try fixture.waitFor(timer_list.interface(), "end|r1|echo|succeeded");
+    try std.testing.expect(fixture.indexOf("{\"id\":7,\"ok\":true,\"data\":\"hi\"}") != null);
+    try std.testing.expect(fixture.indexOf("\"name\":\"task-completed\"") == null);
+}
+
+test "a worker's log lines and console lines reach the main thread's output" {
+    var stdout_buffer: [4096]u8 = undefined;
+    var stderr_buffer: [4096]u8 = undefined;
+    var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
+    var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
+    // The test's thread is the pool's main thread, so the capture of its console is where the workers' lines are written.
+    utils.console.setCapture(&stdout_capture, &stderr_capture);
+    defer utils.console.setCapture(null, null);
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "l1", "log", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|l1|log|succeeded");
+    try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "logged on a worker") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stderr_capture.buffered(), "written to a worker's console") != null);
+}
+
+//
+// A log that records each error line it is given, for the test's thread to set as its own (test-only code).
+//
+const ErrorRecordingLog = struct {
+    // Each error line, in order.
+    errors: std.ArrayList([]u8) = .empty,
+
+    fn ilog(self: *ErrorRecordingLog) utils.log.ILog {
+        return .{ .ptr = self, .vtable = &vtable };
+    }
+
+    fn deinit(self: *ErrorRecordingLog) void {
+        for (self.errors.items) |text| {
+            std.testing.allocator.free(text);
+        }
+        self.errors.deinit(std.testing.allocator);
+    }
+
+    const vtable: utils.log.ILog.VTable = .{
+        .info = ignore,
+        .verbose = ignore,
+        .@"error" = recordError,
+        .exception = recordException,
+        .warn = ignore,
+        .debug = ignore,
+        .tool = ignoreTool,
+        .event = ignore,
+        .verboseEnabled = verboseEnabled,
+        .getLogDetails = getLogDetails,
+    };
+
+    fn ignore(ptr: *anyopaque, message: []const u8) void {
+        _ = ptr;
+        _ = message;
+    }
+
+    fn recordError(ptr: *anyopaque, message: []const u8) void {
+        const self: *ErrorRecordingLog = @ptrCast(@alignCast(ptr));
+        self.errors.append(std.testing.allocator, std.testing.allocator.dupe(u8, message) catch @panic("out of memory")) catch @panic("out of memory");
+    }
+
+    fn recordException(ptr: *anyopaque, message: []const u8, err: anyerror) void {
+        _ = err catch {};
+        recordError(ptr, message);
+    }
+
+    fn ignoreTool(ptr: *anyopaque, tool_name: []const u8, data: utils.log.IToolOutput) void {
+        _ = ptr;
+        _ = tool_name;
+        _ = data;
+    }
+
+    fn verboseEnabled(ptr: *anyopaque) bool {
+        _ = ptr;
+        return false;
+    }
+
+    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!utils.log.ILogDetails {
+        _ = ptr;
+        _ = allocator;
+        _ = io;
+        return utils.log.noLogDetails;
+    }
+};
+
+test "an error a worker logs with its cause reaches the main thread's log as one error line, with the cause under it" {
+    var recording: ErrorRecordingLog = .{};
+    defer recording.deinit();
+    // The test's thread is the pool's main thread, so its log is where the workers' lines are written.
+    utils.log.setLog(recording.ilog());
+    defer utils.log.setLog(null);
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "x1", "log-exception", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|x1|log-exception|succeeded");
+    try std.testing.expectEqual(@as(usize, 1), recording.errors.items.len);
+    try std.testing.expect(std.mem.startsWith(u8, recording.errors.items[0], "failed on a worker\n"));
+    try std.testing.expect(std.mem.indexOf(u8, recording.errors.items[0], "Boom") != null);
+}
+
+test "a task's request to the native app reaches the main thread's handler, and the task gets its response" {
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, true);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "o1", "os-version", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|o1|os-version|succeeded");
+    try std.testing.expect(fixture.indexOf("\"type\":\"native-app-request\",\"requestId\":1,\"function\":\"os-version\"") != null);
+    try std.testing.expect(fixture.indexOf("\"outputs\":\"Test OS 2\"") != null);
+}
+
+test "with no handler for the native app's requests, a task's request fails as NativeCallMissing" {
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "p1", "pick", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|p1|pick|failed");
+    try std.testing.expect(fixture.indexOf("\"errorMessage\":\"NativeCallMissing\"") != null);
+}
+
+test "a child a task queues runs, and its end goes back to the worker of the task that queued it" {
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(2, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "p1", "parent-of-echo", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|p1|parent-of-echo|succeeded");
+    try std.testing.expect(fixture.indexOf("end|p1.c0|echo|succeeded") != null);
+    try std.testing.expect(fixture.indexOf("\"taskId\":\"p1\",\"status\":\"succeeded\",\"outputs\":{\"from\":\"child\"}") != null);
+}
+
+test "cancelling a source ends its waiting tasks as cancelled without starting them, and stops its running ones" {
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "running", "wait-for-cancel", "gone", "null", .background, null);
+    // The worker is started for the first task, which it runs once it reports it is ready.
+    while (fixture.pool.pending_tasks.items.len > 0) {
+        const message = fixture.queue.take(std.testing.io, std.testing.allocator, .none).?;
+        defer std.testing.allocator.free(message.text);
+        _ = fixture.receive(timer_list.interface(), message);
+    }
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "waiting", "echo", "gone", "null", .background, null);
+    fixture.pool.cancelSource(std.testing.io, std.testing.allocator, "gone");
+    fixture.takeNotices();
+    try std.testing.expect(fixture.indexOf("end|waiting|echo|cancelled|started=false") != null);
+    try fixture.waitFor(timer_list.interface(), "end|running|wait-for-cancel|cancelled|started=true");
+}
+
+test "cancelling a task that waits on a child stops the child, and then the task" {
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(2, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "p1", "parent-of-waiter", "family", "null", .background, null);
+    // The child is running once a second worker has been started for it and has taken it.
+    while (fixture.pool.pending_tasks.items.len > 0 or fixture.pool.workers.items.len < 2) {
+        const message = fixture.queue.take(std.testing.io, std.testing.allocator, .none).?;
+        defer std.testing.allocator.free(message.text);
+        _ = fixture.receive(timer_list.interface(), message);
+    }
+    fixture.pool.cancelSource(std.testing.io, std.testing.allocator, "family");
+    fixture.takeNotices();
+    try fixture.waitFor(timer_list.interface(), "end|p1|parent-of-waiter|cancelled");
+    const child = fixture.indexOf("end|p1.c0|wait-for-cancel|cancelled") orelse return error.NotSeen;
+    const parent = fixture.indexOf("end|p1|parent-of-waiter|cancelled") orelse return error.NotSeen;
+    try std.testing.expect(child < parent);
+}
+
+test "shutting the pool down stops the tasks still running and ends every worker" {
+    // The testing allocator fails the test if a worker or a task is left unfreed, and shutdown returns only once every worker's
+    // thread has ended.
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(3, false);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "a", "wait-for-cancel", "a", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "b", "wait-for-cancel", "b", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "c", "echo", "c", "null", .background, null);
+    while (fixture.pool.workers.items.len < 2) {
+        const message = fixture.queue.take(std.testing.io, std.testing.allocator, .none).?;
+        defer std.testing.allocator.free(message.text);
+        _ = fixture.receive(timer_list.interface(), message);
+    }
+    fixture.deinit(timer_list.interface());
+}
+
+test "a worker that cannot start reports why and ends, and the pool logs it and lets it go, leaving its task waiting" {
+    const allocator = std.testing.allocator;
+    const io = std.testing.io;
+    // The test generator of uuids keeps its counter in TEST_TMP_DIR. Below a file that directory cannot be made, so a worker that
+    // has to make its own session id cannot start.
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(io, .{
+        .sub_path = "file",
+        .data = "x",
+    });
+    const test_tmp_dir = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/file/tmp", .{&tmp.sub_path});
+    defer allocator.free(test_tmp_dir);
+    var environment = std.process.Environ.Map.init(allocator);
+    defer environment.deinit();
+    try environment.put("NODE_ENV", "testing");
+    try environment.put("TEST_TMP_DIR", test_tmp_dir);
+    utils.process_env.setEnvironMap(&environment);
+    defer utils.process_env.setEnvironMap(null);
+    var stdout_buffer: [4096]u8 = undefined;
+    var stderr_buffer: [4096]u8 = undefined;
+    var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
+    var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
+    utils.console.setCapture(&stdout_capture, &stderr_capture);
+    defer utils.console.setCapture(null, null);
+
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    // No session id, so the worker makes its own.
+    fixture.pool.options.worker_options.sessionId = "";
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "t1", "echo", "s", "null", .background, null);
+    // A worker that cannot start is followed by another for the waiting task, which cannot start either, so messages keep coming and
+    // the wait has a deadline of its own.
+    const deadline = std.Io.Clock.Timestamp.fromNow(io, .{
+        .raw = .fromMilliseconds(10_000),
+        .clock = .awake,
+    });
+    while (std.mem.indexOf(u8, stderr_capture.buffered(), "Worker 1 could not start: ") == null) {
+        const message = fixture.queue.take(std.testing.io, std.testing.allocator, .{ .deadline = deadline }) orelse return error.TimedOut;
+        defer std.testing.allocator.free(message.text);
+        _ = fixture.receive(timer_list.interface(), message);
+    }
+
+    // The worker that could not start is gone, and the task has not run.
+    for (fixture.pool.workers.items) |state| {
+        try std.testing.expect(state.workerId != 1);
+    }
+    try std.testing.expect(fixture.indexOf("end|t1") == null);
+}

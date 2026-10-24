@@ -1,7 +1,7 @@
 const std = @import("std");
 const actions = @import("../lib/actions.zig");
 
-test "the shell's own actions are recognised by name" {
+test "the native app's own actions are recognised by name" {
     try std.testing.expectEqual(actions.Action.quit, actions.fromName("quit").?);
     try std.testing.expectEqual(actions.Action.close_window, actions.fromName("close-window").?);
     try std.testing.expectEqual(actions.Action.toggle_devtools, actions.fromName("toggle-devtools").?);

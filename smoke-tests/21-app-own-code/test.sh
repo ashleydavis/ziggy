@@ -9,7 +9,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"
 start_test_app
 
 click app-refuse
-wait_for_text app-result "error reply: The test app refused, as it was asked to."
+wait_for_text app-result "error reply: The test app refused, as the request told it to."
 
 click app-describe
 wait_for_text app-result 'describe-self: {"taskId":"describe-self-1","taskType":"describe-self","source":"describe-source","maxConcurrentChildTasks":'

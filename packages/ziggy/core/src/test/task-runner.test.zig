@@ -3,7 +3,7 @@ const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
 const utils = @import("ziggy").task_queue.utils;
 
-fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
+fn addTask(native_app: *helpers.FakeNativeApp, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
         .kind = "system",
         .name = "add-task",
@@ -16,26 +16,26 @@ fn addTask(core: *ziggy.core.Core, id: []const u8, task_type: []const u8, source
         },
     });
     defer std.testing.allocator.free(message);
-    core.postMessage(message);
+    native_app.sendMessage(std.testing.allocator, message);
 }
 
-fn cancelSource(core: *ziggy.core.Core, source: []const u8) !void {
+fn cancelSource(native_app: *helpers.FakeNativeApp, source: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
         .kind = "system",
         .name = "cancel-tasks",
         .data = source,
     });
     defer std.testing.allocator.free(message);
-    core.postMessage(message);
+    native_app.sendMessage(std.testing.allocator, message);
 }
 
 
-fn expectCompleted(shell: *helpers.FakeShell, id: []const u8, status: []const u8) !void {
+fn expectCompleted(native_app: *helpers.FakeNativeApp, id: []const u8, status: []const u8) !void {
     var buffer: [256]u8 = undefined;
     const text = try std.fmt.bufPrint(&buffer, "task-completed\",\"data\":{{\"taskId\":\"{s}\",", .{id});
-    try shell.expectMessageContaining(text);
-    const index = shell.indexOfContaining(text).?;
-    const message = try shell.messageAt(std.testing.allocator, index);
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, text);
+    const index = native_app.indexOfContaining(std.testing.io, std.testing.allocator, text).?;
+    const message = try native_app.messageAt(std.testing.io, std.testing.allocator, index);
     defer std.testing.allocator.free(message);
     // TaskStatus has no cancelled, so a cancelled task is reported as failed with the error message "Cancelled".
     const is_cancelled = std.mem.eql(u8, status, "cancelled");
@@ -49,225 +49,225 @@ fn expectCompleted(shell: *helpers.FakeShell, id: []const u8, status: []const u8
 }
 
 test "a short task sends its event and completes as succeeded with its result" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    defer core.destroy();
-    try addTask(core, "t1", "quick", "s", "null", "background");
-    try shell.expectMessageContaining("\"status\":\"succeeded\",\"outputs\":\"done\"");
-    const event_index = shell.indexOfContaining("\"kind\":\"system\",\"name\":\"task-event\"").?;
-    const completed_index = shell.indexOfContaining("\"kind\":\"system\",\"name\":\"task-completed\"").?;
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "t1", "quick", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"succeeded\",\"outputs\":\"done\"");
+    const event_index = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"task-event\"").?;
+    const completed_index = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"task-completed\"").?;
     try std.testing.expect(event_index < completed_index);
-    const event = try shell.messageAt(std.testing.allocator, event_index);
+    const event = try native_app.messageAt(std.testing.io, std.testing.allocator, event_index);
     defer std.testing.allocator.free(event);
     try std.testing.expectEqualStrings("{\"kind\":\"system\",\"name\":\"task-event\",\"data\":{\"taskId\":\"t1\",\"source\":\"s\",\"data\":{\"text\":\"hello\"}}}", event);
 }
 
 test "a failing task completes as failed with its error" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try addTask(core, "t1", "fail", "s", "null", "background");
-    try shell.expectMessageContaining("\"status\":\"failed\",\"error\":{\"message\":\"TestFailure\"},\"errorMessage\":\"TestFailure\"");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "t1", "fail", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"failed\",\"error\":{\"message\":\"TestFailure\"},\"errorMessage\":\"TestFailure\"");
 }
 
 test "an unknown task type completes as failed" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try addTask(core, "t1", "nothing-like-this", "s", "null", "background");
-    try shell.expectMessageContaining("\"status\":\"failed\",\"error\":{\"message\":\"UnknownTaskType\"},\"errorMessage\":\"UnknownTaskType\"");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "t1", "nothing-like-this", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"failed\",\"error\":{\"message\":\"UnknownTaskType\"},\"errorMessage\":\"UnknownTaskType\"");
 }
 
 test "cancelling a running task stops it early and completes it as cancelled" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    defer core.destroy();
-    try addTask(core, "t1", "spin", "s", "null", "background");
-    try shell.expectMessageContaining("\"step\":3");
-    try cancelSource(core, "s");
-    try expectCompleted(&shell, "t1", "cancelled");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "t1", "spin", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"step\":3");
+    try cancelSource(&native_app, "s");
+    try expectCompleted(&native_app, "t1", "cancelled");
 }
 
 test "cancelling a queued task means it never starts" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try addTask(core, "blocker", "sleep", "blocker-source", "{\"ms\":300,\"name\":\"blocker\"}", "background");
-    try shell.expectMessageContaining("\"start\":\"blocker\"");
-    try addTask(core, "queued", "sleep", "queued-source", "{\"ms\":10,\"name\":\"queued\"}", "background");
-    try cancelSource(core, "queued-source");
-    try expectCompleted(&shell, "queued", "cancelled");
-    try expectCompleted(&shell, "blocker", "succeeded");
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("\"start\":\"queued\""));
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "blocker", "sleep", "blocker-source", "{\"ms\":300,\"name\":\"blocker\"}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"blocker\"");
+    try addTask(&native_app, "queued", "sleep", "queued-source", "{\"ms\":10,\"name\":\"queued\"}", "background");
+    try cancelSource(&native_app, "queued-source");
+    try expectCompleted(&native_app, "queued", "cancelled");
+    try expectCompleted(&native_app, "blocker", "succeeded");
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "\"start\":\"queued\""));
 }
 
 test "cancelling one source leaves another source's tasks running" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 3, 2);
-    defer core.destroy();
-    try addTask(core, "a", "spin", "source-a", "null", "background");
-    try addTask(core, "b", "spin", "source-b", "null", "background");
-    try shell.expectMessageContaining("\"taskId\":\"a\",\"source\":\"source-a\",\"data\":{\"step\":2}");
-    try shell.expectMessageContaining("\"taskId\":\"b\",\"source\":\"source-b\",\"data\":{\"step\":2}");
-    try cancelSource(core, "source-a");
-    try expectCompleted(&shell, "a", "cancelled");
-    shell.sleepMs(50);
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("task-completed\",\"data\":{\"taskId\":\"b\""));
-    try cancelSource(core, "source-b");
-    try expectCompleted(&shell, "b", "cancelled");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 3, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "a", "spin", "source-a", "null", "background");
+    try addTask(&native_app, "b", "spin", "source-b", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"a\",\"source\":\"source-a\",\"data\":{\"step\":2}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"b\",\"source\":\"source-b\",\"data\":{\"step\":2}");
+    try cancelSource(&native_app, "source-a");
+    try expectCompleted(&native_app, "a", "cancelled");
+    ziggy.fake_native_app.sleepMs(std.testing.io, 50);
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "task-completed\",\"data\":{\"taskId\":\"b\""));
+    try cancelSource(&native_app, "source-b");
+    try expectCompleted(&native_app, "b", "cancelled");
 }
 
 test "a task queued under a source after it was cancelled is not cancelled" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    defer core.destroy();
-    try addTask(core, "first", "spin", "s", "null", "background");
-    try shell.expectMessageContaining("\"step\":1");
-    try cancelSource(core, "s");
-    try expectCompleted(&shell, "first", "cancelled");
-    try addTask(core, "second", "quick", "s", "null", "background");
-    try expectCompleted(&shell, "second", "succeeded");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "first", "spin", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"step\":1");
+    try cancelSource(&native_app, "s");
+    try expectCompleted(&native_app, "first", "cancelled");
+    try addTask(&native_app, "second", "quick", "s", "null", "background");
+    try expectCompleted(&native_app, "second", "succeeded");
 }
 
 test "a cancel for an unknown source is harmless" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try cancelSource(core, "nobody");
-    try addTask(core, "t1", "quick", "s", "null", "background");
-    try expectCompleted(&shell, "t1", "succeeded");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try cancelSource(&native_app, "nobody");
+    try addTask(&native_app, "t1", "quick", "s", "null", "background");
+    try expectCompleted(&native_app, "t1", "succeeded");
 }
 
 test "a higher priority task starts before a lower priority one queued earlier" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try addTask(core, "blocker", "sleep", "s", "{\"ms\":150,\"name\":\"blocker\"}", "background");
-    try shell.expectMessageContaining("\"start\":\"blocker\"");
-    try addTask(core, "low", "sleep", "s", "{\"ms\":5,\"name\":\"low\"}", "background");
-    try addTask(core, "high", "sleep", "s", "{\"ms\":5,\"name\":\"high\"}", "interactive");
-    try expectCompleted(&shell, "low", "succeeded");
-    try expectCompleted(&shell, "high", "succeeded");
-    const high = shell.indexOfContaining("\"start\":\"high\"").?;
-    const low = shell.indexOfContaining("\"start\":\"low\"").?;
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "blocker", "sleep", "s", "{\"ms\":150,\"name\":\"blocker\"}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"blocker\"");
+    try addTask(&native_app, "low", "sleep", "s", "{\"ms\":5,\"name\":\"low\"}", "background");
+    try addTask(&native_app, "high", "sleep", "s", "{\"ms\":5,\"name\":\"high\"}", "interactive");
+    try expectCompleted(&native_app, "low", "succeeded");
+    try expectCompleted(&native_app, "high", "succeeded");
+    const high = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"start\":\"high\"").?;
+    const low = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"start\":\"low\"").?;
     try std.testing.expect(high < low);
 }
 
 test "tasks of equal priority start in the order they were queued" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try addTask(core, "blocker", "sleep", "s", "{\"ms\":100,\"name\":\"blocker\"}", "background");
-    try shell.expectMessageContaining("\"start\":\"blocker\"");
-    try addTask(core, "one", "sleep", "s", "{\"ms\":2,\"name\":\"one\"}", "background");
-    try addTask(core, "two", "sleep", "s", "{\"ms\":2,\"name\":\"two\"}", "background");
-    try expectCompleted(&shell, "two", "succeeded");
-    try std.testing.expect(shell.indexOfContaining("\"start\":\"one\"").? < shell.indexOfContaining("\"start\":\"two\"").?);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "blocker", "sleep", "s", "{\"ms\":100,\"name\":\"blocker\"}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"blocker\"");
+    try addTask(&native_app, "one", "sleep", "s", "{\"ms\":2,\"name\":\"one\"}", "background");
+    try addTask(&native_app, "two", "sleep", "s", "{\"ms\":2,\"name\":\"two\"}", "background");
+    try expectCompleted(&native_app, "two", "succeeded");
+    try std.testing.expect(native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"start\":\"one\"").? < native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"start\":\"two\"").?);
 }
 
 test "several tasks run at the same time up to the pool size and the rest wait their turn" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 1);
-    defer core.destroy();
-    try addTask(core, "t1", "sleep", "s", "{\"ms\":150,\"name\":\"t1\"}", "background");
-    try addTask(core, "t2", "sleep", "s", "{\"ms\":150,\"name\":\"t2\"}", "background");
-    try addTask(core, "t3", "sleep", "s", "{\"ms\":5,\"name\":\"t3\"}", "background");
-    try shell.expectMessageContaining("\"start\":\"t2\"");
-    shell.sleepMs(40);
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("\"start\":\"t3\""));
-    try expectCompleted(&shell, "t3", "succeeded");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "t1", "sleep", "s", "{\"ms\":150,\"name\":\"t1\"}", "background");
+    try addTask(&native_app, "t2", "sleep", "s", "{\"ms\":150,\"name\":\"t2\"}", "background");
+    try addTask(&native_app, "t3", "sleep", "s", "{\"ms\":5,\"name\":\"t3\"}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"t2\"");
+    ziggy.fake_native_app.sleepMs(std.testing.io, 40);
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "\"start\":\"t3\""));
+    try expectCompleted(&native_app, "t3", "succeeded");
 }
 
 test "two live tasks with the same id both run and each reports its completion" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 1);
-    defer core.destroy();
-    try addTask(core, "same", "sleep", "s", "{\"ms\":30,\"name\":\"first\"}", "background");
-    try addTask(core, "same", "quick", "s", "null", "background");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "same", "sleep", "s", "{\"ms\":30,\"name\":\"first\"}", "background");
+    try addTask(&native_app, "same", "quick", "s", "null", "background");
     var attempts: usize = 0;
-    while (shell.countContaining("task-completed\",\"data\":{\"taskId\":\"same\"") < 2 and attempts < 400) {
-        shell.sleepMs(5);
+    while (native_app.countContaining(std.testing.io, std.testing.allocator, "task-completed\",\"data\":{\"taskId\":\"same\"") < 2 and attempts < 400) {
+        ziggy.fake_native_app.sleepMs(std.testing.io, 5);
         attempts += 1;
     }
-    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("task-completed\",\"data\":{\"taskId\":\"same\""));
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("DuplicateTaskId"));
+    try std.testing.expectEqual(@as(usize, 2), native_app.countContaining(std.testing.io, std.testing.allocator, "task-completed\",\"data\":{\"taskId\":\"same\""));
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "DuplicateTaskId"));
 }
 
 test "add-task without a task type is an error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"x\",\"source\":\"s\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"taskType\\\" is missing\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"x\",\"source\":\"s\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"taskType\\\" is missing\"}");
 }
 
 test "add-task without a task id is an error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"source\":\"s\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"taskId\\\" is missing\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"source\":\"s\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"taskId\\\" is missing\"}");
 }
 
 test "add-task without a source is an error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"taskId\":\"x\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"source\\\" is missing\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"taskId\":\"x\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"source\\\" is missing\"}");
 }
 
 test "events sent from several tasks at once all arrive, in order within each task" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 4, 1);
-    defer core.destroy();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 4, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
     const count = 300;
-    try addTask(core, "f1", "flooder", "s", "{\"count\":300}", "background");
-    try addTask(core, "f2", "flooder", "s", "{\"count\":300}", "background");
-    try addTask(core, "f3", "flooder", "s", "{\"count\":300}", "background");
-    try addTask(core, "f4", "flooder", "s", "{\"count\":300}", "background");
-    try expectCompleted(&shell, "f1", "succeeded");
-    try expectCompleted(&shell, "f2", "succeeded");
-    try expectCompleted(&shell, "f3", "succeeded");
-    try expectCompleted(&shell, "f4", "succeeded");
+    try addTask(&native_app, "f1", "flooder", "s", "{\"count\":300}", "background");
+    try addTask(&native_app, "f2", "flooder", "s", "{\"count\":300}", "background");
+    try addTask(&native_app, "f3", "flooder", "s", "{\"count\":300}", "background");
+    try addTask(&native_app, "f4", "flooder", "s", "{\"count\":300}", "background");
+    try expectCompleted(&native_app, "f1", "succeeded");
+    try expectCompleted(&native_app, "f2", "succeeded");
+    try expectCompleted(&native_app, "f3", "succeeded");
+    try expectCompleted(&native_app, "f4", "succeeded");
     for ([_][]const u8{ "f1", "f2", "f3", "f4" }) |id| {
         var previous: i64 = -1;
         var seen: usize = 0;
         var index: usize = 0;
-        while (index < shell.count()) : (index += 1) {
-            const message = try shell.messageAt(std.testing.allocator, index);
+        while (index < native_app.count(std.testing.io, std.testing.allocator)) : (index += 1) {
+            const message = try native_app.messageAt(std.testing.io, std.testing.allocator, index);
             defer std.testing.allocator.free(message);
             var marker_buffer: [64]u8 = undefined;
             const marker = try std.fmt.bufPrint(&marker_buffer, "\"taskId\":\"{s}\",", .{id});
@@ -286,74 +286,74 @@ test "events sent from several tasks at once all arrive, in order within each ta
 }
 
 test "destroy with tasks still running cancels them, waits and leaves no leak" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    try addTask(core, "t1", "spin", "s", "null", "background");
-    try addTask(core, "t2", "spin", "s", "null", "background");
-    try addTask(core, "t3", "sleep", "s", "{\"ms\":100000,\"name\":\"queued\"}", "background");
-    try shell.expectMessageContaining("\"taskId\":\"t2\",\"source\":\"s\",\"data\":{\"step\":1}");
-    core.destroy();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    try addTask(&native_app, "t1", "spin", "s", "null", "background");
+    try addTask(&native_app, "t2", "spin", "s", "null", "background");
+    try addTask(&native_app, "t3", "sleep", "s", "{\"ms\":100000,\"name\":\"queued\"}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"t2\",\"source\":\"s\",\"data\":{\"step\":1}");
+    native_app.stop(std.testing.io, std.testing.allocator);
 }
 
 test "a parent that queues children waits for all of them" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 3, 4);
-    defer core.destroy();
-    try addTask(core, "p", "parent", "s", "{\"children\":6,\"childMs\":10,\"name\":\"p\"}", "background");
-    try expectCompleted(&shell, "p", "succeeded");
-    try std.testing.expectEqual(@as(usize, 6), shell.countContaining("\"childEnd\":\"p\""));
-    try std.testing.expect(shell.indexOfContaining("\"allChildrenDone\":\"p\"").? > shell.indexOfContaining("\"childEnd\":\"p\"").?);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 3, 4);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "p", "parent", "s", "{\"children\":6,\"childMs\":10,\"name\":\"p\"}", "background");
+    try expectCompleted(&native_app, "p", "succeeded");
+    try std.testing.expectEqual(@as(usize, 6), native_app.countContaining(std.testing.io, std.testing.allocator, "\"childEnd\":\"p\""));
+    try std.testing.expect(native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"allChildrenDone\":\"p\"").? > native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"childEnd\":\"p\"").?);
     // Each child completes on its own and carries the parent's source.
-    try shell.expectMessageContaining("task-completed\",\"data\":{\"taskId\":\"p.c5\",\"result\":{\"taskId\":\"p.c5\",\"status\":\"succeeded\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "task-completed\",\"data\":{\"taskId\":\"p.c5\",\"result\":{\"taskId\":\"p.c5\",\"status\":\"succeeded\"");
 }
 
 test "a parent with no children completes normally" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try addTask(core, "p", "parent", "s", "{\"children\":0,\"name\":\"p\"}", "background");
-    try expectCompleted(&shell, "p", "succeeded");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "p", "parent", "s", "{\"children\":0,\"name\":\"p\"}", "background");
+    try expectCompleted(&native_app, "p", "succeeded");
 }
 
 test "awaitTask returns the result of one child and a failed child is returned as a failure" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    defer core.destroy();
-    try addTask(core, "p", "await-one", "s", "null", "background");
-    try shell.expectMessageContaining("\"first\":\"succeeded\",\"firstResult\":\"child answer\",\"second\":\"failed\",\"secondError\":\"TestFailure\"");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "p", "await-one", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"first\":\"succeeded\",\"firstResult\":\"child result\",\"second\":\"failed\",\"secondError\":\"TestFailure\"");
 }
 
 test "runChild runs children one after another and returns each one's completion" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    defer core.destroy();
-    try addTask(core, "p", "run-children-in-turn", "s", "null", "background");
-    try shell.expectMessageContaining("\"first\":\"succeeded\",\"firstResult\":\"child answer\",\"second\":\"failed\",\"secondError\":\"TestFailure\",\"third\":\"succeeded\",\"thirdResult\":\"child answer\"");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "p", "run-children-in-turn", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"first\":\"succeeded\",\"firstResult\":\"child result\",\"second\":\"failed\",\"secondError\":\"TestFailure\",\"third\":\"succeeded\",\"thirdResult\":\"child result\"");
 }
 
 test "no more than the child task limit run at once" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 6, 2);
-    defer core.destroy();
-    try addTask(core, "p", "parent", "s", "{\"children\":8,\"childMs\":20,\"name\":\"p\"}", "background");
-    try expectCompleted(&shell, "p", "succeeded");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 6, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "p", "parent", "s", "{\"children\":8,\"childMs\":20,\"name\":\"p\"}", "background");
+    try expectCompleted(&native_app, "p", "succeeded");
     var running: i32 = 0;
     var most: i32 = 0;
     var index: usize = 0;
-    while (index < shell.count()) : (index += 1) {
-        const message = try shell.messageAt(std.testing.allocator, index);
+    while (index < native_app.count(std.testing.io, std.testing.allocator)) : (index += 1) {
+        const message = try native_app.messageAt(std.testing.io, std.testing.allocator, index);
         defer std.testing.allocator.free(message);
         if (std.mem.indexOf(u8, message, "\"childStart\"") != null) {
             running += 1;
@@ -367,35 +367,21 @@ test "no more than the child task limit run at once" {
     try std.testing.expect(most >= 1);
 }
 
-test "a parent that queues more children than the pool has workers does not deadlock when every worker holds a parent" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 10);
-    defer core.destroy();
-    try addTask(core, "p1", "parent", "s", "{\"children\":5,\"childMs\":5,\"name\":\"p1\"}", "background");
-    try addTask(core, "p2", "parent", "s", "{\"children\":5,\"childMs\":5,\"name\":\"p2\"}", "background");
-    try expectCompleted(&shell, "p1", "succeeded");
-    try expectCompleted(&shell, "p2", "succeeded");
-    try std.testing.expectEqual(@as(usize, 5), shell.countContaining("\"childEnd\":\"p1\""));
-    try std.testing.expectEqual(@as(usize, 5), shell.countContaining("\"childEnd\":\"p2\""));
-}
-
 test "children of two parents do not run more at once than the pool has workers" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 3, 10);
-    defer core.destroy();
-    try addTask(core, "p1", "parent", "s", "{\"children\":6,\"childMs\":20,\"name\":\"p1\"}", "background");
-    try addTask(core, "p2", "parent", "s", "{\"children\":6,\"childMs\":20,\"name\":\"p2\"}", "background");
-    try expectCompleted(&shell, "p1", "succeeded");
-    try expectCompleted(&shell, "p2", "succeeded");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 3, 10);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "p1", "parent", "s", "{\"children\":6,\"childMs\":20,\"name\":\"p1\"}", "background");
+    try addTask(&native_app, "p2", "parent", "s", "{\"children\":6,\"childMs\":20,\"name\":\"p2\"}", "background");
+    try expectCompleted(&native_app, "p1", "succeeded");
+    try expectCompleted(&native_app, "p2", "succeeded");
     var running: i32 = 0;
     var most: i32 = 0;
     var index: usize = 0;
-    while (index < shell.count()) : (index += 1) {
-        const message = try shell.messageAt(std.testing.allocator, index);
+    while (index < native_app.count(std.testing.io, std.testing.allocator)) : (index += 1) {
+        const message = try native_app.messageAt(std.testing.io, std.testing.allocator, index);
         defer std.testing.allocator.free(message);
         if (std.mem.indexOf(u8, message, "\"childStart\"") != null) {
             running += 1;
@@ -405,361 +391,406 @@ test "children of two parents do not run more at once than the pool has workers"
             running -= 1;
         }
     }
-    // Two parents hold two of the three threads while they wait, helping run children, so at most three tasks run.
+    // Two parents hold two of the three workers while they wait, so the children run on the third, and never more than three tasks run.
     try std.testing.expect(most <= 3);
 }
 
 test "cancelling the parent's source cancels its children and the parent completes as cancelled" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 3, 2);
-    defer core.destroy();
-    try addTask(core, "p", "blocked-parent", "s", "null", "background");
-    try shell.expectMessageContaining("\"childStart\":\"blocked\"");
-    try cancelSource(core, "s");
-    try expectCompleted(&shell, "p", "cancelled");
-    try expectCompleted(&shell, "p.c0", "cancelled");
-    try expectCompleted(&shell, "p.c1", "cancelled");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 3, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "p", "blocked-parent", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"childStart\":\"blocked\"");
+    try cancelSource(&native_app, "s");
+    try expectCompleted(&native_app, "p", "cancelled");
+    try expectCompleted(&native_app, "p.c0", "cancelled");
+    try expectCompleted(&native_app, "p.c1", "cancelled");
 }
 
 //
 // Waits until the fake native app has been told the given number of keep-alive changes, and returns what it was told.
 //
-fn keepAliveCalls(shell: *helpers.FakeShell, count: usize) ![]bool {
+fn keepAliveCalls(native_app: *helpers.FakeNativeApp, count: usize) ![]bool {
     var waited: u32 = 0;
-    while (waited < 2000) : (waited += 1) {
-        shell.mutex.lockUncancelable(shell.threaded.io());
-        const have = shell.keep_alive_calls.items.len;
-        shell.mutex.unlock(shell.threaded.io());
-        if (have >= count) {
-            break;
+    while (true) : (waited += 1) {
+        const text = try native_app.keepAliveCalls(std.testing.io, std.testing.allocator);
+        defer std.testing.allocator.free(text);
+        const parsed = try std.json.parseFromSlice([]bool, std.testing.allocator, text, .{});
+        defer parsed.deinit();
+        if (parsed.value.len >= count or waited >= 2000) {
+            return try std.testing.allocator.dupe(bool, parsed.value);
         }
-        try std.Io.sleep(shell.threaded.io(), .fromMilliseconds(1), .awake);
+        ziggy.fake_native_app.sleepMs(std.testing.io, 1);
     }
-    shell.mutex.lockUncancelable(shell.threaded.io());
-    defer shell.mutex.unlock(shell.threaded.io());
-    return try std.testing.allocator.dupe(bool, shell.keep_alive_calls.items);
 }
 
-test "a keep-alive task asks the shell to keep the app running while it is queued or running, and to stop when it ends" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    defer core.destroy();
-    try addTask(core, "k1", "keep-sleep", "s", "{\"ms\":30}", "background");
-    const during = try keepAliveCalls(&shell, 1);
+test "a keep-alive task has the native app keep the app running while it is queued or running, and to stop when it ends" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "k1", "keep-sleep", "s", "{\"ms\":30}", "background");
+    const during = try keepAliveCalls(&native_app, 1);
     defer std.testing.allocator.free(during);
     try std.testing.expectEqualSlices(bool, &[_]bool{true}, during[0..1]);
-    try expectCompleted(&shell, "k1", "succeeded");
-    const after = try keepAliveCalls(&shell, 2);
+    try expectCompleted(&native_app, "k1", "succeeded");
+    const after = try keepAliveCalls(&native_app, 2);
     defer std.testing.allocator.free(after);
     try std.testing.expectEqualSlices(bool, &[_]bool{ true, false }, after);
 }
 
-test "several keep-alive tasks ask once, and the shell is told to stop only when the last one ends" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 3, 2);
-    defer core.destroy();
-    try addTask(core, "k1", "keep-sleep", "s1", "{\"ms\":20}", "background");
-    try addTask(core, "k2", "keep-sleep", "s2", "{\"ms\":100000}", "background");
-    try expectCompleted(&shell, "k1", "succeeded");
-    const calls = try keepAliveCalls(&shell, 1);
+test "several keep-alive tasks send one keep-alive call, and the native app is told to stop only when the last one ends" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 3, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "k1", "keep-sleep", "s1", "{\"ms\":20}", "background");
+    try addTask(&native_app, "k2", "keep-sleep", "s2", "{\"ms\":100000}", "background");
+    try expectCompleted(&native_app, "k1", "succeeded");
+    const calls = try keepAliveCalls(&native_app, 1);
     defer std.testing.allocator.free(calls);
     try std.testing.expectEqualSlices(bool, &[_]bool{true}, calls);
-    try cancelSource(core, "s2");
-    try expectCompleted(&shell, "k2", "cancelled");
-    const done = try keepAliveCalls(&shell, 2);
+    try cancelSource(&native_app, "s2");
+    try expectCompleted(&native_app, "k2", "cancelled");
+    const done = try keepAliveCalls(&native_app, 2);
     defer std.testing.allocator.free(done);
     try std.testing.expectEqualSlices(bool, &[_]bool{ true, false }, done);
 }
 
-test "a hold keeps the app running with no task, and the shell is told to stop only when the hold and the last keep-alive task have both ended" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 3, 2);
-    defer core.destroy();
-    core.runner.holdKeepAlive(true);
-    const held = try keepAliveCalls(&shell, 1);
+//
+// hold: holds the app running with or without a task, or lets it go, as the app's own code on the main thread does.
+//
+fn holdHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, keep_running: bool) !void {
+    _ = timers;
+    services.holdKeepAlive(io, allocator, keep_running);
+}
+
+//
+// The app of the hold test: the helpers' app with the message hold.
+//
+const hold_app = registered: {
+    var registered = ziggy.core.App(.{
+        .messages = .{
+            .hold = holdHandler,
+        },
+        .tasks = .{},
+        .menu = &.{},
+        .ui_files = &[_]ziggy.ui_files.UiFile{},
+    });
+    registered.tasks = &helpers.task_handlers;
+    break :registered registered;
+};
+
+//
+// Has the main thread of the core hold the app running, or let it go.
+//
+fn hold(native_app: *helpers.FakeNativeApp, keep_running: bool) void {
+    native_app.sendMessage(std.testing.allocator, if (keep_running) "{\"kind\":\"app\",\"name\":\"hold\",\"data\":true}" else "{\"kind\":\"app\",\"name\":\"hold\",\"data\":false}");
+}
+
+test "a hold keeps the app running with no task, and the native app is told to stop only when the hold and the last keep-alive task have both ended" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(3, 2), hold_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    hold(&native_app, true);
+    const held = try keepAliveCalls(&native_app, 1);
     defer std.testing.allocator.free(held);
     try std.testing.expectEqualSlices(bool, &[_]bool{true}, held);
-    try addTask(core, "k1", "keep-sleep", "s1", "{\"ms\":20}", "background");
-    try expectCompleted(&shell, "k1", "succeeded");
-    core.runner.holdKeepAlive(true);
-    try addTask(core, "k2", "keep-sleep", "s2", "{\"ms\":100000}", "background");
-    core.runner.holdKeepAlive(false);
-    const while_task_runs = try keepAliveCalls(&shell, 1);
+    try addTask(&native_app, "k1", "keep-sleep", "s1", "{\"ms\":20}", "background");
+    try expectCompleted(&native_app, "k1", "succeeded");
+    hold(&native_app, true);
+    try addTask(&native_app, "k2", "keep-sleep", "s2", "{\"ms\":100000}", "background");
+    hold(&native_app, false);
+    const while_task_runs = try keepAliveCalls(&native_app, 1);
     defer std.testing.allocator.free(while_task_runs);
     try std.testing.expectEqualSlices(bool, &[_]bool{true}, while_task_runs);
-    try cancelSource(core, "s2");
-    try expectCompleted(&shell, "k2", "cancelled");
-    core.runner.holdKeepAlive(false);
-    const done = try keepAliveCalls(&shell, 2);
+    try cancelSource(&native_app, "s2");
+    try expectCompleted(&native_app, "k2", "cancelled");
+    hold(&native_app, false);
+    const done = try keepAliveCalls(&native_app, 2);
     defer std.testing.allocator.free(done);
     try std.testing.expectEqualSlices(bool, &[_]bool{ true, false }, done);
 }
 
-test "a normal task never asks the shell to keep the app running" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    defer core.destroy();
-    try addTask(core, "n1", "sleep", "s", "{\"ms\":10}", "background");
-    try expectCompleted(&shell, "n1", "succeeded");
-    try std.Io.sleep(shell.threaded.io(), .fromMilliseconds(50), .awake);
-    const calls = try keepAliveCalls(&shell, 0);
+test "a normal task never has the native app keep the app running" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "n1", "sleep", "s", "{\"ms\":10}", "background");
+    try expectCompleted(&native_app, "n1", "succeeded");
+    try std.Io.sleep(std.testing.io, .fromMilliseconds(50), .awake);
+    const calls = try keepAliveCalls(&native_app, 0);
     defer std.testing.allocator.free(calls);
     try std.testing.expectEqual(@as(usize, 0), calls.len);
 }
 
 test "a keep-alive parent keeps the app running until its children are done and it ends" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 3, 2);
-    defer core.destroy();
-    try addTask(core, "p1", "keep-parent", "s", "{\"children\":2,\"childMs\":20}", "background");
-    try expectCompleted(&shell, "p1", "succeeded");
-    const calls = try keepAliveCalls(&shell, 2);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 3, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "p1", "keep-parent", "s", "{\"children\":2,\"childMs\":20}", "background");
+    try expectCompleted(&native_app, "p1", "succeeded");
+    const calls = try keepAliveCalls(&native_app, 2);
     defer std.testing.allocator.free(calls);
     try std.testing.expectEqualSlices(bool, &[_]bool{ true, false }, calls);
 }
 
-fn hostRequestTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const method = ziggy.json.getString(data, "method").?;
-    const reply = try context.hostRequest(method, "{\"key\":\"value\"}");
+fn nativeCallTask(services: ziggy.task_runner.TaskServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, context: ziggy.task_runner.TaskContext, payload: std.json.Value) !ziggy.json.Raw {
+    _ = context;
+    const method = ziggy.json.getString(payload, "method").?;
+    const reply = try services.nativeCall(io, allocator, timers, method, "{\"key\":\"value\"}");
     if (!reply.succeeded) {
-        return try ziggy.json.stringify(context.arena, .{
-            .failedBecause = reply.text,
-        });
+        return .{
+            .text = try ziggy.json.stringify(allocator, .{
+                .failedBecause = reply.text,
+            }),
+        };
     }
-    return try context.arena.dupe(u8, reply.text);
-}
-
-test "a task asks the shell to do something only the platform can do, and gets its answer" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const host_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
-        .{ .name = "host-request", .handler = hostRequestTask },
+    return .{
+        .text = reply.text,
     };
-    var host_app = helpers.app;
-    host_app.tasks = &host_tasks;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), host_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h1\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"exportFile\"},\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("\"outputs\":{\"method\":\"exportFile\",\"request\":{\"key\":\"value\"}}");
 }
 
-test "a task is told why the shell could not do what was asked" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const host_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
-        .{ .name = "host-request", .handler = hostRequestTask },
+test "a task has the native app do something only the platform can do, and gets its result" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+        .{ .name = "native-call", .handler = ziggy.task_runner.wrapTask("native-call", nativeCallTask) },
     };
-    var host_app = helpers.app;
-    host_app.tasks = &host_tasks;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), host_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h2\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"fail\"},\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("\"outputs\":{\"failedBecause\":\"The phone said no.\"}");
+    var native_call_app = helpers.app;
+    native_call_app.tasks = &native_call_tasks;
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_call_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h1\",\"taskType\":\"native-call\",\"source\":\"src\",\"data\":{\"method\":\"exportFile\"},\"priority\":\"background\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"outputs\":{\"method\":\"exportFile\",\"request\":{\"key\":\"value\"}}");
 }
 
-test "a task on a platform with no host request callback gets HostCallbackMissing" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const host_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
-        .{ .name = "host-request", .handler = hostRequestTask },
+test "a task is told why the native app could not do the native call" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+        .{ .name = "native-call", .handler = ziggy.task_runner.wrapTask("native-call", nativeCallTask) },
     };
-    var host_app = helpers.app;
-    host_app.tasks = &host_tasks;
-    var config = shell.config(1, 1);
-    config.host_request = null;
-    const core = try ziggy.core.Core.create(std.testing.allocator, config, host_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h3\",\"taskType\":\"host-request\",\"source\":\"src\",\"data\":{\"method\":\"exportFile\"},\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("HostCallbackMissing");
+    var native_call_app = helpers.app;
+    native_call_app.tasks = &native_call_tasks;
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_call_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h2\",\"taskType\":\"native-call\",\"source\":\"src\",\"data\":{\"method\":\"fail\"},\"priority\":\"background\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"outputs\":{\"failedBecause\":\"The phone refused.\"}");
 }
 
-test "askShell gives the shell's answer, and the caller owns exactly what it gives and nothing else" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const config = shell.config(1, 1);
-    const answer = try ziggy.task_runner.askShell(&config, std.testing.allocator, "exportFile", "{\"key\":\"value\"}");
-    defer std.testing.allocator.free(answer);
-    try std.testing.expectEqualStrings("{\"method\":\"exportFile\",\"request\":{\"key\":\"value\"}}", answer);
-}
-
-test "askShell fails with the shell's reason when the shell could not do what was asked" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const config = shell.config(1, 1);
-    try std.testing.expectError(error.Thrown, ziggy.task_runner.askShell(&config, std.testing.allocator, "fail", "null"));
-    try std.testing.expectEqualStrings("fail failed: The phone said no.", utils.errors.lastErrorMessage());
-}
-
-test "askShell fails naming the method when the shell gave no host request callback" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    var config = shell.config(1, 1);
-    config.host_request = null;
-    try std.testing.expectError(error.Thrown, ziggy.task_runner.askShell(&config, std.testing.allocator, "exportFile", "null"));
-    try std.testing.expectEqualStrings("exportFile needs the phone's shell, and this program has none.", utils.errors.lastErrorMessage());
-}
-
-fn hostRequesterTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    var storage: ziggy.task_runner.TaskHostRequester = undefined;
-    const requester = context.hostRequester(&storage) orelse {
-        return try context.arena.dupe(u8, "\"no requester\"");
+test "a task on a platform with no native call callback gets NativeCallMissing" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+        .{ .name = "native-call", .handler = ziggy.task_runner.wrapTask("native-call", nativeCallTask) },
     };
-    return try requester.call(context.arena, "shareFile", "{\"name\":\"a.jpg\"}");
+    var native_call_app = helpers.app;
+    native_call_app.tasks = &native_call_tasks;
+    var config = native_app.config(1, 1);
+    config.has_native_call = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, native_call_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h3\",\"taskType\":\"native-call\",\"source\":\"src\",\"data\":{\"method\":\"exportFile\"},\"priority\":\"background\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "NativeCallMissing");
 }
 
-test "a task's host requester asks the shell through the host request callback" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const host_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
-        .{ .name = "host-requester", .handler = hostRequesterTask },
+fn nativeCallerTask(services: ziggy.task_runner.TaskServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, context: ziggy.task_runner.TaskContext, payload: std.json.Value) !ziggy.json.Raw {
+    _ = timers;
+    _ = context;
+    _ = payload;
+    var storage: ziggy.task_runner.TaskNativeCaller = undefined;
+    const requester = services.nativeCaller(&storage) orelse {
+        return .{
+            .text = "\"no requester\"",
+        };
     };
-    var host_app = helpers.app;
-    host_app.tasks = &host_tasks;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), host_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"r1\",\"taskType\":\"host-requester\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("\"outputs\":{\"method\":\"shareFile\",\"request\":{\"name\":\"a.jpg\"}}");
-}
-
-test "a task has no host requester when the shell gave no host request callback" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const host_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
-        .{ .name = "host-requester", .handler = hostRequesterTask },
+    return .{
+        .text = try requester.call(io, allocator, "shareFile", "{\"name\":\"a.jpg\"}"),
     };
-    var host_app = helpers.app;
-    host_app.tasks = &host_tasks;
-    var config = shell.config(1, 1);
-    config.host_request = null;
-    const core = try ziggy.core.Core.create(std.testing.allocator, config, host_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"r2\",\"taskType\":\"host-requester\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("\"outputs\":\"no requester\"");
 }
 
-fn refusingPick(user_data: ?*anyopaque, kind: i32, title: ?[*:0]const u8, initial_name: ?[*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
-    _ = user_data;
-    _ = kind;
-    _ = title;
-    _ = initial_name;
-    _ = buffer;
-    _ = capacity;
-    return -1;
+test "a task's native caller reaches the native app through the native call callback" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+        .{ .name = "native-caller", .handler = ziggy.task_runner.wrapTask("native-caller", nativeCallerTask) },
+    };
+    var native_call_app = helpers.app;
+    native_call_app.tasks = &native_call_tasks;
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_call_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"r1\",\"taskType\":\"native-caller\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"outputs\":{\"method\":\"shareFile\",\"request\":{\"name\":\"a.jpg\"}}");
 }
 
-test "a dialog the shell could not show fails the task with HostCallbackFailed" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    var config = shell.config(1, 1);
-    config.pick_paths = refusingPick;
-    const core = try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"p1\",\"taskType\":\"pick-open\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("\"errorMessage\":\"HostCallbackFailed\"");
+test "a task has no native caller when the native app gave no native call callback" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+        .{ .name = "native-caller", .handler = ziggy.task_runner.wrapTask("native-caller", nativeCallerTask) },
+    };
+    var native_call_app = helpers.app;
+    native_call_app.tasks = &native_call_tasks;
+    var config = native_app.config(1, 1);
+    config.has_native_call = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, native_call_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"r2\",\"taskType\":\"native-caller\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"outputs\":\"no requester\"");
+}
+
+test "a dialog the native app could not show fails the task with NativeCallFailed" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), helpers.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.setResult(std.testing.io, std.testing.allocator, "pick-paths", false, "The dialog could not be shown.");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"p1\",\"taskType\":\"pick-open\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"errorMessage\":\"NativeCallFailed\"");
 }
 
 test "task-completed carries the full task result: the task's type and its input" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try addTask(core, "t1", "quick", "s", "{\"a\":1}", "background");
-    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"task-completed\",\"data\":{\"taskId\":\"t1\",\"result\":{\"taskId\":\"t1\",\"status\":\"succeeded\",\"outputs\":\"done\",\"type\":\"quick\",\"inputs\":{\"a\":1}}}}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "t1", "quick", "s", "{\"a\":1}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"task-completed\",\"data\":{\"taskId\":\"t1\",\"result\":{\"taskId\":\"t1\",\"status\":\"succeeded\",\"outputs\":\"done\",\"type\":\"quick\",\"inputs\":{\"a\":1}}}}");
 }
 
 test "add-task with a priority that is not interactive or background is an error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"x\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"urgent\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"y\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":5}}");
-    try shell.expectMessageContaining("{\"id\":2,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"x\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"urgent\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"y\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":5}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
 }
 
 test "add-task without a priority runs the task as background" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null}}");
-    try expectCompleted(&shell, "t1", "succeeded");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null}}");
+    try expectCompleted(&native_app, "t1", "succeeded");
 }
 
 test "cancel-tasks with the source as an object instead of a bare string is an error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"cancel-tasks\",\"data\":{\"source\":\"s\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: ");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"cancel-tasks\",\"data\":{\"source\":\"s\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: ");
 }
 
 test "add-task takes the priority interactive or background, or none, and refuses anything else" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"a\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"interactive\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":{}}");
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"b\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("{\"id\":2,\"ok\":true,\"data\":{}}");
-    core.postMessage("{\"kind\":\"system\",\"id\":3,\"name\":\"add-task\",\"data\":{\"taskId\":\"c\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null}}");
-    try shell.expectMessageContaining("{\"id\":3,\"ok\":true,\"data\":{}}");
-    core.postMessage("{\"kind\":\"system\",\"id\":4,\"name\":\"add-task\",\"data\":{\"taskId\":\"d\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"Interactive\"}}");
-    try shell.expectMessageContaining("{\"id\":4,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"a\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"interactive\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"b\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"background\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":true,\"data\":{}}");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":3,\"name\":\"add-task\",\"data\":{\"taskId\":\"c\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":3,\"ok\":true,\"data\":{}}");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":4,\"name\":\"add-task\",\"data\":{\"taskId\":\"d\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"Interactive\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":4,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
 }
 
 test "a second interactive task goes in front of the first one still waiting, and background tasks keep their arrival order" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try addTask(core, "blocker", "sleep", "s", "{\"ms\":150,\"name\":\"blocker\"}", "background");
-    try shell.expectMessageContaining("\"start\":\"blocker\"");
-    try addTask(core, "background-1", "sleep", "s", "{\"ms\":2,\"name\":\"background-1\"}", "background");
-    try addTask(core, "interactive-1", "sleep", "s", "{\"ms\":2,\"name\":\"interactive-1\"}", "interactive");
-    try addTask(core, "background-2", "sleep", "s", "{\"ms\":2,\"name\":\"background-2\"}", "background");
-    try addTask(core, "interactive-2", "sleep", "s", "{\"ms\":2,\"name\":\"interactive-2\"}", "interactive");
-    try expectCompleted(&shell, "background-2", "succeeded");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "blocker", "sleep", "s", "{\"ms\":150,\"name\":\"blocker\"}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"blocker\"");
+    try addTask(&native_app, "background-1", "sleep", "s", "{\"ms\":2,\"name\":\"background-1\"}", "background");
+    try addTask(&native_app, "interactive-1", "sleep", "s", "{\"ms\":2,\"name\":\"interactive-1\"}", "interactive");
+    try addTask(&native_app, "background-2", "sleep", "s", "{\"ms\":2,\"name\":\"background-2\"}", "background");
+    try addTask(&native_app, "interactive-2", "sleep", "s", "{\"ms\":2,\"name\":\"interactive-2\"}", "interactive");
+    try expectCompleted(&native_app, "background-2", "succeeded");
     const order = [_][]const u8{ "interactive-2", "interactive-1", "background-1", "background-2" };
     var previous: usize = 0;
     for (order) |name| {
         var buffer: [64]u8 = undefined;
         const text = try std.fmt.bufPrint(&buffer, "\"start\":\"{s}\"", .{name});
-        const index = shell.indexOfContaining(text).?;
+        const index = native_app.indexOfContaining(std.testing.io, std.testing.allocator, text).?;
         try std.testing.expect(index >= previous);
         previous = index;
     }
+}
+
+//
+// The payload of the greet task.
+//
+const GreetPayload = struct {
+    // Who to greet.
+    name: []const u8,
+};
+
+//
+// The result of the greet task.
+//
+const GreetResult = struct {
+    // The greeting, naming the task it came from.
+    greeting: []const u8,
+};
+
+//
+// greet: a task with a typed payload and result, whose result is a greeting built from the payload and the task's context.
+//
+fn greetTask(services: ziggy.task_runner.TaskServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, context: ziggy.task_runner.TaskContext, payload: GreetPayload) !GreetResult {
+    _ = services;
+    _ = timers;
+    _ = io;
+    return .{
+        .greeting = try std.fmt.allocPrint(allocator, "Hello {s} from {s} of {s}", .{ payload.name, context.task_id, context.source }),
+    };
+}
+
+test "a task's data is parsed into its payload type and its result turned into JSON, and data that does not fit fails the task" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    const greet_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+        .{ .name = "greet", .handler = ziggy.task_runner.wrapTask("greet", greetTask) },
+    };
+    var greet_app = helpers.app;
+    greet_app.tasks = &greet_tasks;
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), greet_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try addTask(&native_app, "g1", "greet", "src", "{\"name\":\"Ada\",\"unknown\":1}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"g1\",\"status\":\"succeeded\",\"outputs\":{\"greeting\":\"Hello Ada from g1 of src\"}");
+    try addTask(&native_app, "g2", "greet", "src", "{}", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"g2\",\"status\":\"failed\",\"error\":{\"message\":\"MissingField\"}");
 }
 
 test "a child runs at the priority it asks for, and otherwise at its parent's" {

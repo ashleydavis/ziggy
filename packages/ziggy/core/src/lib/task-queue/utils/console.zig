@@ -1,5 +1,6 @@
 const std = @import("std");
 const standard_streams = @import("standard-streams.zig");
+const builtin = @import("builtin");
 
 //
 // A console that writes lines to the process streams.
@@ -11,22 +12,44 @@ const standard_streams = @import("standard-streams.zig");
 //
 
 //
-// Serializes writes to stdout from multiple threads.
+// Only the main thread writes stdout and stderr. A worker sets a forward, and its lines go to the main thread, which writes them.
 //
-var stdout_mutex: std.Io.Mutex = .init;
 
 //
-// When set, lines written to stdout are written here instead (used by tests).
+// Which of the process's streams a line is for.
 //
-var captured_stdout: ?*std.Io.Writer = null;
+pub const Stream = enum {
+    stdout,
+    stderr,
+};
 
 //
-// When set, lines written to stderr are written here instead (used by tests).
+// Where the calling thread's console lines go instead of the process's streams: a worker's go to the main thread.
 //
-var captured_stderr: ?*std.Io.Writer = null;
+pub const Forward = struct {
+    // The forward's own pointer, passed back on every call.
+    context: ?*anyopaque,
+    // Takes one line, which is valid only during the call.
+    function: *const fn (context: ?*anyopaque, stream: Stream, line: []const u8) void,
+};
 
 //
-// Redirects console output to the given writers (pass null to restore the real stdout/stderr).
+// When set, the calling thread's lines go here instead of to the process's streams.
+//
+threadlocal var forward: ?Forward = null;
+
+//
+// When set, lines the calling thread writes to stdout are written here instead (used by tests).
+//
+threadlocal var captured_stdout: ?*std.Io.Writer = null;
+
+//
+// When set, lines the calling thread writes to stderr are written here instead (used by tests).
+//
+threadlocal var captured_stderr: ?*std.Io.Writer = null;
+
+//
+// Redirects the calling thread's console output to the given writers (pass null to restore the real stdout/stderr).
 //
 pub fn setCapture(stdout_writer: ?*std.Io.Writer, stderr_writer: ?*std.Io.Writer) void {
     captured_stdout = stdout_writer;
@@ -34,15 +57,30 @@ pub fn setCapture(stdout_writer: ?*std.Io.Writer, stderr_writer: ?*std.Io.Writer
 }
 
 //
+// Sends the calling thread's console lines to the forward given (pass null to write them to the process's streams again).
+//
+pub fn setForward(lines_to: ?Forward) void {
+    forward = lines_to;
+}
+
+//
 // Writes a line to stdout, ignoring write errors (like console.log).
 //
 fn writeStdoutLine(message: []const u8) void {
     const io = std.Options.debug_io;
-    stdout_mutex.lockUncancelable(io);
-    defer stdout_mutex.unlock(io);
+    if (forward) |lines_to| {
+        lines_to.function(lines_to.context, .stdout, message);
+        return;
+    }
     if (captured_stdout) |capture_writer| {
         capture_writer.writeAll(message) catch {};
         capture_writer.writeByte('\n') catch {};
+        return;
+    }
+    // In a test program stdout belongs to Zig's test runner, which talks to the build system over it, so a line there would break
+    // that conversation. Each thread has a capture of its own, and a thread a test starts has none, so its line goes to stderr.
+    if (builtin.is_test) {
+        writeStderrLine(message);
         return;
     }
     var buffer: [1024]u8 = undefined;
@@ -57,6 +95,10 @@ fn writeStdoutLine(message: []const u8) void {
 // Writes a line to stderr, ignoring write errors (like console.error).
 //
 fn writeStderrLine(message: []const u8) void {
+    if (forward) |lines_to| {
+        lines_to.function(lines_to.context, .stderr, message);
+        return;
+    }
     var buffer: [1024]u8 = undefined;
     const locked_stderr = std.debug.lockStderr(&buffer);
     defer std.debug.unlockStderr();

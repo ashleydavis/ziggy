@@ -33,20 +33,20 @@ test "the paths of a drop come back as a JSON array, in the order dropped" {
     defer std.testing.allocator.free(directory_path);
     const folder = try std.fs.path.join(std.testing.allocator, &.{ directory_path, "a folder" });
     defer std.testing.allocator.free(folder);
-    var dropped = DroppedFiles.init(std.testing.allocator);
-    defer dropped.deinit();
+    var dropped: DroppedFiles = .empty;
+    defer dropped.deinit(std.testing.allocator);
     const json = try std.json.Stringify.valueAlloc(std.testing.allocator, &[_][]const u8{ first, folder }, .{});
     defer std.testing.allocator.free(json);
-    try dropped.replace(std.testing.io, json);
-    const paths = try dropped.pathsJson(std.testing.io, std.testing.allocator);
+    try dropped.replace(std.testing.io, std.testing.allocator, json);
+    const paths = try dropped.pathsJson(std.testing.allocator);
     defer std.testing.allocator.free(paths);
     try std.testing.expectEqualStrings(json, paths);
 }
 
 test "nothing dropped gives an empty array" {
-    var dropped = DroppedFiles.init(std.testing.allocator);
-    defer dropped.deinit();
-    const paths = try dropped.pathsJson(std.testing.io, std.testing.allocator);
+    var dropped: DroppedFiles = .empty;
+    defer dropped.deinit(std.testing.allocator);
+    const paths = try dropped.pathsJson(std.testing.allocator);
     defer std.testing.allocator.free(paths);
     try std.testing.expectEqualStrings("[]", paths);
 }
@@ -58,15 +58,15 @@ test "a new drop replaces the last one" {
     defer std.testing.allocator.free(first);
     const second = try writeFile(tmp, "second.txt", "22");
     defer std.testing.allocator.free(second);
-    var dropped = DroppedFiles.init(std.testing.allocator);
-    defer dropped.deinit();
+    var dropped: DroppedFiles = .empty;
+    defer dropped.deinit(std.testing.allocator);
     const first_json = try arrayOf(first);
     defer std.testing.allocator.free(first_json);
     const second_json = try arrayOf(second);
     defer std.testing.allocator.free(second_json);
-    try dropped.replace(std.testing.io, first_json);
-    try dropped.replace(std.testing.io, second_json);
-    const paths = try dropped.pathsJson(std.testing.io, std.testing.allocator);
+    try dropped.replace(std.testing.io, std.testing.allocator, first_json);
+    try dropped.replace(std.testing.io, std.testing.allocator, second_json);
+    const paths = try dropped.pathsJson(std.testing.allocator);
     defer std.testing.allocator.free(paths);
     try std.testing.expectEqualStrings(second_json, paths);
 }
@@ -76,14 +76,14 @@ test "a path that does not exist is an error and keeps the last drop" {
     defer tmp.cleanup();
     const path = try writeFile(tmp, "keep.txt", "k");
     defer std.testing.allocator.free(path);
-    var dropped = DroppedFiles.init(std.testing.allocator);
-    defer dropped.deinit();
+    var dropped: DroppedFiles = .empty;
+    defer dropped.deinit(std.testing.allocator);
     const json = try arrayOf(path);
     defer std.testing.allocator.free(json);
-    try dropped.replace(std.testing.io, json);
-    try std.testing.expectError(error.FileNotFound, dropped.replace(std.testing.io, "[\"/nonexistent/nothing.txt\"]"));
-    try std.testing.expectError(error.NotAnArrayOfPaths, dropped.replace(std.testing.io, "{}"));
-    const paths = try dropped.pathsJson(std.testing.io, std.testing.allocator);
+    try dropped.replace(std.testing.io, std.testing.allocator, json);
+    try std.testing.expectError(error.FileNotFound, dropped.replace(std.testing.io, std.testing.allocator, "[\"/nonexistent/nothing.txt\"]"));
+    try std.testing.expectError(error.NotAnArrayOfPaths, dropped.replace(std.testing.io, std.testing.allocator, "{}"));
+    const paths = try dropped.pathsJson(std.testing.allocator);
     defer std.testing.allocator.free(paths);
     try std.testing.expectEqualStrings(json, paths);
 }

@@ -20,7 +20,9 @@ const EventRecorder = struct {
     //
     // Records an event.
     //
-    fn record(context: ?*anyopaque, event: std.json.Value) void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
+        _ = io;
+        _ = allocator;
         const self: *EventRecorder = @ptrCast(@alignCast(context.?));
         self.calls += 1;
         self.lastType = event.object.get("type").?.string;
@@ -53,7 +55,7 @@ test "cancel causes isCancelled to return true" {
     context.cancel();
 
     try std.testing.expect(context.isCancelled());
-    try std.testing.expect(context.taskContext().isCancelled());
+    try std.testing.expect(context.taskContext().isCancelled(std.testing.io, std.testing.allocator));
 }
 
 test "sendEvent invokes the injected sendEventFn with the correct argument" {
@@ -65,14 +67,14 @@ test "sendEvent invokes the injected sendEventFn with the correct argument" {
     var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10);
 
     const msg = try std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), "{\"type\":\"progress\",\"value\":42}", .{});
-    context.sendEvent(msg);
+    context.sendEvent(std.testing.io, arena.allocator(), msg);
 
     try std.testing.expectEqual(@as(usize, 1), recorder.calls);
     try std.testing.expectEqualStrings("progress", recorder.lastType);
     try std.testing.expectEqual(@as(i64, 42), recorder.lastValue);
 
     // Through the ITaskContext interface too.
-    context.taskContext().sendEvent(msg);
+    context.taskContext().sendEvent(std.testing.io, arena.allocator(), msg);
     try std.testing.expectEqual(@as(usize, 2), recorder.calls);
 }
 

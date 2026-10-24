@@ -1,23 +1,23 @@
 //
 // IQueueBackend: the interface that all task scheduling backends implement.
 // Real worker pools and IPC/WebSocket proxies implement this.
-// TaskQueue depends only on IQueueBackend; concrete backend classes are registered once
-// at process startup via setQueueBackend().
+// TaskQueue depends only on IQueueBackend; each thread that queues tasks registers its backend once
+// with setQueueBackend(): a worker registers the backend that sends its child tasks to the main thread,
+// and the main thread registers its worker pool.
 //
 // Threading contract:
-// - Every method may be called from any thread.
-// - Callbacks may be invoked from any thread (e.g. a worker thread when a task completes), but the
-//   callbacks registered for a task added with addTask must fire before that task can start running
-//   (TaskQueue relies on onTaskAdded being called synchronously from addTask).
-// - After an UnsubscribeFn returns, the backend must not invoke that callback again, and no invocation of
-//   it may still be running (TaskQueue frees its state after unsubscribing). A backend may hold its own
-//   lock while invoking callbacks: the callbacks registered by TaskQueue never call back into the backend.
+// - A backend is used only on the thread that registered it.
+// - Callbacks fire on that thread, while it reads its messages (see waitForMessage), but the callbacks
+//   registered for a task added with addTask must fire before addTask returns (TaskQueue relies on
+//   onTaskAdded being called synchronously from addTask).
+// - After an UnsubscribeFn returns, the backend must not invoke that callback again.
 // - Values passed to callbacks only have to stay valid during the call.
 //
 
 const std = @import("std");
 const utils = @import("utils.zig");
 const types = @import("types.zig");
+const Timers = @import("../timers.zig").Timers;
 const WorkerTaskCompletionCallback = types.WorkerTaskCompletionCallback;
 const TaskEventCallback = types.TaskEventCallback;
 const UnsubscribeFn = types.UnsubscribeFn;
@@ -38,32 +38,37 @@ pub const IQueueBackend = struct {
     vtable: *const VTable,
 
     //
-    // The functions an implementation of IQueueBackend provides.
+    // The functions an implementation of IQueueBackend provides. Each is given the Io and the allocator of the calling thread where
+    // it needs them, and the backend keeps neither.
     //
     pub const VTable = struct {
         // Adds a task to the backend. Returns the task ID (allocated with allocator).
         addTask: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8,
 
         // Registers a callback that fires whenever a task with the given source is added.
-        onTaskAdded: *const fn (ptr: *anyopaque, source: []const u8, callback: TaskAddedCallback) anyerror!UnsubscribeFn,
+        onTaskAdded: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, source: []const u8, callback: TaskAddedCallback) anyerror!UnsubscribeFn,
 
         // Registers a callback that fires when any task completes (success or failure).
-        onTaskComplete: *const fn (ptr: *anyopaque, callback: WorkerTaskCompletionCallback) anyerror!UnsubscribeFn,
+        onTaskComplete: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, callback: WorkerTaskCompletionCallback) anyerror!UnsubscribeFn,
 
         // Registers a callback for task events of a specific type.
-        onTaskEvent: *const fn (ptr: *anyopaque, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn,
+        onTaskEvent: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn,
 
         // Registers a callback for every task event regardless of type.
-        onAnyTaskEvent: *const fn (ptr: *anyopaque, callback: TaskEventCallback) anyerror!UnsubscribeFn,
+        onAnyTaskEvent: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, callback: TaskEventCallback) anyerror!UnsubscribeFn,
 
         // Signals running tasks with the given source to cancel and drops pending tasks with that source.
-        cancelTasks: *const fn (ptr: *anyopaque, source: []const u8) void,
+        cancelTasks: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void,
 
         // Registers a callback that fires when cancelTasks is called for the given source.
-        onTasksCancelled: *const fn (ptr: *anyopaque, source: []const u8, callback: TasksCancelledCallback) anyerror!UnsubscribeFn,
+        onTasksCancelled: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, source: []const u8, callback: TasksCancelledCallback) anyerror!UnsubscribeFn,
 
         // Shuts down the backend, releasing all resources.
-        shutdown: *const fn (ptr: *anyopaque) void,
+        shutdown: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) void,
+
+        // Reads the thread's next message, waiting for one no longer than until the thread's next timer is due, and runs the timers
+        // that are due, so the callbacks of a task that ended or sent an event fire.
+        waitForMessage: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void,
     };
 
     //
@@ -86,66 +91,76 @@ pub const IQueueBackend = struct {
     // Registers a callback that fires whenever a task with the given source is added.
     // Returns an unsubscribe function.
     //
-    pub fn onTaskAdded(self: IQueueBackend, source: []const u8, callback: TaskAddedCallback) anyerror!UnsubscribeFn {
-        return self.vtable.onTaskAdded(self.ptr, source, callback);
+    pub fn onTaskAdded(self: IQueueBackend, allocator: std.mem.Allocator, source: []const u8, callback: TaskAddedCallback) anyerror!UnsubscribeFn {
+        return self.vtable.onTaskAdded(self.ptr, allocator, source, callback);
     }
 
     //
     // Registers a callback that fires when any task completes (success or failure).
     // Returns an unsubscribe function.
     //
-    pub fn onTaskComplete(self: IQueueBackend, callback: WorkerTaskCompletionCallback) anyerror!UnsubscribeFn {
-        return self.vtable.onTaskComplete(self.ptr, callback);
+    pub fn onTaskComplete(self: IQueueBackend, allocator: std.mem.Allocator, callback: WorkerTaskCompletionCallback) anyerror!UnsubscribeFn {
+        return self.vtable.onTaskComplete(self.ptr, allocator, callback);
     }
 
     //
     // Registers a callback for task events of a specific type.
     // Returns an unsubscribe function.
     //
-    pub fn onTaskEvent(self: IQueueBackend, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn {
-        return self.vtable.onTaskEvent(self.ptr, eventType, callback);
+    pub fn onTaskEvent(self: IQueueBackend, allocator: std.mem.Allocator, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn {
+        return self.vtable.onTaskEvent(self.ptr, allocator, eventType, callback);
     }
 
     //
     // Registers a callback for every task event regardless of type.
     // Returns an unsubscribe function.
     //
-    pub fn onAnyTaskEvent(self: IQueueBackend, callback: TaskEventCallback) anyerror!UnsubscribeFn {
-        return self.vtable.onAnyTaskEvent(self.ptr, callback);
+    pub fn onAnyTaskEvent(self: IQueueBackend, allocator: std.mem.Allocator, callback: TaskEventCallback) anyerror!UnsubscribeFn {
+        return self.vtable.onAnyTaskEvent(self.ptr, allocator, callback);
     }
 
     //
     // Signals running tasks with the given source to cancel and drops any pending
     // tasks with that source from the queue.
     //
-    pub fn cancelTasks(self: IQueueBackend, source: []const u8) void {
-        self.vtable.cancelTasks(self.ptr, source);
+    pub fn cancelTasks(self: IQueueBackend, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+        self.vtable.cancelTasks(self.ptr, io, allocator, source);
     }
 
     //
     // Registers a callback that fires when cancelTasks is called for the given source.
     // Returns an unsubscribe function.
     //
-    pub fn onTasksCancelled(self: IQueueBackend, source: []const u8, callback: TasksCancelledCallback) anyerror!UnsubscribeFn {
-        return self.vtable.onTasksCancelled(self.ptr, source, callback);
+    pub fn onTasksCancelled(self: IQueueBackend, allocator: std.mem.Allocator, source: []const u8, callback: TasksCancelledCallback) anyerror!UnsubscribeFn {
+        return self.vtable.onTasksCancelled(self.ptr, allocator, source, callback);
     }
 
     //
     // Shuts down the backend, releasing all resources.
     //
-    pub fn shutdown(self: IQueueBackend) void {
-        self.vtable.shutdown(self.ptr);
+    pub fn shutdown(self: IQueueBackend, io: std.Io, allocator: std.mem.Allocator) void {
+        self.vtable.shutdown(self.ptr, io, allocator);
+    }
+
+    //
+    // Reads the thread's next message, waiting for one no longer than until the thread's next timer is due, and runs the timers that
+    // are due, so the callbacks of a task that ended or sent an event fire. A TaskQueue waits for its tasks with it.
+    //
+    pub fn waitForMessage(self: IQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+        self.vtable.waitForMessage(self.ptr, io, allocator, timers);
     }
 };
 
-//
-// The process-level singleton backend. Set once at startup via setQueueBackend().
-//
-var _backend: ?IQueueBackend = null;
 
 //
-// Registers the process-level singleton queue backend.
-// Must be called once at process startup before any TaskQueue is created.
+// The backend of the calling thread, set once when the thread starts via setQueueBackend(). Each thread
+// has its own: a worker's sends child tasks to the main thread, and the main thread's is its worker pool.
+//
+threadlocal var _backend: ?IQueueBackend = null;
+
+//
+// Registers the queue backend of the calling thread.
+// Must be called on the thread before any TaskQueue is created on it.
 // (It takes an optional so that tests can clear it.)
 //
 pub fn setQueueBackend(backend: ?IQueueBackend) void {
@@ -153,8 +168,8 @@ pub fn setQueueBackend(backend: ?IQueueBackend) void {
 }
 
 //
-// Returns the process-level singleton queue backend.
-// Throws if setQueueBackend() has not been called.
+// Returns the queue backend of the calling thread.
+// Throws if setQueueBackend() has not been called on it.
 //
 pub fn getQueueBackend() !IQueueBackend {
     if (_backend) |backend| {

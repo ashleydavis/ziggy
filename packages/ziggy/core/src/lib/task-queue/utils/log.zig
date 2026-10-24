@@ -149,10 +149,21 @@ pub const ILog = struct {
 };
 
 //
-// Sets the global log.
+// Sets the log of the calling thread, or, with null, has it use the console log again. Each thread has its own: the main thread's
+// writes to the console or a file, and a worker's sends each line to the main thread (see worker.zig in Ziggy's core).
 //
-pub fn setLog(_log: ILog) void {
-    log = _log;
+pub fn setLog(_log: ?ILog) void {
+    thread_log = _log;
+}
+
+//
+// The log of the calling thread: the one it set with setLog, or the console log.
+//
+pub fn currentLog() ILog {
+    return thread_log orelse .{
+        .ptr = @constCast(&console_log),
+        .vtable = &ConsoleLog.vtable,
+    };
 }
 
 //
@@ -274,11 +285,87 @@ pub const ConsoleLog = struct {
 };
 
 //
-// State of the default console log.
+// State of the default console log, which nothing changes.
 //
-var console_log: ConsoleLog = .{ .verbose_enabled = false };
+const console_log: ConsoleLog = .{ .verbose_enabled = false };
 
 //
-// The global log.
+// The log of the calling thread, set with setLog, or null for the console log.
 //
-pub var log: ILog = .{ .ptr = &console_log, .vtable = &ConsoleLog.vtable };
+threadlocal var thread_log: ?ILog = null;
+
+//
+// The log every caller writes to. It holds nothing of its own: each line goes to the log of the thread that writes it (currentLog).
+//
+pub const log: ILog = .{
+    .ptr = @constCast(&console_log),
+    .vtable = &ThreadLog.vtable,
+};
+
+//
+// The functions of `log`, each of which passes the call on to the calling thread's log.
+//
+const ThreadLog = struct {
+    const vtable: ILog.VTable = .{
+        .info = info,
+        .verbose = verbose,
+        .@"error" = logError,
+        .exception = exception,
+        .warn = warn,
+        .debug = debug,
+        .tool = tool,
+        .event = event,
+        .verboseEnabled = verboseEnabled,
+        .getLogDetails = getLogDetails,
+    };
+
+    fn info(ptr: *anyopaque, message: []const u8) void {
+        _ = ptr;
+        currentLog().info(message);
+    }
+
+    fn verbose(ptr: *anyopaque, message: []const u8) void {
+        _ = ptr;
+        currentLog().verbose(message);
+    }
+
+    fn logError(ptr: *anyopaque, message: []const u8) void {
+        _ = ptr;
+        currentLog().@"error"(message);
+    }
+
+    fn exception(ptr: *anyopaque, message: []const u8, err: anyerror) void {
+        _ = ptr;
+        currentLog().exception(message, err);
+    }
+
+    fn warn(ptr: *anyopaque, message: []const u8) void {
+        _ = ptr;
+        currentLog().warn(message);
+    }
+
+    fn debug(ptr: *anyopaque, message: []const u8) void {
+        _ = ptr;
+        currentLog().debug(message);
+    }
+
+    fn tool(ptr: *anyopaque, toolName: []const u8, data: IToolOutput) void {
+        _ = ptr;
+        currentLog().tool(toolName, data);
+    }
+
+    fn event(ptr: *anyopaque, message: []const u8) void {
+        _ = ptr;
+        currentLog().event(message);
+    }
+
+    fn verboseEnabled(ptr: *anyopaque) bool {
+        _ = ptr;
+        return currentLog().verboseEnabled();
+    }
+
+    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!ILogDetails {
+        _ = ptr;
+        return currentLog().getLogDetails(allocator, io);
+    }
+};

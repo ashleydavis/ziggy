@@ -3,14 +3,18 @@
 //
 // The kinds of Zig code an app's frontend uses: a message handler, which returns the message response to a message from the frontend
 // straight away, a task, which does slower work on a thread of its own and reports back while it runs, and a menu item's function,
-// which sends the frontend an event.
+// which sends the frontend an event. Each takes the same standard arguments as every other of its kind: its services, the timers, the
+// Io and an allocator, then (for a task) its context, then the payload.
 //
 
 const std = @import("std");
 const builtin = @import("builtin");
 const ziggy = @import("ziggy");
 
+const HandlerServices = ziggy.core.HandlerServices;
+const TaskServices = ziggy.task_runner.TaskServices;
 const TaskContext = ziggy.task_runner.TaskContext;
+const Timers = ziggy.timers.Timers;
 
 //
 // The data of the frontend's hello-world message.
@@ -31,11 +35,13 @@ pub const HelloWorldResponse = struct {
 //
 // Handles the frontend's hello-world message: returns a greeting for the name in the message's data, naming the platform the app runs on.
 //
-pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: HelloWorldRequest) !HelloWorldResponse {
-    _ = core;
+pub fn helloWorldHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: HelloWorldRequest) !HelloWorldResponse {
+    _ = services;
+    _ = timers;
+    _ = io;
     return .{
-        .greeting = try std.fmt.allocPrint(arena, "Hello {s}, from Zig on {s}", .{
-            request.name,
+        .greeting = try std.fmt.allocPrint(allocator, "Hello {s}, from Zig on {s}", .{
+            payload.name,
             @tagName(builtin.os.tag),
         }),
     };
@@ -44,13 +50,15 @@ pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, reque
 //
 // The hello-world task: sends the frontend one output event while it runs, then completes with a result.
 //
-pub fn helloWorldTaskHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    try context.sendEvent(.{
+pub fn helloWorldTaskHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
+    _ = timers;
+    _ = context;
+    _ = payload;
+    try services.sendEvent(io, allocator, .{
         .type = "output",
         .text = "Hello world from a task",
     });
-    return try context.arena.dupe(u8, "\"hello world task done\"");
+    return "hello world task done";
 }
 
 //
@@ -58,6 +66,7 @@ pub fn helloWorldTaskHandler(context: *TaskContext, data: std.json.Value) anyerr
 // frontend writes to its log. It runs on the thread that handles messages, like a message handler, so it must be quick: slow work
 // queues a task from it.
 //
-pub fn helloFromZigMenuItem(core: *ziggy.core.Core, arena: std.mem.Allocator) !void {
-    try core.sendEvent(arena, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
+pub fn helloFromZigMenuItem(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) !void {
+    _ = timers;
+    try services.sendEvent(io, allocator, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
 }

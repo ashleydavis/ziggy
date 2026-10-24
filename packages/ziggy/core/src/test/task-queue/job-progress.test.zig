@@ -12,25 +12,26 @@ const EventRecorder = struct {
     // Number of events sent.
     calls: usize,
 
-    // The last event, serialized to JSON so it can be compared after the call returns.
+    // The last event, serialized to JSON with the allocator the call was given, so it can be compared after the call returns.
     lastEvent: []const u8,
 
-    // Allocator for lastEvent.
-    allocator: std.mem.Allocator,
 
     //
     // ITaskContext.sendEvent for the recorder.
     //
-    fn sendEvent(ptr: *anyopaque, event: std.json.Value) void {
+    fn sendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
+        _ = io;
         const self: *EventRecorder = @ptrCast(@alignCast(ptr));
         self.calls += 1;
-        self.lastEvent = std.json.Stringify.valueAlloc(self.allocator, event, .{}) catch unreachable;
+        self.lastEvent = std.json.Stringify.valueAlloc(allocator, event, .{}) catch unreachable;
     }
 
     //
     // ITaskContext.isCancelled for the recorder.
     //
-    fn isCancelled(ptr: *anyopaque) bool {
+    fn isCancelled(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) bool {
+        _ = io;
+        _ = allocator;
         _ = ptr;
         return false;
     }
@@ -65,8 +66,7 @@ fn makeContext(recorder: *EventRecorder, generators: *Generators) ITaskContext {
         .sessionId = "session-1",
         .taskId = "task-1",
         .maxConcurrentChildTasks = 1,
-        .hostRequester = null,
-        .toolRunner = null,
+        .nativeCaller = null,
         .ptr = recorder,
         .vtable = &EventRecorder.vtable,
     };
@@ -78,7 +78,6 @@ test "sends the whole job with every report, so a listener that joined late lear
     var recorder: EventRecorder = .{
         .calls = 0,
         .lastEvent = "",
-        .allocator = arena.allocator(),
     };
     var generators: Generators = .{
         .uuidGenerator = .{},
@@ -86,7 +85,7 @@ test "sends the whole job with every report, so a listener that joined late lear
     };
     const context = makeContext(&recorder, &generators);
 
-    try sendJobProgress(arena.allocator(), context, .{
+    try sendJobProgress(arena.allocator(), std.testing.io, context, .{
         .id = "job-1",
         .name = "Importing photos",
         .cancelSource = "session-1",
@@ -102,7 +101,6 @@ test "carries a job that has not said what it is doing yet" {
     var recorder: EventRecorder = .{
         .calls = 0,
         .lastEvent = "",
-        .allocator = arena.allocator(),
     };
     var generators: Generators = .{
         .uuidGenerator = .{},
@@ -110,7 +108,7 @@ test "carries a job that has not said what it is doing yet" {
     };
     const context = makeContext(&recorder, &generators);
 
-    try sendJobProgress(arena.allocator(), context, .{
+    try sendJobProgress(arena.allocator(), std.testing.io, context, .{
         .id = "job-1",
         .name = "Syncing database",
     }, 5000, null);
@@ -126,7 +124,6 @@ test "sends nothing for a task that carries no job tag" {
     var recorder: EventRecorder = .{
         .calls = 0,
         .lastEvent = "",
-        .allocator = arena.allocator(),
     };
     var generators: Generators = .{
         .uuidGenerator = .{},
@@ -134,7 +131,7 @@ test "sends nothing for a task that carries no job tag" {
     };
     const context = makeContext(&recorder, &generators);
 
-    try sendJobProgress(arena.allocator(), context, null, 5000, "12 imported");
+    try sendJobProgress(arena.allocator(), std.testing.io, context, null, 5000, "12 imported");
 
     try std.testing.expectEqual(@as(usize, 0), recorder.calls);
 }

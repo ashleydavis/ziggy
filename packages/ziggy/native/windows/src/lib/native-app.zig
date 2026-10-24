@@ -2,7 +2,9 @@
 // Ziggy's Windows native app. It creates the window, hosts WebView2, injects window.ziggy, loads the app's bundled
 // frontend, calls the core through the C interface and moves messages between the frontend and the core.
 //
-// Messages from the core arrive on any thread, so they are queued and delivered to the web view from the UI thread.
+// Only the UI thread touches the native app's state. The core posts its messages for the native app to the native app's queue and
+// wakes the UI thread with a window message, and the UI thread takes them (see native-message.zig in the core): it passes each message
+// for the frontend to the web view and does each call, giving the core the result of each call that has one.
 //
 // WebView2 is used through its native COM interface, with the declarations translated from the SDK's own WebView2.h.
 // The WebView2 loader is linked into the executable from the SDK's static library, so no DLL is needed beside it.
@@ -16,6 +18,7 @@ const accelerator_lib = @import("accelerator.zig");
 const actions_lib = @import("actions.zig");
 const menu_lib = @import("menu.zig");
 const pickers_lib = @import("pickers.zig");
+const native_message = @import("native-message");
 
 //
 // The URL prefix the bundled frontend is served under, with a trailing slash. The host name is under .invalid, which can
@@ -39,34 +42,14 @@ pub const AppConfig = struct {
 };
 
 //
-// The window message the deliver callback posts to the UI thread to signal that messages are waiting in the queue.
+// The window message the core's wake posts to the UI thread when the core has posted messages for the native app.
 //
-const WM_ZIGGY_DELIVER: c.UINT = c.WM_APP + 1;
-
-//
-// The window message a worker thread posts to the UI thread to have it show a file or directory dialog. Its lparam is the
-// address of the request.
-//
-const WM_ZIGGY_PICK: c.UINT = c.WM_APP + 2;
-
-//
-// The window message the test control connection's thread posts to have the UI thread do a menu action. Its lparam is the
-// address of the action text, which the UI thread frees.
-//
-const WM_ZIGGY_MENU: c.UINT = c.WM_APP + 3;
-
-//
-// The window message the test control connection's thread posts to have the UI thread capture a picture of the window. Its lparam
-// is the address of the request.
-//
-const WM_ZIGGY_SCREENSHOT: c.UINT = c.WM_APP + 4;
-
-//
+const WM_ZIGGY_NATIVE: c.UINT = c.WM_APP + 1;
 
 //
 // The name of the window class the native app registers.
 //
-const window_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggyShellWindow");
+const window_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggyNativeAppWindow");
 
 //
 // The window style: a normal top level window with a title bar, borders and the sizing and minimize and maximize buttons.
@@ -74,7 +57,7 @@ const window_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggyShellWind
 const window_style: c.DWORD = c.WS_OVERLAPPEDWINDOW;
 
 //
-// Implements the parts of IUnknown that every handler object shares. A handler lives inside the Shell, which outlives
+// Implements the parts of IUnknown that every handler object shares. A handler lives inside the NativeApp, which outlives
 // every call WebView2 can make to it, so it counts no references and reports it always has one.
 //
 fn ComHandler(comptime Interface: type, comptime interface_id: c.IID) type {
@@ -82,7 +65,7 @@ fn ComHandler(comptime Interface: type, comptime interface_id: c.IID) type {
         // The COM object WebView2 is given: a pointer to its table of functions.
         interface: Interface,
         // The native app the handler works for.
-        shell: *Shell,
+        native_app: *NativeApp,
 
         //
         // COM calls this to check whether the object has an interface: it has IUnknown and the handler interface.
@@ -209,9 +192,24 @@ const MenuAction = struct {
 };
 
 //
-// Everything one running native app owns. It lives on the stack of run and every callback is given its address.
+// A file dialog the core requested that is queued until the one showing closes.
 //
-const Shell = struct {
+const QueuedPick = struct {
+    // The number the result of the core's call is sent with.
+    reply: u64,
+    // Which dialog to show.
+    pick_kind: pickers_lib.PickKind,
+    // The dialog's title as UTF-16. Owned.
+    title: [:0]u16,
+    // The suggested file name as UTF-16, or null for none. Owned.
+    initial_name: ?[:0]u16,
+};
+
+//
+// Everything one running native app owns. It lives on the stack of run and every callback is given its address. Only the UI thread
+// touches it.
+//
+const NativeApp = struct {
     // The configuration the app passed in.
     app_config: AppConfig,
     // The command line, for the geometry option.
@@ -224,12 +222,10 @@ const Shell = struct {
     web_view: ?*c.ICoreWebView2,
     // The core's handle, until it is destroyed.
     core: ?*anyopaque,
-    // Guards the queue.
-    queue_lock: c.SRWLOCK,
-    // Messages from the core waiting for the UI thread, oldest first. Every text is owned by the queue.
-    queue: std.ArrayList([]u8),
-    // Set when the core has been destroyed, so nothing more is delivered.
-    destroyed: std.atomic.Value(bool),
+    // The file dialog that is showing, or null.
+    open_dialog: ?*c.IFileDialog,
+    // The file dialogs the core requested while one was showing, oldest first.
+    queued_picks: std.ArrayList(QueuedPick),
     // Set on the UI thread when the window starts closing, so the creation callbacks still to come do nothing.
     closing: bool,
     // The frontend's address as UTF-16, including the query the app supplies. Made once the core exists. Owned.
@@ -280,9 +276,11 @@ const Shell = struct {
     script_executed_handler: ScriptExecutedHandler,
     // Receives the end of a window capture.
     capture_handler: CapturePreviewHandler,
-    // The capture being made, or null when none is. Touched only by the UI thread.
-    screenshot_request: ?*ScreenshotRequest,
-    // The stream the capture in progress is written to, or null when none is. Touched only by the UI thread.
+    // The number the core's call for the capture being made is sent with, or null when none is being made.
+    screenshot_reply: ?u64,
+    // The file the capture being made is written to, as UTF-16, or null when none is being made. Owned.
+    screenshot_path: ?[:0]u16,
+    // The stream the capture in progress is written to, or null when none is.
     screenshot_stream: ?*c.IStream,
 };
 
@@ -291,16 +289,15 @@ const Shell = struct {
 //
 pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
     const allocator = std.heap.c_allocator;
-    var shell: Shell = .{
+    var native_app: NativeApp = .{
         .app_config = app_config,
         .args = args,
         .window = null,
         .controller = null,
         .web_view = null,
         .core = null,
-        .queue_lock = std.mem.zeroes(c.SRWLOCK),
-        .queue = .empty,
-        .destroyed = .init(false),
+        .open_dialog = null,
+        .queued_picks = .empty,
         .closing = false,
         .ui_url = undefined,
         .inject_script = undefined,
@@ -326,21 +323,21 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .script_added_handler = undefined,
         .script_executed_handler = undefined,
         .capture_handler = undefined,
-        .screenshot_request = null,
+        .screenshot_reply = null,
+        .screenshot_path = null,
         .screenshot_stream = null,
     };
-    initHandlers(&shell);
-    const exit_code = try start(&shell, allocator);
-    destroyCore(&shell);
-    discardPending(&shell, allocator);
-    for (shell.menu_actions.items) |menu_action| {
+    initHandlers(&native_app);
+    const exit_code = try start(&native_app, allocator);
+    destroyCore(&native_app);
+    for (native_app.menu_actions.items) |menu_action| {
         allocator.free(menu_action.action);
     }
-    shell.menu_actions.deinit(allocator);
-    if (shell.accelerator_table != null) {
-        _ = c.DestroyAcceleratorTable(shell.accelerator_table);
+    native_app.menu_actions.deinit(allocator);
+    if (native_app.accelerator_table != null) {
+        _ = c.DestroyAcceleratorTable(native_app.accelerator_table);
     }
-    shell.queue.deinit(allocator);
+    native_app.queued_picks.deinit(allocator);
     return exit_code;
 }
 
@@ -348,7 +345,7 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
 // Prints the reason and ends the process with a failure code.
 //
 fn fatal(comptime format: []const u8, arguments: anytype) noreturn {
-    std.debug.print("ziggy shell: " ++ format ++ "\n", arguments);
+    std.debug.print("ziggy native app: " ++ format ++ "\n", arguments);
     std.process.exit(1);
 }
 
@@ -371,84 +368,84 @@ fn guidEquals(left: *const c.GUID, right: *const c.GUID) bool {
 //
 // Points every handler's COM object at its table of functions and at the native app.
 //
-fn initHandlers(shell: *Shell) void {
-    shell.environment_handler = .{
+fn initHandlers(native_app: *NativeApp) void {
+    native_app.environment_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&environment_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.controller_handler = .{
+    native_app.controller_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&controller_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.web_message_handler = .{
+    native_app.web_message_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&web_message_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.navigation_handler = .{
+    native_app.navigation_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&navigation_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.new_window_handler = .{
+    native_app.new_window_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&new_window_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.resource_handler = .{
+    native_app.resource_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&resource_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.script_added_handler = .{
+    native_app.script_added_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&script_added_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.accelerator_handler = .{
+    native_app.accelerator_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&accelerator_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.copy_handler = .{
+    native_app.copy_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&copy_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.cut_handler = .{
+    native_app.cut_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&cut_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.paste_handler = .{
+    native_app.paste_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&paste_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.script_executed_handler = .{
+    native_app.script_executed_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&script_executed_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
-    shell.capture_handler = .{
+    native_app.capture_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&capture_vtable),
         },
-        .shell = shell,
+        .native_app = native_app,
     };
 }
 
@@ -476,43 +473,43 @@ fn readEnvironment(allocator: std.mem.Allocator, comptime name: []const u8) !?[:
 //
 // Creates the window, starts WebView2 and runs the message loop until the window closes.
 //
-fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
+fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
     const test_hooks = c.ziggy_test_hooks_enabled();
-    shell.test_mode = false;
+    native_app.test_mode = false;
     if (test_hooks) {
         const test_mode = try readEnvironment(allocator, "ZIGGY_TEST_MODE");
-        shell.test_mode = test_mode != null;
+        native_app.test_mode = test_mode != null;
     }
 
     var inject_script_length: usize = 0;
     const inject_script = c.ziggy_inject_script(&inject_script_length);
-    shell.inject_script = try std.unicode.utf8ToUtf16LeAllocZ(allocator, inject_script[0..inject_script_length]);
+    native_app.inject_script = try std.unicode.utf8ToUtf16LeAllocZ(allocator, inject_script[0..inject_script_length]);
 
     const local_app_data = try readEnvironment(allocator, "LOCALAPPDATA") orelse {
         return error.LocalAppDataMissing;
     };
     defer allocator.free(local_app_data);
-    shell.data_directory = try std.fmt.allocPrintSentinel(allocator, "{s}\\{s}", .{ local_app_data, shell.app_config.app_id }, 0);
-    const wide_data_directory = try std.unicode.utf8ToUtf16LeAllocZ(allocator, shell.data_directory);
+    native_app.data_directory = try std.fmt.allocPrintSentinel(allocator, "{s}\\{s}", .{ local_app_data, native_app.app_config.app_id }, 0);
+    const wide_data_directory = try std.unicode.utf8ToUtf16LeAllocZ(allocator, native_app.data_directory);
     defer allocator.free(wide_data_directory);
     const created = c.SHCreateDirectoryExW(null, wide_data_directory.ptr, null);
     if (created != c.ERROR_SUCCESS and created != c.ERROR_ALREADY_EXISTS) {
         return error.DataDirectoryFailed;
     }
-    const user_data_folder = try std.fs.path.join(allocator, &.{ shell.data_directory, "WebView2" });
+    const user_data_folder = try std.fs.path.join(allocator, &.{ native_app.data_directory, "WebView2" });
     defer allocator.free(user_data_folder);
     const wide_user_data_folder = try std.unicode.utf8ToUtf16LeAllocZ(allocator, user_data_folder);
     defer allocator.free(wide_user_data_folder);
 
-    if (shell.test_mode) {
-        shell.test_port_file = try readEnvironment(allocator, "ZIGGY_TEST_PORT_FILE");
+    if (native_app.test_mode) {
+        native_app.test_port_file = try readEnvironment(allocator, "ZIGGY_TEST_PORT_FILE");
     }
 
-    var width = shell.app_config.default_width;
-    var height = shell.app_config.default_height;
+    var width = native_app.app_config.default_width;
+    var height = native_app.app_config.default_height;
     var left: c_int = std.math.minInt(c_int);
     var top: c_int = std.math.minInt(c_int);
-    for (shell.args) |argument| {
+    for (native_app.args) |argument| {
         if (std.mem.startsWith(u8, argument, "-geometry=")) {
             const geometry = geometry_lib.parseGeometry(argument["-geometry=".len..]) orelse {
                 return error.InvalidGeometry;
@@ -530,7 +527,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
 
     // Without this Windows scales the window as a bitmap on a high resolution screen and the frontend looks blurred.
     if (c.SetProcessDpiAwarenessContext(c.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == 0) {
-        std.debug.print("ziggy shell: could not set per monitor DPI awareness, error {d}\n", .{c.GetLastError()});
+        std.debug.print("ziggy native app: could not set per monitor DPI awareness, error {d}\n", .{c.GetLastError()});
     }
 
     const hr_init = c.CoInitializeEx(null, c.COINIT_APARTMENTTHREADED);
@@ -544,7 +541,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
     window_class.hInstance = instance;
     // IDC_ARROW, the standard arrow, which the resource macro MAKEINTRESOURCE would write as 32512.
     window_class.hCursor = c.LoadCursorW(null, @ptrFromInt(32512));
-    if (shell.app_config.icon_resource) |icon_resource| {
+    if (native_app.app_config.icon_resource) |icon_resource| {
         window_class.hIcon = c.LoadIconW(instance, @ptrFromInt(icon_resource));
         window_class.hIconSm = window_class.hIcon;
     }
@@ -564,9 +561,9 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
     if (c.AdjustWindowRectExForDpi(&frame, window_style, 0, 0, dpi) == 0) {
         return error.WindowSizeFailed;
     }
-    const wide_title = try std.unicode.utf8ToUtf16LeAllocZ(allocator, shell.app_config.title);
+    const wide_title = try std.unicode.utf8ToUtf16LeAllocZ(allocator, native_app.app_config.title);
     defer allocator.free(wide_title);
-    shell.window = c.CreateWindowExW(
+    native_app.window = c.CreateWindowExW(
         0,
         window_class_name.ptr,
         wide_title.ptr,
@@ -578,16 +575,16 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
         null,
         null,
         instance,
-        shell,
+        native_app,
     ) orelse {
         return error.WindowCreateFailed;
     };
-    _ = c.ShowWindow(shell.window, c.SW_SHOW);
-    if (c.UpdateWindow(shell.window) == 0) {
+    _ = c.ShowWindow(native_app.window, c.SW_SHOW);
+    if (c.UpdateWindow(native_app.window) == 0) {
         return error.WindowCreateFailed;
     }
 
-    check("CreateCoreWebView2EnvironmentWithOptions", c.CreateCoreWebView2EnvironmentWithOptions(null, wide_user_data_folder.ptr, null, &shell.environment_handler.interface));
+    check("CreateCoreWebView2EnvironmentWithOptions", c.CreateCoreWebView2EnvironmentWithOptions(null, wide_user_data_folder.ptr, null, &native_app.environment_handler.interface));
 
     var message: c.MSG = undefined;
     while (true) {
@@ -598,7 +595,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
         if (result < 0) {
             return error.MessageLoopFailed;
         }
-        if (shell.accelerator_table != null and c.TranslateAcceleratorW(shell.window, shell.accelerator_table, &message) != 0) {
+        if (native_app.accelerator_table != null and c.TranslateAcceleratorW(native_app.window, native_app.accelerator_table, &message) != 0) {
             continue;
         }
         _ = c.TranslateMessage(&message);
@@ -610,7 +607,7 @@ fn start(shell: *Shell, allocator: std.mem.Allocator) !u8 {
 //
 // Finds the native app a window belongs to, or null before the native app has attached itself.
 //
-fn shellOf(window: c.HWND) ?*Shell {
+fn nativeAppOf(window: c.HWND) ?*NativeApp {
     const value = c.GetWindowLongPtrW(window, c.GWLP_USERDATA);
     if (value == 0) {
         return null;
@@ -627,22 +624,22 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
         _ = c.SetWindowLongPtrW(window, c.GWLP_USERDATA, @intCast(@intFromPtr(create.lpCreateParams)));
         return c.DefWindowProcW(window, message, wparam, lparam);
     }
-    const shell = shellOf(window) orelse {
+    const native_app = nativeAppOf(window) orelse {
         return c.DefWindowProcW(window, message, wparam, lparam);
     };
     switch (message) {
         c.WM_SIZE => {
-            resizeWebView(shell);
+            resizeWebView(native_app);
             return 0;
         },
         c.WM_MOVE => {
-            if (shell.controller) |controller| {
+            if (native_app.controller) |controller| {
                 check("NotifyParentWindowPositionChanged", controller.lpVtbl.*.NotifyParentWindowPositionChanged.?(controller));
             }
             return 0;
         },
         c.WM_SETFOCUS => {
-            if (shell.controller) |controller| {
+            if (native_app.controller) |controller| {
                 check("MoveFocus", controller.lpVtbl.*.MoveFocus.?(controller, c.COREWEBVIEW2_MOVE_FOCUS_REASON_PROGRAMMATIC));
             }
             return 0;
@@ -656,32 +653,20 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
         },
         c.WM_COMMAND => {
             const command_id: usize = wparam & 0xFFFF;
-            if (command_id < first_command_id or command_id - first_command_id >= shell.menu_actions.items.len) {
+            if (command_id < first_command_id or command_id - first_command_id >= native_app.menu_actions.items.len) {
                 return c.DefWindowProcW(window, message, wparam, lparam);
             }
-            runAction(shell, shell.menu_actions.items[command_id - first_command_id].action);
+            runAction(native_app, native_app.menu_actions.items[command_id - first_command_id].action);
             return 0;
         },
-        WM_ZIGGY_MENU => {
-            handleMenuRequest(shell, @ptrFromInt(@as(usize, @intCast(lparam))));
-            return 0;
-        },
-        WM_ZIGGY_SCREENSHOT => {
-            handleScreenshotRequest(shell, @ptrFromInt(@as(usize, @intCast(lparam))));
-            return 0;
-        },
-        WM_ZIGGY_PICK => {
-            handlePickRequest(shell, @ptrFromInt(@as(usize, @intCast(lparam))));
-            return 0;
-        },
-        WM_ZIGGY_DELIVER => {
-            drainQueue(shell);
+        WM_ZIGGY_NATIVE => {
+            takeCoreMessages(native_app);
             return 0;
         },
         c.WM_CLOSE => {
-            shell.closing = true;
-            destroyCore(shell);
-            closeWebView(shell);
+            native_app.closing = true;
+            destroyCore(native_app);
+            closeWebView(native_app);
             if (c.DestroyWindow(window) == 0) {
                 fatal("DestroyWindow failed, error {d}", .{c.GetLastError()});
             }
@@ -700,12 +685,12 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
 //
 // Makes the web view fill the window's client area.
 //
-fn resizeWebView(shell: *Shell) void {
-    const controller = shell.controller orelse {
+fn resizeWebView(native_app: *NativeApp) void {
+    const controller = native_app.controller orelse {
         return;
     };
     var bounds: c.RECT = undefined;
-    if (c.GetClientRect(shell.window, &bounds) == 0) {
+    if (c.GetClientRect(native_app.window, &bounds) == 0) {
         fatal("GetClientRect failed, error {d}", .{c.GetLastError()});
     }
     check("put_Bounds", controller.lpVtbl.*.put_Bounds.?(controller, bounds));
@@ -714,119 +699,151 @@ fn resizeWebView(shell: *Shell) void {
 //
 // Closes the web view and lets go of it.
 //
-fn closeWebView(shell: *Shell) void {
-    if (shell.web_view) |web_view| {
+fn closeWebView(native_app: *NativeApp) void {
+    if (native_app.web_view) |web_view| {
         _ = web_view.lpVtbl.*.Release.?(web_view);
-        shell.web_view = null;
+        native_app.web_view = null;
     }
-    if (shell.controller) |controller| {
+    if (native_app.controller) |controller| {
         check("Close", controller.lpVtbl.*.Close.?(controller));
         _ = controller.lpVtbl.*.Release.?(controller);
-        shell.controller = null;
+        native_app.controller = null;
     }
-    if (shell.environment) |environment| {
+    if (native_app.environment) |environment| {
         _ = environment.lpVtbl.*.Release.?(environment);
-        shell.environment = null;
+        native_app.environment = null;
     }
 }
 
 //
-// Destroys the core once. After it nothing more is delivered to the frontend.
+// Destroys the core once. After it nothing more is delivered to the frontend and no result is sent: ziggy_destroy gives every
+// call taken and not finished yet its result, so the file dialog that is showing is closed, and the queued ones are dropped, with no result.
 //
-fn destroyCore(shell: *Shell) void {
-    const core = shell.core orelse {
+fn destroyCore(native_app: *NativeApp) void {
+    const core = native_app.core orelse {
         return;
     };
-    shell.destroyed.store(true, .release);
-    shell.core = null;
+    native_app.core = null;
+    for (native_app.queued_picks.items) |queued| {
+        freeQueuedPick(queued);
+    }
+    native_app.queued_picks.clearRetainingCapacity();
+    if (native_app.open_dialog) |dialog| {
+        _ = dialog.lpVtbl.*.Close.?(dialog, hresult_cancelled);
+    }
     c.ziggy_destroy(core);
 }
 
 //
-// Frees the messages queued for the frontend that were never delivered.
+// The core's wake. It runs on any thread of the core or the app, and only posts a window message to the window, the wake data, which
+// the UI thread handles.
 //
-fn discardPending(shell: *Shell, allocator: std.mem.Allocator) void {
-    for (shell.queue.items) |text| {
-        allocator.free(text);
-    }
-    shell.queue.clearRetainingCapacity();
-}
-
-//
-// The core's deliver callback. It runs on any thread: it queues the message and posts WM_ZIGGY_DELIVER so the UI thread delivers it.
-//
-fn deliver(user_data: ?*anyopaque, message: [*c]const u8, message_len: usize) callconv(.c) void {
-    const shell: *Shell = @ptrCast(@alignCast(user_data.?));
-    if (shell.destroyed.load(.acquire)) {
-        return;
-    }
-    const text = std.heap.c_allocator.dupe(u8, message[0..message_len]) catch @panic("out of memory delivering a message");
-    c.AcquireSRWLockExclusive(&shell.queue_lock);
-    shell.queue.append(std.heap.c_allocator, text) catch @panic("out of memory delivering a message");
-    c.ReleaseSRWLockExclusive(&shell.queue_lock);
-    if (c.PostMessageW(shell.window, WM_ZIGGY_DELIVER, 0, 0) == 0) {
-        fatal("could not wake the UI thread to deliver a message, error {d}", .{c.GetLastError()});
+fn wake(wake_data: ?*anyopaque) callconv(.c) void {
+    const window: c.HWND = @ptrCast(@alignCast(wake_data));
+    if (c.PostMessageW(window, WM_ZIGGY_NATIVE, 0, 0) == 0) {
+        fatal("could not wake the UI thread, error {d}", .{c.GetLastError()});
     }
 }
 
 //
-// Runs on the UI thread: sends every queued message to the frontend, in the order they were queued.
+// Runs on the UI thread: takes every message the core has posted for the native app, passing each message for the frontend to the web
+// view and doing each call.
 //
-fn drainQueue(shell: *Shell) void {
+fn takeCoreMessages(native_app: *NativeApp) void {
     const allocator = std.heap.c_allocator;
-    c.AcquireSRWLockExclusive(&shell.queue_lock);
-    var batch = shell.queue;
-    shell.queue = .empty;
-    c.ReleaseSRWLockExclusive(&shell.queue_lock);
-    defer batch.deinit(allocator);
-    for (batch.items) |text| {
+    while (true) {
+        const core = native_app.core orelse {
+            return;
+        };
+        var length: usize = 0;
+        var kind: i32 = 0;
+        var reply: u64 = 0;
+        const text_pointer = c.ziggy_take_native_message(core, &length, &kind, &reply) orelse {
+            return;
+        };
+        // The text is valid only until the next take, which a dialog's own message loop may make, so it is copied.
+        const text = allocator.dupe(u8, text_pointer[0..length]) catch @panic("out of memory taking a message from the core");
         defer allocator.free(text);
-        if (shell.destroyed.load(.acquire)) {
+        if (kind == c.ZIGGY_NATIVE_DELIVER) {
+            deliverToWebView(native_app, text);
             continue;
         }
-        const web_view = shell.web_view orelse {
-            fatal("a message arrived from the core before the web view existed", .{});
+        doCall(native_app, text, reply) catch |err| {
+            fatal("could not do the core's call {s}: {s}", .{ text, @errorName(err) });
         };
-        const script = std.mem.concat(allocator, u8, &.{ "window.__ziggyReceive(", text, ");" }) catch @panic("out of memory delivering a message");
-        defer allocator.free(script);
-        const wide_script = std.unicode.utf8ToUtf16LeAllocZ(allocator, script) catch {
-            fatal("a message from the core is not valid UTF-8", .{});
-        };
-        defer allocator.free(wide_script);
-        check("ExecuteScript", web_view.lpVtbl.*.ExecuteScript.?(web_view, wide_script.ptr, &shell.script_executed_handler.interface));
     }
 }
 
 //
-// The native host callback that gives the operating system's version.
+// Sends a message from the core to the frontend.
 //
-fn osVersion(user_data: ?*anyopaque, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
-    _ = user_data;
+fn deliverToWebView(native_app: *NativeApp, text: []const u8) void {
+    const allocator = std.heap.c_allocator;
+    const web_view = native_app.web_view orelse {
+        fatal("a message arrived from the core before the web view existed", .{});
+    };
+    const script = std.mem.concat(allocator, u8, &.{ "window.__ziggyReceive(", text, ");" }) catch @panic("out of memory delivering a message");
+    defer allocator.free(script);
+    const wide_script = std.unicode.utf8ToUtf16LeAllocZ(allocator, script) catch {
+        fatal("a message from the core is not valid UTF-8", .{});
+    };
+    defer allocator.free(wide_script);
+    check("ExecuteScript", web_view.lpVtbl.*.ExecuteScript.?(web_view, wide_script.ptr, &native_app.script_executed_handler.interface));
+}
+
+//
+// Does one call of the core's, and sends the core its result when it has one: at once, or, for a dialog or a screenshot, once it is done.
+//
+fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
+    var arena_state = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const call = try native_message.parse(arena, text);
+    switch (call) {
+        // The window is closed the same way the user closing it does, once this message has been handled.
+        .quit => if (c.PostMessageW(native_app.window, c.WM_CLOSE, 0, 0) == 0) {
+            fatal("could not post a close to the UI thread, error {d}", .{c.GetLastError()});
+        },
+        .menu_action => |action| runAction(native_app, action),
+        .os_version => {
+            var buffer: [256]u8 = undefined;
+            const version = osVersion(&buffer) catch |err| {
+                sendResult(native_app, reply, false, @errorName(err));
+                return;
+            };
+            sendResult(native_app, reply, true, version);
+        },
+        .pick_paths => |pick| try askForPick(native_app, reply, pick),
+        .screenshot => |output_path| startScreenshot(native_app, reply, output_path),
+        .keep_alive, .native_call, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
+    }
+}
+
+//
+// Sends the core the result of its call taken under the number `reply`, unless the core has been destroyed, which gave it its result already.
+//
+fn sendResult(native_app: *NativeApp, reply: u64, ok: bool, text: []const u8) void {
+    const core = native_app.core orelse {
+        return;
+    };
+    c.ziggy_native_result(core, reply, ok, text.ptr, text.len);
+}
+
+//
+// The operating system's version, as the JSON text of a string written into the buffer.
+//
+fn osVersion(buffer: []u8) ![]u8 {
     var info = std.mem.zeroes(std.os.windows.RTL_OSVERSIONINFOW);
     info.dwOSVersionInfoSize = @sizeOf(std.os.windows.RTL_OSVERSIONINFOW);
     if (std.os.windows.ntdll.RtlGetVersion(&info) != .SUCCESS) {
-        return -1;
+        return error.VersionUnavailable;
     }
-    const written = std.fmt.bufPrint(buffer[0..capacity], "\"Windows {d}.{d}.{d} {s}\"", .{
+    return try std.fmt.bufPrint(buffer, "\"Windows {d}.{d}.{d} {s}\"", .{
         info.dwMajorVersion,
         info.dwMinorVersion,
         info.dwBuildNumber,
         @tagName(builtin.cpu.arch),
-    }) catch {
-        return -1;
-    };
-    return @intCast(written.len);
-}
-
-//
-// The native host callback that quits the application, called by the test control connection. It can be called from any
-// thread, so it posts a close to the UI thread, which closes the window the same way the user closing it does.
-//
-fn quit(user_data: ?*anyopaque) callconv(.c) void {
-    const shell: *Shell = @ptrCast(@alignCast(user_data.?));
-    if (c.PostMessageW(shell.window, c.WM_CLOSE, 0, 0) == 0) {
-        fatal("could not post a close to the UI thread, error {d}", .{c.GetLastError()});
-    }
+    });
 }
 
 //
@@ -853,8 +870,8 @@ fn takeAddress(wide: [*c]c.WCHAR) []u8 {
 //
 // Has the core decide what to do with an address. An address is blocked once the core is gone.
 //
-fn checkAddress(shell: *Shell, address: []const u8) i32 {
-    const core = shell.core orelse {
+fn checkAddress(native_app: *NativeApp, address: []const u8) i32 {
+    const core = native_app.core orelse {
         return c.ZIGGY_URL_BLOCK;
     };
     return c.ziggy_check_url(core, address.ptr, address.len);
@@ -863,44 +880,44 @@ fn checkAddress(shell: *Shell, address: []const u8) i32 {
 //
 // Starts the core, registers for the web view's events and adds the injected script. Runs once the web view exists.
 //
-fn onControllerCreated(shell: *Shell, controller: *c.ICoreWebView2Controller) void {
+fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Controller) void {
     _ = controller.lpVtbl.*.AddRef.?(controller);
-    shell.controller = controller;
+    native_app.controller = controller;
     var web_view: ?*c.ICoreWebView2 = null;
     check("get_CoreWebView2", controller.lpVtbl.*.get_CoreWebView2.?(controller, @ptrCast(&web_view)));
     const created_web_view = web_view orelse {
         fatal("the web view controller gave no web view", .{});
     };
-    shell.web_view = created_web_view;
-    resizeWebView(shell);
+    native_app.web_view = created_web_view;
+    resizeWebView(native_app);
 
     var config = std.mem.zeroes(c.ziggy_config);
-    config.user_data = shell;
-    config.deliver = deliver;
-    config.os_version = osVersion;
-    config.quit = quit;
-    config.pick_paths = pickPaths;
-    config.menu_action = menuAction;
-    config.screenshot = screenshot;
+    config.wake_data = native_app.window;
+    config.wake = wake;
+    config.has_os_version = true;
+    config.has_quit = true;
+    config.has_pick_paths = true;
+    config.has_menu_action = true;
+    config.has_screenshot = true;
     var system_info: c.SYSTEM_INFO = undefined;
     c.GetSystemInfo(&system_info);
     config.worker_threads = system_info.dwNumberOfProcessors;
     config.max_concurrent_child_tasks = 10;
     config.app_url_prefix = app_url_prefix;
-    config.data_dir = shell.data_directory.ptr;
-    if (shell.test_mode) {
+    config.data_dir = native_app.data_directory.ptr;
+    if (native_app.test_mode) {
         config.test_mode = true;
-        if (shell.test_port_file) |port_file| {
+        if (native_app.test_port_file) |port_file| {
             config.test_port_file = port_file.ptr;
         }
     }
-    shell.core = c.ziggy_create(&config) orelse {
+    native_app.core = c.ziggy_create(&config) orelse {
         fatal("the core could not be created", .{});
     };
 
     // The app supplies the query unread, and the core names none of its parts.
     var query_length: usize = 0;
-    const query_pointer = c.ziggy_ui_query(shell.core, &query_length) orelse {
+    const query_pointer = c.ziggy_ui_query(native_app.core, &query_length) orelse {
         fatal("the app could not make the UI's query", .{});
     };
     const query = query_pointer[0..query_length];
@@ -909,7 +926,7 @@ fn onControllerCreated(shell: *Shell, controller: *c.ICoreWebView2Controller) vo
         fatal("could not make the UI's address: {s}", .{@errorName(err)});
     };
     defer std.heap.c_allocator.free(ui_url_utf8);
-    shell.ui_url = std.unicode.utf8ToUtf16LeAllocZ(std.heap.c_allocator, ui_url_utf8) catch |err| {
+    native_app.ui_url = std.unicode.utf8ToUtf16LeAllocZ(std.heap.c_allocator, ui_url_utf8) catch |err| {
         fatal("could not make the UI's address: {s}", .{@errorName(err)});
     };
 
@@ -921,18 +938,18 @@ fn onControllerCreated(shell: *Shell, controller: *c.ICoreWebView2Controller) vo
     // Developer tools are part of a normal desktop app, so they are on in a release build too.
     check("put_AreDevToolsEnabled", web_view_settings.lpVtbl.*.put_AreDevToolsEnabled.?(web_view_settings, 1));
     _ = web_view_settings.lpVtbl.*.Release.?(web_view_settings);
-    buildMenu(shell, shell.core.?) catch |err| {
+    buildMenu(native_app, native_app.core.?) catch |err| {
         fatal("could not build the menu: {s}", .{@errorName(err)});
     };
 
     var token: c.EventRegistrationToken = undefined;
-    check("add_AcceleratorKeyPressed", controller.lpVtbl.*.add_AcceleratorKeyPressed.?(controller, &shell.accelerator_handler.interface, &token));
-    check("add_WebMessageReceived", created_web_view.lpVtbl.*.add_WebMessageReceived.?(created_web_view, &shell.web_message_handler.interface, &token));
+    check("add_AcceleratorKeyPressed", controller.lpVtbl.*.add_AcceleratorKeyPressed.?(controller, &native_app.accelerator_handler.interface, &token));
+    check("add_WebMessageReceived", created_web_view.lpVtbl.*.add_WebMessageReceived.?(created_web_view, &native_app.web_message_handler.interface, &token));
     check("AddWebResourceRequestedFilter", created_web_view.lpVtbl.*.AddWebResourceRequestedFilter.?(created_web_view, std.unicode.utf8ToUtf16LeStringLiteral(app_url_prefix ++ "*"), c.COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL));
-    check("add_WebResourceRequested", created_web_view.lpVtbl.*.add_WebResourceRequested.?(created_web_view, &shell.resource_handler.interface, &token));
-    check("add_NavigationStarting", created_web_view.lpVtbl.*.add_NavigationStarting.?(created_web_view, &shell.navigation_handler.interface, &token));
-    check("add_NewWindowRequested", created_web_view.lpVtbl.*.add_NewWindowRequested.?(created_web_view, &shell.new_window_handler.interface, &token));
-    check("AddScriptToExecuteOnDocumentCreated", created_web_view.lpVtbl.*.AddScriptToExecuteOnDocumentCreated.?(created_web_view, shell.inject_script.ptr, &shell.script_added_handler.interface));
+    check("add_WebResourceRequested", created_web_view.lpVtbl.*.add_WebResourceRequested.?(created_web_view, &native_app.resource_handler.interface, &token));
+    check("add_NavigationStarting", created_web_view.lpVtbl.*.add_NavigationStarting.?(created_web_view, &native_app.navigation_handler.interface, &token));
+    check("add_NewWindowRequested", created_web_view.lpVtbl.*.add_NewWindowRequested.?(created_web_view, &native_app.new_window_handler.interface, &token));
+    check("AddScriptToExecuteOnDocumentCreated", created_web_view.lpVtbl.*.AddScriptToExecuteOnDocumentCreated.?(created_web_view, native_app.inject_script.ptr, &native_app.script_added_handler.interface));
 }
 
 //
@@ -959,7 +976,7 @@ fn heldModifiers() u32 {
 // Adds the items of one menu or submenu to a Win32 menu, recording each item that does something in the native app's list of
 // menu actions. The menu's label text is shown with the shortcut after a tab, as Windows menus do.
 //
-fn appendMenuItems(shell: *Shell, allocator: std.mem.Allocator, win32_menu: c.HMENU, items: []const menu_lib.MenuItem) !void {
+fn appendMenuItems(native_app: *NativeApp, allocator: std.mem.Allocator, win32_menu: c.HMENU, items: []const menu_lib.MenuItem) !void {
     for (items) |item| {
         if (item.separator) {
             if (c.AppendMenuW(win32_menu, c.MF_SEPARATOR, 0, null) == 0) {
@@ -976,7 +993,7 @@ fn appendMenuItems(shell: *Shell, allocator: std.mem.Allocator, win32_menu: c.HM
             const submenu = c.CreatePopupMenu() orelse {
                 return error.MenuBuildFailed;
             };
-            try appendMenuItems(shell, allocator, submenu, sub_items);
+            try appendMenuItems(native_app, allocator, submenu, sub_items);
             const wide_label = try std.unicode.utf8ToUtf16LeAllocZ(allocator, escaped);
             defer allocator.free(wide_label);
             if (c.AppendMenuW(win32_menu, c.MF_POPUP, @intFromPtr(submenu), wide_label.ptr) == 0) {
@@ -993,12 +1010,12 @@ fn appendMenuItems(shell: *Shell, allocator: std.mem.Allocator, win32_menu: c.HM
         if (item.accelerator) |accelerator_text| {
             var parsed: c.ziggy_accelerator = undefined;
             if (!c.ziggy_parse_accelerator(accelerator_text.ptr, accelerator_text.len, &parsed)) {
-                std.debug.print("ziggy shell: the menu item \"{s}\" has a shortcut that is not valid: {s}\n", .{ label, accelerator_text });
+                std.debug.print("ziggy native app: the menu item \"{s}\" has a shortcut that is not valid: {s}\n", .{ label, accelerator_text });
                 return error.InvalidShortcut;
             }
             const key_name = std.mem.sliceTo(&parsed.key, 0);
             binding = accelerator_lib.bindingFor(parsed.modifiers, key_name) orelse {
-                std.debug.print("ziggy shell: the menu item \"{s}\" has a shortcut with a key this shell does not know: {s}\n", .{ label, key_name });
+                std.debug.print("ziggy native app: the menu item \"{s}\" has a shortcut with a key this native app does not know: {s}\n", .{ label, key_name });
                 return error.UnknownShortcutKey;
             };
             var shortcut_buffer: [64]u8 = undefined;
@@ -1008,8 +1025,8 @@ fn appendMenuItems(shell: *Shell, allocator: std.mem.Allocator, win32_menu: c.HM
         }
         const wide_text = try std.unicode.utf8ToUtf16LeAllocZ(allocator, text);
         defer allocator.free(wide_text);
-        const command_id = first_command_id + shell.menu_actions.items.len;
-        try shell.menu_actions.append(allocator, .{
+        const command_id = first_command_id + native_app.menu_actions.items.len;
+        try native_app.menu_actions.append(allocator, .{
             .action = try allocator.dupe(u8, action),
             .binding = binding,
         });
@@ -1023,10 +1040,10 @@ fn appendMenuItems(shell: *Shell, allocator: std.mem.Allocator, win32_menu: c.HM
 // Builds the table of shortcuts the message loop uses when the window itself has the keyboard, with an entry for each key a
 // shortcut matches. A shortcut with the Windows key is left out, because a table cannot hold one.
 //
-fn buildAcceleratorTable(shell: *Shell, allocator: std.mem.Allocator) !void {
+fn buildAcceleratorTable(native_app: *NativeApp, allocator: std.mem.Allocator) !void {
     var entries: std.ArrayList(c.ACCEL) = .empty;
     defer entries.deinit(allocator);
-    for (shell.menu_actions.items, 0..) |menu_action, index| {
+    for (native_app.menu_actions.items, 0..) |menu_action, index| {
         const binding = menu_action.binding orelse {
             continue;
         };
@@ -1067,7 +1084,7 @@ fn buildAcceleratorTable(shell: *Shell, allocator: std.mem.Allocator) !void {
     if (entries.items.len == 0) {
         return;
     }
-    shell.accelerator_table = c.CreateAcceleratorTableW(entries.items.ptr, @intCast(entries.items.len)) orelse {
+    native_app.accelerator_table = c.CreateAcceleratorTableW(entries.items.ptr, @intCast(entries.items.len)) orelse {
         return error.AcceleratorTableFailed;
     };
 }
@@ -1076,7 +1093,7 @@ fn buildAcceleratorTable(shell: *Shell, allocator: std.mem.Allocator) !void {
 // Reads the menu from the core and, when it has any menus, puts them in a menu bar on the window and builds the shortcuts.
 // A menu of no menus shows no menu bar.
 //
-fn buildMenu(shell: *Shell, core: *anyopaque) !void {
+fn buildMenu(native_app: *NativeApp, core: *anyopaque) !void {
     const allocator = std.heap.c_allocator;
     var length: usize = 0;
     const json_pointer = c.ziggy_menu_json(core, &length) orelse {
@@ -1094,7 +1111,7 @@ fn buildMenu(shell: *Shell, core: *anyopaque) !void {
         const popup = c.CreatePopupMenu() orelse {
             return error.MenuBuildFailed;
         };
-        try appendMenuItems(shell, allocator, popup, menu.items);
+        try appendMenuItems(native_app, allocator, popup, menu.items);
         const escaped = try menu_lib.escapeLabel(allocator, menu.label);
         defer allocator.free(escaped);
         const wide_label = try std.unicode.utf8ToUtf16LeAllocZ(allocator, escaped);
@@ -1103,37 +1120,37 @@ fn buildMenu(shell: *Shell, core: *anyopaque) !void {
             return error.MenuBuildFailed;
         }
     }
-    shell.menu_bar = menu_bar;
-    if (c.SetMenu(shell.window, menu_bar) == 0) {
+    native_app.menu_bar = menu_bar;
+    if (c.SetMenu(native_app.window, menu_bar) == 0) {
         return error.MenuBuildFailed;
     }
-    try buildAcceleratorTable(shell, allocator);
-    resizeWebView(shell);
+    try buildAcceleratorTable(native_app, allocator);
+    resizeWebView(native_app);
 }
 
 //
 // Runs a menu action. The actions the native app knows are done here, and any other is sent to the core as a menu-action
 // message. The core runs the app's item.
 //
-fn runAction(shell: *Shell, action: []const u8) void {
+fn runAction(native_app: *NativeApp, action: []const u8) void {
     const known = actions_lib.fromName(action) orelse {
-        sendMenuAction(shell, action);
+        sendMenuAction(native_app, action);
         return;
     };
-    const web_view = shell.web_view orelse {
+    const web_view = native_app.web_view orelse {
         fatal("the menu action {s} ran before the web view existed", .{action});
     };
-    const controller = shell.controller orelse {
+    const controller = native_app.controller orelse {
         fatal("the menu action {s} ran before the web view existed", .{action});
     };
     switch (known) {
         .quit => {
-            if (c.PostMessageW(shell.window, c.WM_CLOSE, 0, 0) == 0) {
+            if (c.PostMessageW(native_app.window, c.WM_CLOSE, 0, 0) == 0) {
                 fatal("could not post a close to the window, error {d}", .{c.GetLastError()});
             }
         },
         .close_window => {
-            if (c.PostMessageW(shell.window, c.WM_CLOSE, 0, 0) == 0) {
+            if (c.PostMessageW(native_app.window, c.WM_CLOSE, 0, 0) == 0) {
                 fatal("could not post a close to the window, error {d}", .{c.GetLastError()});
             }
         },
@@ -1144,7 +1161,7 @@ fn runAction(shell: *Shell, action: []const u8) void {
             toggleDevTools(web_view);
         },
         .toggle_fullscreen => {
-            toggleFullscreen(shell);
+            toggleFullscreen(native_app);
         },
         .zoom_in => {
             changeZoom(controller, 1);
@@ -1156,19 +1173,19 @@ fn runAction(shell: *Shell, action: []const u8) void {
             changeZoom(controller, 0);
         },
         .copy => {
-            copySelection(web_view, &shell.copy_handler.interface);
+            copySelection(web_view, &native_app.copy_handler.interface);
         },
         .cut => {
-            copySelection(web_view, &shell.cut_handler.interface);
+            copySelection(web_view, &native_app.cut_handler.interface);
         },
         .paste => {
-            pasteClipboard(shell, web_view);
+            pasteClipboard(native_app, web_view);
         },
         .undo, .redo, .select_all => {
-            runEditCommand(shell, web_view, actions_lib.editCommand(known).?);
+            runEditCommand(native_app, web_view, actions_lib.editCommand(known).?);
         },
         .focus_window => {
-            focusWindow(shell);
+            focusWindow(native_app);
         },
     }
 }
@@ -1177,14 +1194,14 @@ fn runAction(shell: *Shell, action: []const u8) void {
 // Brings the window to the front, restoring it first when it is minimized, because a second copy of the app was started. Windows
 // may refuse to give the foreground to a process that has received no input, in which case the taskbar button flashes instead.
 //
-fn focusWindow(shell: *Shell) void {
-    if (c.IsIconic(shell.window) != 0) {
-        _ = c.ShowWindow(shell.window, c.SW_RESTORE);
+fn focusWindow(native_app: *NativeApp) void {
+    if (c.IsIconic(native_app.window) != 0) {
+        _ = c.ShowWindow(native_app.window, c.SW_RESTORE);
     }
-    if (c.SetForegroundWindow(shell.window) == 0) {
+    if (c.SetForegroundWindow(native_app.window) == 0) {
         var flash = std.mem.zeroes(c.FLASHWINFO);
         flash.cbSize = @sizeOf(c.FLASHWINFO);
-        flash.hwnd = shell.window;
+        flash.hwnd = native_app.window;
         flash.dwFlags = c.FLASHW_ALL | c.FLASHW_TIMERNOFG;
         _ = c.FlashWindowEx(&flash);
     }
@@ -1247,15 +1264,15 @@ fn findDevToolsWindow(window: c.HWND, lparam: c.LPARAM) callconv(.winapi) c.BOOL
 //
 // Sends an action that belongs to the app to the core, as the system message {"kind":"system","name":"menu-action","data":{"action":...}}.
 //
-fn sendMenuAction(shell: *Shell, action: []const u8) void {
-    const core = shell.core orelse {
+fn sendMenuAction(native_app: *NativeApp, action: []const u8) void {
+    const core = native_app.core orelse {
         return;
     };
     const message = actions_lib.menuActionMessage(std.heap.c_allocator, action) catch {
         fatal("out of memory sending the menu action {s}", .{action});
     };
     defer std.heap.c_allocator.free(message);
-    c.ziggy_post_message(core, message.ptr, message.len);
+    c.ziggy_send_message(core, message.ptr, message.len);
 }
 
 //
@@ -1293,12 +1310,12 @@ fn copySelection(web_view: *c.ICoreWebView2, handler: *c.ICoreWebView2ExecuteScr
 // undo step of its own. document.execCommand('paste') is refused to a script and WebView2 has no paste call, so the command
 // is sent through the DevTools protocol, whose key events can carry editing commands.
 //
-fn pasteClipboard(shell: *Shell, web_view: *c.ICoreWebView2) void {
+fn pasteClipboard(native_app: *NativeApp, web_view: *c.ICoreWebView2) void {
     check("CallDevToolsProtocolMethod", web_view.lpVtbl.*.CallDevToolsProtocolMethod.?(
         web_view,
         std.unicode.utf8ToUtf16LeStringLiteral("Input.dispatchKeyEvent"),
         std.unicode.utf8ToUtf16LeStringLiteral("{\"type\":\"keyDown\",\"commands\":[\"paste\"]}"),
-        &shell.paste_handler.interface,
+        &native_app.paste_handler.interface,
     ));
 }
 
@@ -1315,7 +1332,7 @@ fn pasteInvoke(this: [*c]c.ICoreWebView2CallDevToolsProtocolMethodCompletedHandl
 //
 // Puts text on the clipboard, replacing what it held.
 //
-fn setClipboardText(shell: *Shell, text: []const u8) void {
+fn setClipboardText(native_app: *NativeApp, text: []const u8) void {
     const allocator = std.heap.c_allocator;
     const wide = std.unicode.utf8ToUtf16LeAllocZ(allocator, text) catch {
         fatal("the text to copy is not valid UTF-8", .{});
@@ -1330,9 +1347,9 @@ fn setClipboardText(shell: *Shell, text: []const u8) void {
     };
     @memcpy(@as([*]u8, @ptrCast(locked))[0..bytes], std.mem.sliceAsBytes(wide.ptr[0 .. wide.len + 1]));
     _ = c.GlobalUnlock(memory);
-    if (c.OpenClipboard(shell.window) == 0) {
+    if (c.OpenClipboard(native_app.window) == 0) {
         _ = c.GlobalFree(memory);
-        std.debug.print("ziggy shell: could not open the clipboard to copy, error {d}\n", .{c.GetLastError()});
+        std.debug.print("ziggy native app: could not open the clipboard to copy, error {d}\n", .{c.GetLastError()});
         return;
     }
     defer _ = c.CloseClipboard();
@@ -1349,7 +1366,7 @@ fn setClipboardText(shell: *Shell, text: []const u8) void {
 //
 // The frontend has returned the selected text: puts it on the clipboard. Nothing selected leaves the clipboard as it was.
 //
-fn takeSelection(shell: *Shell, error_code: c.HRESULT, result: [*c]const c.WCHAR) bool {
+fn takeSelection(native_app: *NativeApp, error_code: c.HRESULT, result: [*c]const c.WCHAR) bool {
     check("reading the selected text", error_code);
     const allocator = std.heap.c_allocator;
     const json = std.unicode.utf16LeToUtf8Alloc(allocator, std.mem.span(@as([*:0]const u16, @ptrCast(result)))) catch {
@@ -1363,7 +1380,7 @@ fn takeSelection(shell: *Shell, error_code: c.HRESULT, result: [*c]const c.WCHAR
     if (text.len == 0) {
         return false;
     }
-    setClipboardText(shell, text);
+    setClipboardText(native_app, text);
     return true;
 }
 
@@ -1371,7 +1388,7 @@ fn takeSelection(shell: *Shell, error_code: c.HRESULT, result: [*c]const c.WCHAR
 // The frontend has returned the selected text for a copy: puts it on the clipboard.
 //
 fn copyInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
-    _ = takeSelection(ScriptExecutedHandler.fromInterface(this).shell, error_code, result);
+    _ = takeSelection(ScriptExecutedHandler.fromInterface(this).native_app, error_code, result);
     return c.S_OK;
 }
 
@@ -1379,138 +1396,35 @@ fn copyInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code
 // The frontend has returned the selected text for a cut: puts it on the clipboard and deletes it from the frontend.
 //
 fn cutInvoke(this: [*c]c.ICoreWebView2ExecuteScriptCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
-    const shell = ScriptExecutedHandler.fromInterface(this).shell;
-    if (takeSelection(shell, error_code, result)) {
-        runEditCommand(shell, shell.web_view.?, "delete");
+    const native_app = ScriptExecutedHandler.fromInterface(this).native_app;
+    if (takeSelection(native_app, error_code, result)) {
+        runEditCommand(native_app, native_app.web_view.?, "delete");
     }
     return c.S_OK;
 }
 
 //
-// The native host callback that does a menu action as if its item had been chosen, used by the test control connection. It
-// runs on that connection's thread, so it hands a copy of the action to the UI thread and returns.
+// Ends the screenshot being made, on the UI thread: sends the core the reason its call failed (null when the file was written),
+// releases the stream the capture was written to and forgets the screenshot.
 //
-fn menuAction(user_data: ?*anyopaque, action: [*c]const u8) callconv(.c) void {
-    const shell: *Shell = @ptrCast(@alignCast(user_data.?));
-    const copy = std.heap.c_allocator.dupeZ(u8, std.mem.span(@as([*:0]const u8, @ptrCast(action)))) catch @panic("out of memory choosing a menu action");
-    if (c.PostMessageW(shell.window, WM_ZIGGY_MENU, 0, @intCast(@intFromPtr(copy.ptr))) == 0) {
-        std.heap.c_allocator.free(copy);
-        fatal("could not ask the UI thread to do a menu action, error {d}", .{c.GetLastError()});
+fn finishScreenshot(native_app: *NativeApp, failure: ?[]u8) void {
+    const reply = native_app.screenshot_reply.?;
+    if (failure) |reason| {
+        sendResult(native_app, reply, false, reason);
+        std.heap.c_allocator.free(reason);
     }
-}
-
-//
-// Runs on the UI thread: does the menu action a menu action request carries, with the function a menu click uses, and frees it.
-//
-fn handleMenuRequest(shell: *Shell, action: [*:0]u8) void {
-    const text = std.mem.span(action);
-    defer std.heap.c_allocator.free(text);
-    if (shell.destroyed.load(.acquire)) {
-        return;
+    else {
+        sendResult(native_app, reply, true, "");
     }
-    runAction(shell, text);
-}
-
-//
-// A request for a picture of the window, passed from the thread of the test control connection that wants it to the UI thread that
-// makes it. It lives on the heap and is shared by those two threads, each holding a reference, because the caller gives up waiting
-// when the native app is closing and the UI thread may still be making the capture.
-//
-const ScreenshotRequest = struct {
-    // The file to write the PNG to, as UTF-16. Owned.
-    output_path: [:0]u16,
-    // Signalled by the UI thread when it has finished with the request. Owned.
-    done: c.HANDLE,
-    // How many of the two threads still hold the request.
-    references: std.atomic.Value(u32),
-    // Why the picture could not be made, or null when it was written. Set before done is signalled. Owned.
-    failure: ?[]u8,
-};
-
-//
-// Lets go of one reference to a screenshot request, and frees it when the other thread has let go too.
-//
-fn releaseScreenshotRequest(request: *ScreenshotRequest) void {
-    if (request.references.fetchSub(1, .acq_rel) != 1) {
-        return;
-    }
-    const allocator = std.heap.c_allocator;
-    allocator.free(request.output_path);
-    if (request.failure) |failure| {
-        allocator.free(failure);
-    }
-    _ = c.CloseHandle(request.done);
-    allocator.destroy(request);
-}
-
-//
-// The native host callback that writes a PNG of the window to a file. It runs on the thread of the test control connection, so it posts
-// a window message that has the UI thread capture the window with WebView2's CapturePreview and waits there. Returns 0 when the file was written, or the
-// number of bytes of the reason written into the buffer, negated.
-//
-fn screenshot(user_data: ?*anyopaque, output_path: [*c]const u8, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
-    const shell: *Shell = @ptrCast(@alignCast(user_data.?));
-    const allocator = std.heap.c_allocator;
-    const wide_path = std.unicode.utf8ToUtf16LeAllocZ(allocator, std.mem.span(@as([*:0]const u8, @ptrCast(output_path)))) catch {
-        return screenshotFailure(buffer, capacity, "the path of the screenshot is not valid text");
-    };
-    const done = c.CreateEventW(null, 1, 0, null) orelse {
-        allocator.free(wide_path);
-        return screenshotFailure(buffer, capacity, "could not create an event to wait for the screenshot");
-    };
-    const request = allocator.create(ScreenshotRequest) catch @panic("out of memory taking a screenshot");
-    request.* = .{
-        .output_path = wide_path,
-        .done = done,
-        .references = .init(2),
-        .failure = null,
-    };
-    defer releaseScreenshotRequest(request);
-    if (c.PostMessageW(shell.window, WM_ZIGGY_SCREENSHOT, 0, @intCast(@intFromPtr(request))) == 0) {
-        releaseScreenshotRequest(request);
-        return screenshotFailure(buffer, capacity, "could not ask the UI thread to capture the window");
-    }
-    // The window can close while the capture runs. Closing waits for this thread, so it must not wait for the capture.
-    while (true) {
-        const waited = c.WaitForSingleObject(request.done, 100);
-        if (waited == c.WAIT_OBJECT_0) {
-            break;
-        }
-        if (waited != c.WAIT_TIMEOUT) {
-            return screenshotFailure(buffer, capacity, "waiting for the screenshot failed");
-        }
-        if (shell.destroyed.load(.acquire)) {
-            return screenshotFailure(buffer, capacity, "the window closed before the screenshot was made");
-        }
-    }
-    if (request.failure) |failure| {
-        return screenshotFailure(buffer, capacity, failure);
-    }
-    return 0;
-}
-
-//
-// Writes the reason a screenshot could not be made into the caller's buffer, cut to fit, and returns its length negated.
-//
-fn screenshotFailure(buffer: [*c]u8, capacity: usize, reason: []const u8) isize {
-    const length = @min(reason.len, capacity);
-    @memcpy(buffer[0..length], reason[0..length]);
-    return -@as(isize, @intCast(length));
-}
-
-//
-// Ends a screenshot request on the UI thread: records why it failed (null when the file was written), releases the stream the capture
-// was written to, wakes the thread waiting for it and lets go of the UI thread's reference.
-//
-fn finishScreenshot(shell: *Shell, request: *ScreenshotRequest, failure: ?[]u8) void {
-    request.failure = failure;
-    if (shell.screenshot_stream) |stream| {
+    if (native_app.screenshot_stream) |stream| {
         _ = stream.lpVtbl.*.Release.?(stream);
-        shell.screenshot_stream = null;
+        native_app.screenshot_stream = null;
     }
-    shell.screenshot_request = null;
-    _ = c.SetEvent(request.done);
-    releaseScreenshotRequest(request);
+    if (native_app.screenshot_path) |path| {
+        std.heap.c_allocator.free(path);
+        native_app.screenshot_path = null;
+    }
+    native_app.screenshot_reply = null;
 }
 
 //
@@ -1521,48 +1435,50 @@ fn screenshotReason(comptime format: []const u8, arguments: anytype) []u8 {
 }
 
 //
-// Runs on the UI thread: starts a capture of the window into a memory stream. WebView2 calls capturePreviewInvoke when it is done.
+// Runs on the UI thread: starts a capture of the window into a memory stream, for the core's call. WebView2 calls capturePreviewInvoke
+// when it is done, and the result is sent then.
 //
-fn handleScreenshotRequest(shell: *Shell, request: *ScreenshotRequest) void {
-    if (shell.destroyed.load(.acquire)) {
-        finishScreenshot(shell, request, screenshotReason("the window is closing", .{}));
+fn startScreenshot(native_app: *NativeApp, reply: u64, output_path: []const u8) void {
+    if (native_app.screenshot_reply != null) {
+        sendResult(native_app, reply, false, "another screenshot is still being made");
         return;
     }
-    if (shell.screenshot_request != null) {
-        finishScreenshot(shell, request, screenshotReason("another screenshot is still being made", .{}));
-        return;
-    }
-    const web_view = shell.web_view orelse {
-        finishScreenshot(shell, request, screenshotReason("the window has no web view yet", .{}));
+    const web_view = native_app.web_view orelse {
+        sendResult(native_app, reply, false, "the window has no web view yet");
         return;
     };
+    const wide_path = std.unicode.utf8ToUtf16LeAllocZ(std.heap.c_allocator, output_path) catch {
+        sendResult(native_app, reply, false, "the path of the screenshot is not valid text");
+        return;
+    };
+    native_app.screenshot_reply = reply;
+    native_app.screenshot_path = wide_path;
     var stream: ?*c.IStream = null;
     const stream_result = c.CreateStreamOnHGlobal(null, 1, &stream);
     if (stream_result < 0 or stream == null) {
-        finishScreenshot(shell, request, screenshotReason("could not make a stream for the screenshot, HRESULT 0x{x}", .{@as(u32, @bitCast(stream_result))}));
+        finishScreenshot(native_app, screenshotReason("could not make a stream for the screenshot, HRESULT 0x{x}", .{@as(u32, @bitCast(stream_result))}));
         return;
     }
-    shell.screenshot_request = request;
-    shell.screenshot_stream = stream;
-    const capture_result = web_view.lpVtbl.*.CapturePreview.?(web_view, c.COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, stream, &shell.capture_handler.interface);
+    native_app.screenshot_stream = stream;
+    const capture_result = web_view.lpVtbl.*.CapturePreview.?(web_view, c.COREWEBVIEW2_CAPTURE_PREVIEW_IMAGE_FORMAT_PNG, stream, &native_app.capture_handler.interface);
     if (capture_result < 0) {
-        finishScreenshot(shell, request, screenshotReason("CapturePreview failed, HRESULT 0x{x}", .{@as(u32, @bitCast(capture_result))}));
+        finishScreenshot(native_app, screenshotReason("CapturePreview failed, HRESULT 0x{x}", .{@as(u32, @bitCast(capture_result))}));
     }
 }
 
 //
-// WebView2 has captured the window into the stream: writes the stream's PNG to the request's file and ends the request.
+// WebView2 has captured the window into the stream: writes the stream's PNG to the screenshot's file and sends the core the result of its call.
 //
 fn capturePreviewInvoke(this: [*c]c.ICoreWebView2CapturePreviewCompletedHandler, error_code: c.HRESULT) callconv(.c) c.HRESULT {
-    const shell = CapturePreviewHandler.fromInterface(this).shell;
-    const request = shell.screenshot_request orelse {
-        fatal("WebView2 finished a capture that was not asked for", .{});
-    };
+    const native_app = CapturePreviewHandler.fromInterface(this).native_app;
+    if (native_app.screenshot_reply == null) {
+        fatal("WebView2 finished a capture that was not requested", .{});
+    }
     if (error_code < 0) {
-        finishScreenshot(shell, request, screenshotReason("the capture failed, HRESULT 0x{x}", .{@as(u32, @bitCast(error_code))}));
+        finishScreenshot(native_app, screenshotReason("the capture failed, HRESULT 0x{x}", .{@as(u32, @bitCast(error_code))}));
         return c.S_OK;
     }
-    finishScreenshot(shell, request, writeCapture(shell.screenshot_stream.?, request.output_path));
+    finishScreenshot(native_app, writeCapture(native_app.screenshot_stream.?, native_app.screenshot_path.?));
     return c.S_OK;
 }
 
@@ -1606,7 +1522,7 @@ fn writeCapture(stream: *c.IStream, path: [:0]const u16) ?[]u8 {
 //
 // Runs an editing command in the frontend with document.execCommand, because WebView2 has no editing commands of its own.
 //
-fn runEditCommand(shell: *Shell, web_view: *c.ICoreWebView2, command: []const u8) void {
+fn runEditCommand(native_app: *NativeApp, web_view: *c.ICoreWebView2, command: []const u8) void {
     var script_buffer: [96]u8 = undefined;
     const script = std.fmt.bufPrint(&script_buffer, "document.execCommand('{s}');", .{command}) catch {
         fatal("the editing command {s} is too long", .{command});
@@ -1616,44 +1532,44 @@ fn runEditCommand(shell: *Shell, web_view: *c.ICoreWebView2, command: []const u8
         fatal("the editing command {s} is not valid text", .{command});
     };
     wide_buffer[wide_length] = 0;
-    check("ExecuteScript", web_view.lpVtbl.*.ExecuteScript.?(web_view, &wide_buffer, &shell.script_executed_handler.interface));
+    check("ExecuteScript", web_view.lpVtbl.*.ExecuteScript.?(web_view, &wide_buffer, &native_app.script_executed_handler.interface));
 }
 
 //
 // Switches the window between full screen and what it was: without the title bar, borders and menu bar, covering the
 // monitor it is on, and then restoring its style, menu and its previous place and state (including maximized).
 //
-fn toggleFullscreen(shell: *Shell) void {
-    if (!shell.fullscreen) {
-        shell.saved_placement.length = @sizeOf(c.WINDOWPLACEMENT);
-        if (c.GetWindowPlacement(shell.window, &shell.saved_placement) == 0) {
+fn toggleFullscreen(native_app: *NativeApp) void {
+    if (!native_app.fullscreen) {
+        native_app.saved_placement.length = @sizeOf(c.WINDOWPLACEMENT);
+        if (c.GetWindowPlacement(native_app.window, &native_app.saved_placement) == 0) {
             fatal("GetWindowPlacement failed, error {d}", .{c.GetLastError()});
         }
         var monitor_info = std.mem.zeroes(c.MONITORINFO);
         monitor_info.cbSize = @sizeOf(c.MONITORINFO);
-        if (c.GetMonitorInfoW(c.MonitorFromWindow(shell.window, c.MONITOR_DEFAULTTONEAREST), &monitor_info) == 0) {
+        if (c.GetMonitorInfoW(c.MonitorFromWindow(native_app.window, c.MONITOR_DEFAULTTONEAREST), &monitor_info) == 0) {
             fatal("GetMonitorInfo failed, error {d}", .{c.GetLastError()});
         }
-        _ = c.SetWindowLongPtrW(shell.window, c.GWL_STYLE, @as(c.LONG_PTR, @intCast(window_style & ~@as(c.DWORD, c.WS_OVERLAPPEDWINDOW))) | c.WS_VISIBLE);
-        _ = c.SetMenu(shell.window, null);
+        _ = c.SetWindowLongPtrW(native_app.window, c.GWL_STYLE, @as(c.LONG_PTR, @intCast(window_style & ~@as(c.DWORD, c.WS_OVERLAPPEDWINDOW))) | c.WS_VISIBLE);
+        _ = c.SetMenu(native_app.window, null);
         const bounds = monitor_info.rcMonitor;
-        if (c.SetWindowPos(shell.window, null, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top, c.SWP_NOOWNERZORDER | c.SWP_FRAMECHANGED) == 0) {
+        if (c.SetWindowPos(native_app.window, null, bounds.left, bounds.top, bounds.right - bounds.left, bounds.bottom - bounds.top, c.SWP_NOOWNERZORDER | c.SWP_FRAMECHANGED) == 0) {
             fatal("SetWindowPos failed going full screen, error {d}", .{c.GetLastError()});
         }
-        shell.fullscreen = true;
+        native_app.fullscreen = true;
         return;
     }
-    _ = c.SetWindowLongPtrW(shell.window, c.GWL_STYLE, @as(c.LONG_PTR, @intCast(window_style)) | c.WS_VISIBLE);
-    if (shell.menu_bar != null) {
-        _ = c.SetMenu(shell.window, shell.menu_bar);
+    _ = c.SetWindowLongPtrW(native_app.window, c.GWL_STYLE, @as(c.LONG_PTR, @intCast(window_style)) | c.WS_VISIBLE);
+    if (native_app.menu_bar != null) {
+        _ = c.SetMenu(native_app.window, native_app.menu_bar);
     }
-    if (c.SetWindowPlacement(shell.window, &shell.saved_placement) == 0) {
+    if (c.SetWindowPlacement(native_app.window, &native_app.saved_placement) == 0) {
         fatal("SetWindowPlacement failed, error {d}", .{c.GetLastError()});
     }
-    if (c.SetWindowPos(shell.window, null, 0, 0, 0, 0, c.SWP_NOMOVE | c.SWP_NOSIZE | c.SWP_NOZORDER | c.SWP_NOOWNERZORDER | c.SWP_FRAMECHANGED) == 0) {
+    if (c.SetWindowPos(native_app.window, null, 0, 0, 0, 0, c.SWP_NOMOVE | c.SWP_NOSIZE | c.SWP_NOZORDER | c.SWP_NOOWNERZORDER | c.SWP_FRAMECHANGED) == 0) {
         fatal("SetWindowPos failed leaving full screen, error {d}", .{c.GetLastError()});
     }
-    shell.fullscreen = false;
+    native_app.fullscreen = false;
 }
 
 //
@@ -1662,7 +1578,7 @@ fn toggleFullscreen(shell: *Shell) void {
 //
 fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler, sender: [*c]c.ICoreWebView2Controller, args: [*c]c.ICoreWebView2AcceleratorKeyPressedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
-    const shell = AcceleratorHandler.fromInterface(this).shell;
+    const native_app = AcceleratorHandler.fromInterface(this).native_app;
     var kind: c.COREWEBVIEW2_KEY_EVENT_KIND = undefined;
     check("get_KeyEventKind", args.*.lpVtbl.*.get_KeyEventKind.?(args, &kind));
     if (kind != c.COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN and kind != c.COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN) {
@@ -1671,7 +1587,7 @@ fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler,
     var virtual_key: c.UINT = 0;
     check("get_VirtualKey", args.*.lpVtbl.*.get_VirtualKey.?(args, &virtual_key));
     const held = heldModifiers();
-    for (shell.menu_actions.items) |menu_action| {
+    for (native_app.menu_actions.items) |menu_action| {
         const binding = menu_action.binding orelse {
             continue;
         };
@@ -1686,7 +1602,7 @@ fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler,
         var status = std.mem.zeroes(c.COREWEBVIEW2_PHYSICAL_KEY_STATUS);
         check("get_PhysicalKeyStatus", args.*.lpVtbl.*.get_PhysicalKeyStatus.?(args, &status));
         if (status.WasKeyDown == 0) {
-            runAction(shell, menu_action.action);
+            runAction(native_app, menu_action.action);
         }
         return c.S_OK;
     }
@@ -1694,133 +1610,52 @@ fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler,
 }
 
 //
-// A request for a file or folder dialog, passed from the worker thread that wants the result to the UI thread that shows the
-// dialog. It lives on the heap and is shared by those two threads, each holding a reference, because the worker gives up
-// waiting when the native app is closing and the UI thread may still be inside the dialog. The UI thread never touches the
-// worker's buffer: it leaves the result here and the worker copies it out.
+// Runs on the UI thread: shows a file dialog for the core's call, or, while one is showing, keeps the call until it closes. A dialog
+// runs its own message loop, so the window and the web view keep working while it is open, and the core's calls that come meanwhile are
+// taken in that loop.
 //
-const PickRequest = struct {
-    // Which dialog to show.
-    kind: pickers_lib.PickKind,
-    // The dialog's title as UTF-16. Owned.
-    title: [:0]u16,
-    // The suggested file name as UTF-16, or null for none. Owned.
-    initial_name: ?[:0]u16,
-    // Signalled by the UI thread when it has finished with the request. Owned.
-    done: c.HANDLE,
-    // How many of the two threads still hold the request.
-    references: std.atomic.Value(u32),
-    // The JSON array of chosen paths, or null when the dialog could not be shown. Set before done is signalled. Owned.
-    answer: ?[]u8,
-};
-
-//
-// Lets go of one reference to a request, and frees it when the other thread has let go too.
-//
-fn releasePickRequest(request: *PickRequest) void {
-    if (request.references.fetchSub(1, .acq_rel) != 1) {
+fn askForPick(native_app: *NativeApp, reply: u64, pick: native_message.PickPaths) !void {
+    const allocator = std.heap.c_allocator;
+    const pick_kind = pickers_lib.kindFromInt(pick.kind) orelse {
+        sendResult(native_app, reply, false, "UnknownDialogKind");
+        return;
+    };
+    const title = try std.unicode.utf8ToUtf16LeAllocZ(allocator, pick.title orelse pickers_lib.defaultTitle(pick_kind));
+    errdefer allocator.free(title);
+    const initial_name: ?[:0]u16 = if (pick.initial_name) |name| try std.unicode.utf8ToUtf16LeAllocZ(allocator, name) else null;
+    errdefer if (initial_name) |name| allocator.free(name);
+    try native_app.queued_picks.append(allocator, .{
+        .reply = reply,
+        .pick_kind = pick_kind,
+        .title = title,
+        .initial_name = initial_name,
+    });
+    if (native_app.open_dialog != null) {
         return;
     }
-    const allocator = std.heap.c_allocator;
-    allocator.free(request.title);
-    if (request.initial_name) |name| {
-        allocator.free(name);
-    }
-    if (request.answer) |answer| {
-        allocator.free(answer);
-    }
-    _ = c.CloseHandle(request.done);
-    allocator.destroy(request);
-}
-
-//
-// The native host callback that shows a file or folder dialog and writes the chosen paths as a JSON array into the buffer. It
-// runs on a worker thread, so it posts a window message that has the UI thread show the dialog, and waits there for the result. Returns the number of
-// bytes written, or -1 and a message on standard error when the dialog could not be shown or the result does not fit.
-//
-fn pickPaths(user_data: ?*anyopaque, kind: i32, title: [*c]const u8, initial_name: [*c]const u8, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
-    const shell: *Shell = @ptrCast(@alignCast(user_data.?));
-    const allocator = std.heap.c_allocator;
-    const pick_kind = pickers_lib.kindFromInt(kind) orelse {
-        std.debug.print("ziggy shell: the core asked for a dialog of kind {d}, which is not one\n", .{kind});
-        return -1;
-    };
-    const title_text: []const u8 = if (title == null) pickers_lib.defaultTitle(pick_kind) else std.mem.span(@as([*:0]const u8, @ptrCast(title)));
-    const wide_title = std.unicode.utf8ToUtf16LeAllocZ(allocator, title_text) catch {
-        std.debug.print("ziggy shell: the dialog title cannot be converted to UTF-16\n", .{});
-        return -1;
-    };
-    var wide_name: ?[:0]u16 = null;
-    if (initial_name != null) {
-        wide_name = std.unicode.utf8ToUtf16LeAllocZ(allocator, std.mem.span(@as([*:0]const u8, @ptrCast(initial_name)))) catch {
-            allocator.free(wide_title);
-            std.debug.print("ziggy shell: the suggested file name cannot be converted to UTF-16\n", .{});
-            return -1;
+    // One dialog at a time, oldest first, until none is queued. A result is sent here only while the core exists.
+    while (native_app.queued_picks.items.len > 0) {
+        const queued = native_app.queued_picks.orderedRemove(0);
+        defer freeQueuedPick(queued);
+        const paths = showPicker(native_app, allocator, queued) catch |err| {
+            sendResult(native_app, queued.reply, false, @errorName(err));
+            continue;
         };
+        defer allocator.free(paths);
+        sendResult(native_app, queued.reply, true, paths);
     }
-    const done = c.CreateEventW(null, 1, 0, null) orelse {
-        allocator.free(wide_title);
-        if (wide_name) |name| {
-            allocator.free(name);
-        }
-        std.debug.print("ziggy shell: could not create an event to wait for the dialog, error {d}\n", .{c.GetLastError()});
-        return -1;
-    };
-    const request = allocator.create(PickRequest) catch @panic("out of memory showing a dialog");
-    request.* = .{
-        .kind = pick_kind,
-        .title = wide_title,
-        .initial_name = wide_name,
-        .done = done,
-        .references = .init(2),
-        .answer = null,
-    };
-    defer releasePickRequest(request);
-    if (c.PostMessageW(shell.window, WM_ZIGGY_PICK, 0, @intCast(@intFromPtr(request))) == 0) {
-        std.debug.print("ziggy shell: could not ask the UI thread to show a dialog, error {d}\n", .{c.GetLastError()});
-        releasePickRequest(request);
-        return -1;
-    }
-    // The window can close while the dialog is open. Closing waits for this thread, so it must not wait for the dialog.
-    while (true) {
-        const waited = c.WaitForSingleObject(request.done, 100);
-        if (waited == c.WAIT_OBJECT_0) {
-            break;
-        }
-        if (waited != c.WAIT_TIMEOUT) {
-            std.debug.print("ziggy shell: waiting for the dialog failed, error {d}\n", .{c.GetLastError()});
-            return -1;
-        }
-        if (shell.destroyed.load(.acquire)) {
-            return -1;
-        }
-    }
-    const answer = request.answer orelse {
-        return -1;
-    };
-    if (answer.len > capacity) {
-        std.debug.print("ziggy shell: the chosen paths do not fit in the {d} byte buffer\n", .{capacity});
-        return -1;
-    }
-    @memcpy(buffer[0..answer.len], answer);
-    return @intCast(answer.len);
 }
 
 //
-// Runs on the UI thread: shows the dialog a worker posted, which runs its own message loop, so the window and the web view
-// keep working while it is open, and leaves the result in the request.
+// Frees a dialog that waited.
 //
-fn handlePickRequest(shell: *Shell, request: *PickRequest) void {
-    defer releasePickRequest(request);
-    defer _ = c.SetEvent(request.done);
-    if (shell.destroyed.load(.acquire)) {
-        return;
+fn freeQueuedPick(queued: QueuedPick) void {
+    std.heap.c_allocator.free(queued.title);
+    if (queued.initial_name) |name| {
+        std.heap.c_allocator.free(name);
     }
-    request.answer = showPicker(shell, std.heap.c_allocator, request) catch |err| {
-        std.debug.print("ziggy shell: the dialog failed: {s}\n", .{@errorName(err)});
-        return;
-    };
 }
+
 
 //
 // The HRESULT a dialog's Show returns when the user cancels it.
@@ -1831,7 +1666,7 @@ const hresult_cancelled: c.HRESULT = @bitCast(@as(u32, 0x800704C7));
 // Shows a Common Item Dialog and returns the JSON array of what the user chose, "[]" when the user cancelled. The caller owns
 // the result.
 //
-fn showPicker(shell: *Shell, allocator: std.mem.Allocator, request: *PickRequest) ![]u8 {
+fn showPicker(native_app: *NativeApp, allocator: std.mem.Allocator, pick: QueuedPick) ![]u8 {
     var paths: std.ArrayList([]u8) = .empty;
     defer {
         for (paths.items) |path| {
@@ -1839,7 +1674,7 @@ fn showPicker(shell: *Shell, allocator: std.mem.Allocator, request: *PickRequest
         }
         paths.deinit(allocator);
     }
-    if (request.kind == .save_file) {
+    if (pick.pick_kind == .save_file) {
         var save_dialog: ?*c.IFileSaveDialog = null;
         check("CoCreateInstance(FileSaveDialog)", c.CoCreateInstance(&c.CLSID_FileSaveDialog, null, c.CLSCTX_INPROC_SERVER, &c.IID_IFileSaveDialog, @ptrCast(&save_dialog)));
         const dialog = save_dialog orelse {
@@ -1848,12 +1683,14 @@ fn showPicker(shell: *Shell, allocator: std.mem.Allocator, request: *PickRequest
         defer _ = dialog.lpVtbl.*.Release.?(dialog);
         var options: c.FILEOPENDIALOGOPTIONS = 0;
         check("GetOptions", dialog.lpVtbl.*.GetOptions.?(dialog, &options));
-        check("SetOptions", dialog.lpVtbl.*.SetOptions.?(dialog, pickers_lib.dialogOptions(request.kind, options)));
-        check("SetTitle", dialog.lpVtbl.*.SetTitle.?(dialog, request.title.ptr));
-        if (request.initial_name) |name| {
+        check("SetOptions", dialog.lpVtbl.*.SetOptions.?(dialog, pickers_lib.dialogOptions(pick.pick_kind, options)));
+        check("SetTitle", dialog.lpVtbl.*.SetTitle.?(dialog, pick.title.ptr));
+        if (pick.initial_name) |name| {
             check("SetFileName", dialog.lpVtbl.*.SetFileName.?(dialog, name.ptr));
         }
-        const shown = dialog.lpVtbl.*.Show.?(dialog, shell.window);
+        native_app.open_dialog = @ptrCast(dialog);
+        defer native_app.open_dialog = null;
+        const shown = dialog.lpVtbl.*.Show.?(dialog, native_app.window);
         if (shown == hresult_cancelled) {
             return pickers_lib.pathsJson(allocator, &.{});
         }
@@ -1871,9 +1708,11 @@ fn showPicker(shell: *Shell, allocator: std.mem.Allocator, request: *PickRequest
     defer _ = dialog.lpVtbl.*.Release.?(dialog);
     var options: c.FILEOPENDIALOGOPTIONS = 0;
     check("GetOptions", dialog.lpVtbl.*.GetOptions.?(dialog, &options));
-    check("SetOptions", dialog.lpVtbl.*.SetOptions.?(dialog, pickers_lib.dialogOptions(request.kind, options)));
-    check("SetTitle", dialog.lpVtbl.*.SetTitle.?(dialog, request.title.ptr));
-    const shown = dialog.lpVtbl.*.Show.?(dialog, shell.window);
+    check("SetOptions", dialog.lpVtbl.*.SetOptions.?(dialog, pickers_lib.dialogOptions(pick.pick_kind, options)));
+    check("SetTitle", dialog.lpVtbl.*.SetTitle.?(dialog, pick.title.ptr));
+    native_app.open_dialog = @ptrCast(dialog);
+    defer native_app.open_dialog = null;
+    const shown = dialog.lpVtbl.*.Show.?(dialog, native_app.window);
     if (shown == hresult_cancelled) {
         return pickers_lib.pathsJson(allocator, &.{});
     }
@@ -1910,8 +1749,8 @@ fn itemPath(allocator: std.mem.Allocator, item: *c.IShellItem) ![]u8 {
 // WebView2 has created its environment: creates the controller of the window with it.
 //
 fn environmentInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler, error_code: c.HRESULT, environment: [*c]c.ICoreWebView2Environment) callconv(.c) c.HRESULT {
-    const shell = EnvironmentHandler.fromInterface(this).shell;
-    if (shell.closing) {
+    const native_app = EnvironmentHandler.fromInterface(this).native_app;
+    if (native_app.closing) {
         return c.S_OK;
     }
     check("creating the WebView2 environment (is the WebView2 runtime installed?)", error_code);
@@ -1919,8 +1758,8 @@ fn environmentInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2EnvironmentCompl
         fatal("WebView2 gave no environment", .{});
     }
     _ = environment.*.lpVtbl.*.AddRef.?(environment);
-    shell.environment = environment;
-    check("CreateCoreWebView2Controller", environment.*.lpVtbl.*.CreateCoreWebView2Controller.?(environment, shell.window, &shell.controller_handler.interface));
+    native_app.environment = environment;
+    check("CreateCoreWebView2Controller", environment.*.lpVtbl.*.CreateCoreWebView2Controller.?(environment, native_app.window, &native_app.controller_handler.interface));
     return c.S_OK;
 }
 
@@ -1928,15 +1767,15 @@ fn environmentInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2EnvironmentCompl
 // WebView2 has created the controller of the window: sets up the web view.
 //
 fn controllerInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, error_code: c.HRESULT, controller: [*c]c.ICoreWebView2Controller) callconv(.c) c.HRESULT {
-    const shell = ControllerHandler.fromInterface(this).shell;
-    if (shell.closing) {
+    const native_app = ControllerHandler.fromInterface(this).native_app;
+    if (native_app.closing) {
         return c.S_OK;
     }
     check("creating the WebView2 controller", error_code);
     if (controller == null) {
         fatal("WebView2 gave no controller", .{});
     }
-    onControllerCreated(shell, controller);
+    onControllerCreated(native_app, controller);
     return c.S_OK;
 }
 
@@ -1990,8 +1829,8 @@ fn recordPostedFiles(core: ?*anyopaque, args: [*c]c.ICoreWebView2WebMessageRecei
 //
 fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2WebMessageReceivedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
-    const shell = WebMessageHandler.fromInterface(this).shell;
-    const core = shell.core orelse {
+    const native_app = WebMessageHandler.fromInterface(this).native_app;
+    const core = native_app.core orelse {
         return c.S_OK;
     };
     var wide: [*c]c.WCHAR = null;
@@ -2007,7 +1846,7 @@ fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sen
         recordPostedFiles(core, args);
         return c.S_OK;
     }
-    c.ziggy_post_message(core, text.ptr, text.len);
+    c.ziggy_send_message(core, text.ptr, text.len);
     return c.S_OK;
 }
 
@@ -2017,12 +1856,12 @@ fn webMessageInvoke(this: [*c]c.ICoreWebView2WebMessageReceivedEventHandler, sen
 //
 fn navigationInvoke(this: [*c]c.ICoreWebView2NavigationStartingEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2NavigationStartingEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
-    const shell = NavigationHandler.fromInterface(this).shell;
+    const native_app = NavigationHandler.fromInterface(this).native_app;
     var wide: [*c]c.WCHAR = null;
     check("get_Uri", args.*.lpVtbl.*.get_Uri.?(args, &wide));
     const address = takeAddress(wide);
     defer std.heap.c_allocator.free(address);
-    const verdict = checkAddress(shell, address);
+    const verdict = checkAddress(native_app, address);
     if (verdict == c.ZIGGY_URL_ALLOW) {
         return c.S_OK;
     }
@@ -2038,13 +1877,13 @@ fn navigationInvoke(this: [*c]c.ICoreWebView2NavigationStartingEventHandler, sen
 //
 fn newWindowInvoke(this: [*c]c.ICoreWebView2NewWindowRequestedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2NewWindowRequestedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
-    const shell = NewWindowHandler.fromInterface(this).shell;
+    const native_app = NewWindowHandler.fromInterface(this).native_app;
     var wide: [*c]c.WCHAR = null;
     check("get_Uri", args.*.lpVtbl.*.get_Uri.?(args, &wide));
     const address = takeAddress(wide);
     defer std.heap.c_allocator.free(address);
     check("put_Handled", args.*.lpVtbl.*.put_Handled.?(args, 1));
-    if (checkAddress(shell, address) == c.ZIGGY_URL_OPEN_EXTERNALLY) {
+    if (checkAddress(native_app, address) == c.ZIGGY_URL_OPEN_EXTERNALLY) {
         openAddress(address);
     }
     return c.S_OK;
@@ -2077,8 +1916,8 @@ fn memoryStream(content: []const u8) *c.IStream {
 //
 fn resourceInvoke(this: [*c]c.ICoreWebView2WebResourceRequestedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2WebResourceRequestedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
-    const shell = ResourceHandler.fromInterface(this).shell;
-    const environment = shell.environment orelse {
+    const native_app = ResourceHandler.fromInterface(this).native_app;
+    const environment = native_app.environment orelse {
         fatal("a UI request arrived before the web view environment existed", .{});
     };
     var request: ?*c.ICoreWebView2WebResourceRequest = null;
@@ -2100,7 +1939,7 @@ fn resourceInvoke(this: [*c]c.ICoreWebView2WebResourceRequestedEventHandler, sen
     const path_end = std.mem.indexOfAny(u8, path, "?#") orelse path.len;
     path = path[0..path_end];
 
-    const core = shell.core orelse {
+    const core = native_app.core orelse {
         fatal("a UI request arrived before the core existed", .{});
     };
     var response: ?*c.ICoreWebView2WebResourceResponse = null;
@@ -2144,15 +1983,15 @@ fn openAddress(address: []const u8) void {
 //
 fn scriptAddedInvoke(this: [*c]c.ICoreWebView2AddScriptToExecuteOnDocumentCreatedCompletedHandler, error_code: c.HRESULT, id: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
     _ = id;
-    const shell = ScriptAddedHandler.fromInterface(this).shell;
-    if (shell.closing) {
+    const native_app = ScriptAddedHandler.fromInterface(this).native_app;
+    if (native_app.closing) {
         return c.S_OK;
     }
     check("adding the injected script", error_code);
-    const web_view = shell.web_view orelse {
+    const web_view = native_app.web_view orelse {
         fatal("the injected script was added without a web view", .{});
     };
-    check("Navigate", web_view.lpVtbl.*.Navigate.?(web_view, shell.ui_url.ptr));
+    check("Navigate", web_view.lpVtbl.*.Navigate.?(web_view, native_app.ui_url.ptr));
     return c.S_OK;
 }
 

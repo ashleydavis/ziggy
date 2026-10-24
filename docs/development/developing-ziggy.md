@@ -67,7 +67,7 @@ The commands are in [Commands in Ziggy's repository](commands.md).
 2. Implement it in every native app that supports it, on the native app's UI thread.
 3. Call it from the backend and write its unit test with a test implementation of the native call.
 
-An app's own native calls need none of this: they go through `host_request` (see [Native calls](../user-guide/native-calls.md)).
+An app's own native calls need none of this: they go through `native_call` (see [Native calls](../user-guide/native-calls.md)).
 
 ## Guides
 

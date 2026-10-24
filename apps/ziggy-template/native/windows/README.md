@@ -7,7 +7,7 @@ The Windows executable of the Ziggy template. `src/main.zig` names the app and h
 - Creates a Win32 window. `-geometry=WxH` or `-geometry=WxH+X+Y` sets the frontend's size in pixels at 96 DPI, and the position is honoured.
 - Hosts the frontend in WebView2, through its native COM interface. The declarations come from `zig translate-c` on the SDK's own `WebView2.h`, and the SDK's static loader library is linked into the executable, so no DLL is needed.
 - Injects `ziggy-inject.js` with `AddScriptToExecuteOnDocumentCreated`, and loads the frontend only after that has completed.
-- Passes frontend messages (`WebMessageReceived`, read with `TryGetWebMessageAsString`) to `ziggy_post_message`.
+- Passes frontend messages (`WebMessageReceived`, read with `TryGetWebMessageAsString`) to `ziggy_send_message`.
 - Delivers the backend's messages by `ExecuteScript("window.__ziggyReceive(...)")` on the UI thread. The backend delivers from any thread, so messages are queued under a lock and the UI thread is woken with a window message.
 - Serves the frontend from the files embedded in the app's backend: it serves every request to `https://ziggy-app.invalid/` (a host name that can never be looked up) with the file `ziggy_ui_file` gives, through the web view's `WebResourceRequested` event, and decides every navigation (`NavigationStarting`) and new window request (`NewWindowRequested`) with `ziggy_check_url`. External links open in the system browser.
 - Keeps the app's data under `%LOCALAPPDATA%\<app id>`, which is also WebView2's profile directory (in `WebView2` inside it).

@@ -6,6 +6,7 @@ pub const task_queue = @import("task-queue/task-queue.zig");
 pub const types = @import("task-queue/types.zig");
 pub const queue_backend = @import("task-queue/queue-backend.zig");
 pub const worker = @import("task-queue/worker.zig");
+pub const worker_queue_backend = @import("task-queue/worker-queue-backend.zig");
 pub const task_context = @import("task-queue/task-context.zig");
 pub const json_value = @import("task-queue/json-value.zig");
 pub const job_progress = @import("task-queue/job-progress.zig");

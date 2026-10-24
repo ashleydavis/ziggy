@@ -8,55 +8,55 @@ const std = @import("std");
 const ziggy = @import("ziggy");
 const app = @import("ziggy-template-backend");
 
-const FakeShell = ziggy.fake_shell.FakeShell;
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 test "the hello-world message is answered with a greeting for the name it sent" {
-    var shell: FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"hello-world\",\"data\":{\"name\":\"world\"}}");
-    try shell.expectMessageContaining("\"greeting\":\"Hello world, from Zig on");
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"hello-world\",\"data\":{\"name\":\"world\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"greeting\":\"Hello world, from Zig on");
 }
 
 test "a hello-world message with no name is refused as InvalidMessageData naming the field" {
-    var shell: FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"hello-world\"}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"name\\\" is missing\"}");
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"hello-world\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"name\\\" is missing\"}");
 }
 
 test "the hello-world task sends its output and completes" {
-    var shell: FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"hello-world-task\",\"source\":\"hello\",\"data\":null}}");
-    try shell.expectMessageContaining("\"text\":\"Hello world from a task\"");
-    try shell.expectMessageContaining("\"status\":\"succeeded\",\"outputs\":\"hello world task done\"");
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"hello-world-task\",\"source\":\"hello\",\"data\":null}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"text\":\"Hello world from a task\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"succeeded\",\"outputs\":\"hello world task done\"");
 }
 
 test "a message of a name the template does not know is answered with UnknownMessageName" {
-    var shell: FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"goodbye-world\"}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"UnknownMessageName\"}");
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"goodbye-world\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMessageName\"}");
 }
 
 test "a message with no name is refused with MissingMessageName" {
-    var shell: FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"data\":{\"name\":\"world\"}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"MissingMessageName\"}");
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"data\":{\"name\":\"world\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"MissingMessageName\"}");
 }

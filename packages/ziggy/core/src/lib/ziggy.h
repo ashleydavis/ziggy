@@ -11,43 +11,13 @@
 extern "C" {
 #endif
 
-// Delivers a JSON message from the core to the native app. The message is valid only while the call runs, so the native app
-// copies it before returning. It may be called from any thread, so the native app moves to its UI thread before touching
-// the web view.
-typedef void (*ziggy_deliver_fn)(void *user_data, const char *message, size_t message_len);
+// Wakes the native app's UI thread to take the core's messages with ziggy_take_native_message. The core calls it from any of its threads
+// after it posts a message for the native app. It does nothing but have the platform run code on the UI thread (g_idle_add, PostMessage,
+// DispatchQueue.main.async, a write the main looper watches for), and it is given the config's wake_data unread: the core never touches the
+// native app's state, and the native app touches it only on its UI thread.
+typedef void (*ziggy_wake_fn)(void *wake_data);
 
-// Native host callback: writes the operating system's version, as a JSON string, into the buffer the core gives it, and
-// returns the number of bytes written, or a negative number when it cannot.
-typedef intptr_t (*ziggy_os_version_fn)(void *user_data, char *buffer, size_t capacity);
-
-// Native host callback: has the native app quit the application. Called only by the test control connection.
-typedef void (*ziggy_quit_fn)(void *user_data);
-
-// Native host callback: does a menu action as if the user had chosen its menu item, by the path the menu item takes in the native app,
-// so the native app's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
-// other action reaches the frontend. The core calls it, from the thread of the test control connection, only to let a test choose a
-// menu item. The native app does the work on its UI thread and returns at once.
-typedef void (*ziggy_menu_action_fn)(void *user_data, const char *action);
-
-// Native host callback: writes a PNG picture of the app's window to the file at the path (NUL terminated), waits until the file is
-// written, and returns 0. When it cannot it writes the text of the reason into the buffer and returns the number of bytes written,
-// negated. The core calls it, from the thread of the test control connection, only to let a test take a screenshot. The native app does
-// the capture on its UI thread and waits for it.
-typedef intptr_t (*ziggy_screenshot_fn)(void *user_data, const char *output_path, char *buffer, size_t capacity);
-
-// Tells the native app whether the app must keep running because tasks marked keep-alive are queued or running: true when the first
-// such task is queued, false when the last one ends. Called from any thread while the core holds a lock, so it must return at
-// once and must not call back into the core.
-typedef void (*ziggy_keep_alive_fn)(void *user_data, bool keep_running);
-
-// Native host callback: does one thing only the platform can do, named by method ("exportFile", "secureStoreGet", ...). The request is
-// the JSON text of the method's argument (NUL terminated), and the native app writes the JSON text of its result into the buffer and returns
-// the number of bytes written. When it cannot do what the method names it writes the text of the reason and returns that number of bytes
-// negated. The native app may show native interface and wait for the user, so the core calls it from a worker thread, never from the one that
-// handles UI messages, and it may take a long time.
-typedef intptr_t (*ziggy_host_request_fn)(void *user_data, const char *method, const char *request_json, char *buffer, size_t capacity);
-
-// The kinds of dialog a native app shows in ziggy_pick_paths_fn.
+// The kinds of dialog a native app shows for a "pick-paths" call.
 enum {
     // A dialog to choose one or more existing files to open.
     ZIGGY_PICK_OPEN_FILES = 0,
@@ -57,30 +27,27 @@ enum {
     ZIGGY_PICK_FOLDER = 2
 };
 
-// Native host callback: shows a native file or folder dialog, waits for the user, and writes what they chose into the buffer
-// the core gives it, as a JSON array of path strings ("[]" when they cancelled). Returns the number of bytes written, or a
-// negative number on failure. The title is NUL terminated and may be NULL. The initial name is NUL terminated and may be NULL,
-// and is used only to save. The core calls it from a worker thread, never from the one that handles UI messages, so the
-// native app shows the dialog on its UI thread and waits.
-typedef intptr_t (*ziggy_pick_paths_fn)(void *user_data, int32_t kind, const char *title, const char *initial_name, char *buffer, size_t capacity);
-
 // What the native app passes to ziggy_create. Every pointer is copied by the core, so it need only be valid during the call.
 typedef struct ziggy_config {
-    // The native app's own pointer, passed back on every callback.
-    void *user_data;
-    // Delivers a message to the frontend. Required.
-    ziggy_deliver_fn deliver;
-    // Native host callback: the operating system's version. NULL when the platform has none.
-    ziggy_os_version_fn os_version;
-    // Native host callback: quit the application. NULL when the platform has none.
-    ziggy_quit_fn quit;
-    // Native host callback: show a native file or folder dialog. NULL when the platform has none.
-    ziggy_pick_paths_fn pick_paths;
-    // Native host callback: do a menu action as if its menu item had been chosen. NULL on a platform with no menu. Used only by
-    // the test control connection.
-    ziggy_menu_action_fn menu_action;
-    // Native host callback: keep the app running, or stop. NULL when the platform has none.
-    ziggy_keep_alive_fn keep_alive;
+    // What the core hands wake: a value that reaches the native app's UI thread through the platform (a window handle, a file
+    // descriptor), never the native app's state. The core never reads or writes through it.
+    void *wake_data;
+    // Wakes the native app's UI thread. Required.
+    ziggy_wake_fn wake;
+    // Whether the native app does "os-version" calls.
+    bool has_os_version;
+    // Whether the native app does "quit" calls.
+    bool has_quit;
+    // Whether the native app does "pick-paths" calls.
+    bool has_pick_paths;
+    // Whether the native app does "menu-action" calls. False on a platform with no menu. Used only by the test control connection.
+    bool has_menu_action;
+    // Whether the native app does "keep-alive" calls.
+    bool has_keep_alive;
+    // Whether the native app does "native-call" calls, the app's own native calls.
+    bool has_native_call;
+    // Whether the native app does "screenshot" calls. Used only by the test control connection.
+    bool has_screenshot;
     // The number of worker threads.
     uint32_t worker_threads;
     // The limit on child tasks in flight for any one parent task.
@@ -93,13 +60,46 @@ typedef struct ziggy_config {
     bool test_mode;
     // The file the test control connection writes its port to, or NULL for none. Used only in a test hooks build.
     const char *test_port_file;
-    // Native host callback: do one thing only the platform can do, by name. NULL when the platform has none. Last in the struct so that a
-    // native app that builds it with zeroes needs no change.
-    ziggy_host_request_fn host_request;
-    // Native host callback: write a PNG of the app's window to a file. NULL when the platform has none. Used only by the test control
-    // connection. Last in the struct so that a native app that builds it with zeroes needs no change.
-    ziggy_screenshot_fn screenshot;
 } ziggy_config;
+
+// The kinds of message ziggy_take_native_message gives.
+enum {
+    // A JSON message for the frontend, which the native app passes to the web view unread.
+    ZIGGY_NATIVE_DELIVER = 0,
+    // A call: a JSON object whose "type" names what the native app is to do. The calls are
+    //   {"type":"quit"}                                         quit the application
+    //   {"type":"menu-action","action":"reload"}                do a menu action as if its menu item had been chosen, by the path the menu
+    //                                                           item takes in the native app, so the native app's own actions (reload, zoom,
+    //                                                           developer tools, full screen, the editing commands, quit) really happen and
+    //                                                           any other action reaches the frontend
+    //   {"type":"keep-alive","keepRunning":true}                keep the app running because tasks marked keep-alive are queued or running
+    //                                                           (true when the first is queued, false when the last ends)
+    //   {"type":"os-version"}                                   the result is the operating system's version, as the JSON text of a string
+    //   {"type":"pick-paths","kind":0,"title":"...","initialName":"..."}
+    //                                                           show a native file or folder dialog of a ZIGGY_PICK_ kind; the result is the
+    //                                                           JSON text of an array of the paths chosen, "[]" when the user cancelled.
+    //                                                           The title and the initial name may be missing. The initial name is the
+    //                                                           suggested file name of a save, and the folder the others start in.
+    //   {"type":"native-call","method":"...","request":"..."}   the app's own native call: do one thing only the platform can do, named by method ("exportFile",
+    //                                                           "secureStoreGet", ...), with the JSON text of its argument; the result is
+    //                                                           the JSON text the method gives, and a failure's reason is in words the user
+    //                                                           can act on
+    //   {"type":"screenshot","outputPath":"..."}                write a PNG of the app's window to the file; the result is empty
+    // A call that has a result also carries "callId", which the native app ignores.
+    ZIGGY_NATIVE_CALL = 1
+};
+
+// Takes the next message the core sent the native app, on the native app's UI thread, or returns NULL when there is none. Each
+// wake is handled by taking messages until there are none. The text is valid until the next call or ziggy_destroy, and its length
+// is written to the pointer given. Its kind, a ZIGGY_NATIVE_ value, is written to kind, and the number to send its result with to reply:
+// 0 for a message that has no result. The native app may take its time over a call, showing native interface and waiting for the
+// user, as long as it does not hold up its UI thread.
+const char *ziggy_take_native_message(void *handle, size_t *length, int32_t *kind, uint64_t *reply);
+
+// Gives the core the result of the call taken under the number reply, on the native app's UI thread: ok and the result's text when the native app did what
+// the call names, or not ok and the text of the reason when it could not. Each call that has a result gets it once.
+void ziggy_native_result(void *handle, uint64_t reply, bool ok, const char *text, size_t text_len);
+
 
 // The result of ziggy_check_url.
 enum {
@@ -111,16 +111,20 @@ enum {
     ZIGGY_URL_BLOCK = 2
 };
 
-// Creates a core and returns its handle, or NULL on failure (the reason is printed to standard error).
+// Creates a core and returns the pointer every other function takes, the core's main thread's queue, or NULL on failure (the reason is
+// printed to standard error). A process runs one core at a time: a second call before ziggy_destroy fails.
 void *ziggy_create(const ziggy_config *config);
 
-// Cancels every running task, waits for the workers to stop and releases everything. No task runs and nothing is
-// delivered after it returns.
+// Stops the core's main thread and waits for it: the main thread cancels every running task, waits for the workers and the test
+// control connection to stop and releases everything. Every call the native app has taken and not given a result, and every call made while
+// the core stops, gets the reason "ShuttingDown" as its result, so a native app closes any open file dialog with no result, and
+// gives no result after this. No task runs and nothing is delivered after it returns.
 void ziggy_destroy(void *handle);
 
-// Delivers a JSON message from the frontend to the core. The message is valid only while the call runs. Each native app calls it
-// on its main thread, in the order the messages arrived, and the message's handler runs on that thread before it returns.
-void ziggy_post_message(void *handle, const char *message, size_t message_len);
+// Passes a JSON message from the frontend, sent with the frontend's send or invoke, to the core's main thread and returns at once.
+// The message is valid only while the call runs. Each native app calls it in the order the messages arrived, and the message's
+// handler runs later, on the core's main thread, in that order.
+void ziggy_send_message(void *handle, const char *message, size_t message_len);
 
 // Decides what to do with an address the web view is about to load: a ZIGGY_URL_ value.
 int32_t ziggy_check_url(void *handle, const char *url, size_t url_len);
@@ -175,11 +179,12 @@ bool ziggy_parse_accelerator(const char *text, size_t text_len, ziggy_accelerato
 
 // Records the files the user dropped on the window, replacing the last drop, so the frontend can get each one's path with
 // getPathForFile. The native app calls it when the drop happens, before the frontend's own drop event. The paths are the JSON text of an array
-// of strings. Returns false, after logging why, when a path is not a readable file or the text is not such an array.
+// of strings, checked on the calling thread: it returns false, after logging why, when a path is not a readable file or the text is
+// not such an array. The core's main thread records the drop, and reads it before any message sent after this returns.
 bool ziggy_files_dropped(void *handle, const char *paths_json, size_t paths_len);
 
-// Returns the query of the frontend's address, which the app supplies, as the text after the question mark (NUL terminated, empty
-// when the app has none), valid until the next call or ziggy_destroy. The native app appends a question mark and this text to the
+// Returns the query of the frontend's address, which the app supplies on the core's main thread, as the text after the question mark
+// (NUL terminated, empty when the app has none), valid until the next call or ziggy_destroy. The native app appends a question mark and this text to the
 // frontend's address and passes it through unread. The length, not counting the terminator, is written to the pointer given. Returns
 // NULL, after printing why, when the app could not make it, and the native app then does not load the frontend.
 const char *ziggy_ui_query(void *handle, size_t *length);

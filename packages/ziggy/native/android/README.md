@@ -2,7 +2,7 @@
 
 Ziggy's Android framework code: a Java library (no Kotlin) that is a Gradle build of its own. An app's Gradle project takes it as the dependency `dev.ziggy:ziggy-native-android`, built from a Ziggy checkout (`includeBuild` in the app's `settings.gradle`) or from a version tag of Ziggy's repository (a source dependency). The exact lines are in the guide to building your app. It sets its own SDK levels (`compileSdkVersion` 35, `minSdkVersion` 24) and uses the same Android Gradle plugin version an app must use, because Gradle does not allow two versions of that plugin in one build. Terms are defined in the [glossary](../../../../docs/glossary.md).
 
-`ZiggyShell` takes an activity and a `WebView` and:
+`ZiggyNativeApp` takes an activity and a `WebView` and:
 
 - Configures the web view: JavaScript and DOM storage on (so `localStorage` and IndexedDB work; `localStorage` reaches the disk a few seconds after the frontend sets it); file access, file-URL access, content access and universal access off (the bundled frontend is served from the core library through `shouldInterceptRequest`, so it needs no file access); no cleartext or mixed content.
 - Injects `ziggy-inject.js` (embedded in the core library, so the app supplies nothing) with `WebViewCompat.addDocumentStartJavaScript` (androidx.webkit), so it runs before the frontend's own scripts. There is no fallback: a web view without that feature makes `start` throw, because running the script when the frontend starts loading races the frontend's first script and would lose quietly.
@@ -14,16 +14,16 @@ Ziggy's Android framework code: a Java library (no Kotlin) that is a Gradle buil
 
 The app's activity makes these calls (the template's `MainActivity` makes each one):
 
-- `new ZiggyShell(activity, webView, nativeLibraryName, workerThreads, maxConcurrentChildTasks)`: the activity, the web view it shows, the name of the app's backend library (`lib<name>.so` without `lib` and `.so`), and the size of the backend's task pool and its limit on child tasks in flight.
+- `new ZiggyNativeApp(activity, webView, nativeLibraryName, workerThreads, maxConcurrentChildTasks)`: the activity, the web view it shows, the name of the app's backend library (`lib<name>.so` without `lib` and `.so`), and the size of the backend's task pool and its limit on child tasks in flight.
 - `start()` in `onCreate`, on the main thread: creates the backend, configures the web view and loads the frontend.
 - `onResume()` in `onResume`: starts the keep-alive service if the system refused it earlier, which it does when the app was not yet in the foreground.
-- `onActivityResult(requestCode, resultCode, data)` in `onActivityResult`: hands a picker's result to the backend thread waiting for it. It returns false when the result was not a picker's, and the activity then passes it on.
+- `onActivityResult(requestCode, resultCode, data)` in `onActivityResult`: hands a picker's result to the thread that showed the picker. It returns false when the result was not a picker's, and the activity then passes it on.
 - `destroy()` in `onDestroy`: destroys the backend once. Nothing is delivered after it.
 
 And these when the app needs them, before `start`:
 
 - `setKeepAliveNotification(channelName, channelDescription, title, text)`: the text of the keep-alive service's ongoing notification, and what the system settings show for its channel.
-- `setHostRequestHandler(handler)`: the object that handles the app's own native calls. Without one, every one of the app's own native calls fails with a message reporting that no handler is set.
+- `setNativeCallHandler(handler)`: the object that handles the app's own native calls. Without one, every one of the app's own native calls fails with a message reporting that no handler is set.
 
 A handler of the app's own native calls can show an activity of its own and wait for it, from a thread that is not the main thread: `startActivityAndWait(intent)` returns the activity's result data, and `startIntentSenderAndWait(sender)` shows a system confirmation and returns whether the user accepted it. Both share the one slot the pickers use, so one such activity is on screen at a time.
 
@@ -33,7 +33,7 @@ The library is built by the app's Gradle build, which includes this one.
 
 ## File and directory pickers
 
-The backend shows a picker through the `pick_paths` native call, from a worker thread. The Zig side (`jni.zig`) calls `ZiggyHost.pickPathsJson(kind, title, initialName)` on that thread, and `ZiggyShell` starts a Storage Access Framework activity with `startActivityForResult` on the main thread and blocks the worker until the activity's `onActivityResult` runs. The activity must forward `onActivityResult` to `ZiggyShell.onActivityResult`. The result is a JSON array of strings, as UTF-8 bytes, and `[]` when the user cancelled.
+The backend shows a picker through the `pick_paths` native call. The Zig side (`jni.zig`) calls `ZiggyNativeCalls.pickPaths(kind, title, initialName, reply)` on the main thread, and `ZiggyNativeApp` starts a Storage Access Framework activity with `startActivityForResult` from its native call thread and blocks that thread until the activity's `onActivityResult` runs. The activity must forward `onActivityResult` to `ZiggyNativeApp.onActivityResult`. The result goes back to the core with `ZiggyNative.nativeResult` on the main thread: a JSON array of strings, as UTF-8 bytes, and `[]` when the user cancelled.
 
 - Open files: `ACTION_OPEN_DOCUMENT`, openable, any type, multiple allowed. Each chosen document is copied into its own directory under the app's cache directory (`ziggy-picked/<unique>/<display name>`) and the result is those file system paths, so the frontend and the backend get real paths. The copies are not deleted by Ziggy; the cache directory is the system's to clear.
 - Directory: `ACTION_OPEN_DOCUMENT_TREE`. The result is the tree Uri string (`content://...`). A tree Uri is not a file system path: Android does not give an app a path to a directory the user picked, only a Uri to read and write through a `ContentResolver`.

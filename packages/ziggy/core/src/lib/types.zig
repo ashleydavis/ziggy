@@ -5,21 +5,11 @@
 const std = @import("std");
 
 //
-// Delivers a JSON message from the core to the native app. The message is valid only while the call runs, so the
-// native app copies it before returning. It may be called from any thread.
+// Wakes the native app's UI thread to take the core's messages with ziggy_take_native_message (see native-message.zig). The core calls
+// it from any of its threads after it posts a message for the native app. It only has the platform run code on the UI thread, and is
+// given the native app's wake_data unread: the core never touches the native app's state.
 //
-pub const DeliverFn = *const fn (user_data: ?*anyopaque, message_ptr: [*]const u8, message_len: usize) callconv(.c) void;
-
-//
-// A native host callback that writes the operating system's version string, as JSON (a JSON string), into the buffer
-// the core gives it, and returns the number of bytes written, or a negative number when it cannot.
-//
-pub const OsVersionFn = *const fn (user_data: ?*anyopaque, buffer: [*]u8, capacity: usize) callconv(.c) isize;
-
-//
-// Has the native app quit the application. Called only by the test control connection.
-//
-pub const QuitFn = *const fn (user_data: ?*anyopaque) callconv(.c) void;
+pub const WakeFn = *const fn (wake_data: ?*anyopaque) callconv(.c) void;
 
 //
 // The kind of dialog a native app shows.
@@ -34,52 +24,9 @@ pub const PickKind = enum(i32) {
 };
 
 //
-// A native host callback that shows a native file or folder dialog, waits for the user, and writes what they chose into the
-// buffer the core gives it, as a JSON array of path strings ("[]" when they cancelled). Returns the number of bytes written, or
-// a negative number on failure. The title is NUL terminated and may be null. The initial name is NUL terminated and may be
-// null: for a save dialog it is the suggested file name, and for a dialog that opens files or a folder it is the folder the dialog
-// starts in, which a native app that cannot start a dialog in a folder leaves out. The core calls it from a worker thread, never from the one that handles UI messages, so
-// the native app shows the dialog on its UI thread and waits.
+// What a native app returned for a native call.
 //
-//
-// A native host callback that does a menu action as if the user had chosen its menu item, by the path the menu item takes in the
-// native app, so the native app's own actions (reload, zoom, developer tools, full screen, the editing commands, quit) really happen and any
-// other action reaches the core, which runs the app's item. The core calls it, from the thread of the test control connection, only to let a test choose a
-// menu item. The native app does the work on its UI thread and returns at once.
-//
-pub const MenuActionFn = *const fn (user_data: ?*anyopaque, action: [*:0]const u8) callconv(.c) void;
-
-//
-// A native host callback that writes a PNG picture of the app's window to the file at the path (NUL terminated), waits until the
-// file is written, and returns 0. When it cannot, it writes the text of the reason into the buffer and returns the number of bytes
-// written negated. The core calls it, from the thread of the test control connection, only to let a test take a screenshot. The
-// native app does the capture on its UI thread and waits for it, so the window stays responsive.
-//
-pub const ScreenshotFn = *const fn (user_data: ?*anyopaque, output_path: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize;
-
-//
-// Tells the native app whether the app must keep running because tasks marked keep-alive are queued or running. Called with true when the
-// first such task is queued and with false when the last one ends, so the native app can use its platform's way of staying alive (an
-// Android foreground service or an iOS background task; a desktop native app provides none, because closing its window quits the app). Called from any
-// thread while the core holds a lock, so it must return at once and must not call back into the core.
-//
-pub const KeepAliveFn = *const fn (user_data: ?*anyopaque, keep_running: bool) callconv(.c) void;
-
-pub const PickPathsFn = *const fn (user_data: ?*anyopaque, kind: i32, title: ?[*:0]const u8, initial_name: ?[*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize;
-
-//
-// A native host callback that does one thing only the platform can do, named by `method` ("exportFile", "secureStoreGet", ...). The
-// request is the JSON text of the method's argument (NUL terminated), and the native app writes the JSON text of its result into the
-// buffer and returns the number of bytes written. When it cannot do what the method names it writes the text of the reason, in words the user
-// can act on, and returns that number of bytes negated. The native app may show native interface and wait for the user, so the core calls
-// it from a worker thread, never from the one that handles UI messages, and it may take a long time.
-//
-pub const HostRequestFn = *const fn (user_data: ?*anyopaque, method: [*:0]const u8, request_json: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize;
-
-//
-// What a native app returned for a host request.
-//
-pub const HostReply = struct {
+pub const NativeCallResult = struct {
     // Whether the native app did what the method names.
     succeeded: bool,
     // The JSON text of the result when it succeeded, and the text of the reason when it did not.
@@ -91,21 +38,27 @@ pub const HostReply = struct {
 // Declared with the same fields, in the same order, in ziggy.h.
 //
 pub const ZiggyConfig = extern struct {
-    // The native app's own pointer, passed back on every callback.
-    user_data: ?*anyopaque,
-    // Delivers a message to the frontend.
-    deliver: ?DeliverFn,
-    // Native host callback: the operating system's version. Null when the platform has none.
-    os_version: ?OsVersionFn,
-    // Native host callback: quit the application. Null when the platform has none.
-    quit: ?QuitFn,
-    // Native host callback: show a native file or folder dialog. Null when the platform has none.
-    pick_paths: ?PickPathsFn,
-    // Native host callback: do a menu action as if its menu item had been chosen. Null on a platform with no menu. Used only by
-    // the test control connection.
-    menu_action: ?MenuActionFn,
-    // Native host callback: keep the app running, or stop. Null when the platform has none.
-    keep_alive: ?KeepAliveFn,
+    // What the native app gives wake: a value that reaches its UI thread through the platform, never its state. The core hands it to
+    // wake unread.
+    wake_data: ?*anyopaque,
+    // Wakes the native app's UI thread to take the core's messages. Required.
+    wake: ?WakeFn,
+    // Whether the native app gives the operating system's version.
+    has_os_version: bool,
+    // Whether the native app can quit the application.
+    has_quit: bool,
+    // Whether the native app shows native file and folder dialogs.
+    has_pick_paths: bool,
+    // Whether the native app does menu actions as if their menu items had been chosen: false on a platform with no menu. Used only
+    // by the test control connection.
+    has_menu_action: bool,
+    // Whether the native app keeps the app running for keep-alive tasks.
+    has_keep_alive: bool,
+    // Whether the native app does the things only the platform can do (a share sheet, a permission prompt, the keychain), by name.
+    has_native_call: bool,
+    // Whether the native app writes a PNG of its window to a file. Used only by the test control connection; without it a screenshot
+    // is taken from outside the app.
+    has_screenshot: bool,
     // The number of worker threads.
     worker_threads: u32,
     // The limit on child tasks in flight for any one parent task.
@@ -118,13 +71,6 @@ pub const ZiggyConfig = extern struct {
     test_mode: bool,
     // The file the test control connection writes its port to, or null for none. Used only in a test hooks build.
     test_port_file: ?[*:0]const u8,
-    // Native host callback: do one thing only the platform can do (a share sheet, a permission prompt, the keychain), by name. Null when
-    // the platform has none. Last in the struct so that a native app that builds it with zeroes needs no change.
-    host_request: ?HostRequestFn,
-    // Native host callback: write a PNG of the app's window to a file. Null when the platform has none, and a screenshot is taken from
-    // outside the app instead. Used only by the test control connection. Last in the struct so that a native app that builds it with zeroes
-    // needs no change.
-    screenshot: ?ScreenshotFn,
 };
 
 //
@@ -166,7 +112,7 @@ pub const Completion = struct {
 pub const TaskError = error{
     Cancelled,
     UnknownTaskType,
-    HostCallbackMissing,
+    NativeCallMissing,
 };
 
 //
@@ -213,16 +159,3 @@ pub const TaskSentEvent = struct {
     event_json: []const u8,
 };
 
-//
-// Lets the app see every task end and every event a task sends, through
-// onTaskComplete and onAnyTaskEvent. Both functions are called from the thread the event happened on, with no lock held, and the
-// values are valid only during the call.
-//
-pub const TaskObserver = struct {
-    // The observer's own pointer, passed back on every call.
-    user_data: ?*anyopaque,
-    // Called when a task has ended, after the frontend has been told.
-    on_task_end: *const fn (user_data: ?*anyopaque, end: TaskEnd) void,
-    // Called when a task sends an event, after the frontend has been told.
-    on_task_event: *const fn (user_data: ?*anyopaque, sent: TaskSentEvent) void,
-};

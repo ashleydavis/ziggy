@@ -215,7 +215,7 @@ final class ZiggyMenu: NSObject {
         if name.hasPrefix("f"), let number = Int(name.dropFirst()), number >= 1, number <= 35 {
             return functionKey(NSF1FunctionKey + number - 1)
         }
-        ZiggyBridge.fail("the menu has a shortcut with a key this shell does not know: \(name)")
+        ZiggyBridge.fail("the menu has a shortcut with a key this native app does not know: \(name)")
     }
 
     // The one character string AppKit uses for a function key code such as NSF12FunctionKey.
@@ -334,7 +334,7 @@ final class ZiggyMenu: NSObject {
             return
         }
         guard let visible = inspector.value(forKey: "visible") as? Bool else {
-            ZiggyBridge.report("toggle-devtools: the private inspector did not say whether it is visible.")
+            ZiggyBridge.report("toggle-devtools: the private inspector did not report whether it is visible.")
             return
         }
         if visible {
