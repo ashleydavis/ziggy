@@ -41,6 +41,7 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mob
 - `15-menu-devtools`: Toggle Developer Tools opens and closes the developer tools, seen the way each platform shows them.
 - `19-normal-task-ends-with-window`: closing the window with only a normal background task running ends the app.
 - `20-drop-files`: a file dropped on the window gets its real path from `getPathForFile`, and a file of another size does not. The drop is faked in two steps, because no tool can drag a file into the window: the `drop` command records it with the backend and `drop-file` gives the frontend a drop event. The native app's own reading of a real drop is not covered by any automatic test.
+- `25-close-with-dialog-open`: quitting while a real file dialog is open ends the app. Nothing reports that the dialog is on screen, so the scenario waits a few seconds after the click before it quits.
 
 The scenarios in `dev-only` run in dev mode only:
 

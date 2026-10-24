@@ -106,7 +106,7 @@ A `.standard` item runs an action the native app does itself, named by the `zigg
 
 ### A Zig function
 
-A `.zig` item calls a Zig function of the app's, `fn (core: *ziggy.core.Core, arena: std.mem.Allocator) anyerror!void`. The template's Hello menu has one:
+A `.zig` item calls a Zig function of the app's, which takes the same standard arguments as a message handler with no payload and no reply: `fn (services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void` (see [What every handler is given](app-declaration.md#what-every-handler-is-given)). The template's Hello menu has one:
 
 ```zig
             .{
@@ -121,12 +121,14 @@ A `.zig` item calls a Zig function of the app's, `fn (core: *ziggy.core.Core, ar
 The function, in [`backend/src/lib/hello-world.zig`](../../apps/ziggy-template/backend/src/lib/hello-world.zig), sends the frontend an app event (see [Sending an event to the frontend](messages.md#sending-an-event-to-the-frontend)):
 
 ```zig
-pub fn helloFromZigMenuItem(core: *ziggy.core.Core, arena: std.mem.Allocator) !void {
-    try core.sendEvent(arena, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
+pub fn helloFromZigMenuItem(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) !void {
+    _ = timers;
+    _ = io;
+    try services.sendEvent(allocator, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
 }
 ```
 
-The core calls it on the thread that handles messages, like a message handler, with the arena of the `menu-action` message, so it must be quick: slow work queues a task from it (see [Tasks](tasks.md)). The native app posts the `menu-action` message with no id, so there is no message response to carry an error the function returns. The error is reported as a `core-error` system event instead, which the frontend hears through `window.ziggy.onCoreError` (see [Ziggy's own calls](messages.md#ziggys-own-calls)).
+The core calls it on the thread that handles messages, like a message handler, with the allocator of the `menu-action` message, so it must be quick: slow work queues a task from it (see [Tasks](tasks.md)). The native app posts the `menu-action` message with no id, so there is no message response to carry an error the function returns. The error is reported as a `core-error` system event instead, which the frontend hears through `window.ziggy.onCoreError` (see [Ziggy's own calls](messages.md#ziggys-own-calls)).
 
 ### The frontend
 
@@ -216,13 +218,13 @@ A `.zig` or `.ui` item can be tested in the backend's unit tests by posting the 
 
 ```zig
 test "Say Hello From the UI sends the UI the menu event naming it" {
-    var shell: FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"hello-from-ui\"}}");
-    try shell.expectMessageContaining("{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"hello-from-ui\"}}");
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"hello-from-ui\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"hello-from-ui\"}}");
 }
 ```
 

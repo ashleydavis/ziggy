@@ -29,7 +29,7 @@ case "$ACTION" in
         # the check uses the MinGW target, which has them.
         bash "$SCRIPT_DIR/fetch-webview2.sh"
         for target in x86_64-windows-gnu aarch64-windows-gnu; do
-            echo "Checking the Windows shell for $target"
+            echo "Checking the Windows native app for $target"
             (cd "$EXAMPLE_DIR" && zig build ziggy-test-app-windows-check -Dtarget="$target" -Dcompile-only=true)
         done
         ;;

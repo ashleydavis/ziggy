@@ -1,6 +1,8 @@
 //
-// Native file and folder pickers. The core calls the pick_paths callback from a worker thread. The dialog is shown on the main thread and the
-// worker waits for the user, so the main thread is never blocked. On MacOS these are NSOpenPanel and NSSavePanel.
+// Native file and folder pickers, for the core's "pick-paths" calls. The calls reach the app's main thread, which shows the panel and
+// returns at once: the panel's completion gives the outcome, one picker at a time. On MacOS these are NSOpenPanel and NSSavePanel.
+// Everything here runs on the main thread. Before the core is destroyed the bridge closes the pickers: the one showing is cancelled
+// and the ones queued are dropped, because destroying the core gives their calls their results.
 //
 
 import Foundation
@@ -16,60 +18,68 @@ enum ZiggyPickOutcome {
     case failed(String)
 }
 
-// Carries the outcome from the main thread, where the dialog runs, to the worker thread that waits for it.
-final class ZiggyPickAnswer {
-    // The outcome, set on the main thread before the semaphore is signalled and read on the worker after it.
-    var outcome: ZiggyPickOutcome?
+// One picker requested and not shown yet.
+struct ZiggyPickRequest {
+    // What to show.
+    let kind: Int32
+    let title: String?
+    let initialName: String?
+    // Called with the outcome.
+    let completion: (ZiggyPickOutcome) -> Void
 }
 
-// Shows pickers for the core's pick_paths callback.
-enum ZiggyPicker {
-    // The core's pick_paths callback, for a worker thread. Shows the dialog on the main thread, waits for the user, and
-    // writes the chosen paths into the buffer as a JSON array of strings ("[]" when they cancelled). Returns the number of
-    // bytes written, or -1 after printing why it could not.
-    static func pickPaths(webView: WKWebView, kind: Int32, title: String?, initialName: String?, buffer: UnsafeMutablePointer<CChar>, capacity: Int) -> Int {
-        if Thread.isMainThread {
-            ZiggyBridge.report("a picker was asked for on the main thread, which would wait for itself")
-            return -1
+// The pickers the core requested, shown one after another on the main thread.
+final class ZiggyPickers {
+    // The pickers queued until the one showing closes, oldest first.
+    private var queued: [ZiggyPickRequest] = []
+    // The panel showing, or nil.
+    private var showing: NSSavePanel?
+    // Set once closed: nothing more is shown and no outcome is given.
+    private var closed = false
+
+    // Shows a picker, or keeps it until the one showing closes, and gives its outcome to the completion.
+    func show(_ request: ZiggyPickRequest) {
+        if closed {
+            return
         }
-        let answer = ZiggyPickAnswer()
-        let semaphore = DispatchSemaphore(value: 0)
-        DispatchQueue.main.async {
-            ZiggyPicker.present(webView: webView, kind: kind, title: title, initialName: initialName) { outcome in
-                answer.outcome = outcome
-                semaphore.signal()
-            }
-        }
-        semaphore.wait()
-        guard let outcome = answer.outcome else {
-            ZiggyBridge.report("the picker finished without an outcome")
-            return -1
-        }
-        switch outcome {
-        case .failed(let reason):
-            ZiggyBridge.report("the picker failed: \(reason)")
-            return -1
-        case .chosen(let paths):
-            let bytes: Data
-            do {
-                bytes = try JSONEncoder().encode(paths)
-            }
-            catch {
-                ZiggyBridge.report("could not write the chosen paths as JSON: \(error)")
-                return -1
-            }
-            if bytes.count > capacity {
-                ZiggyBridge.report("the chosen paths need \(bytes.count) bytes and the core's buffer holds \(capacity)")
-                return -1
-            }
-            bytes.copyBytes(to: UnsafeMutableRawBufferPointer(start: buffer, count: capacity).bindMemory(to: UInt8.self), count: bytes.count)
-            return bytes.count
+        queued.append(request)
+        showNext()
+    }
+
+    // Cancels the picker showing and drops the ones queued, giving none of them an outcome.
+    func close() {
+        closed = true
+        queued = []
+        if let panel = showing {
+            showing = nil
+            panel.cancel(nil)
         }
     }
 
-    // Runs on the main thread: shows the panel for the kind, which blocks the main thread inside the panel's own event loop
-    // until the user answers, then reports the outcome.
-    private static func present(webView: WKWebView, kind: Int32, title: String?, initialName: String?, completion: @escaping (ZiggyPickOutcome) -> Void) {
+    // Shows the oldest picker queued, when none is showing.
+    private func showNext() {
+        if showing != nil || queued.isEmpty {
+            return
+        }
+        let request = queued.removeFirst()
+        guard let panel = ZiggyPickers.panel(kind: request.kind, title: request.title, initialName: request.initialName) else {
+            request.completion(.failed("unknown picker kind \(request.kind)"))
+            showNext()
+            return
+        }
+        showing = panel
+        panel.begin { [weak self] response in
+            guard let self = self, self.showing === panel else {
+                return
+            }
+            self.showing = nil
+            request.completion(ZiggyPickers.outcome(panel: panel, response: response))
+            self.showNext()
+        }
+    }
+
+    // The panel for the kind, or nil for a kind ziggy.h does not give.
+    private static func panel(kind: Int32, title: String?, initialName: String?) -> NSSavePanel? {
         let panel: NSSavePanel
         switch Int(kind) {
         case Int(ZIGGY_PICK_OPEN_FILES):
@@ -90,26 +100,37 @@ enum ZiggyPicker {
             savePanel.nameFieldStringValue = initialName ?? ""
             panel = savePanel
         default:
-            completion(.failed("unknown picker kind \(kind)"))
-            return
+            return nil
         }
         if let title = title {
             panel.title = title
             panel.message = title
         }
-        if panel.runModal() != .OK {
-            completion(.chosen([]))
-            return
+        return panel
+    }
+
+    // What the user did with a panel that closed.
+    private static func outcome(panel: NSSavePanel, response: NSApplication.ModalResponse) -> ZiggyPickOutcome {
+        if response != .OK {
+            return .chosen([])
         }
         if let openPanel = panel as? NSOpenPanel {
-            completion(.chosen(openPanel.urls.map { $0.path }))
-            return
+            return .chosen(openPanel.urls.map { $0.path })
         }
         guard let url = panel.url else {
-            completion(.failed("the save panel was accepted with no file"))
-            return
+            return .failed("the save panel was accepted with no file")
         }
-        completion(.chosen([url.path]))
+        return .chosen([url.path])
+    }
+
+    // The JSON array of the chosen paths, or nil after reporting why it could not be written.
+    static func json(paths: [String]) -> String? {
+        do {
+            return String(decoding: try JSONEncoder().encode(paths), as: UTF8.self)
+        }
+        catch {
+            ZiggyBridge.report("could not write the chosen paths as JSON: \(error)")
+            return nil
+        }
     }
 }
-

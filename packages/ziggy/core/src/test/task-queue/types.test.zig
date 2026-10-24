@@ -47,7 +47,8 @@ test "ITaskResult round-trips through JSON" {
 //
 // Counts the calls of a callback closure.
 //
-fn countCall(context: ?*anyopaque, taskId: []const u8) void {
+fn countCall(context: ?*anyopaque, allocator: std.mem.Allocator, taskId: []const u8) void {
+    _ = allocator;
     _ = taskId;
     const counter: *usize = @ptrCast(@alignCast(context.?));
     counter.* += 1;
@@ -56,7 +57,8 @@ fn countCall(context: ?*anyopaque, taskId: []const u8) void {
 //
 // Counts the calls of an unsubscribe closure and records the key.
 //
-fn recordUnsubscribe(context: ?*anyopaque, key: usize) void {
+fn recordUnsubscribe(context: ?*anyopaque, allocator: std.mem.Allocator, key: usize) void {
+    _ = allocator;
     const recorded_key: *usize = @ptrCast(@alignCast(context.?));
     recorded_key.* = key;
 }
@@ -64,12 +66,12 @@ fn recordUnsubscribe(context: ?*anyopaque, key: usize) void {
 test "callback closures call their function with their context" {
     var counter: usize = 0;
     const callback: types.TaskAddedCallback = .{ .context = &counter, .function = countCall };
-    callback.call("a");
-    callback.call("b");
+    callback.call(std.testing.allocator, "a");
+    callback.call(std.testing.allocator, "b");
     try std.testing.expectEqual(@as(usize, 2), counter);
 
     var recorded_key: usize = 0;
     const unsubscribe: types.UnsubscribeFn = .{ .context = &recorded_key, .key = 42, .function = recordUnsubscribe };
-    unsubscribe.call();
+    unsubscribe.call(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 42), recorded_key);
 }

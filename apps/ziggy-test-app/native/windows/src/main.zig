@@ -4,11 +4,11 @@
 //
 
 const std = @import("std");
-const shell = @import("ziggy-native-windows");
+const native_app = @import("ziggy-native-windows");
 
 pub fn main(init: std.process.Init) !u8 {
     const args = try init.minimal.args.toSlice(init.arena.allocator());
-    return try shell.run(.{
+    return try native_app.run(.{
         .app_id = "dev.ziggy.testapp",
         .title = "Ziggy test app",
         .default_width = 900,

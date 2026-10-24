@@ -15,14 +15,14 @@ pub const SendEventFn = struct {
     // The state of the function, passed to function.
     context: ?*anyopaque,
 
-    // Sends the event.
-    function: *const fn (context: ?*anyopaque, event: std.json.Value) void,
+    // Sends the event, with the calling thread's Io and allocator.
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void,
 
     //
     // Invokes the function.
     //
-    pub fn call(self: SendEventFn, event: std.json.Value) void {
-        self.function(self.context, event);
+    pub fn call(self: SendEventFn, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
+        self.function(self.context, io, allocator, event);
     }
 };
 
@@ -56,9 +56,9 @@ pub const TaskContext = struct {
     maxConcurrentChildTasks: u32,
 
     //
-    // Whether this task has been cancelled (atomic: cancel is called from another thread than the task's).
+    // Whether this task has been cancelled. The context is used only on the thread that runs the task.
     //
-    _isCancelled: std.atomic.Value(bool),
+    _isCancelled: bool,
 
     //
     // Sends an event back to the caller.
@@ -82,7 +82,7 @@ pub const TaskContext = struct {
             .sessionId = sessionId,
             .taskId = taskId,
             .maxConcurrentChildTasks = maxConcurrentChildTasks,
-            ._isCancelled = std.atomic.Value(bool).init(false),
+            ._isCancelled = false,
             .sendEventFn = sendEventFn,
         };
     }
@@ -97,8 +97,7 @@ pub const TaskContext = struct {
             .sessionId = self.sessionId,
             .taskId = self.taskId,
             .maxConcurrentChildTasks = self.maxConcurrentChildTasks,
-            .hostRequester = null,
-            .toolRunner = null,
+            .nativeCaller = null,
             .ptr = self,
             .vtable = &vtable,
         };
@@ -115,36 +114,38 @@ pub const TaskContext = struct {
     //
     // Sends an event back to the caller via the main process.
     //
-    pub fn sendEvent(self: *TaskContext, event: std.json.Value) void {
-        self.sendEventFn.call(event);
+    pub fn sendEvent(self: *TaskContext, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
+        self.sendEventFn.call(io, allocator, event);
     }
 
     //
     // Marks this task as cancelled.
     //
     pub fn cancel(self: *TaskContext) void {
-        self._isCancelled.store(true, .release);
+        self._isCancelled = true;
     }
 
     //
     // Returns true if this task has been cancelled.
     //
     pub fn isCancelled(self: *TaskContext) bool {
-        return self._isCancelled.load(.acquire);
+        return self._isCancelled;
     }
 
     //
     // ITaskContext.sendEvent for this implementation.
     //
-    fn sendEventErased(ptr: *anyopaque, event: std.json.Value) void {
+    fn sendEventErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
         const self: *TaskContext = @ptrCast(@alignCast(ptr));
-        self.sendEvent(event);
+        self.sendEvent(io, allocator, event);
     }
 
     //
     // ITaskContext.isCancelled for this implementation.
     //
-    fn isCancelledErased(ptr: *anyopaque) bool {
+    fn isCancelledErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) bool {
+        _ = io;
+        _ = allocator;
         const self: *TaskContext = @ptrCast(@alignCast(ptr));
         return self.isCancelled();
     }

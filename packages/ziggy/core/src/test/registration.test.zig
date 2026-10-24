@@ -5,22 +5,14 @@ const helpers = @import("helpers.zig");
 //
 // Fails unless the last message the fake native app recorded is the expected text.
 //
-fn expectLastMessage(shell: *helpers.FakeShell, expected: []const u8) !void {
-    const last = try shell.messageAt(std.testing.allocator, shell.count() - 1);
+fn expectLastMessage(native_app: *helpers.FakeNativeApp, expected: []const u8) !void {
+    const last = try native_app.messageAt(std.testing.io, std.testing.allocator, native_app.count(std.testing.io, std.testing.allocator) - 1);
     defer std.testing.allocator.free(last);
     try std.testing.expectEqualStrings(expected, last);
 }
 
 //
-// The registry of system messages, which the core holds untyped. It is a registry of the same type as the app's, so the tests reach
-// it by that type.
-//
-fn systemRegistry(core: *ziggy.core.Core) *@TypeOf(core.app_messages) {
-    return @ptrCast(@alignCast(core.system_messages));
-}
-
-//
-// The data of the messages registered in these tests.
+// The data of the messages declared in these tests.
 //
 const LateRequest = struct {
     // A word the response repeats.
@@ -28,162 +20,133 @@ const LateRequest = struct {
 };
 
 //
-// The response of the messages registered in these tests.
+// The response of the messages declared in these tests.
 //
 const LateResponse = struct {
-    // Which handler answered.
+    // Which handler ran.
     from: []const u8,
-    // The request's word.
+    // The payload's word.
     word: []const u8,
 };
 
 //
-// A handler registered while the core runs.
+// A handler the app of these tests declares.
 //
-fn lateHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: LateRequest) !LateResponse {
-    _ = core;
-    _ = arena;
+fn lateHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: LateRequest) !LateResponse {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     return .{
         .from = "late",
-        .word = request.word,
+        .word = payload.word,
     };
 }
 
 //
-// A system handler registered while the core runs.
+// Sends a system message of the name, with no data, and gives whether the main thread has a system message of that name: any response
+// but UnknownSystemMessage.
 //
-fn lateSystemHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: LateRequest) !LateResponse {
-    _ = core;
-    _ = arena;
-    return .{
-        .from = "late system",
-        .word = request.word,
+fn systemHas(native_app: *helpers.FakeNativeApp, name: []const u8) !bool {
+    var buffer: [256]u8 = undefined;
+    try native_app.send(std.testing.io, std.testing.allocator, try std.fmt.bufPrint(&buffer, "{{\"kind\":\"system\",\"id\":\"system-has\",\"name\":\"{s}\",\"data\":null}}", .{name}));
+    const index = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"id\":\"system-has\"") orelse {
+        return error.SystemHasNoResponse;
     };
+    const response = try native_app.messageAt(std.testing.io, std.testing.allocator, index);
+    defer std.testing.allocator.free(response);
+    native_app.removeContaining(std.testing.io, std.testing.allocator, "\"id\":\"system-has\"");
+    return std.mem.indexOf(u8, response, "UnknownSystemMessage") == null;
 }
 
 //
-// A task registered while the core runs.
+// A task the app of these tests declares.
 //
-fn lateTask(context: *ziggy.task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    return try context.arena.dupe(u8, "\"late task done\"");
-}
-
-test "an app message registered while the core runs is handled from then on" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"late\",\"data\":{\"word\":\"hi\"}}");
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMessageName\"}");
-    const registering = try std.Thread.spawn(.{}, registerLate, .{core});
-    registering.join();
-    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"late\",\"data\":{\"word\":\"hi\"}}");
-    try expectLastMessage(&shell, "{\"id\":2,\"ok\":true,\"data\":{\"from\":\"late\",\"word\":\"hi\"}}");
+fn lateTask(services: ziggy.task_runner.TaskServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, context: ziggy.task_runner.TaskContext, payload: std.json.Value) ![]const u8 {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = context;
+    _ = payload;
+    return "late task done";
 }
 
 //
-// Registers the late message, on a thread of its own.
+// The app of these tests: it declares the message "late", an app message under the name of the system message get-platform, and the
+// task type "late-task".
 //
-fn registerLate(core: *ziggy.core.Core) void {
-    core.registerMessage("late", lateHandler) catch |err| {
-        std.debug.panic("the late message could not be registered: {s}", .{@errorName(err)});
-    };
+const declared_app = ziggy.core.App(.{
+    .messages = .{
+        .late = lateHandler,
+        .@"get-platform" = lateHandler,
+    },
+    .tasks = .{
+        .@"late-task" = lateTask,
+    },
+    .menu = &.{},
+    .ui_files = &[_]ziggy.ui_files.UiFile{},
+});
+
+test "an app message the app declares is handled, and a name it does not declare is UnknownMessageName" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"undeclared\",\"data\":{\"word\":\"hi\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMessageName\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":2,\"name\":\"late\",\"data\":{\"word\":\"hi\"}}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":true,\"data\":{\"from\":\"late\",\"word\":\"hi\"}}");
 }
 
-test "registering an app message under a name registered already, by App or by registerMessage, is DuplicateMessage" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try std.testing.expectError(error.DuplicateMessage, core.registerMessage("greet", lateHandler));
-    try core.registerMessage("late", lateHandler);
-    try std.testing.expectError(error.DuplicateMessage, core.registerMessage("late", lateHandler));
-    // The registered handlers are the ones that stay.
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"greet\",\"data\":{\"name\":\"Ada\"}}");
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":{\"text\":\"Hello Ada\",\"times\":1}}");
+test "an app message declared under a system message's name is an app message, and the system message is still Ziggy's" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"get-platform\",\"data\":{\"word\":\"app\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"from\":\"late\",\"word\":\"app\"}}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"get-platform\",\"data\":null}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":true,\"data\":{\"platformKind\":");
+    try std.testing.expect(!try systemHas(&native_app, "late"));
 }
 
-test "an app message registered under a system message's name is an app message, and the system message is still Ziggy's" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try core.registerMessage("get-platform", lateHandler);
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"get-platform\",\"data\":{\"word\":\"app\"}}");
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":{\"from\":\"late\",\"word\":\"app\"}}");
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"get-platform\",\"data\":null}");
-    try shell.expectMessageContaining("{\"id\":2,\"ok\":true,\"data\":{\"platformKind\":");
-    try std.testing.expect(systemRegistry(core).find("late") == null);
+test "a system message is never handled as an app message, and an app message never as a system message" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"late\",\"data\":{\"word\":\"hi\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"UnknownSystemMessage\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":2,\"name\":\"cancel-tasks\",\"data\":\"nothing\"}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":false,\"error\":\"UnknownMessageName\"}");
 }
 
-test "a system message registered while the core runs is handled from then on, and never as an app message" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"late-system\",\"data\":{\"word\":\"hi\"}}");
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":false,\"error\":\"UnknownSystemMessage\"}");
-    try systemRegistry(core).register("late-system", lateSystemHandler);
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"late-system\",\"data\":{\"word\":\"hi\"}}");
-    try expectLastMessage(&shell, "{\"id\":2,\"ok\":true,\"data\":{\"from\":\"late system\",\"word\":\"hi\"}}");
-    core.postMessage("{\"kind\":\"app\",\"id\":3,\"name\":\"late-system\",\"data\":{\"word\":\"hi\"}}");
-    try expectLastMessage(&shell, "{\"id\":3,\"ok\":false,\"error\":\"UnknownMessageName\"}");
+test "a task type the app declares can be queued, and one it does not declare fails as UnknownTaskType" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"before\",\"taskType\":\"undeclared-task\",\"source\":\"s\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"taskId\":\"before\",\"result\":{\"taskId\":\"before\",\"status\":\"failed\",\"error\":{\"message\":\"UnknownTaskType\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"after\",\"taskType\":\"late-task\",\"source\":\"s\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"taskId\":\"after\",\"result\":{\"taskId\":\"after\",\"status\":\"succeeded\",\"outputs\":\"late task done\"");
 }
 
-test "registering a system message under a name registered already is DuplicateMessage" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try std.testing.expectError(error.DuplicateMessage, systemRegistry(core).register("add-task", lateSystemHandler));
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"cancel-tasks\",\"data\":\"nothing\"}");
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":{}}");
-}
-
-test "a task type registered while the core runs can be queued from then on" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"before\",\"taskType\":\"late-task\",\"source\":\"s\"}}");
-    try shell.expectMessageContaining("{\"taskId\":\"before\",\"result\":{\"taskId\":\"before\",\"status\":\"failed\",\"error\":{\"message\":\"UnknownTaskType\"}");
-    try core.registerTask("late-task", lateTask);
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"after\",\"taskType\":\"late-task\",\"source\":\"s\"}}");
-    try shell.expectMessageContaining("{\"taskId\":\"after\",\"result\":{\"taskId\":\"after\",\"status\":\"succeeded\",\"outputs\":\"late task done\"");
-}
-
-test "registering a task type registered already is DuplicateTaskType" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try std.testing.expectError(error.DuplicateTaskType, core.registerTask("quick", lateTask));
-    try core.registerTask("late-task", .{
-        .handler = lateTask,
-        .kind = .keep_alive,
-    });
-    try std.testing.expectError(error.DuplicateTaskType, core.registerTask("late-task", lateTask));
-}
-
-test "every system message of Ziggy's parts is registered, the test hook ones too in a test hooks build" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    const registry = systemRegistry(core);
+test "every system message of Ziggy's parts is handled, the test hook ones too in a test hooks build" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
     for ([_][]const u8{ "add-task", "cancel-tasks", "get-platform", "menu-action", "get-dropped-paths" }) |name| {
-        try std.testing.expect(registry.find(name) != null);
+        try std.testing.expect(try systemHas(&native_app, name));
     }
     // The unit tests run with the test hooks built in.
-    try std.testing.expect(registry.find("test-result") != null);
-    try std.testing.expect(registry.find("test-ui-ready") != null);
+    try std.testing.expect(try systemHas(&native_app, "test-result"));
+    try std.testing.expect(try systemHas(&native_app, "test-ui-ready"));
 }

@@ -1,6 +1,7 @@
 //
-// Screenshots for the test control connection. The core calls the screenshot callback from the thread of the control connection. The snapshot is
-// taken on the main thread, with the web view's own takeSnapshot, and the connection's thread waits for the file to be written.
+// Screenshots for the core's "screenshot" calls, which only the test control connection makes. The call reaches the app's main thread,
+// which takes the snapshot with the web view's own takeSnapshot and returns at once: the snapshot's completion writes the file and
+// gives the outcome.
 //
 
 import Foundation
@@ -8,31 +9,14 @@ import WebKit
 import CZiggy
 import AppKit
 
-// Carries the outcome from the main thread, where the snapshot is taken, to the thread that waits for it.
-final class ZiggyScreenshotAnswer {
-    // Why the picture could not be written, or nil when it was. Set on the main thread before the semaphore is signalled and read
-    // by the waiting thread after it.
-    var failure: String?
-}
-
-// Takes screenshots for the core's screenshot callback.
+// Takes screenshots for the core's screenshot calls.
 enum ZiggyScreenshot {
-    // The core's screenshot callback. Writes a PNG of the web view to the path, waits until the file is written and returns 0.
-    // When it cannot, it writes the reason into the buffer and returns the number of bytes written, negated.
-    static func write(webView: WKWebView, path: String, buffer: UnsafeMutablePointer<CChar>, capacity: Int) -> Int {
-        if Thread.isMainThread {
-            return reply(failure: "a screenshot was asked for on the main thread, which would wait for itself", buffer: buffer, capacity: capacity)
+    // Writes a PNG of the web view to the path, on the main thread, and gives the completion nil once the file is written, or the
+    // reason it could not be.
+    static func take(webView: WKWebView, path: String, completion: @escaping (String?) -> Void) {
+        webView.takeSnapshot(with: nil) { image, error in
+            completion(ZiggyScreenshot.save(image: image, error: error, path: path))
         }
-        let answer = ZiggyScreenshotAnswer()
-        let semaphore = DispatchSemaphore(value: 0)
-        DispatchQueue.main.async {
-            webView.takeSnapshot(with: nil) { image, error in
-                answer.failure = ZiggyScreenshot.save(image: image, error: error, path: path)
-                semaphore.signal()
-            }
-        }
-        semaphore.wait()
-        return reply(failure: answer.failure, buffer: buffer, capacity: capacity)
     }
 
     // Writes the snapshot to the path as a PNG, and returns nil when it worked or the reason it did not.
@@ -53,16 +37,5 @@ enum ZiggyScreenshot {
             return "could not write the screenshot to \(path): \(error.localizedDescription)"
         }
         return nil
-    }
-
-    // Turns a failure into what the callback returns: 0 for none, otherwise the reason is copied into the buffer, cut to fit, and
-    // its length is returned negated.
-    static func reply(failure: String?, buffer: UnsafeMutablePointer<CChar>, capacity: Int) -> Int {
-        guard let failure = failure else {
-            return 0
-        }
-        let bytes = Array(failure.utf8.prefix(capacity))
-        memcpy(buffer, bytes, bytes.count)
-        return -bytes.count
     }
 }

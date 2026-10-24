@@ -3,173 +3,172 @@ const builtin = @import("builtin");
 const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
 
-fn lastMessage(shell: *helpers.FakeShell) ![]u8 {
-    return try shell.messageAt(std.testing.allocator, shell.count() - 1);
+fn lastMessage(native_app: *helpers.FakeNativeApp) ![]u8 {
+    return try native_app.messageAt(std.testing.io, std.testing.allocator, native_app.count(std.testing.io, std.testing.allocator) - 1);
 }
 
 //
 // Fails unless the last message the fake native app recorded is the expected text.
 //
-fn expectLastMessage(shell: *helpers.FakeShell, expected: []const u8) !void {
-    const last = try lastMessage(shell);
+fn expectLastMessage(native_app: *helpers.FakeNativeApp, expected: []const u8) !void {
+    const last = try lastMessage(native_app);
     defer std.testing.allocator.free(last);
     try std.testing.expectEqualStrings(expected, last);
 }
 
 test "a message with an id reaches the app's message handler and its response comes back with the same id" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":7,\"name\":\"echo\",\"data\":{\"a\":1}}");
-    const reply = try lastMessage(&shell);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":7,\"name\":\"echo\",\"data\":{\"a\":1}}");
+    const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":7,\"ok\":true,\"data\":{\"a\":1}}", reply);
 }
 
 test "a string id is echoed as a string" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":\"abc\",\"name\":\"echo\",\"data\":null}");
-    const reply = try lastMessage(&shell);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":\"abc\",\"name\":\"echo\",\"data\":null}");
+    const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":\"abc\",\"ok\":true,\"data\":null}", reply);
 }
 
 test "a system message name Ziggy does not know gets UnknownSystemMessage" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"nope\",\"data\":null}");
-    const reply = try lastMessage(&shell);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"nope\",\"data\":null}");
+    const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":1,\"ok\":false,\"error\":\"UnknownSystemMessage\"}", reply);
 }
 
 test "test-result and test-ui-ready are error replies when the core is not in test mode" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":null}}");
-    const first = try lastMessage(&shell);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":null}}");
+    const first = try lastMessage(&native_app);
     defer std.testing.allocator.free(first);
     try std.testing.expectEqualStrings("{\"id\":1,\"ok\":false,\"error\":\"TestControlNotRunning\"}", first);
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"test-ui-ready\",\"data\":null}");
-    const second = try lastMessage(&shell);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"test-ui-ready\",\"data\":null}");
+    const second = try lastMessage(&native_app);
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualStrings("{\"id\":2,\"ok\":false,\"error\":\"TestControlNotRunning\"}", second);
 }
 
 test "malformed JSON is reported as a core-error event and the core keeps working" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{not json");
-    core.postMessage("[1,2,3]");
-    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("\"kind\":\"system\",\"name\":\"core-error\""));
-    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("InvalidMessage"));
-    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"echo\",\"data\":1}");
-    const reply = try lastMessage(&shell);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{not json");
+    try native_app.send(std.testing.io, std.testing.allocator, "[1,2,3]");
+    try std.testing.expectEqual(@as(usize, 2), native_app.countContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"core-error\""));
+    try std.testing.expectEqual(@as(usize, 2), native_app.countContaining(std.testing.io, std.testing.allocator, "InvalidMessage"));
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":2,\"name\":\"echo\",\"data\":1}");
+    const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":2,\"ok\":true,\"data\":1}", reply);
 }
 
 test "the message's name reaches the app's message handler unchanged" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":7,\"name\":\"name\",\"data\":null}");
-    try expectLastMessage(&shell, "{\"id\":7,\"ok\":true,\"data\":\"name\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":7,\"name\":\"name\",\"data\":null}");
+    try expectLastMessage(&native_app, "{\"id\":7,\"ok\":true,\"data\":\"name\"}");
 }
 
 test "a message with no name, an empty name or a name that is not a string is refused with MissingMessageName before the handler runs" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var recording_app = helpers.app;
     recording_app.messages = recording.messages;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), recording_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"data\":null}");
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":false,\"error\":\"MissingMessageName\"}");
-    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"\",\"data\":null}");
-    try expectLastMessage(&shell, "{\"id\":2,\"ok\":false,\"error\":\"MissingMessageName\"}");
-    core.postMessage("{\"kind\":\"app\",\"id\":3,\"name\":7,\"data\":null}");
-    try expectLastMessage(&shell, "{\"id\":3,\"ok\":false,\"error\":\"MissingMessageName\"}");
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), recording_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"data\":null}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"MissingMessageName\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":2,\"name\":\"\",\"data\":null}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":false,\"error\":\"MissingMessageName\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":3,\"name\":7,\"data\":null}");
+    try expectLastMessage(&native_app, "{\"id\":3,\"ok\":false,\"error\":\"MissingMessageName\"}");
     // A message sent with send has no message response to carry the refusal, so it is a core-error event.
-    core.postMessage("{\"kind\":\"app\",\"data\":null}");
-    try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MissingMessageName\"}}");
-    core.postMessage("{\"kind\":\"app\",\"name\":\"\"}");
-    try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MissingMessageName\"}}");
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("the app's message handler was called"));
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":null}");
+    try expectLastMessage(&native_app, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MissingMessageName\"}}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"\"}");
+    try expectLastMessage(&native_app, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MissingMessageName\"}}");
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "the app's message handler was called"));
 }
 
 test "a handler that fails gets an error response when the message has an id and a core-error event when not" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":3,\"name\":\"nope\",\"data\":1}");
-    try shell.expectMessageContaining("{\"id\":3,\"ok\":false,\"error\":\"UnknownMessageName\"}");
-    core.postMessage("{\"kind\":\"app\",\"name\":\"fail\"}");
-    try shell.expectMessageContaining("{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"HandlerFailed\"}}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":3,\"name\":\"nope\",\"data\":1}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":3,\"ok\":false,\"error\":\"UnknownMessageName\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"fail\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"HandlerFailed\"}}");
 }
 
 test "a system message whose name is not a string is an invalid message" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":3,\"name\":7,\"data\":null}");
-    try expectLastMessage(&shell, "{\"id\":3,\"ok\":false,\"error\":\"InvalidMessage\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":3,\"name\":7,\"data\":null}");
+    try expectLastMessage(&native_app, "{\"id\":3,\"ok\":false,\"error\":\"InvalidMessage\"}");
 }
 
 test "a handler that returns none with an id gets an empty successful response, and without an id gets nothing" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"name\":\"none\"}");
-    try std.testing.expectEqual(@as(usize, 0), shell.count());
-    core.postMessage("{\"kind\":\"app\",\"id\":9,\"name\":\"none\"}");
-    try expectLastMessage(&shell, "{\"id\":9,\"ok\":true,\"data\":null}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"none\"}");
+    try std.testing.expectEqual(@as(usize, 0), native_app.count(std.testing.io, std.testing.allocator));
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":9,\"name\":\"none\"}");
+    try expectLastMessage(&native_app, "{\"id\":9,\"ok\":true,\"data\":null}");
 }
 
 test "core.sendEvent delivers the data as an app event" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena_state.deinit();
-    try core.sendEvent(arena_state.allocator(), "{\"type\":\"saved\",\"count\":2}");
-    try expectLastMessage(&shell, "{\"kind\":\"app\",\"data\":{\"type\":\"saved\",\"count\":2}}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"send-app-event\",\"data\":{\"type\":\"saved\",\"count\":2}}");
+    try expectLastMessage(&native_app, "{\"kind\":\"app\",\"data\":{\"type\":\"saved\",\"count\":2}}");
 }
 
 //
-// The handler of every message of the recording app: it records that it was called by delivering a line the test counts.
+// The handler of every message of the recording app: it records that it was called by sending an app event the test counts.
 //
-fn recordAppMessage(core: *ziggy.core.Core, arena: std.mem.Allocator, message: ziggy.core.Message) anyerror!ziggy.core.MessageResult {
+fn recordAppMessage(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, message: ziggy.core.Message) anyerror!ziggy.core.MessageResult {
+    _ = timers;
     _ = message;
-    core.deliver("{\"data\":\"the app's message handler was called\"}");
+    try services.sendEvent(io, allocator, "\"the app's message handler was called\"");
     return .{
-        .response = try arena.dupe(u8, "null"),
+        .response = try allocator.dupe(u8, "null"),
     };
 }
 
@@ -195,54 +194,54 @@ const recording = ziggy.core.App(.{
 });
 
 test "system messages are handled by Ziggy and never reach the app, even when the app has a message of the same name" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var recording_app = helpers.app;
     recording_app.messages = recording.messages;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), recording_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"get-platform\",\"data\":null}");
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"own\",\"data\":null}}");
-    core.postMessage("{\"kind\":\"system\",\"id\":3,\"name\":\"cancel-tasks\",\"data\":\"own\"}");
-    core.postMessage("{\"kind\":\"system\",\"id\":4,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
-    core.postMessage("{\"kind\":\"system\",\"id\":5,\"name\":\"get-dropped-paths\",\"data\":null}");
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), recording_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"get-platform\",\"data\":null}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"own\",\"data\":null}}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":3,\"name\":\"cancel-tasks\",\"data\":\"own\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":4,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":5,\"name\":\"get-dropped-paths\",\"data\":null}");
     var id: usize = 1;
     while (id <= 5) : (id += 1) {
         var buffer: [32]u8 = undefined;
-        try shell.expectMessageContaining(try std.fmt.bufPrint(&buffer, "{{\"id\":{d},\"ok\":true,", .{id}));
+        try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, try std.fmt.bufPrint(&buffer, "{{\"id\":{d},\"ok\":true,", .{id}));
     }
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("the app's message handler was called"));
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "the app's message handler was called"));
     // The same handler is called for a message of the app's own, so the count above would have seen it.
-    core.postMessage("{\"kind\":\"app\",\"id\":6,\"name\":\"anything\",\"data\":null}");
-    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("the app's message handler was called"));
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":6,\"name\":\"anything\",\"data\":null}");
+    try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "the app's message handler was called"));
 }
 
 test "an app message reaches the app's handler and never a system handler, even with a system message's name" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var recording_app = helpers.app;
     recording_app.messages = recording.messages;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), recording_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":1,\"name\":\"get-platform\",\"data\":null}");
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":null}");
-    core.postMessage("{\"kind\":\"app\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
-    try expectLastMessage(&shell, "{\"id\":2,\"ok\":true,\"data\":null}");
-    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("the app's message handler was called"));
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("platformKind"));
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("\"name\":\"menu-action\""));
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), recording_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"get-platform\",\"data\":null}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":null}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":true,\"data\":null}");
+    try std.testing.expectEqual(@as(usize, 2), native_app.countContaining(std.testing.io, std.testing.allocator, "the app's message handler was called"));
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "platformKind"));
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "\"name\":\"menu-action\""));
 }
 
 test "a message with no kind, or a kind that is neither app nor system, is refused as InvalidMessage with a core-error event" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var recording_app = helpers.app;
     recording_app.messages = recording.messages;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), recording_app);
-    defer core.destroy();
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), recording_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
     const refused = [_][]const u8{
         "{\"id\":1,\"name\":\"echo\",\"data\":null}",
         "{\"kind\":\"other\",\"id\":2,\"name\":\"echo\",\"data\":null}",
@@ -250,72 +249,72 @@ test "a message with no kind, or a kind that is neither app nor system, is refus
         "{\"kind\":\"App\",\"name\":\"echo\"}",
     };
     for (refused) |message| {
-        core.postMessage(message);
-        try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"InvalidMessage\"}}");
+        try native_app.send(std.testing.io, std.testing.allocator, message);
+        try expectLastMessage(&native_app, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"InvalidMessage\"}}");
     }
-    try std.testing.expectEqual(refused.len, shell.count());
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("the app's message handler was called"));
+    try std.testing.expectEqual(refused.len, native_app.count(std.testing.io, std.testing.allocator));
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "the app's message handler was called"));
 }
 
 test "a message without an id gets no reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"name\":\"echo\",\"data\":1}");
-    try std.testing.expectEqual(@as(usize, 0), shell.count());
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"echo\",\"data\":1}");
+    try std.testing.expectEqual(@as(usize, 0), native_app.count(std.testing.io, std.testing.allocator));
 }
 
 test "a handler that fails becomes an error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
-    const reply = try lastMessage(&shell);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
+    const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":4,\"ok\":false,\"error\":\"HandlerFailed\"}", reply);
 }
 
 test "get-platform reports the platform kind" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":5,\"name\":\"get-platform\",\"data\":null}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":5,\"name\":\"get-platform\",\"data\":null}");
     // Android and iOS are the mobile platforms, and every other platform is desktop. The test runs on both, so it names the
     // kind each is expected to report.
     const expected = if (builtin.os.tag == .ios or builtin.abi.isAndroid())
         "\"platformKind\":\"mobile\""
     else
         "\"platformKind\":\"desktop\"";
-    try shell.expectMessageContaining(expected);
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, expected);
 }
 
 test "text with quotes, newlines and non-ASCII characters round trips unchanged" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":6,\"name\":\"echo\",\"data\":{\"text\":\"say \\\"hi\\\"\\nline two \\u00e9 \\u4e16\\u754c \\ud83d\\ude00\"}}");
-    const reply = try lastMessage(&shell);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":6,\"name\":\"echo\",\"data\":{\"text\":\"quote \\\"hi\\\"\\nline two \\u00e9 \\u4e16\\u754c \\ud83d\\ude00\"}}");
+    const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
     var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, reply, .{});
     defer parsed.deinit();
     const text = parsed.value.object.get("data").?.object.get("text").?.string;
-    try std.testing.expectEqualStrings("say \"hi\"\nline two é 世界 😀", text);
+    try std.testing.expectEqualStrings("quote \"hi\"\nline two é 世界 😀", text);
 }
 
 test "a multi-megabyte payload round trips unchanged" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
     const payload = try std.testing.allocator.alloc(u8, 6 * 1024 * 1024);
     defer std.testing.allocator.free(payload);
     for (payload, 0..) |*byte, index| {
@@ -330,8 +329,8 @@ test "a multi-megabyte payload round trips unchanged" {
         },
     });
     defer std.testing.allocator.free(message);
-    core.postMessage(message);
-    const reply = try lastMessage(&shell);
+    try native_app.send(std.testing.io, std.testing.allocator, message);
+    const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
     var parsed = try std.json.parseFromSlice(std.json.Value, std.testing.allocator, reply, .{});
     defer parsed.deinit();
@@ -340,164 +339,148 @@ test "a multi-megabyte payload round trips unchanged" {
 }
 
 test "create then destroy releases everything" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 3, 2);
-    core.destroy();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 3, 2);
+    native_app.stop(std.testing.io, std.testing.allocator);
 }
 
-test "create without a deliver callback fails" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    var config = shell.config(1, 1);
-    config.deliver = null;
-    try std.testing.expectError(error.DeliverCallbackMissing, ziggy.core.Core.create(std.testing.allocator, config, helpers.app));
-}
-
-test "check url uses the configured prefix" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try std.testing.expectEqual(ziggy.types.UrlDecision.allow, core.checkUrl("file:///app/dist/index.html"));
-    try std.testing.expectEqual(ziggy.types.UrlDecision.block, core.checkUrl("file:///other/index.html"));
+test "create without a wake callback fails" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.wake = null;
+    try std.testing.expectError(error.WakeCallbackMissing, native_app.start(std.testing.io, std.testing.allocator, config, helpers.app));
 }
 
 test "a menu-action message naming a .ui item reaches the UI as the app event menu; no menu-action event is sent" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
-    const event = try shell.messageAt(std.testing.allocator, 0);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
+    const event = try native_app.messageAt(std.testing.io, std.testing.allocator, 0);
     defer std.testing.allocator.free(event);
     try std.testing.expectEqualStrings("{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"about\"}}", event);
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{}}");
     // An item in a submenu is found too.
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"nested\"}}");
-    try shell.expectMessageContaining("{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"nested\"}}");
-    try expectLastMessage(&shell, "{\"id\":2,\"ok\":true,\"data\":{}}");
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("\"name\":\"menu-action\""));
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"nested\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"nested\"}}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":true,\"data\":{}}");
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "\"name\":\"menu-action\""));
 }
 
 test "a menu-action message naming a .zig item calls its function with the core; its error is the error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"zig-item\"}}");
-    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("the menu item's function ran"));
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":true,\"data\":{}}");
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"failing-item\"}}");
-    try expectLastMessage(&shell, "{\"id\":2,\"ok\":false,\"error\":\"MenuItemFailed\"}");
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("\"type\":\"menu\""));
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"zig-item\"}}");
+    try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "the menu item's function ran"));
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"failing-item\"}}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":false,\"error\":\"MenuItemFailed\"}");
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "\"type\":\"menu\""));
 }
 
 test "a menu-action message naming an unknown item or a standard action fails with UnknownMenuItem and runs nothing" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"nonsense\"}}");
-    try expectLastMessage(&shell, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMenuItem\"}");
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"quit\"}}");
-    try expectLastMessage(&shell, "{\"id\":2,\"ok\":false,\"error\":\"UnknownMenuItem\"}");
-    try std.testing.expectEqual(@as(usize, 2), shell.count());
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"nonsense\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMenuItem\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"menu-action\",\"data\":{\"action\":\"quit\"}}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":false,\"error\":\"UnknownMenuItem\"}");
+    try std.testing.expectEqual(@as(usize, 2), native_app.count(std.testing.io, std.testing.allocator));
 }
 
 test "a menu-action message with no action is an error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"action\\\" is missing\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"action\\\" is missing\"}");
 }
 
-test "the core holds the app's menu for shells to read" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try std.testing.expectEqualStrings(ziggy.menu.menuJson(helpers.menu), core.menu_json);
-    try std.testing.expect(core.menu_targets.get("zig-item") != null);
+test "the app holds its menu for native apps to read" {
+    try std.testing.expectEqualStrings(ziggy.menu.menuJson(helpers.menu), helpers.app.menu_json);
+    try std.testing.expect(helpers.app.menu_targets.get("zig-item") != null);
 }
 
-test "the core finds a file of the app's bundled UI by the path of a request" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try std.testing.expectEqualStrings("<html></html>", core.uiFile("/index.html").?.content);
-    try std.testing.expectEqualStrings("index.html", core.uiFile("/").?.path);
-    try std.testing.expect(core.uiFile("/missing.js") == null);
+test "a file of the app's bundled UI is found by the path of a request" {
+    try std.testing.expectEqualStrings("<html></html>", ziggy.ui_files.findFile(helpers.app.ui_files, "/index.html").?.content);
+    try std.testing.expectEqualStrings("index.html", ziggy.ui_files.findFile(helpers.app.ui_files, "/").?.path);
+    try std.testing.expect(ziggy.ui_files.findFile(helpers.app.ui_files, "/missing.js") == null);
 }
 
-test "answerWithTask answers the message with the task's result, without blocking the dispatcher" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":11,\"name\":\"quick-request\"}");
-    try shell.expectMessageContaining("{\"id\":11,\"ok\":true,\"data\":\"done\"}");
+test "respondWithTask answers the message with the task's result, without blocking the dispatcher" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":11,\"name\":\"quick-request\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":11,\"ok\":true,\"data\":\"done\"}");
     // The reply is the only thing sent: a request's task sends no task-completed event of its own.
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("task-completed"));
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "task-completed"));
 }
 
 test "a message answered by a task that fails gets an error response" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":12,\"name\":\"fail-request\"}");
-    try shell.expectMessageContaining("{\"id\":12,\"ok\":false,\"error\":\"TestFailure\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":12,\"name\":\"fail-request\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":12,\"ok\":false,\"error\":\"TestFailure\"}");
 }
 
-test "answerWithTask refuses a message with no id and queues nothing" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"name\":\"quick-request\"}");
-    // The refusal reaches the frontend before postMessage returns, as a core-error event, because there is no id to answer.
-    try expectLastMessage(&shell, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MessageHasNoId\"}}");
-    try std.testing.expectEqual(@as(usize, 0), core.runner.live.items.len);
+test "a message with no id whose response is to be a task's result is refused and queues nothing" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"quick-request\"}");
+    // The refusal reaches the frontend as a core-error event, because there is no id to respond to.
+    try expectLastMessage(&native_app, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MessageHasNoId\"}}");
+    // The pool has one worker and runs its tasks in the order they were queued, so a quick task queued for the message would have sent
+    // its event before this task ends.
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"after\",\"taskType\":\"child-result\",\"source\":\"own\",\"data\":null}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"after\",\"status\":\"succeeded\"");
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "\"text\":\"hello\""));
 }
 
-test "a native dialog is shown through the shell's callback with the title and kind" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 1);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":13,\"name\":\"pick-open-request\",\"data\":\"Choose files\"}");
-    try shell.expectMessageContaining("{\"id\":13,\"ok\":true,\"data\":[\"kind0\",\"Choose files\",\"-\"]}");
-    core.postMessage("{\"kind\":\"app\",\"id\":14,\"name\":\"pick-save-request\",\"data\":\"photo.jpg\"}");
-    try shell.expectMessageContaining("{\"id\":14,\"ok\":true,\"data\":[\"kind1\",\"-\",\"photo.jpg\"]}");
+test "a native dialog is shown through the native app's callback with the title and kind" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":13,\"name\":\"pick-open-request\",\"data\":\"Choose files\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":13,\"ok\":true,\"data\":[\"kind0\",\"Choose files\",\"-\"]}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":14,\"name\":\"pick-save-request\",\"data\":\"photo.jpg\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":14,\"ok\":true,\"data\":[\"kind1\",\"-\",\"photo.jpg\"]}");
 }
 
-test "a dialog with no callback from the shell is an error reply naming what is missing" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    var config = shell.config(2, 1);
-    config.pick_paths = null;
-    const core = try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":15,\"name\":\"pick-open-request\"}");
-    try shell.expectMessageContaining("{\"id\":15,\"ok\":false,\"error\":\"HostCallbackMissing\"}");
+test "a dialog with no callback from the native app is an error reply naming what is missing" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(2, 1);
+    config.has_pick_paths = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":15,\"name\":\"pick-open-request\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":15,\"ok\":false,\"error\":\"NativeCallMissing\"}");
 }
 
 test "get-dropped-paths replies with the paths of the last drop, and an empty array before any drop" {
@@ -511,208 +494,364 @@ test "get-dropped-paths replies with the paths of the last drop, and an empty ar
     defer std.testing.allocator.free(directory_path);
     const path = try std.fs.path.join(std.testing.allocator, &.{ directory_path, "dropped one.txt" });
     defer std.testing.allocator.free(path);
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 2, 2);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"get-dropped-paths\",\"data\":null}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":true,\"data\":[]}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try helpers.createCore(&native_app, 2, 2);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"get-dropped-paths\",\"data\":null}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":[]}");
     const paths_json = try ziggy.json.stringify(std.testing.allocator, &[_][]const u8{path});
     defer std.testing.allocator.free(paths_json);
-    try core.filesDropped(paths_json);
-    core.postMessage("{\"kind\":\"system\",\"id\":2,\"name\":\"get-dropped-paths\",\"data\":null}");
+    try native_app.filesDropped(std.testing.allocator, paths_json);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"get-dropped-paths\",\"data\":null}");
     const expected = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 2,
         .ok = true,
         .data = ziggy.json.Raw{ .text = paths_json },
     });
     defer std.testing.allocator.free(expected);
-    try shell.expectMessageContaining(expected);
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, expected);
+}
+
+//
+// What the native-services message gives: what the handler services report about the native app.
+//
+const NativeServicesResult = struct {
+    // Whether the native app is a phone's.
+    isPhone: bool,
+    // The app's data directory.
+    dataDir: []const u8,
+};
+
+//
+// native-services: has the native app quit and run its focus-window action through the handler services, and gives what they report
+// about the native app.
+//
+fn nativeServicesHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: struct {}) !NativeServicesResult {
+    _ = timers;
+    _ = payload;
+    services.quit(io, allocator);
+    services.menuAction(io, allocator, "focus-window");
+    return .{
+        .isPhone = services.isPhone(),
+        .dataDir = services.dataDir(),
+    };
+}
+
+//
+// The app of the handler services tests: the helpers' app with native-services.
+//
+const native_services_app = registered: {
+    var registered = ziggy.core.App(.{
+        .messages = .{
+            .@"native-services" = nativeServicesHandler,
+        },
+        .tasks = .{},
+        .menu = &.{},
+        .ui_files = &[_]ziggy.ui_files.UiFile{},
+    });
+    registered.tasks = &helpers.task_handlers;
+    break :registered registered;
+};
+
+test "the handler services reach the native app's quit and menu action callbacks and report its data directory and kind" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_services_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-services\"}");
+    // The fake native app gives a native call callback, as a phone's native app does.
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"isPhone\":true,\"dataDir\":\"/tmp\"}}");
+    try std.testing.expect(native_app.quitCalled(std.testing.io, std.testing.allocator));
+    const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(actions);
+    try std.testing.expectEqualStrings("focus-window\n", actions);
+}
+
+test "the handler services report a desktop's native app, which has no native call callback, and quit and menu actions it lacks change nothing" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.has_native_call = false;
+    config.has_quit = false;
+    config.has_menu_action = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, native_services_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-services\"}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"isPhone\":false,\"dataDir\":\"/tmp\"}}");
+    try std.testing.expect(!native_app.quitCalled(std.testing.io, std.testing.allocator));
+    const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(actions);
+    try std.testing.expectEqualStrings("", actions);
+}
+
+//
+// native-callbacks: starts a thread of the app's own with a copy of the native app's callbacks, as an app starts a server, and waits
+// for it to end.
+//
+fn nativeCallbacksHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: struct {}) !void {
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
+    const thread = try std.Thread.spawn(.{}, callbackThread, .{services.nativeCallbacks()});
+    thread.join();
+}
+
+//
+// A thread of the app's own, with an Io and an allocator of its own: sends the frontend an event and makes a native call through the
+// callbacks it was given, and sends the native call's result, or its absence, as a second event.
+//
+fn callbackThread(callbacks: ziggy.core.NativeCallbacks) void {
+    var thread_allocator: ziggy.thread_allocator.ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    threaded.allocator = allocator;
+    defer threaded.deinit();
+    const io = threaded.io();
+    callbacks.sendEvent(io, allocator, "{\"from\":\"a thread of the app's own\"}") catch @panic("out of memory sending an event");
+    const requester = callbacks.nativeCaller() orelse {
+        callbacks.sendEvent(io, allocator, "{\"nativeCaller\":\"none\"}") catch @panic("out of memory sending an event");
+        return;
+    };
+    const result = requester.call(io, allocator, "exportFile", "{\"key\":1}") catch @panic("the native call failed");
+    defer allocator.free(result);
+    const event = std.fmt.allocPrint(allocator, "{{\"nativeCallResult\":{s}}}", .{result}) catch @panic("out of memory");
+    defer allocator.free(event);
+    callbacks.sendEvent(io, allocator, event) catch @panic("out of memory sending an event");
+}
+
+//
+// The app of the native callbacks tests.
+//
+const callbacks_app = registered: {
+    var registered = ziggy.core.App(.{
+        .messages = .{
+            .@"native-callbacks" = nativeCallbacksHandler,
+        },
+        .tasks = .{},
+        .menu = &.{},
+        .ui_files = &[_]ziggy.ui_files.UiFile{},
+    });
+    registered.tasks = &helpers.task_handlers;
+    break :registered registered;
+};
+
+test "a thread of the app's own sends the frontend events and makes native calls through the native callbacks it was given" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), callbacks_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-callbacks\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"from\":\"a thread of the app's own\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"nativeCallResult\":{\"method\":\"exportFile\",\"request\":{\"key\":1}}}}");
+}
+
+test "the native callbacks of a native app with no native call callback have no native caller" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.has_native_call = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, callbacks_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-callbacks\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"nativeCaller\":\"none\"}}");
 }
 
 fn describeTestError(err: anyerror) ?[]const u8 {
     if (err == error.HandlerFailed) {
-        return "the handler failed because the test said so";
+        return "the handler failed because the test chose to";
     }
     return null;
 }
 
 test "an app's error describer gives the text of an error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var described_app = helpers.app;
     described_app.describe_error = describeTestError;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), described_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
-    const reply = try lastMessage(&shell);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
+    const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
-    try std.testing.expectEqualStrings("{\"id\":4,\"ok\":false,\"error\":\"the handler failed because the test said so\"}", reply);
+    try std.testing.expectEqualStrings("{\"id\":4,\"ok\":false,\"error\":\"the handler failed because the test chose to\"}", reply);
 }
 
-test "an error the describer has nothing to say about is replied to by name" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+test "an error the describer has no description for is replied to by name" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var described_app = helpers.app;
     described_app.describe_error = describeTaskError;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), described_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":5,\"name\":\"fail\"}");
-    try shell.expectMessageContaining("{\"id\":5,\"ok\":false,\"error\":\"HandlerFailed\"}");
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":5,\"name\":\"fail\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":5,\"ok\":false,\"error\":\"HandlerFailed\"}");
 }
 
 fn describeTaskError(err: anyerror) ?[]const u8 {
     if (err == error.TestFailure) {
-        return "the task failed because \"the test\" said so, at C:\\dir";
+        return "the task failed because \"the test\" chose to, at C:\\dir";
     }
     return null;
 }
 
 test "an app's error describer gives the text of a failed request task's error reply" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var described_app = helpers.app;
     described_app.describe_error = describeTaskError;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), described_app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"app\",\"id\":6,\"name\":\"fail-request\"}");
-    try shell.expectMessageContaining("{\"id\":6,\"ok\":false,\"error\":\"the task failed because \\\"the test\\\" said so, at C:\\\\dir\"}");
-}
-
-fn addOne(value: u32) u32 {
-    return value + 1;
-}
-
-test "the core's Io can run a task concurrently" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    const io = core.io();
-    var future = try io.concurrent(addOne, .{41});
-    try std.testing.expectEqual(@as(u32, 42), future.await(io));
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":6,\"name\":\"fail-request\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":6,\"ok\":false,\"error\":\"the task failed because \\\"the test\\\" chose to, at C:\\\\dir\"}");
 }
 
 //
-// The observer test's observer of a task that ended: delivers it to the fake native app as `{ "observedEnd": "id|type|source|input|status" }`,
-// so the test reads it from the messages the fake native app recorded.
+// The observer test's observer of a task that ended: sends it as the app event `{ "observedEnd": "id|type|source|input|status" }`, so
+// the test reads it from the messages the fake native app recorded.
 //
-fn recordTaskEnd(core: *ziggy.core.Core, end: ziggy.types.TaskEnd) void {
-    var arena_state = std.heap.ArenaAllocator.init(core.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const text = std.fmt.allocPrint(arena, "{s}|{s}|{s}|{s}|{s}", .{ end.task_id, end.task_type, end.source, end.input_json, @tagName(end.status) }) catch @panic("out of memory");
-    const message = ziggy.json.stringify(arena, .{
+fn recordTaskEnd(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, end: ziggy.types.TaskEnd) void {
+    _ = timers;
+    const text = std.fmt.allocPrint(allocator, "{s}|{s}|{s}|{s}|{s}", .{ end.task_id, end.task_type, end.source, end.input_json, @tagName(end.status) }) catch @panic("out of memory");
+    const message = ziggy.json.stringify(allocator, .{
         .observedEnd = text,
     }) catch @panic("out of memory");
-    core.deliver(message);
+    services.sendEvent(io, allocator, message) catch @panic("out of memory");
 }
 
 //
-// The observer test's observer of an event a task sent: delivers it to the fake native app as `{ "observedEvent": "id|type|event" }`.
+// The observer test's observer of an event a task sent: sends it as the app event `{ "observedEvent": "id|type|event" }`.
 //
-fn recordTaskEvent(core: *ziggy.core.Core, sent: ziggy.types.TaskSentEvent) void {
-    var arena_state = std.heap.ArenaAllocator.init(core.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const text = std.fmt.allocPrint(arena, "{s}|{s}|{s}", .{ sent.task_id, sent.task_type, sent.event_json }) catch @panic("out of memory");
-    const message = ziggy.json.stringify(arena, .{
+fn recordTaskEvent(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, sent: ziggy.types.TaskSentEvent) void {
+    _ = timers;
+    const text = std.fmt.allocPrint(allocator, "{s}|{s}|{s}", .{ sent.task_id, sent.task_type, sent.event_json }) catch @panic("out of memory");
+    const message = ziggy.json.stringify(allocator, .{
         .observedEvent = text,
     }) catch @panic("out of memory");
-    core.deliver(message);
+    services.sendEvent(io, allocator, message) catch @panic("out of memory");
 }
 
 test "an app observes the end of a task and the events it sent" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var observed_app = helpers.app;
     observed_app.on_task_end = recordTaskEnd;
     observed_app.on_task_event = recordTaskEvent;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), observed_app);
-    core.postMessage("{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"src\",\"data\":{\"a\":1},\"priority\":\"background\"}}");
-    try shell.expectMessageContaining("{\"observedEnd\":\"t1|quick|src|{\\\"a\\\":1}|succeeded\"}");
-    // Destroying the core waits for the workers, so every observer call has been made before the counts are read.
-    core.destroy();
-    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("\"observedEnd\""));
-    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("\"observedEvent\""));
-    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("{\"observedEvent\":\"t1|quick|{\\\"text\\\":\\\"hello\\\"}\"}"));
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), observed_app);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"src\",\"data\":{\"a\":1},\"priority\":\"background\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"observedEnd\":\"t1|quick|src|{\\\"a\\\":1}|succeeded\"}");
+    // Stopping the core waits for the workers, so every observer call has been made before the counts are read.
+    native_app.stop(std.testing.io, std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "\"observedEnd\""));
+    try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "\"observedEvent\""));
+    try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "{\"observedEvent\":\"t1|quick|{\\\"text\\\":\\\"hello\\\"}\"}"));
 }
 
 //
-// The destroy test's on_destroy: tries to queue a task and delivers the phase and the outcome to the fake native app as
+// The destroy test's on_destroy: tries to queue a task and sends the phase and the outcome as the app event
 // `{ "destroyPhase": "phase|accepted" }` or `{ "destroyPhase": "phase|<error name>" }`, so the test reads them from the messages the
 // fake native app recorded.
 //
-fn recordDestroyPhase(core: *ziggy.core.Core, phase: ziggy.core.DestroyPhase) void {
-    var arena_state = std.heap.ArenaAllocator.init(core.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
+fn recordDestroyPhase(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, phase: ziggy.core.DestroyPhase) void {
+    _ = timers;
     var outcome: []const u8 = "accepted";
-    core.runner.addTask(@tagName(phase), "quick", "destroy-test", "{}", .background, null) catch |err| {
+    services.addTask(io, allocator, @tagName(phase), "quick", "destroy-test", "{}", .background) catch |err| {
         outcome = @errorName(err);
     };
-    const text = std.fmt.allocPrint(arena, "{s}|{s}", .{ @tagName(phase), outcome }) catch @panic("out of memory");
-    const message = ziggy.json.stringify(arena, .{
+    const text = std.fmt.allocPrint(allocator, "{s}|{s}", .{ @tagName(phase), outcome }) catch @panic("out of memory");
+    const message = ziggy.json.stringify(allocator, .{
         .destroyPhase = text,
     }) catch @panic("out of memory");
-    core.deliver(message);
+    services.sendEvent(io, allocator, message) catch @panic("out of memory");
 }
 
-test "an app's on_destroy is called before tasks stop, while a task can still be queued, and again after the runner has stopped" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+test "an app's on_destroy is called before tasks stop, while a task can still be queued, and again after the workers have stopped" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var destroyed_app = helpers.app;
     destroyed_app.on_destroy = recordDestroyPhase;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), destroyed_app);
-    core.destroy();
-    const before = shell.indexOfContaining("{\"destroyPhase\":\"before_tasks_stop|accepted\"}") orelse return error.BeforeTasksStopNotCalled;
-    const after = shell.indexOfContaining("{\"destroyPhase\":\"after_tasks_stopped|ShuttingDown\"}") orelse return error.AfterTasksStoppedNotCalled;
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), destroyed_app);
+    native_app.stop(std.testing.io, std.testing.allocator);
+    const before = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "{\"destroyPhase\":\"before_tasks_stop|accepted\"}") orelse return error.BeforeTasksStopNotCalled;
+    const after = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "{\"destroyPhase\":\"after_tasks_stopped|ShuttingDown\"}") orelse return error.AfterTasksStoppedNotCalled;
     try std.testing.expect(before < after);
-    try std.testing.expectEqual(@as(usize, 2), shell.countContaining("\"destroyPhase\""));
+    try std.testing.expectEqual(@as(usize, 2), native_app.countContaining(std.testing.io, std.testing.allocator, "\"destroyPhase\""));
 }
 
 //
-// The create test's on_create: queues a task, which shows the runner is ready, and delivers `{ "created": true }` to the fake native
-// app, so the test reads it from the messages the fake native app recorded.
+// The create test's on_create: queues a task, which shows the worker pool is ready, and sends the app event `{ "created": true }`, so
+// the test reads it from the messages the fake native app recorded.
 //
-fn recordCreate(core: *ziggy.core.Core) anyerror!void {
-    try core.runner.addTask("created", "quick", "create-test", "{}", .background, null);
-    core.deliver("{\"created\":true}");
+fn recordCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+    _ = timers;
+    try services.addTask(io, allocator, "created", "quick", "create-test", "{}", .background);
+    try services.sendEvent(io, allocator, "{\"created\":true}");
 }
 
 test "an app's on_create is called once while the core is created, when a task can already be queued" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var created_app = helpers.app;
     created_app.on_create = recordCreate;
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), created_app);
-    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("{\"created\":true}"));
-    core.destroy();
-    try std.testing.expectEqual(@as(usize, 1), shell.countContaining("{\"created\":true}"));
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), created_app);
+    try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "{\"created\":true}"));
+    native_app.stop(std.testing.io, std.testing.allocator);
+    try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "{\"created\":true}"));
+}
+
+//
+// The thread test's on_create: sends the id of the thread it runs on as an app event.
+//
+fn recordCreateThread(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+    _ = timers;
+    var buffer: [64]u8 = undefined;
+    try services.sendEvent(io, allocator, try std.fmt.bufPrint(&buffer, "{{\"createdOnThread\":{d}}}", .{std.Thread.getCurrentId()}));
+}
+
+test "an app's on_create runs on the core's main thread, not on the thread that creates the core" {
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var thread_app = helpers.app;
+    thread_app.on_create = recordCreateThread;
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), thread_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var expected_buffer: [64]u8 = undefined;
+    const on_this_thread = try std.fmt.bufPrint(&expected_buffer, "{{\"createdOnThread\":{d}}}", .{std.Thread.getCurrentId()});
+    try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "\"createdOnThread\":"));
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, on_this_thread));
 }
 
 //
 // The failed create test's on_create: fails, as an app's would when it cannot make what its handlers need.
 //
-fn failCreate(core: *ziggy.core.Core) anyerror!void {
-    _ = core;
+fn failCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     return error.AppCouldNotStart;
 }
 
 test "an app's on_create that fails makes the core's create fail with its error, and releases what the core made" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
     var failing_app = helpers.app;
     failing_app.on_create = failCreate;
     // The testing allocator fails the test if anything the core made is left unreleased.
-    try std.testing.expectError(error.AppCouldNotStart, ziggy.core.Core.create(std.testing.allocator, shell.config(1, 1), failing_app));
+    try std.testing.expectError(error.AppCouldNotStart, native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), failing_app));
 }

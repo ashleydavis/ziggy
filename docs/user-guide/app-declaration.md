@@ -49,16 +49,44 @@ The fields of `ziggy.core.App`:
 
 The app writes nothing else for Ziggy. Its `build.zig` names this file as `backend_source_file` in `addAppBackend`. Ziggy's build makes the backend library from it: the library exports Ziggy's C interface for the app's `app` and, for Android, the JNI entry points of Ziggy's Android native app.
 
+## What every handler is given
+
+Every message handler, menu item function and app function above (`ui_query`, `on_task_end`, `on_task_event`, `on_create` and `on_destroy`) runs on the backend's main thread and takes the same standard arguments first, whether it uses them or not:
+
+| Argument | Type | What it is |
+|---|---|---|
+| `services` | `ziggy.core.HandlerServices` | What the handler reaches the main thread through (see below). |
+| `timers` | `ziggy.timers.Timers` | The main thread's timers: `setTimeout`, `clearTimeout`, `setInterval` and `clearInterval`, as JavaScript has them. A callback runs on the main thread. |
+| `io` | `std.Io` | The main thread's Io, for sleeping, files and sockets. |
+| `allocator` | `std.mem.Allocator` | Memory for the call. Ziggy makes no promise about when it is freed, so anything kept after the call is allocated with an allocator of the app's own. |
+
+A task handler takes the same, with `ziggy.task_runner.TaskServices` for its services and its worker's timers and Io, and then its context (see [Tasks](tasks.md#writing-a-handler)).
+
+The handler services are an interface, as `std.Io` is: the handler does not see how the main thread keeps its state. Each call runs on the main thread and is done before it returns. The services may be kept, for a timer's callback for one, until the main thread has called `on_destroy` for the last time.
+
+| Function | What it does |
+|---|---|
+| `sendEvent(allocator, data_json)` | Sends the frontend an app event whose data is the JSON text, which the frontend's `onEvent` listeners receive. |
+| `addTask(task_id, task_type, source, data_json, priority)` | Queues a task of the type, with the id, the source it is cancelled by and the JSON text of its input. |
+| `cancelTasks(source)` | Cancels every task queued under the source. |
+| `holdKeepAlive(keep_running)` | Keeps the app running with or without a task, through the native app's `keep_alive` callback, until it is called with `false`. |
+| `quit()` | Has the native app quit. A native app with no `quit` callback ignores it. |
+| `menuAction(action)` | Has the native app run one of its own menu actions, such as `focus-window`. A native app with no `menu_action` callback ignores it. |
+| `dataDir()` | The app's private data directory. |
+| `isPhone()` | Whether the native app is a phone's: the Android and iOS native apps handle the app's own native calls, which no desktop native app does. |
+
 ## When the backend is created
 
-An app that has to make something before its handlers and tasks run (its own state, a log file, task handlers it registers with the task queue) gives `on_create` a function. Ziggy calls it once, on the thread that creates the backend, when the backend is otherwise ready: tasks can be queued, but no message or task has reached the app yet. If it returns an error, creating the backend fails with that error, Ziggy releases what it made and the native app reports the error. `on_destroy` is not called then, so `on_create` must release what it made itself before it returns the error. Ziggy keeps nothing for the app, so the app keeps what it makes where its handlers can reach it.
+An app that has to make something before its handlers and tasks run (its own state, a log file, task handlers it registers with the task queue) gives `on_create` a function. Ziggy calls it once, on the backend's main thread, when the backend is otherwise ready: tasks can be queued, but no message or task has reached the app yet. If it returns an error, creating the backend fails with that error, Ziggy releases what it made and the native app reports the error. `on_destroy` is not called then, so `on_create` must release what it made itself before it returns the error. Ziggy keeps nothing for the app, so the app keeps what it makes where its handlers can reach it.
 
 ```zig
 //
 // Opens the app's cache before any handler can use it.
 //
-fn onCreate(core: *ziggy.core.Core) anyerror!void {
-    try cache.init(core.allocator);
+fn onCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+    _ = timers;
+    _ = allocator;
+    try cache.init(std.heap.smp_allocator, io, services.dataDir());
 }
 
 pub const app = ziggy.core.App(.{
@@ -71,10 +99,10 @@ Here `cache` stands for the app's own code.
 
 ## When the backend is destroyed
 
-An app that starts threads of its own or allocates things that outlive a message gives `on_destroy` a function. Ziggy calls it twice, on the thread that destroys the backend:
+An app that starts threads of its own or allocates things that outlive a message gives `on_destroy` a function. Ziggy calls it twice, on the backend's main thread, while the backend is destroyed:
 
-- `.before_tasks_stop`, first: tasks can still be queued and the ones running are still running. Stop the app's own threads here, since they may still queue tasks or use the backend.
-- `.after_tasks_stopped`, once every task has ended: no task runs and none can be queued, but the backend is not yet freed. Free what the app's own code allocated here.
+- `.before_tasks_stop`, first: tasks can still be queued and the ones running are still running. Stop the app's own threads here, since they may still queue tasks.
+- `.after_tasks_stopped`, once every task has ended: no task runs and none can be queued. Free what the app's own code allocated here.
 
 The backend is destroyed whenever the native app ends it, which is not only when the app quits: on Android it ends with the activity, which Android can destroy while the app's process lives on and later create again, and tests create and destroy it many times. So `on_destroy` must leave nothing behind that the next backend would trip over.
 
@@ -82,12 +110,16 @@ The backend is destroyed whenever the native app ends it, which is not only when
 //
 // Stops the app's threads before tasks stop and frees its cache once they have.
 //
-fn onDestroy(core: *ziggy.core.Core, phase: ziggy.core.DestroyPhase) void {
+fn onDestroy(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, phase: ziggy.core.DestroyPhase) void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     switch (phase) {
         // Tasks still run, and the watcher may still queue them.
         .before_tasks_stop => watcher.stop(),
         // No task runs now and none can be queued, so the cache can go.
-        .after_tasks_stopped => cache.deinit(core.allocator),
+        .after_tasks_stopped => cache.deinit(std.heap.smp_allocator),
     }
 }
 

@@ -1,8 +1,9 @@
 const std = @import("std");
 const utils = @import("ziggy").task_queue.utils;
-const log_module = utils.log;
 const errors = utils.errors;
 const console = utils.console;
+const MessageQueue = @import("ziggy").core.MessageQueue;
+const ThreadAllocator = @import("ziggy").thread_allocator.ThreadAllocator;
 
 //
 // A log that records the last message it received (to test setLog and forwarding).
@@ -20,14 +21,14 @@ const RecordingLog = struct {
     //
     // Gets the ILog interface for this log.
     //
-    fn ilog(self: *RecordingLog) log_module.ILog {
+    fn ilog(self: *RecordingLog) utils.log.ILog {
         return .{ .ptr = self, .vtable = &vtable };
     }
 
     //
     // The ILog functions of this log.
     //
-    const vtable: log_module.ILog.VTable = .{
+    const vtable: utils.log.ILog.VTable = .{
         .info = info,
         .verbose = verbose,
         .@"error" = logError,
@@ -96,7 +97,7 @@ const RecordingLog = struct {
     //
     // Records tool output.
     //
-    fn tool(ptr: *anyopaque, toolName: []const u8, data: log_module.IToolOutput) void {
+    fn tool(ptr: *anyopaque, toolName: []const u8, data: utils.log.IToolOutput) void {
         _ = data;
         record(ptr, "tool", toolName);
     }
@@ -119,7 +120,7 @@ const RecordingLog = struct {
     //
     // Returns fixed log details.
     //
-    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!log_module.ILogDetails {
+    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!utils.log.ILogDetails {
         _ = ptr;
         _ = allocator;
         _ = io;
@@ -142,12 +143,12 @@ test "default log writes info and event to stdout and error, warn and exception 
     console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
     defer console.setCapture(null, null);
 
-    const log = log_module.log;
+    const log = utils.log.log;
     log.info("info message");
     log.verbose("verbose message");
     log.debug("debug message");
     log.event("something happened");
-    log.tool("ffprobe", .{ .stdout = "out", .stderr = null });
+    log.tool("some-tool", .{ .stdout = "out", .stderr = null });
     log.@"error"("error message");
     log.warn("warn message");
     throwRootCause() catch |err| {
@@ -160,39 +161,80 @@ test "default log writes info and event to stdout and error, warn and exception 
 }
 
 test "default log has no log details" {
-    const details = try log_module.log.getLogDetails(std.testing.allocator, std.testing.io);
+    const details = try utils.log.log.getLogDetails(std.testing.allocator, std.testing.io);
     try std.testing.expect(details.logFilePath == null);
     try std.testing.expectEqualStrings("No log file available", details.logHeader);
-    try std.testing.expectEqualStrings(log_module.noLogDetails.logHeader, details.logHeader);
+    try std.testing.expectEqualStrings(utils.log.noLogDetails.logHeader, details.logHeader);
 }
 
-test "setLog replaces the global log" {
-    const original = log_module.log;
-    defer log_module.setLog(original);
+test "setLog replaces the log of the calling thread" {
+    defer utils.log.setLog(null);
     var recording: RecordingLog = .{};
-    log_module.setLog(recording.ilog());
+    utils.log.setLog(recording.ilog());
 
-    log_module.log.info("a");
+    utils.log.log.info("a");
     try std.testing.expectEqualStrings("info", recording.lastMethod);
-    log_module.log.verbose("b");
+    utils.log.log.verbose("b");
     try std.testing.expectEqualStrings("verbose", recording.lastMethod);
-    log_module.log.@"error"("c");
+    utils.log.log.@"error"("c");
     try std.testing.expectEqualStrings("error", recording.lastMethod);
-    log_module.log.exception("d", error.FileNotFound);
+    utils.log.log.exception("d", error.FileNotFound);
     try std.testing.expectEqualStrings("exception", recording.lastMethod);
     try std.testing.expectEqualStrings("FileNotFound", recording.lastErrorName);
-    log_module.log.warn("e");
+    utils.log.log.warn("e");
     try std.testing.expectEqualStrings("warn", recording.lastMethod);
-    log_module.log.debug("f");
+    utils.log.log.debug("f");
     try std.testing.expectEqualStrings("debug", recording.lastMethod);
-    log_module.log.tool("g", .{ .stdout = null, .stderr = null });
+    utils.log.log.tool("g", .{ .stdout = null, .stderr = null });
     try std.testing.expectEqualStrings("tool", recording.lastMethod);
-    log_module.log.event("h");
+    utils.log.log.event("h");
     try std.testing.expectEqualStrings("event", recording.lastMethod);
     try std.testing.expectEqualStrings("h", recording.lastMessage);
-    try std.testing.expect(log_module.log.verboseEnabled());
-    const details = try log_module.log.getLogDetails(std.testing.allocator, std.testing.io);
+    try std.testing.expect(utils.log.log.verboseEnabled());
+    const details = try utils.log.log.getLogDetails(std.testing.allocator, std.testing.io);
     try std.testing.expectEqualStrings("/tmp/test.log", details.logFilePath.?);
+}
+
+//
+// Writes a line through the log on a thread of its own, which has set no log, so the line goes to that thread's console, which the
+// thread captures into a capture of its own, and sends the test's thread what the capture took on the queue given.
+//
+fn logOnAnotherThread(replies: *MessageQueue) void {
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    threaded.allocator = allocator;
+    defer threaded.deinit();
+    var capture = std.Io.Writer.Allocating.init(allocator);
+    defer capture.deinit();
+    console.setCapture(&capture.writer, null);
+    utils.log.log.info("from the other thread");
+    console.setCapture(null, null);
+    replies.post(threaded.io(), 0, capture.written()) catch @panic("out of memory replying to the test");
+}
+
+test "a log set on one thread is not the log of another, which writes to the console" {
+    defer utils.log.setLog(null);
+    var recording: RecordingLog = .{};
+    utils.log.setLog(recording.ilog());
+    var replies = MessageQueue.init();
+    defer replies.deinit();
+    const other = try std.Thread.spawn(.{}, logOnAnotherThread, .{&replies});
+    other.join();
+    const other_written = replies.take(std.testing.io, std.testing.allocator, .none).?;
+    defer std.testing.allocator.free(other_written.text);
+    try std.testing.expectEqualStrings("from the other thread\n", other_written.text);
+    try std.testing.expectEqualStrings("", recording.lastMethod);
+    utils.log.log.info("here");
+    try std.testing.expectEqualStrings("info", recording.lastMethod);
+    utils.log.setLog(null);
+    var stdout_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer stdout_capture.deinit();
+    console.setCapture(&stdout_capture.writer, null);
+    defer console.setCapture(null, null);
+    utils.log.log.info("back on the console");
+    try std.testing.expectEqualStrings("back on the console\n", stdout_capture.written());
 }
 
 test "ilog of a console log gives a log that writes to the console" {
@@ -200,7 +242,7 @@ test "ilog of a console log gives a log that writes to the console" {
     defer stdout_capture.deinit();
     console.setCapture(&stdout_capture.writer, null);
     defer console.setCapture(null, null);
-    var consoleLog: log_module.ConsoleLog = .{ .verbose_enabled = false };
+    var consoleLog: utils.log.ConsoleLog = .{ .verbose_enabled = false };
     const log = consoleLog.ilog();
     log.info("from ilog");
     try std.testing.expectEqualStrings("from ilog\n", stdout_capture.written());

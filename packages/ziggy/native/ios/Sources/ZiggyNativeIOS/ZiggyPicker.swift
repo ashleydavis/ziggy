@@ -1,7 +1,9 @@
 //
-// Native file and folder pickers. The core calls the pick_paths callback from a worker thread. The dialog is shown on the main thread and the
-// worker waits for the user, so the main thread is never blocked. The dialogs are UIDocumentPickerViewController, which can open
-// files and choose a folder but has no dialog for choosing where to save.
+// Native file and folder pickers, for the core's "pick-paths" calls. The calls reach the app's main thread, which presents the picker
+// and returns at once: the picker's delegate gives the outcome. The dialogs are UIDocumentPickerViewController, which can open files
+// and choose a folder but has no dialog for choosing where to save. Everything here runs on the main thread. Before the core is
+// destroyed the bridge closes the pickers: every one showing is dismissed without an outcome, because destroying the core gives
+// their calls their results.
 //
 
 import Foundation
@@ -18,60 +20,43 @@ enum ZiggyPickOutcome {
     case failed(String)
 }
 
-// Carries the outcome from the main thread, where the dialog runs, to the worker thread that waits for it.
-final class ZiggyPickAnswer {
-    // The outcome, set on the main thread before the semaphore is signalled and read on the worker after it.
-    var outcome: ZiggyPickOutcome?
-}
+// The pickers the core requested that are showing.
+final class ZiggyPickers {
+    // The pickers showing.
+    private var showing: [UIDocumentPickerViewController] = []
+    // Set once closed: nothing more is presented and no outcome is given.
+    private var closed = false
 
-// Shows pickers for the core's pick_paths callback.
-enum ZiggyPicker {
-    // The core's pick_paths callback, for a worker thread. Shows the dialog on the main thread, waits for the user, and
-    // writes the chosen paths into the buffer as a JSON array of strings ("[]" when they cancelled). Returns the number of
-    // bytes written, or -1 after printing why it could not.
-    static func pickPaths(webView: WKWebView, kind: Int32, title: String?, initialName: String?, buffer: UnsafeMutablePointer<CChar>, capacity: Int) -> Int {
-        if Thread.isMainThread {
-            ZiggyBridge.report("a picker was asked for on the main thread, which would wait for itself")
-            return -1
+    // Presents a picker over the web view's window and gives its outcome to the completion.
+    func show(webView: WKWebView, kind: Int32, title: String?, initialName: String?, completion: @escaping (ZiggyPickOutcome) -> Void) {
+        if closed {
+            return
         }
-        let answer = ZiggyPickAnswer()
-        let semaphore = DispatchSemaphore(value: 0)
-        DispatchQueue.main.async {
-            ZiggyPicker.present(webView: webView, kind: kind, title: title, initialName: initialName) { outcome in
-                answer.outcome = outcome
-                semaphore.signal()
+        var presented: UIDocumentPickerViewController?
+        presented = ZiggyPickers.present(webView: webView, kind: kind, title: title, initialName: initialName) { [weak self] outcome in
+            guard let self = self, !self.closed else {
+                return
             }
+            self.showing.removeAll { $0 === presented }
+            completion(outcome)
         }
-        semaphore.wait()
-        guard let outcome = answer.outcome else {
-            ZiggyBridge.report("the picker finished without an outcome")
-            return -1
-        }
-        switch outcome {
-        case .failed(let reason):
-            ZiggyBridge.report("the picker failed: \(reason)")
-            return -1
-        case .chosen(let paths):
-            let bytes: Data
-            do {
-                bytes = try JSONEncoder().encode(paths)
-            }
-            catch {
-                ZiggyBridge.report("could not write the chosen paths as JSON: \(error)")
-                return -1
-            }
-            if bytes.count > capacity {
-                ZiggyBridge.report("the chosen paths need \(bytes.count) bytes and the core's buffer holds \(capacity)")
-                return -1
-            }
-            bytes.copyBytes(to: UnsafeMutableRawBufferPointer(start: buffer, count: capacity).bindMemory(to: UInt8.self), count: bytes.count)
-            return bytes.count
+        if let picker = presented {
+            showing.append(picker)
         }
     }
 
-    // Runs on the main thread: presents a document picker over the web view's window and reports the outcome from its
-    // delegate. Saving has no iOS dialog, so it fails.
-    private static func present(webView: WKWebView, kind: Int32, title: String?, initialName: String?, completion: @escaping (ZiggyPickOutcome) -> Void) {
+    // Dismisses every picker showing, giving none of them an outcome.
+    func close() {
+        closed = true
+        for picker in showing {
+            picker.dismiss(animated: false)
+        }
+        showing = []
+    }
+
+    // Presents a document picker over the web view's window and reports the outcome from its delegate, and returns the picker, or
+    // nil when none was presented. Saving has no iOS dialog, so it fails.
+    private static func present(webView: WKWebView, kind: Int32, title: String?, initialName: String?, completion: @escaping (ZiggyPickOutcome) -> Void) -> UIDocumentPickerViewController? {
         let picker: UIDocumentPickerViewController
         switch Int(kind) {
         case Int(ZIGGY_PICK_OPEN_FILES):
@@ -82,14 +67,14 @@ enum ZiggyPicker {
             picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.folder])
         case Int(ZIGGY_PICK_SAVE_FILE):
             completion(.failed("iOS has no dialog for choosing where to save a file"))
-            return
+            return nil
         default:
             completion(.failed("unknown picker kind \(kind)"))
-            return
+            return nil
         }
         guard var presenter = webView.window?.rootViewController else {
             completion(.failed("the web view is not in a window with a root view controller"))
-            return
+            return nil
         }
         while let presented = presenter.presentedViewController {
             presenter = presented
@@ -101,6 +86,18 @@ enum ZiggyPicker {
         picker.delegate = delegate
         delegate.keepAlive = delegate
         presenter.present(picker, animated: true)
+        return picker
+    }
+
+    // The JSON array of the chosen paths, or nil after reporting why it could not be written.
+    static func json(paths: [String]) -> String? {
+        do {
+            return String(decoding: try JSONEncoder().encode(paths), as: UTF8.self)
+        }
+        catch {
+            ZiggyBridge.report("could not write the chosen paths as JSON: \(error)")
+            return nil
+        }
     }
 }
 

@@ -1,11 +1,15 @@
 //
 // The JNI crossing for Ziggy's Android native app, written in Zig against the NDK's own jni.h. The Java class
-// dev.ziggy.nativeapp.ZiggyNative declares the native methods and the Java interface dev.ziggy.nativeapp.ZiggyHost is what the
-// core calls back into. Ziggy's app-root.zig, the root of every app's backend library, calls exportJni with the app registered with App, and
-// the Java_dev_ziggy_nativeapp_ZiggyNative_* functions below are exported from that library.
+// dev.ziggy.nativeapp.ZiggyNative declares the native methods and the Java interface dev.ziggy.nativeapp.ZiggyNativeCalls is what the
+// native app's main thread is called on. Ziggy's app-root.zig, the root of every app's backend library, calls exportJni with the app
+// registered with App, and the Java_dev_ziggy_nativeapp_ZiggyNative_* functions below are exported from that library.
 //
-// Everything the crossing needs lives in a Bridge, which is allocated by create and whose address is the jlong handle the
-// Java side holds. The core's callbacks get the same address as their user_data. Nothing is kept in a global.
+// Everything the crossing keeps lives in a Bridge, which is allocated by create and whose address is the jlong handle the Java side
+// holds. Only the native app's main thread touches it. The core posts its messages for the native app to the native app's queue and
+// wakes the main thread by writing to a pipe the main looper watches (see native-message.zig), and the main thread takes them with
+// takeMessages, calling into ZiggyNativeCalls for each one. The frontend's messages come in on a web view thread, which posts them to the
+// core's main thread's queue, the only part of the core that thread touches, whose address Java holds as a handle of its own. Every
+// function a thread other than the main thread calls allocates with an allocator of its own for the call.
 //
 // Messages cross as byte arrays holding UTF-8, because the JNI string functions use a modified UTF-8 that is not valid
 // UTF-8 for characters outside the basic multilingual plane. Configuration strings (paths) are plain text and
@@ -16,52 +20,60 @@ const std = @import("std");
 const build_options = @import("build_options");
 const c = @import("jni-c");
 const types = @import("types.zig");
-const core_module = @import("core.zig");
+const core = @import("core.zig");
 const ui_files = @import("ui-files.zig");
+const origin_check = @import("origin-check.zig");
 const inject_script = @import("inject-script.zig");
-const host_reply = @import("host-reply.zig");
+const native_message = @import("native-message.zig");
+const NativeSide = @import("native-side.zig").NativeSide;
+const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
+
+const MessageQueue = core.MessageQueue;
 
 //
-// The Java interface the core calls back into.
+// The Java interface the native app's main thread is called on.
 //
-const host_class_name = "dev/ziggy/nativeapp/ZiggyHost";
+const native_calls_class_name = "dev/ziggy/nativeapp/ZiggyNativeCalls";
 
 //
-// Everything one created core needs to reach back into Java. The address of a Bridge is the handle the Java side holds.
+// The native app's main thread's own allocator and Io, made by createBridge and released by destroy, at the edge of the system for as
+// long as the core runs, as the C interface's are (see ziggy-api.zig). A process runs one core at a time.
+//
+var ui_allocator: ThreadAllocator = .init;
+var ui_threaded: std.Io.Threaded = undefined;
+
+//
+// Everything one created core needs on the native app's main thread. The address of a Bridge is the handle the Java side holds. It
+// lives in pages of its own, and only the main thread touches it.
 //
 const Bridge = struct {
-    // The Java virtual machine, used to attach a thread that is not a Java thread.
-    java_vm: *c.JavaVM,
-    // A global reference to the Java object that implements ZiggyHost.
-    host: c.jobject,
-    // ZiggyHost.onCoreMessage(byte[]).
+    // A global reference to the Java object that implements ZiggyNativeCalls.
+    native_calls: c.jobject,
+    // ZiggyNativeCalls.onCoreMessage(byte[]).
     on_core_message_method: c.jmethodID,
-    // ZiggyHost.osVersionJson().
+    // ZiggyNativeCalls.osVersionJson().
     os_version_json_method: c.jmethodID,
-    // ZiggyHost.quit().
+    // ZiggyNativeCalls.quit().
     quit_method: c.jmethodID,
-    // ZiggyHost.keepAlive(boolean).
+    // ZiggyNativeCalls.keepAlive(boolean).
     keep_alive_method: c.jmethodID,
-    // ZiggyHost.pickPathsJson(int, String, String).
+    // ZiggyNativeCalls.pickPaths(int, String, String, long).
     pick_paths_method: c.jmethodID,
-    // ZiggyHost.hostRequest(byte[], byte[]).
-    host_request_method: c.jmethodID,
-    // The core, once it has been created.
-    core: *core_module.Core,
-    // The owned copy of the test port file path, or null when there is none. The core keeps the pointer, so it lives as long as the core.
-    test_port_file: ?[:0]u8,
-};
-
-//
-// A JNI environment for the current thread, attached for the call if the thread was not already a Java thread.
-//
-const Attachment = struct {
-    // The Java virtual machine.
-    java_vm: *c.JavaVM,
-    // The environment of the current thread.
-    env: *c.JNIEnv,
-    // Whether this attachment attached the thread and so has to detach it.
-    attached_here: bool,
+    // ZiggyNativeCalls.nativeCall(byte[], byte[], long).
+    native_call_method: c.jmethodID,
+    // The core's main thread's queue, which the web view thread posts the frontend's messages to. It lives in pages of its own, so the
+    // web view thread needs nothing of the Bridge to reach it.
+    main_queue: *MessageQueue,
+    // The native app's queue, which the core's threads post to.
+    native_queue: MessageQueue,
+    // The native app's side of its queue.
+    native: NativeSide,
+    // The core's main thread.
+    main_thread: std.Thread,
+    // The end of the wake pipe the main looper watches.
+    wake_read: std.posix.fd_t,
+    // The end of the wake pipe the core's wake writes to.
+    wake_write: std.posix.fd_t,
 };
 
 //
@@ -76,45 +88,6 @@ fn envTable(env: *c.JNIEnv) *const c.struct_JNINativeInterface {
 //
 fn vmTable(java_vm: *c.JavaVM) *const c.struct_JNIInvokeInterface {
     return java_vm.*;
-}
-
-//
-// Gives the current thread a JNI environment. A thread the core started is not a Java thread, so it is attached here and
-// detached by detach, which keeps a thread that exits from ever holding an attachment the virtual machine would object to.
-//
-fn attach(java_vm: *c.JavaVM) Attachment {
-    var env: ?*c.JNIEnv = null;
-    const get_env_result = vmTable(java_vm).GetEnv.?(java_vm, @ptrCast(&env), c.JNI_VERSION_1_6);
-    if (get_env_result == c.JNI_OK) {
-        return .{
-            .java_vm = java_vm,
-            .env = env.?,
-            .attached_here = false,
-        };
-    }
-    if (get_env_result != c.JNI_EDETACHED) {
-        @panic("Ziggy JNI: GetEnv failed");
-    }
-    if (vmTable(java_vm).AttachCurrentThread.?(java_vm, @ptrCast(&env), null) != c.JNI_OK) {
-        @panic("Ziggy JNI: AttachCurrentThread failed");
-    }
-    return .{
-        .java_vm = java_vm,
-        .env = env.?,
-        .attached_here = true,
-    };
-}
-
-//
-// Undoes attach: detaches the thread when attach was what attached it.
-//
-fn detach(attachment: Attachment) void {
-    if (!attachment.attached_here) {
-        return;
-    }
-    if (vmTable(attachment.java_vm).DetachCurrentThread.?(attachment.java_vm) != c.JNI_OK) {
-        @panic("Ziggy JNI: DetachCurrentThread failed");
-    }
 }
 
 //
@@ -155,7 +128,7 @@ fn throwJava(env: *c.JNIEnv, class_name: [*:0]const u8, message: []const u8) voi
 }
 
 //
-// Copies a Java string into memory the Bridge owns. Returns null when the Java string is null.
+// Copies a Java string into memory allocated with the allocator. Returns null when the Java string is null.
 //
 fn dupeJavaString(env: *c.JNIEnv, allocator: std.mem.Allocator, string: c.jstring) !?[:0]u8 {
     if (string == null) {
@@ -185,71 +158,34 @@ fn copyJavaBytes(env: *c.JNIEnv, allocator: std.mem.Allocator, array: c.jbyteArr
 }
 
 //
-// The core's deliver callback. It runs on any thread: it hands the message to ZiggyHost.onCoreMessage as a new byte array,
-// and the Java side moves it to the main thread.
+// Makes a Java byte array holding a copy of the bytes, or ends the process when it could not be made.
 //
-fn deliverCallback(user_data: ?*anyopaque, message_ptr: [*]const u8, message_len: usize) callconv(.c) void {
-    const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
-    const attachment = attach(bridge.java_vm);
-    defer detach(attachment);
-    const env = attachment.env;
-    const array = envTable(env).NewByteArray.?(env, @intCast(message_len));
+fn newJavaBytes(env: *c.JNIEnv, bytes: []const u8, what: [*:0]const u8) c.jbyteArray {
+    const array = envTable(env).NewByteArray.?(env, @intCast(bytes.len));
     if (array == null) {
-        failOnPendingException(env, "Ziggy JNI: could not allocate a byte array for a message");
-        fatal(env, "Ziggy JNI: could not allocate a byte array for a message");
+        failOnPendingException(env, what);
+        fatal(env, what);
     }
-    defer envTable(env).DeleteLocalRef.?(env, array);
-    envTable(env).SetByteArrayRegion.?(env, array, 0, @intCast(message_len), @ptrCast(message_ptr));
-    failOnPendingException(env, "Ziggy JNI: could not copy a message into a byte array");
-    var arguments = [1]c.jvalue{
-        .{
-            .l = array,
-        },
+    envTable(env).SetByteArrayRegion.?(env, array, 0, @intCast(bytes.len), @ptrCast(bytes.ptr));
+    failOnPendingException(env, what);
+    return array;
+}
+
+//
+// Makes a Java string of the text, or null for null, or ends the process when it could not be made.
+//
+fn newJavaString(env: *c.JNIEnv, allocator: std.mem.Allocator, text: ?[]const u8, what: [*:0]const u8) c.jstring {
+    const value = text orelse {
+        return null;
     };
-    envTable(env).CallVoidMethodA.?(env, bridge.host, bridge.on_core_message_method, &arguments);
-    failOnPendingException(env, "Ziggy JNI: ZiggyHost.onCoreMessage threw");
-}
-
-//
-// The native host callback that gives the operating system's version, by calling ZiggyHost.osVersionJson for the JSON
-// text. Returns the number of bytes written, or a negative number when Java returns nothing or the result does not fit.
-//
-fn osVersionCallback(user_data: ?*anyopaque, buffer: [*]u8, capacity: usize) callconv(.c) isize {
-    const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
-    const attachment = attach(bridge.java_vm);
-    defer detach(attachment);
-    const env = attachment.env;
-    const string = envTable(env).CallObjectMethodA.?(env, bridge.host, bridge.os_version_json_method, null);
-    failOnPendingException(env, "Ziggy JNI: ZiggyHost.osVersionJson threw");
+    const terminated = allocator.dupeZ(u8, value) catch @panic("Ziggy JNI: out of memory making a string");
+    defer allocator.free(terminated);
+    const string = envTable(env).NewStringUTF.?(env, terminated.ptr);
     if (string == null) {
-        return -1;
+        failOnPendingException(env, what);
+        fatal(env, what);
     }
-    defer envTable(env).DeleteLocalRef.?(env, string);
-    const chars = envTable(env).GetStringUTFChars.?(env, @ptrCast(string), null);
-    if (chars == null) {
-        failOnPendingException(env, "Ziggy JNI: could not read the operating system version");
-        return -1;
-    }
-    defer envTable(env).ReleaseStringUTFChars.?(env, @ptrCast(string), chars);
-    const text = std.mem.span(@as([*:0]const u8, @ptrCast(chars)));
-    if (text.len > capacity) {
-        return -1;
-    }
-    @memcpy(buffer[0..text.len], text);
-    return @intCast(text.len);
-}
-
-//
-// The native host callback that quits the application, by calling ZiggyHost.quit. Called by the test control connection,
-// from its own thread.
-//
-fn quitCallback(user_data: ?*anyopaque) callconv(.c) void {
-    const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
-    const attachment = attach(bridge.java_vm);
-    defer detach(attachment);
-    const env = attachment.env;
-    envTable(env).CallVoidMethodA.?(env, bridge.host, bridge.quit_method, null);
-    failOnPendingException(env, "Ziggy JNI: ZiggyHost.quit threw");
+    return string;
 }
 
 //
@@ -296,173 +232,28 @@ fn installSignalHandlers() void {
 }
 
 //
-// The native host callback that does a menu action. A phone has no menu bar and none of the native app's own actions (reload, zoom,
-// full screen, quit), so every action is posted to the core as a menu-action message, which runs the app's item as it does on a
-// desktop. The core calls it from the thread of the test control connection.
+// The core's wake. It runs on any thread of the core or the app, and only writes a byte to the wake pipe, whose end it is given as the
+// wake data (the descriptor plus one, so that it is never null). The main looper wakes the main thread for it. A full pipe already has
+// a wake waiting in it, so a write that would wait is dropped.
 //
-fn menuActionCallback(user_data: ?*anyopaque, action: [*:0]const u8) callconv(.c) void {
-    const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
-    const message = std.json.Stringify.valueAlloc(std.heap.smp_allocator, .{
-        .kind = "system",
-        .name = "menu-action",
-        .data = .{
-            .action = std.mem.span(action),
-        },
-    }, .{}) catch @panic("Ziggy JNI: out of memory building a menu-action message");
-    defer std.heap.smp_allocator.free(message);
-    bridge.core.postMessage(message);
-}
-
-//
-// The native host callback that keeps the app running, or reports it need not be, by calling ZiggyHost.keepAlive. The core calls it
-// from the thread that queued or ended the task.
-//
-fn keepAliveCallback(user_data: ?*anyopaque, keep_running: bool) callconv(.c) void {
-    const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
-    const attachment = attach(bridge.java_vm);
-    defer detach(attachment);
-    const env = attachment.env;
-    var arguments = [1]c.jvalue{
-        .{
-            .z = if (keep_running) c.JNI_TRUE else c.JNI_FALSE,
-        },
-    };
-    envTable(env).CallVoidMethodA.?(env, bridge.host, bridge.keep_alive_method, &arguments);
-    failOnPendingException(env, "Ziggy JNI: ZiggyHost.keepAlive threw");
-}
-
-//
-// The native host callback that shows a file or folder picker, by calling ZiggyHost.pickPathsJson, which waits for the user.
-// The core calls it from a worker thread, so waiting here holds up only that worker. The result comes back as a byte
-// array of UTF-8 JSON, which is copied into the buffer. Returns the number of bytes written, or a negative number when the
-// picker could not be shown (Java returns null and has logged why) or the result does not fit.
-//
-fn pickPathsCallback(user_data: ?*anyopaque, kind: i32, title: ?[*:0]const u8, initial_name: ?[*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
-    const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
-    const attachment = attach(bridge.java_vm);
-    defer detach(attachment);
-    const env = attachment.env;
-    var title_string: c.jstring = null;
-    if (title) |text| {
-        title_string = envTable(env).NewStringUTF.?(env, text);
-        if (title_string == null) {
-            failOnPendingException(env, "Ziggy JNI: could not make the picker title");
-            return -1;
+fn wake(wake_data: ?*anyopaque) callconv(.c) void {
+    const descriptor: std.posix.fd_t = @intCast(@intFromPtr(wake_data) - 1);
+    const byte = [1]u8{1};
+    const written = std.c.write(descriptor, &byte, byte.len);
+    if (written < 0) {
+        switch (std.c.errno(written)) {
+            .AGAIN => {},
+            else => |code| std.debug.panic("Ziggy JNI: could not write to the wake pipe: {s}", .{@tagName(code)}),
         }
     }
-    defer if (title_string != null) {
-        envTable(env).DeleteLocalRef.?(env, title_string);
-    };
-    var initial_name_string: c.jstring = null;
-    if (initial_name) |text| {
-        initial_name_string = envTable(env).NewStringUTF.?(env, text);
-        if (initial_name_string == null) {
-            failOnPendingException(env, "Ziggy JNI: could not make the picker file name");
-            return -1;
-        }
-    }
-    defer if (initial_name_string != null) {
-        envTable(env).DeleteLocalRef.?(env, initial_name_string);
-    };
-    var arguments = [3]c.jvalue{
-        .{
-            .i = kind,
-        },
-        .{
-            .l = title_string,
-        },
-        .{
-            .l = initial_name_string,
-        },
-    };
-    const answer = envTable(env).CallObjectMethodA.?(env, bridge.host, bridge.pick_paths_method, &arguments);
-    failOnPendingException(env, "Ziggy JNI: ZiggyHost.pickPathsJson threw");
-    if (answer == null) {
-        return -1;
-    }
-    defer envTable(env).DeleteLocalRef.?(env, answer);
-    const length: usize = @intCast(envTable(env).GetArrayLength.?(env, @ptrCast(answer)));
-    if (length > capacity) {
-        return -1;
-    }
-    envTable(env).GetByteArrayRegion.?(env, @ptrCast(answer), 0, @intCast(length), @ptrCast(buffer));
-    failOnPendingException(env, "Ziggy JNI: could not copy the picker answer");
-    return @intCast(length);
-}
-
-//
-// Makes a Java byte array holding a copy of the bytes, or null with an exception pending when it could not be made.
-//
-fn newJavaBytes(env: *c.JNIEnv, bytes: []const u8) c.jbyteArray {
-    const array = envTable(env).NewByteArray.?(env, @intCast(bytes.len));
-    if (array == null) {
-        return null;
-    }
-    envTable(env).SetByteArrayRegion.?(env, array, 0, @intCast(bytes.len), @ptrCast(bytes.ptr));
-    if (envTable(env).ExceptionCheck.?(env) == c.JNI_TRUE) {
-        envTable(env).DeleteLocalRef.?(env, array);
-        return null;
-    }
-    return array;
-}
-
-//
-// The native host callback that does one thing only the app's own code can do, by calling ZiggyHost.hostRequest, which may wait for
-// the user. The core calls it from a worker thread with no lock held. The method and the request cross as UTF-8 bytes, and Java returns
-// a status byte (1 when it did what the method names, 0 when it could not) followed by the result or the reason. Every way the call can
-// fail is returned as a failure with a reason, so the core reports it to the frontend.
-//
-fn hostRequestCallback(user_data: ?*anyopaque, method: [*:0]const u8, request_json: [*:0]const u8, buffer: [*]u8, capacity: usize) callconv(.c) isize {
-    const bridge: *Bridge = @ptrCast(@alignCast(user_data.?));
-    const method_name = std.mem.span(method);
-    const attachment = attach(bridge.java_vm);
-    defer detach(attachment);
-    const env = attachment.env;
-    const method_array = newJavaBytes(env, method_name);
-    if (method_array == null) {
-        failOnPendingException(env, "Ziggy JNI: could not make the host request method");
-        return host_reply.writeHostReply(false, method_name, "The host request could not be sent to the app.", buffer, capacity);
-    }
-    defer envTable(env).DeleteLocalRef.?(env, method_array);
-    const request_array = newJavaBytes(env, std.mem.span(request_json));
-    if (request_array == null) {
-        failOnPendingException(env, "Ziggy JNI: could not make the host request argument");
-        return host_reply.writeHostReply(false, method_name, "The host request could not be sent to the app.", buffer, capacity);
-    }
-    defer envTable(env).DeleteLocalRef.?(env, request_array);
-    var arguments = [2]c.jvalue{
-        .{
-            .l = method_array,
-        },
-        .{
-            .l = request_array,
-        },
-    };
-    const answer = envTable(env).CallObjectMethodA.?(env, bridge.host, bridge.host_request_method, &arguments);
-    failOnPendingException(env, "Ziggy JNI: ZiggyHost.hostRequest threw");
-    if (answer == null) {
-        return host_reply.writeHostReply(false, method_name, "The app gave no answer to the host request.", buffer, capacity);
-    }
-    defer envTable(env).DeleteLocalRef.?(env, answer);
-    const length: usize = @intCast(envTable(env).GetArrayLength.?(env, @ptrCast(answer)));
-    if (length < 1) {
-        return host_reply.writeHostReply(false, method_name, "The app's answer to the host request was empty.", buffer, capacity);
-    }
-    const text = std.heap.smp_allocator.alloc(u8, length) catch {
-        return host_reply.writeHostReply(false, method_name, "The core ran out of memory reading the app's answer to a host request.", buffer, capacity);
-    };
-    defer std.heap.smp_allocator.free(text);
-    envTable(env).GetByteArrayRegion.?(env, @ptrCast(answer), 0, @intCast(length), @ptrCast(text.ptr));
-    failOnPendingException(env, "Ziggy JNI: could not copy the answer to a host request");
-    return host_reply.writeHostReply(text[0] == 1, method_name, text[1..], buffer, capacity);
 }
 
 //
 // What createBridge needs from Java.
 //
 const CreateArguments = struct {
-    // The Java object that implements ZiggyHost.
-    host: c.jobject,
+    // The Java object that implements ZiggyNativeCalls.
+    native_calls: c.jobject,
     // The number of worker threads.
     worker_threads: u32,
     // The limit on child tasks in flight for any one parent task.
@@ -478,49 +269,48 @@ const CreateArguments = struct {
 };
 
 //
-// Creates the Bridge and the core behind it. On failure it returns an error, and a Java exception is already pending
-// when the error is error.JavaException.
+// Creates the Bridge and the core behind it, on the native app's main thread. On failure it returns an error, and a Java exception is
+// already pending when the error is error.JavaException.
 //
-fn createBridge(env: *c.JNIEnv, allocator: std.mem.Allocator, arguments: CreateArguments, app: core_module.RegisteredApp) !*Bridge {
-    const bridge = try allocator.create(Bridge);
-    errdefer allocator.destroy(bridge);
+fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.RegisteredApp) !*Bridge {
+    const bridge = try std.heap.page_allocator.create(Bridge);
+    errdefer std.heap.page_allocator.destroy(bridge);
+    ui_allocator = .init;
+    errdefer ui_allocator.deinit();
+    const allocator = ui_allocator.allocator();
+    ui_threaded = .init_single_threaded;
+    ui_threaded.allocator = allocator;
+    errdefer ui_threaded.deinit();
 
-    var java_vm: ?*c.JavaVM = null;
-    if (envTable(env).GetJavaVM.?(env, @ptrCast(&java_vm)) != c.JNI_OK) {
-        return error.GetJavaVmFailed;
-    }
-    bridge.java_vm = java_vm.?;
-
-    const host_class = envTable(env).FindClass.?(env, host_class_name);
-    if (host_class == null) {
-        return error.JavaException;
-    }
-    defer envTable(env).DeleteLocalRef.?(env, host_class);
-    bridge.on_core_message_method = envTable(env).GetMethodID.?(env, host_class, "onCoreMessage", "([B)V") orelse {
-        return error.JavaException;
-    };
-    bridge.os_version_json_method = envTable(env).GetMethodID.?(env, host_class, "osVersionJson", "()Ljava/lang/String;") orelse {
-        return error.JavaException;
-    };
-    bridge.quit_method = envTable(env).GetMethodID.?(env, host_class, "quit", "()V") orelse {
-        return error.JavaException;
-    };
-    bridge.keep_alive_method = envTable(env).GetMethodID.?(env, host_class, "keepAlive", "(Z)V") orelse {
-        return error.JavaException;
-    };
-    bridge.pick_paths_method = envTable(env).GetMethodID.?(env, host_class, "pickPathsJson", "(ILjava/lang/String;Ljava/lang/String;)[B") orelse {
-        return error.JavaException;
-    };
-
-    bridge.host_request_method = envTable(env).GetMethodID.?(env, host_class, "hostRequest", "([B[B)[B") orelse {
-        return error.JavaException;
-    };
-
-    bridge.host = envTable(env).NewGlobalRef.?(env, arguments.host);
-    if (bridge.host == null) {
+    const native_calls_class = envTable(env).FindClass.?(env, native_calls_class_name);
+    if (native_calls_class == null) {
         return error.JavaException;
     }
-    errdefer envTable(env).DeleteGlobalRef.?(env, bridge.host);
+    defer envTable(env).DeleteLocalRef.?(env, native_calls_class);
+    bridge.on_core_message_method = envTable(env).GetMethodID.?(env, native_calls_class, "onCoreMessage", "([B)V") orelse {
+        return error.JavaException;
+    };
+    bridge.os_version_json_method = envTable(env).GetMethodID.?(env, native_calls_class, "osVersionJson", "()Ljava/lang/String;") orelse {
+        return error.JavaException;
+    };
+    bridge.quit_method = envTable(env).GetMethodID.?(env, native_calls_class, "quit", "()V") orelse {
+        return error.JavaException;
+    };
+    bridge.keep_alive_method = envTable(env).GetMethodID.?(env, native_calls_class, "keepAlive", "(Z)V") orelse {
+        return error.JavaException;
+    };
+    bridge.pick_paths_method = envTable(env).GetMethodID.?(env, native_calls_class, "pickPaths", "(ILjava/lang/String;Ljava/lang/String;J)V") orelse {
+        return error.JavaException;
+    };
+    bridge.native_call_method = envTable(env).GetMethodID.?(env, native_calls_class, "nativeCall", "([B[BJ)V") orelse {
+        return error.JavaException;
+    };
+
+    bridge.native_calls = envTable(env).NewGlobalRef.?(env, arguments.native_calls);
+    if (bridge.native_calls == null) {
+        return error.JavaException;
+    }
+    errdefer envTable(env).DeleteGlobalRef.?(env, bridge.native_calls);
 
     const app_url_prefix = (try dupeJavaString(env, allocator, arguments.app_url_prefix)) orelse {
         return error.AppUrlPrefixMissing;
@@ -530,39 +320,204 @@ fn createBridge(env: *c.JNIEnv, allocator: std.mem.Allocator, arguments: CreateA
         return error.DataDirMissing;
     };
     defer allocator.free(data_dir);
-    bridge.test_port_file = try dupeJavaString(env, allocator, arguments.test_port_file);
-    errdefer if (bridge.test_port_file) |port_file| {
-        allocator.free(port_file);
-    };
+    const test_port_file = try dupeJavaString(env, allocator, arguments.test_port_file);
+    defer if (test_port_file) |port_file| allocator.free(port_file);
+
+    var pipe: [2]std.posix.fd_t = undefined;
+    if (std.c.pipe2(&pipe, .{
+        .NONBLOCK = true,
+        .CLOEXEC = true,
+    }) != 0) {
+        return error.WakePipeFailed;
+    }
+    bridge.wake_read = pipe[0];
+    bridge.wake_write = pipe[1];
+    errdefer {
+        _ = std.c.close(bridge.wake_read);
+        _ = std.c.close(bridge.wake_write);
+    }
 
     const config = types.ZiggyConfig{
-        .user_data = bridge,
-        .deliver = deliverCallback,
-        .os_version = osVersionCallback,
-        .quit = quitCallback,
-        .pick_paths = pickPathsCallback,
-        .menu_action = menuActionCallback,
-        .keep_alive = keepAliveCallback,
+        .wake_data = @ptrFromInt(@as(usize, @intCast(bridge.wake_write)) + 1),
+        .wake = wake,
+        .has_os_version = true,
+        .has_quit = true,
+        .has_pick_paths = true,
+        // A phone has no menu bar, so a test's menu item reaches the core as the frontend's menu-action message instead.
+        .has_menu_action = true,
+        .has_keep_alive = true,
+        .has_native_call = true,
+        // A phone's screenshot is taken from the computer with adb, so the app has no way of taking one itself.
+        .has_screenshot = false,
         .worker_threads = arguments.worker_threads,
         .max_concurrent_child_tasks = arguments.max_concurrent_child_tasks,
         .app_url_prefix = app_url_prefix.ptr,
         .data_dir = data_dir.ptr,
         .test_mode = arguments.test_mode != c.JNI_FALSE,
-        .test_port_file = if (bridge.test_port_file) |port_file| port_file.ptr else null,
-        .host_request = hostRequestCallback,
-        // A phone's screenshot is taken from the host with adb, so the app has no way of taking one itself.
-        .screenshot = null,
+        .test_port_file = if (test_port_file) |port_file| port_file.ptr else null,
     };
-    bridge.core = try core_module.Core.create(allocator, config, app);
+    bridge.main_queue = try std.heap.page_allocator.create(MessageQueue);
+    errdefer std.heap.page_allocator.destroy(bridge.main_queue);
+    bridge.main_queue.* = MessageQueue.init();
+    errdefer bridge.main_queue.deinit();
+    bridge.native_queue = MessageQueue.init();
+    errdefer bridge.native_queue.deinit();
+    bridge.native = .init(&bridge.native_queue);
+    errdefer bridge.native.deinit(allocator);
+    bridge.main_thread = try core.start(allocator, bridge.main_queue, &bridge.native_queue, config, app);
     installSignalHandlers();
     return bridge;
+}
+
+//
+// Takes every message the core has posted for the native app, on the main thread, and calls ZiggyNativeCalls for each: onCoreMessage for a
+// message for the frontend, and the method of each call. A menu action becomes the frontend's menu-action message, because a phone has
+// no menu of the native app's own.
+//
+fn takeMessages(env: *c.JNIEnv, bridge: *Bridge) void {
+    const allocator = ui_allocator.allocator();
+    var drained: [64]u8 = undefined;
+    while (true) {
+        _ = std.posix.read(bridge.wake_read, &drained) catch |err| switch (err) {
+            error.WouldBlock => break,
+            else => std.debug.panic("Ziggy JNI: could not read the wake pipe: {s}", .{@errorName(err)}),
+        };
+    }
+    while (true) {
+        const taken = bridge.native.take(ui_threaded.io(), allocator, .{
+            .duration = .{
+                .raw = .zero,
+                .clock = .awake,
+            },
+        }) orelse {
+            return;
+        };
+        if (taken.kind == .deliver) {
+            const array = newJavaBytes(env, taken.text, "Ziggy JNI: could not copy a message into a byte array");
+            defer envTable(env).DeleteLocalRef.?(env, array);
+            var arguments = [1]c.jvalue{
+                .{
+                    .l = array,
+                },
+            };
+            envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.on_core_message_method, &arguments);
+            failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.onCoreMessage threw");
+            continue;
+        }
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        // The text is valid only until the next take, which Java may cause, so the call is read from a copy.
+        const text = arena.dupe(u8, taken.text) catch @panic("Ziggy JNI: out of memory taking a call");
+        const call = native_message.parse(arena, text) catch {
+            std.debug.panic("Ziggy JNI: the core sent a call the native app cannot read: {s}", .{text});
+        };
+        doCall(env, bridge, arena, call, taken.reply);
+    }
+}
+
+//
+// Does one call of the core's, on the main thread. A dialog and a native call are given their results later, by ZiggyNative.nativeResult.
+//
+fn doCall(env: *c.JNIEnv, bridge: *Bridge, arena: std.mem.Allocator, call: native_message.Call, reply: u64) void {
+    switch (call) {
+        .quit => {
+            envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.quit_method, null);
+            failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.quit threw");
+        },
+        .keep_alive => |keep_running| {
+            var arguments = [1]c.jvalue{
+                .{
+                    .z = if (keep_running) c.JNI_TRUE else c.JNI_FALSE,
+                },
+            };
+            envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.keep_alive_method, &arguments);
+            failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.keepAlive threw");
+        },
+        .menu_action => |action| {
+            const message = std.json.Stringify.valueAlloc(arena, .{
+                .kind = "system",
+                .name = "menu-action",
+                .data = .{
+                    .action = action,
+                },
+            }, .{}) catch @panic("Ziggy JNI: out of memory building a menu-action message");
+            core.sendMessage(arena, bridge.main_queue, message);
+        },
+        .os_version => {
+            const string = envTable(env).CallObjectMethodA.?(env, bridge.native_calls, bridge.os_version_json_method, null);
+            failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.osVersionJson threw");
+            if (string == null) {
+                giveResult(bridge, reply, false, "NativeCallFailed");
+                return;
+            }
+            defer envTable(env).DeleteLocalRef.?(env, string);
+            const version = dupeJavaString(env, arena, @ptrCast(string)) catch {
+                failOnPendingException(env, "Ziggy JNI: could not read the operating system version");
+                giveResult(bridge, reply, false, "NativeCallFailed");
+                return;
+            };
+            giveResult(bridge, reply, true, version.?);
+        },
+        .pick_paths => |pick| {
+            const title = newJavaString(env, arena, pick.title, "Ziggy JNI: could not make the picker title");
+            defer if (title != null) envTable(env).DeleteLocalRef.?(env, title);
+            const initial_name = newJavaString(env, arena, pick.initial_name, "Ziggy JNI: could not make the picker file name");
+            defer if (initial_name != null) envTable(env).DeleteLocalRef.?(env, initial_name);
+            var arguments = [4]c.jvalue{
+                .{
+                    .i = pick.kind,
+                },
+                .{
+                    .l = title,
+                },
+                .{
+                    .l = initial_name,
+                },
+                .{
+                    .j = @bitCast(reply),
+                },
+            };
+            envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.pick_paths_method, &arguments);
+            failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.pickPaths threw");
+        },
+        .native_call => |native_call| {
+            const method = newJavaBytes(env, native_call.method, "Ziggy JNI: could not make the native call method");
+            defer envTable(env).DeleteLocalRef.?(env, method);
+            const request = newJavaBytes(env, native_call.request, "Ziggy JNI: could not make the native call argument");
+            defer envTable(env).DeleteLocalRef.?(env, request);
+            var arguments = [3]c.jvalue{
+                .{
+                    .l = method,
+                },
+                .{
+                    .l = request,
+                },
+                .{
+                    .j = @bitCast(reply),
+                },
+            };
+            envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.native_call_method, &arguments);
+            failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.nativeCall threw");
+        },
+        .screenshot, .stopped => std.debug.panic("Ziggy JNI: the core sent a call the native app does not do", .{}),
+    }
+}
+
+//
+// Gives the result of the core's call taken under the number `reply`.
+//
+fn giveResult(bridge: *Bridge, reply: u64, succeeded: bool, text: []const u8) void {
+    bridge.native.result(ui_threaded.io(), ui_allocator.allocator(), reply, succeeded, text) catch |err| {
+        std.debug.panic("Ziggy JNI: could not give the result of the core's call: {s}", .{@errorName(err)});
+    };
 }
 
 //
 // Exports the JNI entry points of dev.ziggy.nativeapp.ZiggyNative and JNI_OnLoad from the library that calls this, serving the
 // app registered with App. It is called once, from app-root.zig, and only for an Android target.
 //
-pub fn exportJni(comptime app: core_module.RegisteredApp) void {
+pub fn exportJni(comptime app: core.RegisteredApp) void {
     const Exports = struct {
         //
         // Called when the virtual machine loads the library: checks that it supports the JNI version the entry points use.
@@ -586,12 +541,12 @@ pub fn exportJni(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // Creates the core for the app's host object and returns its handle, or zero with a Java exception pending.
+        // Creates the core for the app's ZiggyNativeCalls object, on the main thread, and returns its handle, or zero with a Java exception pending.
         //
         fn create(
             env: *c.JNIEnv,
             class: c.jclass,
-            host: c.jobject,
+            native_calls: c.jobject,
             worker_threads: c.jint,
             max_concurrent_child_tasks: c.jint,
             app_url_prefix: c.jstring,
@@ -600,8 +555,8 @@ pub fn exportJni(comptime app: core_module.RegisteredApp) void {
             test_port_file: c.jstring,
         ) callconv(.c) c.jlong {
             _ = class;
-            const bridge = createBridge(env, std.heap.smp_allocator, .{
-                .host = host,
+            const bridge = createBridge(env, .{
+                .native_calls = native_calls,
                 .worker_threads = @intCast(worker_threads),
                 .max_concurrent_child_tasks = @intCast(max_concurrent_child_tasks),
                 .app_url_prefix = app_url_prefix,
@@ -620,66 +575,133 @@ pub fn exportJni(comptime app: core_module.RegisteredApp) void {
         }
 
         //
-        // Destroys the core of the handle and releases everything the bridge held.
+        // The handle of the core's main thread's queue, which the frontend's messages are posted to from the web view's thread.
+        //
+        fn messageQueue(env: *c.JNIEnv, class: c.jclass, handle: c.jlong) callconv(.c) c.jlong {
+            _ = env;
+            _ = class;
+            const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
+            return @intCast(@intFromPtr(bridge.main_queue));
+        }
+
+        //
+        // The end of the wake pipe the main looper watches, readable whenever the core has posted messages for the native app.
+        //
+        fn wakeDescriptor(env: *c.JNIEnv, class: c.jclass, handle: c.jlong) callconv(.c) c.jint {
+            _ = env;
+            _ = class;
+            const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
+            return @intCast(bridge.wake_read);
+        }
+
+        //
+        // Takes every message the core has posted for the native app, on the main thread.
+        //
+        fn takeMessagesEntry(env: *c.JNIEnv, class: c.jclass, handle: c.jlong) callconv(.c) void {
+            _ = class;
+            takeMessages(env, @ptrFromInt(@as(usize, @intCast(handle))));
+        }
+
+        //
+        // Gives the result of the core's call taken under the number reply, on the main thread.
+        //
+        fn nativeResult(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, reply: c.jlong, ok: c.jboolean, text: c.jbyteArray) callconv(.c) void {
+            _ = class;
+            const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
+            const allocator = ui_allocator.allocator();
+            const copy = copyJavaBytes(env, allocator, text) catch |err| {
+                if (err != error.JavaException) {
+                    throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy the result of a call");
+                }
+                return;
+            };
+            defer allocator.free(copy);
+            giveResult(bridge, @bitCast(reply), ok != c.JNI_FALSE, copy);
+        }
+
+        //
+        // Destroys the core of the handle, on the main thread, failing every call meanwhile with ShuttingDown, and releases
+        // everything the bridge held.
         //
         fn destroy(env: *c.JNIEnv, class: c.jclass, handle: c.jlong) callconv(.c) void {
             _ = class;
             const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
+            const allocator = ui_allocator.allocator();
             // After this returns nothing runs and nothing is delivered, so the Bridge can be released.
-            bridge.core.destroy();
-            envTable(env).DeleteGlobalRef.?(env, bridge.host);
-            if (bridge.test_port_file) |port_file| {
-                std.heap.smp_allocator.free(port_file);
-            }
-            std.heap.smp_allocator.destroy(bridge);
+            core.stop(allocator, bridge.main_queue, &bridge.native, null, bridge.main_thread);
+            bridge.native.deinit(allocator);
+            bridge.native_queue.deinit();
+            bridge.main_queue.deinit();
+            std.heap.page_allocator.destroy(bridge.main_queue);
+            _ = std.c.close(bridge.wake_read);
+            _ = std.c.close(bridge.wake_write);
+            envTable(env).DeleteGlobalRef.?(env, bridge.native_calls);
+            ui_threaded.deinit();
+            ui_allocator.deinit();
+            std.heap.page_allocator.destroy(bridge);
         }
 
         //
-        // Passes a message from the frontend to the core.
+        // Passes a message from the frontend to the core's main thread, from the web view's thread, which reaches only the queue.
         //
-        fn postMessage(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, message: c.jbyteArray) callconv(.c) void {
+        fn sendMessage(env: *c.JNIEnv, class: c.jclass, queue_handle: c.jlong, message: c.jbyteArray) callconv(.c) void {
             _ = class;
-            const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
-            const copy = copyJavaBytes(env, std.heap.smp_allocator, message) catch |err| {
+            const queue: *MessageQueue = @ptrFromInt(@as(usize, @intCast(queue_handle)));
+            var thread_allocator: ThreadAllocator = .init;
+            defer thread_allocator.deinit();
+            const allocator = thread_allocator.allocator();
+            const copy = copyJavaBytes(env, allocator, message) catch |err| {
                 if (err != error.JavaException) {
                     throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy a message from the UI");
                 }
                 return;
             };
-            defer std.heap.smp_allocator.free(copy);
-            bridge.core.postMessage(copy);
+            defer allocator.free(copy);
+            core.sendMessage(allocator, queue, copy);
         }
 
         //
-        // Has the core decide what to do with an address the web view is about to load.
+        // Has the core's origin check decide what to do with an address the web view is about to load, against the app's URL prefix,
+        // from whichever of the web view's threads calls it.
         //
-        fn checkUrl(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, url: c.jbyteArray) callconv(.c) c.jint {
+        fn checkUrl(env: *c.JNIEnv, class: c.jclass, app_url_prefix: c.jbyteArray, url: c.jbyteArray) callconv(.c) c.jint {
             _ = class;
-            const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
-            const copy = copyJavaBytes(env, std.heap.smp_allocator, url) catch |err| {
+            var thread_allocator: ThreadAllocator = .init;
+            defer thread_allocator.deinit();
+            const allocator = thread_allocator.allocator();
+            const prefix = copyJavaBytes(env, allocator, app_url_prefix) catch |err| {
+                if (err != error.JavaException) {
+                    throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy the app's URL prefix");
+                }
+                return @intFromEnum(types.UrlDecision.block);
+            };
+            defer allocator.free(prefix);
+            const copy = copyJavaBytes(env, allocator, url) catch |err| {
                 if (err != error.JavaException) {
                     throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy an address to check");
                 }
                 return @intFromEnum(types.UrlDecision.block);
             };
-            defer std.heap.smp_allocator.free(copy);
-            return @intFromEnum(bridge.core.checkUrl(copy));
+            defer allocator.free(copy);
+            return @intFromEnum(origin_check.checkUrl(prefix, copy));
         }
 
         //
         // Copies the Java byte array of a request path and finds the bundled frontend's file for it. Null when there is no
         // such file, or when the path could not be copied (in which case a Java exception is pending).
         //
-        fn findUiFile(env: *c.JNIEnv, handle: c.jlong, path: c.jbyteArray) ?*const ui_files.UiFile {
-            const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
-            const copy = copyJavaBytes(env, std.heap.smp_allocator, path) catch |err| {
+        fn findUiFile(env: *c.JNIEnv, path: c.jbyteArray) ?*const ui_files.UiFile {
+            var thread_allocator: ThreadAllocator = .init;
+            defer thread_allocator.deinit();
+            const allocator = thread_allocator.allocator();
+            const copy = copyJavaBytes(env, allocator, path) catch |err| {
                 if (err != error.JavaException) {
                     throwJava(env, "java/lang/OutOfMemoryError", "Ziggy could not copy a UI path");
                 }
                 return null;
             };
-            defer std.heap.smp_allocator.free(copy);
-            return bridge.core.uiFile(copy);
+            defer allocator.free(copy);
+            return ui_files.findFile(app.ui_files, copy);
         }
 
         //
@@ -687,60 +709,42 @@ pub fn exportJni(comptime app: core_module.RegisteredApp) void {
         //
         fn injectScript(env: *c.JNIEnv, class: c.jclass) callconv(.c) c.jbyteArray {
             _ = class;
-            const array = envTable(env).NewByteArray.?(env, @intCast(inject_script.text.len));
-            if (array == null) {
-                failOnPendingException(env, "Ziggy JNI: could not allocate a byte array for the inject script");
-                fatal(env, "Ziggy JNI: could not allocate a byte array for the inject script");
-            }
-            envTable(env).SetByteArrayRegion.?(env, array, 0, @intCast(inject_script.text.len), @ptrCast(inject_script.text.ptr));
-            failOnPendingException(env, "Ziggy JNI: could not copy the inject script into a byte array");
-            return array;
+            return newJavaBytes(env, inject_script.text, "Ziggy JNI: could not copy the inject script into a byte array");
         }
 
         //
         // The query of the frontend's address as UTF-8 bytes, or null, with a Java exception pending, when the app could not make it.
+        // Called on the main thread.
         //
         fn uiQuery(env: *c.JNIEnv, class: c.jclass, handle: c.jlong) callconv(.c) c.jbyteArray {
             _ = class;
             const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
-            const text = bridge.core.uiQuery() catch |err| {
+            const allocator = ui_allocator.allocator();
+            const text = core.uiQuery(allocator, bridge.main_queue) catch |err| {
                 throwJava(env, "java/lang/IllegalStateException", @errorName(err));
                 return null;
             };
-            const array = envTable(env).NewByteArray.?(env, @intCast(text.len));
-            if (array == null) {
-                failOnPendingException(env, "Ziggy JNI: could not allocate a byte array for the UI query");
-                fatal(env, "Ziggy JNI: could not allocate a byte array for the UI query");
-            }
-            envTable(env).SetByteArrayRegion.?(env, array, 0, @intCast(text.len), @ptrCast(text.ptr));
-            failOnPendingException(env, "Ziggy JNI: could not copy the UI query into a byte array");
-            return array;
+            defer allocator.free(text);
+            return newJavaBytes(env, text, "Ziggy JNI: could not copy the UI query into a byte array");
         }
 
         //
         // Gives the bytes of a file of the bundled frontend, or null when the frontend has no such file.
         //
-        fn uiFileContent(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, path: c.jbyteArray) callconv(.c) c.jbyteArray {
+        fn uiFileContent(env: *c.JNIEnv, class: c.jclass, path: c.jbyteArray) callconv(.c) c.jbyteArray {
             _ = class;
-            const file = findUiFile(env, handle, path) orelse {
+            const file = findUiFile(env, path) orelse {
                 return null;
             };
-            const array = envTable(env).NewByteArray.?(env, @intCast(file.content.len));
-            if (array == null) {
-                failOnPendingException(env, "Ziggy JNI: could not allocate a byte array for a UI file");
-                fatal(env, "Ziggy JNI: could not allocate a byte array for a UI file");
-            }
-            envTable(env).SetByteArrayRegion.?(env, array, 0, @intCast(file.content.len), @ptrCast(file.content.ptr));
-            failOnPendingException(env, "Ziggy JNI: could not copy a UI file into a byte array");
-            return array;
+            return newJavaBytes(env, file.content, "Ziggy JNI: could not copy a UI file into a byte array");
         }
 
         //
         // Gives the content type of a file of the bundled frontend, or null when the frontend has no such file.
         //
-        fn uiFileContentType(env: *c.JNIEnv, class: c.jclass, handle: c.jlong, path: c.jbyteArray) callconv(.c) c.jstring {
+        fn uiFileContentType(env: *c.JNIEnv, class: c.jclass, path: c.jbyteArray) callconv(.c) c.jstring {
             _ = class;
-            const file = findUiFile(env, handle, path) orelse {
+            const file = findUiFile(env, path) orelse {
                 return null;
             };
             const text = envTable(env).NewStringUTF.?(env, ui_files.contentType(file.path).ptr);
@@ -760,11 +764,23 @@ pub fn exportJni(comptime app: core_module.RegisteredApp) void {
     @export(&Exports.create, .{
         .name = "Java_dev_ziggy_nativeapp_ZiggyNative_create",
     });
+    @export(&Exports.messageQueue, .{
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_messageQueue",
+    });
+    @export(&Exports.wakeDescriptor, .{
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_wakeDescriptor",
+    });
+    @export(&Exports.takeMessagesEntry, .{
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_takeMessages",
+    });
+    @export(&Exports.nativeResult, .{
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_nativeResult",
+    });
     @export(&Exports.destroy, .{
         .name = "Java_dev_ziggy_nativeapp_ZiggyNative_destroy",
     });
-    @export(&Exports.postMessage, .{
-        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_postMessage",
+    @export(&Exports.sendMessage, .{
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_sendMessage",
     });
     @export(&Exports.checkUrl, .{
         .name = "Java_dev_ziggy_nativeapp_ZiggyNative_checkUrl",

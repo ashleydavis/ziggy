@@ -3,7 +3,7 @@
 Ziggy's native app code for iOS, as a Swift package (swift-tools-version 5.7, iOS 14). One class, `ZiggyBridge`, serves the app. Terms are defined in the [glossary](../../../../docs/glossary.md).
 
 - `CZiggy` is a system library target whose `ziggy.h` is a link to the backend's own header (`packages/ziggy/core/src/lib/ziggy.h`).
-- `ZiggyNativeIOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards frontend messages to `ziggy_post_message`, delivers the backend's messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the backend.
+- `ZiggyNativeIOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards frontend messages to `ziggy_send_message`, delivers the backend's messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the backend.
 
 The static library with the backend (`libziggy_template.a` for the template) is linked by the app project.
 
@@ -45,7 +45,7 @@ A loopback server the frontend loads media from needs `NSAllowsLocalNetworking` 
 
 ## The app's own native calls
 
-The app's own native calls are how the backend has the app's own code do something only the platform can do (a permission prompt, the keychain, a share sheet), named by a method. The app gives `ZiggyBridge.setHostRequestHandler` an object that conforms to `ZiggyHostRequestHandler` before `start`. The backend calls it from a worker thread with the method name and the JSON text of its argument, and the handler returns the JSON text of the result or throws `ZiggyHostRequestError` with a reason in words the user can act on. The handler may block, for instance on a permission dialog, because the backend's worker thread waits and the main thread does not. The native app knows no method names. With no handler set the backend has no `host_request` native call, and such a call fails with a message reporting that no handler is set.
+The app's own native calls are how the backend has the app's own code do something only the platform can do (a permission prompt, the keychain, a share sheet), named by a method. The app gives `ZiggyBridge.setNativeCallHandler` an object that conforms to `ZiggyNativeCallHandler` before `start`. The backend calls it from a worker thread with the method name and the JSON text of its argument, and the handler returns the JSON text of the result or throws `ZiggyNativeCallError` with a reason in words the user can act on. The handler may block, for instance on a permission dialog, because the backend's worker thread waits and the main thread does not. The native app knows no method names. With no handler set the backend has no `native_call` native call, and such a call fails with a message reporting that no handler is set.
 
 ## Starting work from the app
 

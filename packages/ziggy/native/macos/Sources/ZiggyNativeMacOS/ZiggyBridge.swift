@@ -2,8 +2,9 @@
 // Ziggy's native app for MacOS. It owns the WKWebView, injects window.ziggy, loads the app's bundled frontend, calls the
 // core through the C interface and moves messages between the frontend and the core.
 //
-// Messages from the core arrive on any thread, so each is copied and handed to the main queue, which delivers them to the
-// frontend in the order they were handed over.
+// Only the main thread touches the native app's state. The core posts its messages for the native app to the native app's queue and
+// wakes the main thread through the main queue, and the main thread takes them (see native-message.zig in the core): it passes each
+// message for the frontend to the web view and does each call, giving the core the result of each call that has one.
 //
 
 import Foundation
@@ -100,11 +101,13 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The main menu, once the core exists. This holds it because a menu item's target is not retained.
     private var menu: ZiggyMenu?
 
+    // The pickers the core requested, which shutdown closes before it destroys the core.
+    private let pickers = ZiggyPickers()
 
     // The name of the script message handler that the injected script posts through.
     private static let handlerName = "ziggy"
 
-    // The name the os_version callback gives the operating system.
+    // The name the os-version call gives the operating system.
     private static let operatingSystemName = "macOS"
 
     // Creates the web view with the injected script and the message handler. The frontend is not loaded and the core does not
@@ -195,76 +198,21 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         let environment = ProcessInfo.processInfo.environment
 
         var config = ziggy_config()
-        config.user_data = Unmanaged.passUnretained(self).toOpaque()
-        config.deliver = { userData, message, messageLength in
-            guard let userData = userData, let message = message else {
-                ZiggyBridge.fail("the core delivered a message with no text")
-            }
-            let bridge = Unmanaged<ZiggyBridge>.fromOpaque(userData).takeUnretainedValue()
-            // The bytes are valid only during this call, so they are copied into a string before it returns.
-            let bytes = UnsafeBufferPointer(start: UnsafeRawPointer(message).assumingMemoryBound(to: UInt8.self), count: messageLength)
-            let text = String(decoding: bytes, as: UTF8.self)
+        // The main queue hands the bridge's address back to the main thread, which is the only thread that reads it.
+        config.wake_data = Unmanaged.passUnretained(self).toOpaque()
+        config.wake = { wakeData in
             DispatchQueue.main.async {
-                bridge.deliverToUi(text)
-            }
-        }
-        config.os_version = { userData, buffer, capacity in
-            guard let buffer = buffer else {
-                return -1
-            }
-            let version = ProcessInfo.processInfo.operatingSystemVersion
-            let text = "\"\(ZiggyBridge.operatingSystemName) \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)\""
-            let bytes = Array(text.utf8)
-            if bytes.count > capacity {
-                return -1
-            }
-            memcpy(buffer, bytes, bytes.count)
-            return bytes.count
-        }
-        config.quit = { userData in
-            guard let userData = userData else {
-                ZiggyBridge.fail("the core asked to quit with no bridge")
-            }
-            let bridge = Unmanaged<ZiggyBridge>.fromOpaque(userData).takeUnretainedValue()
-            DispatchQueue.main.async {
-                bridge.quit()
-            }
-        }
-        config.pick_paths = { userData, kind, title, initialName, buffer, capacity in
-            guard let userData = userData, let buffer = buffer else {
-                ZiggyBridge.fail("the core asked for a picker with no bridge or no buffer")
-            }
-            let bridge = Unmanaged<ZiggyBridge>.fromOpaque(userData).takeUnretainedValue()
-            return ZiggyPicker.pickPaths(
-                webView: bridge.webView,
-                kind: kind,
-                title: title.map { String(cString: $0) },
-                initialName: initialName.map { String(cString: $0) },
-                buffer: buffer,
-                capacity: capacity
-            )
-        }
-        config.menu_action = { userData, action in
-            guard let userData = userData, let action = action else {
-                ZiggyBridge.fail("the core chose a menu action with no bridge or no action")
-            }
-            let bridge = Unmanaged<ZiggyBridge>.fromOpaque(userData).takeUnretainedValue()
-            // Copied before the hop, because the core's text is valid only during this call.
-            let text = String(cString: action)
-            DispatchQueue.main.async {
-                guard let menu = bridge.menu else {
-                    ZiggyBridge.fail("the core chose the menu action \(text) before there was a menu")
+                guard let wakeData = wakeData else {
+                    ZiggyBridge.fail("the core woke the native app with no bridge")
                 }
-                menu.perform(action: text)
+                Unmanaged<ZiggyBridge>.fromOpaque(wakeData).takeUnretainedValue().takeCoreMessages()
             }
         }
-        config.screenshot = { userData, outputPath, buffer, capacity in
-            guard let userData = userData, let outputPath = outputPath, let buffer = buffer else {
-                ZiggyBridge.fail("the core asked for a screenshot with no bridge, no path or no buffer")
-            }
-            let bridge = Unmanaged<ZiggyBridge>.fromOpaque(userData).takeUnretainedValue()
-            return ZiggyScreenshot.write(webView: bridge.webView, path: String(cString: outputPath), buffer: buffer, capacity: capacity)
-        }
+        config.has_os_version = true
+        config.has_quit = true
+        config.has_pick_paths = true
+        config.has_menu_action = true
+        config.has_screenshot = true
         config.worker_threads = UInt32(ProcessInfo.processInfo.activeProcessorCount)
         config.max_concurrent_child_tasks = 10
 
@@ -313,11 +261,13 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         webView.load(URLRequest(url: uiURL))
     }
 
-    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the frontend.
+    // Destroys the core once. After it returns the core runs nothing and nothing more is delivered to the frontend. Any picker the core
+    // requested is closed first with no result, because destroying the core gives every call not finished yet its result.
     public func shutdown() {
         guard let handle = core else {
             return
         }
+        pickers.close()
         destroyed = true
         core = nil
         uiHandler.core = nil
@@ -326,9 +276,93 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     }
 
 
-    // Ends the app. Only the core's test control connection calls this.
+    // Ends the app. Only the core's test control connection requests this.
     private func quit() {
         NSApplication.shared.terminate(nil)
+    }
+
+    // Runs on the main thread: takes every message the core has posted for the native app, passing each message for the frontend to
+    // the web view and doing each call.
+    private func takeCoreMessages() {
+        while let handle = core {
+            var length = 0
+            var kind: Int32 = 0
+            var reply: UInt64 = 0
+            guard let text = ziggy_take_native_message(handle, &length, &kind, &reply) else {
+                return
+            }
+            // The text is valid only until the next take, so it is copied.
+            let message = String(decoding: UnsafeRawBufferPointer(start: text, count: length), as: UTF8.self)
+            if Int(kind) == Int(ZIGGY_NATIVE_DELIVER) {
+                deliverToUi(message)
+                continue
+            }
+            doCall(message, reply: reply)
+        }
+    }
+
+    // Runs on the main thread: does one call of the core's, and gives the core its result when it has one, at once or, for a picker or a
+    // screenshot, once it is done.
+    private func doCall(_ text: String, reply: UInt64) {
+        guard let call = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any], let type = call["type"] as? String else {
+            ZiggyBridge.fail("the core sent a call the native app cannot read: \(text)")
+        }
+        switch type {
+        case "quit":
+            quit()
+        case "menu-action":
+            guard let action = call["action"] as? String else {
+                ZiggyBridge.fail("the core sent a menu action with no action: \(text)")
+            }
+            guard let menu = menu else {
+                ZiggyBridge.fail("the core chose the menu action \(action) before there was a menu")
+            }
+            menu.perform(action: action)
+        case "os-version":
+            let version = ProcessInfo.processInfo.operatingSystemVersion
+            finishCall(reply, ok: true, text: "\"\(ZiggyBridge.operatingSystemName) \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)\"")
+        case "pick-paths":
+            guard let kind = call["kind"] as? Int else {
+                ZiggyBridge.fail("the core sent a picker call with no kind: \(text)")
+            }
+            pickers.show(ZiggyPickRequest(kind: Int32(kind), title: call["title"] as? String, initialName: call["initialName"] as? String) { [weak self] outcome in
+                switch outcome {
+                case .failed(let reason):
+                    self?.finishCall(reply, ok: false, text: reason)
+                case .chosen(let paths):
+                    guard let json = ZiggyPickers.json(paths: paths) else {
+                        self?.finishCall(reply, ok: false, text: "the chosen paths could not be written as JSON")
+                        return
+                    }
+                    self?.finishCall(reply, ok: true, text: json)
+                }
+            })
+        case "screenshot":
+            guard let path = call["outputPath"] as? String else {
+                ZiggyBridge.fail("the core sent a screenshot call with no path: \(text)")
+            }
+            ZiggyScreenshot.take(webView: webView, path: path) { [weak self] failure in
+                if let failure = failure {
+                    self?.finishCall(reply, ok: false, text: failure)
+                }
+                else {
+                    self?.finishCall(reply, ok: true, text: "")
+                }
+            }
+        default:
+            ZiggyBridge.fail("the core sent a call the native app does not do: \(text)")
+        }
+    }
+
+    // Runs on the main thread: gives the core the result of its call taken under the number reply, unless the core has been destroyed,
+    // which gave the call its result already.
+    private func finishCall(_ reply: UInt64, ok: Bool, text: String) {
+        guard let handle = core else {
+            return
+        }
+        text.withCString { pointer in
+            ziggy_native_result(handle, reply, ok, pointer, text.utf8.count)
+        }
     }
 
     // Runs on the main thread: sends one message from the core to the frontend.
@@ -359,7 +393,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             return
         }
         text.withCString { pointer in
-            ziggy_post_message(handle, pointer, text.utf8.count)
+            ziggy_send_message(handle, pointer, text.utf8.count)
         }
     }
 
@@ -455,12 +489,12 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
 
     // Writes a problem to standard error and carries on.
     static func report(_ message: String) {
-        FileHandle.standardError.write(Data("ziggy shell: \(message)\n".utf8))
+        FileHandle.standardError.write(Data("ziggy native app: \(message)\n".utf8))
     }
 
     // Writes a problem to standard error and stops the app.
     static func fail(_ message: String) -> Never {
-        FileHandle.standardError.write(Data("ziggy shell: \(message)\n".utf8))
+        FileHandle.standardError.write(Data("ziggy native app: \(message)\n".utf8))
         exit(1)
     }
 }

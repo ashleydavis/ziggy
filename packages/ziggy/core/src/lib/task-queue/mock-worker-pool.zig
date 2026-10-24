@@ -1,52 +1,28 @@
 //
 // Mock queue backend for testing TaskQueue.
-// Executes tasks in-process for fast, predictable tests. Each task runs on its own thread (up to maxConcurrent at a time), so handlers may block.
+// Runs tasks on real workers (see worker.zig in Ziggy's core) that talk to the pool by message, as the app's own pool does, with no
+// native app and no frontend. The thread that makes the pool is its main thread: the pool reads the workers' messages on it, while a
+// TaskQueue on that thread waits for its tasks.
 // Exported from the package (task_queue_zig.mock_worker_pool) so other packages can test code that
 // uses TaskQueue.
 //
 
 const std = @import("std");
-const utils = @import("utils.zig");
 const types = @import("types.zig");
-const worker = @import("worker.zig");
-const json_value = @import("json-value.zig");
 const queue_backend = @import("queue-backend.zig");
-const pending_task_queue = @import("pending-task-queue.zig");
-const insertTaskByPriority = pending_task_queue.insertTaskByPriority;
-const resolveTaskPriority = pending_task_queue.resolveTaskPriority;
-const ITaskResult = types.ITaskResult;
-const ITaskContext = types.ITaskContext;
-const ITaskEventData = types.ITaskEventData;
-const TaskStatus = types.TaskStatus;
-const TaskPriority = types.TaskPriority;
-const WorkerTaskCompletionCallback = types.WorkerTaskCompletionCallback;
-const TaskEventCallback = types.TaskEventCallback;
-const IEventCallbackEntry = types.IEventCallbackEntry;
-const UnsubscribeFn = types.UnsubscribeFn;
-const TaskAddedCallback = types.TaskAddedCallback;
-const TasksCancelledCallback = types.TasksCancelledCallback;
+const message_queue = @import("../message-queue.zig");
+const worker_pool = @import("../worker-pool.zig");
+const task_runner = @import("../task-runner.zig");
+const app = @import("../app.zig");
+const utils = @import("utils.zig");
 const IQueueBackend = queue_backend.IQueueBackend;
-const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
-const ITimestampProvider = utils.timestamp_provider.ITimestampProvider;
+const Timers = @import("../timers.zig").Timers;
 const errors = utils.errors;
-const log = &utils.log.log;
 
 //
-// Thread-safe allocator for the pool's state and the tasks.
-//
-const pool_allocator = std.heap.smp_allocator;
-
-//
-// The parts of the task context shared by every task
-// (everything but sendEvent, isCancelled and taskId).
+// The parts of the task context shared by every task.
 //
 pub const IBaseContext = struct {
-    // Generates unique identifiers.
-    uuidGenerator: IUuidGenerator,
-
-    // Provides the current timestamp.
-    timestampProvider: ITimestampProvider,
-
     // Unique identifier for the session the tasks belong to.
     sessionId: []const u8,
 
@@ -55,570 +31,109 @@ pub const IBaseContext = struct {
 };
 
 //
-// A queued or running task.
+// The task types of a mock pool, from a struct literal whose fields are task types and their handlers, as an app's `.tasks` gives
+// them (see App in Ziggy's core). A handler is Ziggy's or one written against the task queue package.
 //
-const IMockTask = struct {
-    // Owns everything the task allocates, including the handler's allocations.
-    arena: std.heap.ArenaAllocator,
-
-    // The pool that runs the task.
-    pool: *MockWorkerPool,
-
-    // The task ID.
-    id: []const u8,
-
-    // The task type (handler name).
-    type: []const u8,
-
-    // The task data (a copy owned by the task).
-    data: std.json.Value,
-
-    // The source tag of the task.
-    source: []const u8,
-
-    // How urgent the task is. Decides which pending task is dispatched next.
-    priority: TaskPriority,
-};
-
-//
-// A registration of a callback with the key that identifies it for unsubscribing.
-//
-fn Registration(comptime CallbackT: type) type {
-    return struct {
-        // Identifies the registration.
-        key: usize,
-
-        // The source filter (empty when the callback is not per source).
-        source: []const u8,
-
-        // The callback.
-        callback: CallbackT,
-    };
+pub fn handlers(comptime tasks: anytype) []const task_runner.TaskHandlerEntry {
+    return comptime app.taskTable(tasks);
 }
-
 //
-// Mock implementation of IQueueBackend that executes tasks in-process.
-// Supports concurrency limits for testing parallel-execution scenarios.
+// Mock implementation of IQueueBackend that executes tasks on workers.
+// Supports concurrency limits for testing parallel-execution scenarios: maxConcurrent is the number of workers.
+// It keeps no Io or allocator: each function is given those of the thread that owns the pool, and what it keeps is allocated
+// with that thread's allocator. Each worker makes its own.
 //
 pub const MockWorkerPool = struct {
-    // Io for locking, waiting and running handlers.
-    io: std.Io,
+    // The queue the workers send their messages to.
+    queue: message_queue.MessageQueue,
 
-    // Callbacks invoked when any task completes.
-    completionCallbacks: std.ArrayList(Registration(WorkerTaskCompletionCallback)),
-
-    // Callbacks invoked for task events of a specific type.
-    eventCallbacks: std.ArrayList(Registration(IEventCallbackEntry)),
-
-    // Callbacks invoked for all task events.
-    anyEventCallbacks: std.ArrayList(Registration(TaskEventCallback)),
-
-    // Per-source callbacks fired when a task is added.
-    taskAddedCallbacks: std.ArrayList(Registration(TaskAddedCallback)),
-
-    // Per-source callbacks fired when the tasks of a source are cancelled.
-    tasksCancelledCallbacks: std.ArrayList(Registration(TasksCancelledCallback)),
-
-    // Number of tasks currently running.
-    activeTaskCount: usize,
-
-    // Tasks waiting for a free slot, in FIFO order.
-    pendingTasks: std.ArrayList(*IMockTask),
-
-    // Maximum number of tasks that run at the same time.
-    maxConcurrent: usize,
-
-    // Sources whose tasks have been cancelled.
-    cancelledSources: std.StringHashMapUnmanaged(void),
-
-    // The context shared by every task.
-    baseContext: IBaseContext,
-
-    // Guards every field (tasks run on threads).
-    mutex: std.Io.Mutex,
-
-    // Signalled when a task finishes.
-    condition: std.Io.Condition,
-
-    // The threads started for tasks, joined by deinit.
-    threads: std.ArrayList(std.Thread),
-
-    // The key of the next registration.
-    nextKey: usize,
+    // The pool of workers.
+    pool: worker_pool.WorkerPool,
 
     //
-    // Creates the pool.
+    // Creates the pool, allocated with the owning thread's allocator. No worker starts until a task is added.
     //
-    pub fn init(io: std.Io, maxConcurrent: usize, baseContext: IBaseContext) !*MockWorkerPool {
-        const self = try pool_allocator.create(MockWorkerPool);
-        self.* = .{
-            .io = io,
-            .completionCallbacks = .empty,
-            .eventCallbacks = .empty,
-            .anyEventCallbacks = .empty,
-            .taskAddedCallbacks = .empty,
-            .tasksCancelledCallbacks = .empty,
-            .activeTaskCount = 0,
-            .pendingTasks = .empty,
-            .maxConcurrent = maxConcurrent,
-            .cancelledSources = .empty,
-            .baseContext = baseContext,
-            .mutex = .init,
-            .condition = .init,
-            .threads = .empty,
-            .nextKey = 0,
-        };
+    pub fn init(allocator: std.mem.Allocator, maxConcurrent: usize, baseContext: IBaseContext, taskTypes: []const task_runner.TaskHandlerEntry) !*MockWorkerPool {
+        const self = try allocator.create(MockWorkerPool);
+        self.queue = message_queue.MessageQueue.init();
+        self.pool = worker_pool.WorkerPool.init(&self.queue, .{
+            .max_workers = @intCast(maxConcurrent),
+            .tasks = taskTypes,
+            .describe_error = describeError,
+            .worker_options = .{
+                .workerId = 0,
+                .sessionId = baseContext.sessionId,
+                .maxConcurrentChildTasks = baseContext.maxConcurrentChildTasks,
+            },
+        });
         return self;
     }
 
     //
-    // Waits for the queued and running tasks to finish, joins the task threads and frees the pool.
+    // Waits for the queued and running tasks to finish, running the owning thread's timers as they come due, stops the workers and frees
+    // the pool.
     //
-    pub fn deinit(self: *MockWorkerPool) void {
-        self.lock();
-        while (self.activeTaskCount > 0 or self.pendingTasks.items.len > 0) {
-            self.condition.waitUncancelable(self.io, &self.mutex);
+    pub fn deinit(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+        while (self.pool.isBusy()) {
+            self.waitForMessage(io, allocator, timers);
         }
-        const threads = self.threads;
-        self.threads = .empty;
-        self.unlock();
-        for (threads.items) |thread| {
-            thread.join();
-        }
-        var owned_threads = threads;
-        owned_threads.deinit(pool_allocator);
-
-        self.shutdown();
-        self.completionCallbacks.deinit(pool_allocator);
-        self.eventCallbacks.deinit(pool_allocator);
-        self.anyEventCallbacks.deinit(pool_allocator);
-        self.taskAddedCallbacks.deinit(pool_allocator);
-        self.tasksCancelledCallbacks.deinit(pool_allocator);
-        self.pendingTasks.deinit(pool_allocator);
-        var source_iterator = self.cancelledSources.keyIterator();
-        while (source_iterator.next()) |source| {
-            pool_allocator.free(source.*);
-        }
-        self.cancelledSources.deinit(pool_allocator);
-        pool_allocator.destroy(self);
+        self.pool.shutdown(io, allocator, timers, null);
+        self.queue.deinit();
+        allocator.destroy(self);
     }
 
     //
     // Gets the IQueueBackend interface for this pool.
     //
     pub fn queueBackend(self: *MockWorkerPool) IQueueBackend {
-        return .{ .ptr = self, .vtable = &vtable };
+        return self.pool.queueBackend();
     }
 
     //
-    // The IQueueBackend functions of this pool.
+    // Reads the next message a worker sent and handles it, or runs the owning thread's timers that are due when one comes due first.
     //
-    const vtable: IQueueBackend.VTable = .{
-        .addTask = addTaskErased,
-        .onTaskAdded = onTaskAddedErased,
-        .onTaskComplete = onTaskCompleteErased,
-        .onTaskEvent = onTaskEventErased,
-        .onAnyTaskEvent = onAnyTaskEventErased,
-        .cancelTasks = cancelTasksErased,
-        .onTasksCancelled = onTasksCancelledErased,
-        .shutdown = shutdownErased,
-    };
-
-    //
-    // Locks the pool.
-    //
-    fn lock(self: *MockWorkerPool) void {
-        self.mutex.lockUncancelable(self.io);
+    pub fn waitForMessage(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+        self.pool.waitForWorkerMessage(io, allocator, timers);
     }
 
     //
-    // Unlocks the pool.
+    // Handles every message the workers have sent so far, without waiting for more.
     //
-    fn unlock(self: *MockWorkerPool) void {
-        self.mutex.unlock(self.io);
-    }
-
-    //
-    // Queues a task. Fires the onTaskAdded callbacks of its source before the task can start.
-    //
-    pub fn addTask(self: *MockWorkerPool, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) ![]const u8 {
-        const id = taskId orelse try std.fmt.allocPrint(allocator, "{s}-{d}-{d}", .{ @"type", std.Io.Clock.real.now(io).toMilliseconds(), self.nextRandom(io) });
-
-        const task = try pool_allocator.create(IMockTask);
-        task.arena = std.heap.ArenaAllocator.init(pool_allocator);
-        const task_allocator = task.arena.allocator();
-        task.pool = self;
-        task.id = try task_allocator.dupe(u8, id);
-        task.type = try task_allocator.dupe(u8, @"type");
-        task.data = try json_value.cloneJsonValue(task_allocator, data);
-        task.source = try task_allocator.dupe(u8, source);
-        task.priority = resolveTaskPriority(priority, null);
-
-        self.lock();
-        defer self.unlock();
-        for (self.taskAddedCallbacks.items) |registration| {
-            if (std.mem.eql(u8, registration.source, source)) {
-                registration.callback.call(id);
+    pub fn handleQueuedMessages(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+        while (self.queue.tryTake(io, allocator)) |message| {
+            defer allocator.free(message.text);
+            if (!self.pool.receive(io, allocator, timers, message)) {
+                std.debug.panic("a message reached the mock worker pool from no worker of it: {s}", .{message.text});
             }
         }
-        try insertTaskByPriority(pool_allocator, &self.pendingTasks, task);
-        self.tryDispatch();
-        return id;
     }
 
     //
-    // The types of the tasks still waiting for a slot, in the order they will be dispatched.
+    // The types of the tasks still waiting for a worker, in the order they will be dispatched.
     //
     pub fn getPendingTaskTypes(self: *MockWorkerPool, allocator: std.mem.Allocator) ![]const []const u8 {
-        self.lock();
-        defer self.unlock();
-        const taskTypes = try allocator.alloc([]const u8, self.pendingTasks.items.len);
-        for (self.pendingTasks.items, taskTypes) |task, *taskType| {
-            taskType.* = try allocator.dupe(u8, task.type);
+        const taskTypes = try allocator.alloc([]const u8, self.pool.pending_tasks.items.len);
+        for (self.pool.pending_tasks.items, taskTypes) |task, *taskType| {
+            taskType.* = try allocator.dupe(u8, task.task_type);
         }
         return taskTypes;
     }
 
     //
-    // A random number for generated task IDs.
+    // Marks the source as cancelled: drops its pending tasks and tells the running ones to stop.
     //
-    fn nextRandom(self: *MockWorkerPool, io: std.Io) u64 {
-        _ = self;
-        var bytes: [8]u8 = undefined;
-        io.random(&bytes);
-        return std.mem.readInt(u64, &bytes, .little);
-    }
-
-    //
-    // Starts pending tasks while there are free slots (the lock must be held).
-    //
-    fn tryDispatch(self: *MockWorkerPool) void {
-        while (self.activeTaskCount < self.maxConcurrent and self.pendingTasks.items.len > 0) {
-            const task = self.pendingTasks.orderedRemove(0);
-            self.activeTaskCount += 1;
-            const thread = std.Thread.spawn(.{}, executeTask, .{ self, task }) catch |err| {
-                log.exception("Error executing task", err);
-                self.activeTaskCount -= 1;
-                freeTask(task);
-                continue;
-            };
-            self.threads.append(pool_allocator, thread) catch |err| {
-                log.exception("Error executing task", err);
-                thread.detach();
-            };
-        }
-    }
-
-    //
-    // Frees a task and everything it allocated.
-    //
-    fn freeTask(task: *IMockTask) void {
-        task.arena.deinit();
-        pool_allocator.destroy(task);
-    }
-
-    //
-    // Runs a task on its thread and reports its completion.
-    //
-    fn executeTask(self: *MockWorkerPool, task: *IMockTask) void {
-        const task_allocator = task.arena.allocator();
-        const taskContext: ITaskContext = .{
-            .uuidGenerator = self.baseContext.uuidGenerator,
-            .timestampProvider = self.baseContext.timestampProvider,
-            .sessionId = self.baseContext.sessionId,
-            .taskId = task.id,
-            .maxConcurrentChildTasks = self.baseContext.maxConcurrentChildTasks,
-            .hostRequester = null,
-            .toolRunner = null,
-            .ptr = task,
-            .vtable = &task_context_vtable,
-        };
-
-        var result: ITaskResult = undefined;
-        if (worker.executeTaskHandler(task_allocator, self.io, task.type, task.data, taskContext)) |outputs| {
-            result = .{
-                .taskId = task.id,
-                .type = task.type,
-                .inputs = task.data,
-                .status = .Succeeded,
-                .outputs = outputs,
-            };
-        }
-        else |err| {
-            const is_thrown = err == error.Thrown or err == error.FatalError;
-            const message = errors.errorMessage(err);
-            result = .{
-                .taskId = task.id,
-                .type = task.type,
-                .inputs = task.data,
-                .status = .Failed,
-                .@"error" = .{ .name = if (is_thrown) errors.lastErrorName() else "Error", .message = message },
-                .errorMessage = if (message.len > 0) message else "Unknown error",
-            };
-        }
-
-        self.lock();
-        defer self.unlock();
-        self.activeTaskCount -= 1;
-        self.notifyCompletionCallbacks(result);
-        freeTask(task);
-        self.tryDispatch();
-        self.condition.broadcast(self.io);
-    }
-
-    //
-    // The ITaskContext functions of a task.
-    //
-    const task_context_vtable: ITaskContext.VTable = .{
-        .sendEvent = taskSendEvent,
-        .isCancelled = taskIsCancelled,
-    };
-
-    //
-    // ITaskContext.sendEvent of a task: forwards the event to the event callbacks.
-    //
-    fn taskSendEvent(ptr: *anyopaque, event: std.json.Value) void {
-        const task: *IMockTask = @ptrCast(@alignCast(ptr));
-        const self = task.pool;
-        self.lock();
-        defer self.unlock();
-        self.notifyEventCallbacks(task.id, event);
-    }
-
-    //
-    // ITaskContext.isCancelled of a task: true once the task's source has been cancelled.
-    //
-    fn taskIsCancelled(ptr: *anyopaque) bool {
-        const task: *IMockTask = @ptrCast(@alignCast(ptr));
-        const self = task.pool;
-        self.lock();
-        defer self.unlock();
-        return self.cancelledSources.contains(task.source);
-    }
-
-    //
-    // Registers a callback that fires when a task with the given source is added.
-    //
-    pub fn onTaskAdded(self: *MockWorkerPool, source: []const u8, callback: TaskAddedCallback) !UnsubscribeFn {
-        return self.register(TaskAddedCallback, &self.taskAddedCallbacks, source, callback);
-    }
-
-    //
-    // Registers a callback that fires when any task completes.
-    //
-    pub fn onTaskComplete(self: *MockWorkerPool, callback: WorkerTaskCompletionCallback) !UnsubscribeFn {
-        return self.register(WorkerTaskCompletionCallback, &self.completionCallbacks, "", callback);
-    }
-
-    //
-    // Registers a callback for task events of a specific type.
-    //
-    pub fn onTaskEvent(self: *MockWorkerPool, eventType: []const u8, callback: TaskEventCallback) !UnsubscribeFn {
-        return self.register(IEventCallbackEntry, &self.eventCallbacks, "", .{ .eventType = eventType, .callback = callback });
-    }
-
-    //
-    // Registers a callback for all task events.
-    //
-    pub fn onAnyTaskEvent(self: *MockWorkerPool, callback: TaskEventCallback) !UnsubscribeFn {
-        return self.register(TaskEventCallback, &self.anyEventCallbacks, "", callback);
-    }
-
-    //
-    // Registers a callback that fires when cancelTasks is called for the given source.
-    //
-    pub fn onTasksCancelled(self: *MockWorkerPool, source: []const u8, callback: TasksCancelledCallback) !UnsubscribeFn {
-        return self.register(TasksCancelledCallback, &self.tasksCancelledCallbacks, source, callback);
-    }
-
-    //
-    // Adds a registration to a callback list and returns the function that removes it
-    // (the source and the event type of an entry are expected to outlive the registration).
-    //
-    fn register(self: *MockWorkerPool, comptime CallbackT: type, list: *std.ArrayList(Registration(CallbackT)), source: []const u8, callback: CallbackT) !UnsubscribeFn {
-        self.lock();
-        defer self.unlock();
-        const key = self.nextKey;
-        self.nextKey += 1;
-        try list.append(pool_allocator, .{ .key = key, .source = source, .callback = callback });
-        return .{ .context = self, .key = key, .function = unregister };
-    }
-
-    //
-    // Removes the registration with the given key from whichever callback list holds it.
-    //
-    fn unregister(context: ?*anyopaque, key: usize) void {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(context.?));
-        self.lock();
-        defer self.unlock();
-        removeKey(TaskAddedCallback, &self.taskAddedCallbacks, key);
-        removeKey(WorkerTaskCompletionCallback, &self.completionCallbacks, key);
-        removeKey(IEventCallbackEntry, &self.eventCallbacks, key);
-        removeKey(TaskEventCallback, &self.anyEventCallbacks, key);
-        removeKey(TasksCancelledCallback, &self.tasksCancelledCallbacks, key);
-    }
-
-    //
-    // Removes the registration with the given key from a callback list, if it is there.
-    //
-    fn removeKey(comptime CallbackT: type, list: *std.ArrayList(Registration(CallbackT)), key: usize) void {
-        for (list.items, 0..) |registration, index| {
-            if (registration.key == key) {
-                _ = list.orderedRemove(index);
-                return;
-            }
-        }
-    }
-
-    //
-    // Marks the source as cancelled, drops its pending tasks and fires its onTasksCancelled callbacks.
-    //
-    pub fn cancelTasks(self: *MockWorkerPool, source: []const u8) void {
-        self.lock();
-        defer self.unlock();
-        if (!self.cancelledSources.contains(source)) {
-            const owned_source = pool_allocator.dupe(u8, source) catch |err| {
-                log.exception("Failed to cancel tasks", err);
-                return;
-            };
-            self.cancelledSources.put(pool_allocator, owned_source, {}) catch |err| {
-                pool_allocator.free(owned_source);
-                log.exception("Failed to cancel tasks", err);
-                return;
-            };
-        }
-        var index: usize = 0;
-        while (index < self.pendingTasks.items.len) {
-            const task = self.pendingTasks.items[index];
-            if (std.mem.eql(u8, task.source, source)) {
-                _ = self.pendingTasks.orderedRemove(index);
-                freeTask(task);
-                continue;
-            }
-            index += 1;
-        }
-        for (self.tasksCancelledCallbacks.items) |registration| {
-            if (std.mem.eql(u8, registration.source, source)) {
-                registration.callback.call();
-            }
-        }
-        self.condition.broadcast(self.io);
-    }
-
-    //
-    // Drops the pending tasks and every registered callback.
-    //
-    pub fn shutdown(self: *MockWorkerPool) void {
-        self.lock();
-        defer self.unlock();
-        for (self.pendingTasks.items) |task| {
-            freeTask(task);
-        }
-        self.pendingTasks.clearRetainingCapacity();
-        self.completionCallbacks.clearRetainingCapacity();
-        self.eventCallbacks.clearRetainingCapacity();
-        self.anyEventCallbacks.clearRetainingCapacity();
-        self.taskAddedCallbacks.clearRetainingCapacity();
-        self.tasksCancelledCallbacks.clearRetainingCapacity();
-        self.condition.broadcast(self.io);
-    }
-
-    //
-    // Invokes the completion callbacks (the lock must be held). Callback errors are logged.
-    //
-    fn notifyCompletionCallbacks(self: *MockWorkerPool, result: ITaskResult) void {
-        for (self.completionCallbacks.items) |registration| {
-            registration.callback.call(result) catch |err| {
-                log.exception("Error in task completion callback", err);
-            };
-        }
-    }
-
-    //
-    // Invokes the event callbacks that match the event type, then the callbacks for any event
-    // (the lock must be held). Callback errors are logged.
-    //
-    fn notifyEventCallbacks(self: *MockWorkerPool, taskId: []const u8, event: std.json.Value) void {
-        const eventType = types.eventTypeOf(event);
-        const data: ITaskEventData = .{ .taskId = taskId, .event = event };
-
-        for (self.eventCallbacks.items) |registration| {
-            if (eventType == null or !std.mem.eql(u8, eventType.?, registration.callback.eventType)) {
-                continue;
-            }
-            registration.callback.callback.call(data) catch |err| {
-                log.exception("Error in task event callback", err);
-            };
-        }
-
-        for (self.anyEventCallbacks.items) |registration| {
-            registration.callback.call(data) catch |err| {
-                log.exception("Error in any task event callback", err);
-            };
-        }
-    }
-
-    //
-    // IQueueBackend.addTask for this implementation.
-    //
-    fn addTaskErased(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        return self.addTask(allocator, io, @"type", data, source, taskId, priority);
-    }
-
-    //
-    // IQueueBackend.onTaskAdded for this implementation.
-    //
-    fn onTaskAddedErased(ptr: *anyopaque, source: []const u8, callback: TaskAddedCallback) anyerror!UnsubscribeFn {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        return self.onTaskAdded(source, callback);
-    }
-
-    //
-    // IQueueBackend.onTaskComplete for this implementation.
-    //
-    fn onTaskCompleteErased(ptr: *anyopaque, callback: WorkerTaskCompletionCallback) anyerror!UnsubscribeFn {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        return self.onTaskComplete(callback);
-    }
-
-    //
-    // IQueueBackend.onTaskEvent for this implementation.
-    //
-    fn onTaskEventErased(ptr: *anyopaque, eventType: []const u8, callback: TaskEventCallback) anyerror!UnsubscribeFn {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        return self.onTaskEvent(eventType, callback);
-    }
-
-    //
-    // IQueueBackend.onAnyTaskEvent for this implementation.
-    //
-    fn onAnyTaskEventErased(ptr: *anyopaque, callback: TaskEventCallback) anyerror!UnsubscribeFn {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        return self.onAnyTaskEvent(callback);
-    }
-
-    //
-    // IQueueBackend.cancelTasks for this implementation.
-    //
-    fn cancelTasksErased(ptr: *anyopaque, source: []const u8) void {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        self.cancelTasks(source);
-    }
-
-    //
-    // IQueueBackend.onTasksCancelled for this implementation.
-    //
-    fn onTasksCancelledErased(ptr: *anyopaque, source: []const u8, callback: TasksCancelledCallback) anyerror!UnsubscribeFn {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        return self.onTasksCancelled(source, callback);
-    }
-
-    //
-    // IQueueBackend.shutdown for this implementation.
-    //
-    fn shutdownErased(ptr: *anyopaque) void {
-        const self: *MockWorkerPool = @ptrCast(@alignCast(ptr));
-        self.shutdown();
+    pub fn cancelTasks(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+        self.pool.cancelSource(io, allocator, source);
     }
 };
+
+//
+// Gives the text of a failed task's error: the message the handler recorded (the task queue's throwError), or the error's name.
+//
+fn describeError(err: anyerror) ?[]const u8 {
+    const message = errors.errorMessage(err);
+    if (message.len == 0) {
+        return null;
+    }
+    return message;
+}

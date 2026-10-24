@@ -58,10 +58,10 @@ pub fn chooseRenderDevice() !void {
                 }
                 return;
             }
-            std.debug.print("ziggy shell: the graphics card {s} could not be set up, so the web view will not draw with it.\n", .{device_path});
+            std.debug.print("ziggy native app: the graphics card {s} could not be set up, so the web view will not draw with it.\n", .{device_path});
         }
     }
-    std.debug.print("ziggy shell: no graphics card could be set up, so the web view draws without one.\n", .{});
+    std.debug.print("ziggy native app: no graphics card could be set up, so the web view draws without one.\n", .{});
     if (c.setenv("WEBKIT_DISABLE_DMABUF_RENDERER", "1", 1) != 0) {
         return error.SetEnvironmentFailed;
     }

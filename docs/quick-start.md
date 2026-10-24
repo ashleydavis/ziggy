@@ -128,15 +128,17 @@ pub const HelloWorldResponse = struct {
 //
 // Handles the frontend's hello-world message.
 //
-pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: HelloWorldRequest) !HelloWorldResponse {
-    _ = core;
+pub fn helloWorldHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: HelloWorldRequest) !HelloWorldResponse {
+    _ = services;
+    _ = timers;
+    _ = io;
 
     //
     // Sends the response back to the frontend.
     //
     return .{
-        .greeting = try std.fmt.allocPrint(arena, "Hello {s}, from Zig on {s}", .{
-            request.name,
+        .greeting = try std.fmt.allocPrint(allocator, "Hello {s}, from Zig on {s}", .{
+            payload.name,
             @tagName(builtin.os.tag),
         }),
     };
@@ -188,13 +190,17 @@ A Zig function runs the task on a worker thread, sends the frontend an event and
 //
 // The hello-world task: sends the frontend one output event while it runs, then completes with a result.
 //
-pub fn helloWorldTaskHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
+pub fn helloWorldTaskHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = context;
+    _ = payload;
 
     //
     // Sends the frontend an event while the task runs.
     //
-    try context.sendEvent(.{
+    try services.sendEvent(.{
         .type = "output",
         .text = "Hello world from a task",
     });
@@ -202,7 +208,7 @@ pub fn helloWorldTaskHandler(context: *TaskContext, data: std.json.Value) anyerr
     //
     // Completes with a result for the frontend.
     //
-    return try context.arena.dupe(u8, "\"hello world task done\"");
+    return "hello world task done";
 }
 ```
 
@@ -241,8 +247,10 @@ The Zig function sends the frontend an event of its own ([`backend/src/lib/hello
 //
 // Runs when "Say Hello From Zig" is chosen. Sends the frontend an event to log.
 //
-pub fn helloFromZigMenuItem(core: *ziggy.core.Core, arena: std.mem.Allocator) !void {
-    try core.sendEvent(arena, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
+pub fn helloFromZigMenuItem(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) !void {
+    _ = timers;
+    _ = io;
+    try services.sendEvent(allocator, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
 }
 ```
 

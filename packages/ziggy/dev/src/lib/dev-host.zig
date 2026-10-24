@@ -1,28 +1,39 @@
 //
 // Ziggy's dev host: an app's core run as a program of its own for dev mode, with the frontend in an ordinary browser instead of
 // the system web view. It plays the part a native app plays, through the same C interface: it creates the core, carries messages
-// between the frontend and the core over a WebSocket and implements the core's native host callbacks. It also stands in front of the app's own
+// between the frontend and the core over a WebSocket and does the core's calls to the native app. It also stands in front of the app's own
 // dev server: the browser opens the dev host, which serves /__ziggy itself and forwards everything else to the dev server, putting
 // its dev script and the inject script at the start of each page on the way through, and passing the dev server's own WebSockets
 // through. The dev server needs nothing of Ziggy's.
 //
-// What only a native app can do (menus, screenshots, the app's own host requests) has no callback here, so the core fails each
-// with HostCallbackMissing. File and folder dialogs are shown by the dev host itself on Linux, through zenity (see pickers.zig), and
-// are missing on the other platforms. A dropped file is handled too: the browser hands its contents over and the dev host saves a
-// copy, whose path is what the frontend gets.
+// What only a native app can do (menus, screenshots, the app's own native calls) the dev host does not do, so the core fails each
+// with NativeCallMissing. File and folder dialogs are shown by the dev host itself on Linux, through zenity (see pickers.zig), on a
+// thread of their own, and are missing on the other platforms. A dropped file is handled too: the browser hands its contents over and
+// the dev host saves a copy, whose path is what the frontend gets.
 //
-// It listens on 127.0.0.1 only. Each connection is served on a thread of its own. Messages from the core arrive on any thread and
-// are written to the WebSocket of the page that connected last, or kept until a page connects.
+// It listens on 127.0.0.1 only. The program's main thread is the dev host's UI thread: it owns the core's handle, the page that
+// connected last and the messages waiting for a page, and every other thread talks to it by message (see message-queue.zig): an
+// accepting thread, which serves each connection on a thread of its own, the dialog thread, and the core, which posts its messages for
+// the native app to the native app's queue and wakes the main thread to take them (see native-message.zig). A message for the page is
+// written to the WebSocket of the page that connected last, or kept until a page connects. Each thread allocates with an allocator of
+// its own.
 //
 
 const std = @import("std");
 const builtin = @import("builtin");
 const z = @import("c");
+const message_queue = @import("message-queue");
+const socket_wait = @import("socket-wait");
 const request_paths = @import("request-paths.zig");
 const args_lib = @import("args.zig");
 const web_socket_lib = @import("web-socket.zig");
 const proxy = @import("proxy.zig");
 const pickers = @import("pickers.zig");
+const native_message = @import("native-message");
+const ThreadAllocator = @import("thread-allocator").ThreadAllocator;
+
+const MessageQueue = message_queue.MessageQueue;
+const QueueMessage = message_queue.Message;
 
 // Ziggy's dev mode script, which the dev host puts in each page before the inject script. See dev-client.js.
 const dev_script = @embedFile("dev-client.js");
@@ -33,58 +44,184 @@ const message_limit = 256 * 1024 * 1024;
 // The largest request body or page the dev host holds whole while it forwards it.
 const forward_limit = 64 * 1024 * 1024;
 
+// How long a thread that serves a socket waits for it before it reads its own messages again, in milliseconds.
+const socket_wait_ms: i32 = 20;
+
 //
-// What the dev host is told about the app by the app's build.
+// What a message to the main thread is, by the number it is sent under.
 //
-pub const AppInfo = struct {
-    // The app's name as people see it, for the messages the dev host writes.
-    title: []const u8,
+const Hub = struct {
+    // A message from the core for the page. The text is the message.
+    const deliver: u32 = 1;
+    // A message from the page for the core. The text is the message.
+    const frontend: u32 = 2;
+    // A page has connected. The reply queue is the page's, which the main thread sends the page's messages to from then on.
+    const page_connected: u32 = 3;
+    // A page has gone. The reply queue is the page's, which the main thread stops sending to, and acknowledges with page_released.
+    const page_disconnected: u32 = 4;
+    // Messages for the page that a page that went did not write, oldest first. The text is a JSON array of them. They go ahead of every
+    // message waiting for a page.
+    const undelivered: u32 = 5;
+    // A request for the query of the frontend's address. The reply, to the reply queue, is the query, or an empty text with from 1
+    // when the app could not make it.
+    const ui_query: u32 = 6;
+    // A request to record a drop. The text is the JSON array of the paths, and the reply, to the reply queue, is "true" or "false".
+    const drop: u32 = 7;
+    // The core has posted messages for the native app, which the main thread takes.
+    const native: u32 = 8;
+    // A dialog's result, from the dialog thread. The text is a PickResult.
+    const picked: u32 = 9;
 };
 
 //
-// The page connected over the WebSocket. Messages from the core are written to it.
+// A dialog for the dialog thread to show, as the main thread sends it, and its result, as the dialog thread sends it back.
 //
-const Socket = struct {
-    // The WebSocket, whose writer is used only while the host's socket mutex is held.
-    web_socket: std.http.Server.WebSocket,
+const PickRequest = struct {
+    // The number the result of the core's call is sent with.
+    reply: u64,
+    // The kind of dialog, as ziggy.h numbers it.
+    kind: i32,
+    // The dialog's title, or null.
+    title: ?[]const u8 = null,
+    // The initial name, or null.
+    initialName: ?[]const u8 = null,
 };
 
 //
-// Everything one running dev host owns. It lives on the stack of run and every callback is given its address.
+// A dialog's result.
+//
+const PickResult = struct {
+    // The number the result of the core's call is sent with.
+    reply: u64,
+    // Whether the dialog was shown.
+    succeeded: bool,
+    // The JSON text of the paths chosen, or the reason the dialog could not be shown.
+    text: []const u8,
+};
+
+//
+// What a message to a page's thread is, by the number it is sent under.
+//
+const Page = struct {
+    // A message from the core to write to the page. The text is the message.
+    const deliver: u32 = 1;
+    // The main thread will send no more messages to this page.
+    const released: u32 = 2;
+};
+
+//
+// What the dev host's main thread owns. It lives on the stack of run.
 //
 const DevHost = struct {
-    // The Io every thread uses.
-    io: std.Io,
-    // A thread safe allocator.
-    allocator: std.mem.Allocator,
     // The command line.
     options: args_lib.DevHostOptions,
     // The core's handle, until it is destroyed.
     core: ?*anyopaque,
-    // Held while a message is handed to the core and while the core is destroyed, so neither happens during the other.
-    core_mutex: std.Io.Mutex,
-    // Held while the socket or the waiting messages are used.
-    socket_mutex: std.Io.Mutex,
-    // The page connected last, or null when none is.
-    socket: ?*Socket,
+    // The main thread's messages. It is never freed: a connection's thread may still post to it while the program ends.
+    queue: *MessageQueue,
+    // The dialog thread's messages: a PickRequest for each dialog, and "stop".
+    picks: *MessageQueue,
+    // The queue of the page connected last, or null when none is.
+    page: ?*MessageQueue,
     // Messages from the core that arrived while no page was connected, oldest first.
-    waiting: std.ArrayList([]u8),
-    // Set when the core has been destroyed, so nothing more is delivered.
-    destroyed: std.atomic.Value(bool),
-    // Set when the core calls the quit callback, so the accepting loop ends.
-    stopping: std.atomic.Value(bool),
+    pending: std.ArrayList([]u8),
     // The port the dev host listens on.
     port: u16,
-    // Counts the drops, so each drop's copies go in a directory of their own.
-    drop_count: std.atomic.Value(u32),
+    // Set once the core has sent the native app a quit call.
+    quit_requested: bool,
 };
+
+//
+// What a connection thread of the dev host keeps while it serves its connection, all of it its own: its copy of what it reads of the
+// command line, and the main thread's queue, which it talks to the main thread through. Its Io and allocator are made by the thread
+// and given to each function.
+//
+const Connection = struct {
+    // The thread's own copy of the parts of the command line it reads.
+    options: ConnectionOptions,
+    // The main thread's messages.
+    hub: *MessageQueue,
+};
+
+//
+// The parts of the command line a connection thread reads. It holds its own copy of them, so each thread it is given to has one.
+//
+const ConnectionOptions = struct {
+    // The port the app's own dev server listens on.
+    ui_port: u16,
+    // The app's data directory, in the first data_dir_len bytes.
+    data_dir_buffer: [std.fs.max_path_bytes]u8,
+    // The length of the data directory.
+    data_dir_len: usize,
+
+    //
+    // The options, with a copy of the data directory.
+    //
+    fn init(ui_port: u16, data_dir: []const u8) !ConnectionOptions {
+        if (data_dir.len > std.fs.max_path_bytes) {
+            return error.NameTooLong;
+        }
+        var options: ConnectionOptions = .{
+            .ui_port = ui_port,
+            .data_dir_buffer = undefined,
+            .data_dir_len = data_dir.len,
+        };
+        @memcpy(options.data_dir_buffer[0..data_dir.len], data_dir);
+        return options;
+    }
+
+    //
+    // The app's data directory.
+    //
+    fn dataDir(self: *const ConnectionOptions) []const u8 {
+        return self.data_dir_buffer[0..self.data_dir_len];
+    }
+};
+
+//
+// What the accepting thread is given when it starts, which it owns from then on.
+//
+const AcceptStart = struct {
+    // The accepting thread's own copy of what each connection thread is given a copy of.
+    options: ConnectionOptions,
+    // The main thread's messages, which each connection thread talks to the main thread through.
+    hub: *MessageQueue,
+    // The accepting thread's messages: "stop" from the main thread.
+    queue: *MessageQueue,
+    // The listening socket, which the accepting thread closes when it ends.
+    listener: std.Io.net.Server,
+};
+
+//
+// What a connection thread is given when it starts, which it owns from then on.
+//
+const ConnectionStart = struct {
+    // The connection thread's own copy of the parts of the command line it reads.
+    options: ConnectionOptions,
+    // The main thread's messages.
+    hub: *MessageQueue,
+    // The connection's socket, which the thread closes when it ends.
+    stream: std.Io.net.Stream,
+};
+
+//
+// A single threaded Io of the calling thread's own.
+//
+fn ownIo(allocator: std.mem.Allocator) std.Io.Threaded {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    threaded.allocator = allocator;
+    return threaded;
+}
 
 //
 // Runs the dev host and returns the process's exit code.
 //
 pub fn run(init: std.process.Init, app: AppInfo) !u8 {
     const io = init.io;
-    const allocator = std.heap.smp_allocator;
+    // The main thread's own allocator. Every other thread makes one of its own.
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
     const all_args = try init.minimal.args.toSlice(init.arena.allocator());
     const options = args_lib.parseDevHostOptions(all_args[1..]) catch |err| {
         std.debug.print("ziggy dev host: {s}. Usage: --data-dir <dir> [--port <port>] [--port-file <file>]\n", .{@errorName(err)});
@@ -99,80 +236,229 @@ pub fn run(init: std.process.Init, app: AppInfo) !u8 {
         std.debug.print("ziggy dev host: cannot listen on 127.0.0.1:{d}: {s}\n", .{ options.port, @errorName(err) });
         return 1;
     };
-    defer listener.deinit(io);
+    // The accepting thread owns the listening socket once it starts, and closes it.
+    var listener_given = false;
+    defer if (!listener_given) listener.deinit(io);
 
-    var host = DevHost{
-        .io = io,
-        .allocator = allocator,
+    // Never freed, as the main thread's queue explains: it lives in pages of its own, so the main thread's allocator has nothing left
+    // allocated when the thread ends.
+    const queue = try std.heap.page_allocator.create(MessageQueue);
+    queue.* = MessageQueue.init();
+    var picks = MessageQueue.init();
+    defer picks.deinit();
+    var dev_host = DevHost{
         .options = options,
         .core = null,
-        .core_mutex = .init,
-        .socket_mutex = .init,
-        .socket = null,
-        .waiting = .empty,
-        .destroyed = .init(false),
-        .stopping = .init(false),
+        .queue = queue,
+        .picks = &picks,
+        .page = null,
+        .pending = .empty,
         .port = listener.socket.address.getPort(),
-        .drop_count = .init(0),
+        .quit_requested = false,
     };
     defer {
-        for (host.waiting.items) |text| {
+        for (dev_host.pending.items) |text| {
             allocator.free(text);
         }
-        host.waiting.deinit(allocator);
+        dev_host.pending.deinit(allocator);
     }
 
-    try createCore(&host, init.environ_map);
-    defer destroyCore(&host);
+    const picking = try std.Thread.spawn(.{}, showDialogs, .{ &picks, queue });
+    defer {
+        picks.post(io, 1, "") catch @panic("out of memory stopping the dialog thread");
+        picking.join();
+    }
+
+    try createCore(&dev_host, allocator, init.environ_map);
+    defer destroyCore(&dev_host);
 
     if (options.port_file) |port_file| {
         var port_text: [8]u8 = undefined;
         try std.Io.Dir.cwd().writeFile(io, .{
             .sub_path = port_file,
-            .data = try std.fmt.bufPrint(&port_text, "{d}", .{host.port}),
+            .data = try std.fmt.bufPrint(&port_text, "{d}", .{dev_host.port}),
         });
     }
-    std.debug.print("ziggy dev host: the core of {s} is running on 127.0.0.1:{d}\n", .{ app.title, host.port });
+    std.debug.print("ziggy dev host: the core of {s} is running on 127.0.0.1:{d}\n", .{ app.title, dev_host.port });
 
-    while (!host.stopping.load(.acquire)) {
-        const stream = listener.accept(io) catch |err| {
+    var accept_queue = MessageQueue.init();
+    defer accept_queue.deinit();
+    const accepting = try std.Thread.spawn(.{}, acceptConnections, .{AcceptStart{
+        .options = try ConnectionOptions.init(options.ui_port, options.data_dir),
+        .hub = queue,
+        .queue = &accept_queue,
+        .listener = listener,
+    }});
+    listener_given = true;
+    while (!dev_host.quit_requested) {
+        const message = queue.take(io, allocator, .none) orelse {
+            break;
+        };
+        defer allocator.free(message.text);
+        handleHubMessage(&dev_host, io, allocator, message);
+    }
+    try accept_queue.post(io, 0, "stop");
+    accepting.join();
+    return 0;
+}
+
+//
+// The accepting thread: accepts each connection and serves it on a thread of its own, until the main thread sends it "stop", then
+// closes the listening socket. It waits for a connection no longer than socket_wait_ms at a time, so it reads its messages in between.
+//
+fn acceptConnections(given: AcceptStart) void {
+    var start = given;
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+    defer start.listener.deinit(io);
+    while (true) {
+        if (start.queue.tryTake(io, allocator)) |message| {
+            allocator.free(message.text);
+            break;
+        }
+        const ready = socket_wait.waitReadable(start.listener.socket.handle, socket_wait_ms) catch |err| {
+            std.debug.panic("ziggy dev host: waiting for a connection failed: {s}", .{@errorName(err)});
+        };
+        if (!ready) {
+            continue;
+        }
+        const stream = start.listener.accept(io) catch |err| {
             std.debug.print("ziggy dev host: accept failed: {s}\n", .{@errorName(err)});
             continue;
         };
-        if (host.stopping.load(.acquire)) {
-            stream.close(io);
-            break;
-        }
-        const thread = std.Thread.spawn(.{}, serveConnection, .{ &host, stream }) catch |err| {
+        const thread = std.Thread.spawn(.{}, serveConnection, .{ConnectionStart{
+            .options = start.options,
+            .hub = start.hub,
+            .stream = stream,
+        }}) catch |err| {
             std.debug.print("ziggy dev host: could not serve a connection: {s}\n", .{@errorName(err)});
             stream.close(io);
             continue;
         };
         thread.detach();
     }
-    return 0;
+}
+
+//
+// Handles one message on the main thread.
+//
+fn handleHubMessage(dev_host: *DevHost, io: std.Io, allocator: std.mem.Allocator, message: QueueMessage) void {
+    switch (message.from) {
+        Hub.native => takeNativeMessages(dev_host, io, allocator),
+        Hub.picked => {
+            const core = dev_host.core orelse {
+                return;
+            };
+            var arena_state = std.heap.ArenaAllocator.init(allocator);
+            defer arena_state.deinit();
+            const result = std.json.parseFromSliceLeaky(PickResult, arena_state.allocator(), message.text, .{}) catch @panic("the dialog thread sent a result that is not a PickResult");
+            z.ziggy_native_result(core, result.reply, result.succeeded, result.text.ptr, result.text.len);
+        },
+        Hub.frontend => {
+            const core = dev_host.core orelse {
+                return;
+            };
+            z.ziggy_send_message(core, message.text.ptr, message.text.len);
+        },
+        Hub.page_connected => connectPage(dev_host, io, allocator, message.reply_to.?),
+        Hub.page_disconnected => {
+            const page = message.reply_to.?;
+            if (dev_host.page == page) {
+                dev_host.page = null;
+            }
+            page.post(io, Page.released, "") catch @panic("out of memory releasing a page");
+        },
+        Hub.undelivered => {
+            var arena_state = std.heap.ArenaAllocator.init(allocator);
+            defer arena_state.deinit();
+            const texts = std.json.parseFromSliceLeaky([]const []const u8, arena_state.allocator(), message.text, .{}) catch @panic("the messages a page did not write are not a JSON array of texts");
+            for (texts, 0..) |text, index| {
+                const copy = allocator.dupe(u8, text) catch @panic("out of memory keeping a message for the page");
+                dev_host.pending.insert(allocator, index, copy) catch @panic("out of memory keeping a message for the page");
+            }
+            if (dev_host.page) |page| {
+                sendPending(dev_host, io, allocator, page);
+            }
+        },
+        Hub.ui_query => {
+            const reply_to = message.reply_to.?;
+            const core = dev_host.core orelse {
+                reply_to.post(io, 1, "") catch @panic("out of memory replying to a request for the query");
+                return;
+            };
+            var query_length: usize = 0;
+            const query_pointer = z.ziggy_ui_query(core, &query_length) orelse {
+                reply_to.post(io, 1, "") catch @panic("out of memory replying to a request for the query");
+                return;
+            };
+            reply_to.post(io, 0, query_pointer[0..query_length]) catch @panic("out of memory replying to a request for the query");
+        },
+        Hub.drop => {
+            const reply_to = message.reply_to.?;
+            const core = dev_host.core orelse {
+                reply_to.post(io, 0, "false") catch @panic("out of memory replying to a drop");
+                return;
+            };
+            const recorded = z.ziggy_files_dropped(core, message.text.ptr, message.text.len);
+            reply_to.post(io, 0, if (recorded) "true" else "false") catch @panic("out of memory replying to a drop");
+        },
+        else => std.debug.panic("ziggy dev host: the main thread was sent a message it does not know ({d})", .{message.from}),
+    }
+}
+
+//
+// Sends a message from the core to the page connected last, or keeps it until a page connects.
+//
+fn sendToPage(dev_host: *DevHost, io: std.Io, allocator: std.mem.Allocator, text: []const u8) void {
+    if (dev_host.page) |page| {
+        page.post(io, Page.deliver, text) catch @panic("out of memory sending a message to the page");
+        return;
+    }
+    const copy = allocator.dupe(u8, text) catch @panic("out of memory keeping a message for the page");
+    dev_host.pending.append(allocator, copy) catch @panic("out of memory keeping a message for the page");
+}
+
+//
+// Makes a page the one messages go to, and sends it the messages that waited for a page.
+//
+fn connectPage(dev_host: *DevHost, io: std.Io, allocator: std.mem.Allocator, page: *MessageQueue) void {
+    dev_host.page = page;
+    sendPending(dev_host, io, allocator, page);
+}
+
+//
+// Sends a page every message that waited for one, oldest first.
+//
+fn sendPending(dev_host: *DevHost, io: std.Io, allocator: std.mem.Allocator, page: *MessageQueue) void {
+    for (dev_host.pending.items) |text| {
+        page.post(io, Page.deliver, text) catch @panic("out of memory sending a message to the page");
+        allocator.free(text);
+    }
+    dev_host.pending.clearRetainingCapacity();
 }
 
 //
 // Creates the core with the dev host's callbacks. Test mode is on when the core was built with the test hooks and
 // ZIGGY_TEST_MODE is set, as in a native app, and the control connection's port goes to ZIGGY_TEST_PORT_FILE.
 //
-fn createCore(host: *DevHost, environ_map: *std.process.Environ.Map) !void {
-    const app_url_prefix = try std.fmt.allocPrintSentinel(host.allocator, "http://127.0.0.1:{d}/", .{host.port}, 0);
-    defer host.allocator.free(app_url_prefix);
-    const data_dir = try host.allocator.dupeZ(u8, host.options.data_dir);
-    defer host.allocator.free(data_dir);
+fn createCore(dev_host: *DevHost, allocator: std.mem.Allocator, environ_map: *std.process.Environ.Map) !void {
+    const app_url_prefix = try std.fmt.allocPrintSentinel(allocator, "http://127.0.0.1:{d}/", .{dev_host.port}, 0);
+    defer allocator.free(app_url_prefix);
+    const data_dir = try allocator.dupeZ(u8, dev_host.options.data_dir);
+    defer allocator.free(data_dir);
     var test_port_file: ?[:0]u8 = null;
-    defer if (test_port_file) |path| host.allocator.free(path);
+    defer if (test_port_file) |path| allocator.free(path);
 
     var config = std.mem.zeroes(z.ziggy_config);
-    config.user_data = host;
-    config.deliver = deliver;
-    config.quit = quit;
-    config.os_version = osVersion;
-    if (builtin.os.tag == .linux) {
-        config.pick_paths = pickPaths;
-    }
+    config.wake_data = dev_host.queue;
+    config.wake = wake;
+    config.has_quit = true;
+    config.has_os_version = true;
+    config.has_pick_paths = builtin.os.tag == .linux;
     config.worker_threads = @intCast(std.Thread.getCpuCount() catch 4);
     config.max_concurrent_child_tasks = 10;
     config.app_url_prefix = app_url_prefix.ptr;
@@ -180,190 +466,195 @@ fn createCore(host: *DevHost, environ_map: *std.process.Environ.Map) !void {
     if (z.ziggy_test_hooks_enabled() and environ_map.get("ZIGGY_TEST_MODE") != null) {
         config.test_mode = true;
         if (environ_map.get("ZIGGY_TEST_PORT_FILE")) |path| {
-            test_port_file = try host.allocator.dupeZ(u8, path);
+            test_port_file = try allocator.dupeZ(u8, path);
             config.test_port_file = test_port_file.?.ptr;
         }
     }
-    host.core = z.ziggy_create(&config) orelse {
+    dev_host.core = z.ziggy_create(&config) orelse {
         return error.CoreCreateFailed;
     };
 }
 
 //
-// Destroys the core once. After it nothing more is delivered and no message reaches it.
+// Destroys the core once, on the main thread. After it nothing more is delivered and no message reaches it.
 //
-fn destroyCore(host: *DevHost) void {
-    host.core_mutex.lockUncancelable(host.io);
-    defer host.core_mutex.unlock(host.io);
-    const core = host.core orelse {
+fn destroyCore(dev_host: *DevHost) void {
+    const core = dev_host.core orelse {
         return;
     };
-    host.destroyed.store(true, .release);
-    host.core = null;
+    dev_host.core = null;
     z.ziggy_destroy(core);
 }
 
 //
-// Hands a message from the frontend to the core.
+// The core's wake. It runs on any thread of the core or the app, and posts to the main thread's queue, given as the wake data, that
+// the core has messages for the native app, which the main thread then takes.
 //
-fn postToCore(host: *DevHost, text: []const u8) void {
-    host.core_mutex.lockUncancelable(host.io);
-    defer host.core_mutex.unlock(host.io);
-    const core = host.core orelse {
+fn wake(wake_data: ?*anyopaque) callconv(.c) void {
+    const queue: *MessageQueue = @ptrCast(@alignCast(wake_data.?));
+    // A post needs an Io of the calling thread's own, which allocates nothing for it, so its allocator is a buffer on the stack.
+    var buffer: [1024]u8 = undefined;
+    var fixed = std.heap.FixedBufferAllocator.init(&buffer);
+    var threaded = ownIo(fixed.allocator());
+    defer threaded.deinit();
+    queue.post(threaded.io(), Hub.native, "") catch @panic("out of memory waking the dev host");
+}
+
+//
+// Takes every message the core has posted for the native app, on the main thread: a message for the page goes to the page, a quit
+// ends the dev host, the operating system's version is sent at once, and a dialog goes to the dialog thread, whose result
+// is sent later.
+//
+fn takeNativeMessages(dev_host: *DevHost, io: std.Io, allocator: std.mem.Allocator) void {
+    const core = dev_host.core orelse {
         return;
     };
-    z.ziggy_post_message(core, text.ptr, text.len);
+    while (true) {
+        var length: usize = 0;
+        var kind: i32 = 0;
+        var reply: u64 = 0;
+        const text_pointer = z.ziggy_take_native_message(core, &length, &kind, &reply) orelse {
+            return;
+        };
+        const text = text_pointer[0..length];
+        if (kind == z.ZIGGY_NATIVE_DELIVER) {
+            sendToPage(dev_host, io, allocator, text);
+            continue;
+        }
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        const call = native_message.parse(arena, text) catch {
+            std.debug.panic("ziggy dev host: the core sent a call the dev host cannot read: {s}", .{text});
+        };
+        switch (call) {
+            .quit => dev_host.quit_requested = true,
+            .os_version => {
+                var buffer: [256]u8 = undefined;
+                const version = osVersion(&buffer) catch |err| {
+                    const reason = @errorName(err);
+                    z.ziggy_native_result(core, reply, false, reason.ptr, reason.len);
+                    continue;
+                };
+                z.ziggy_native_result(core, reply, true, version.ptr, version.len);
+            },
+            .pick_paths => |pick| {
+                const request = std.json.Stringify.valueAlloc(arena, PickRequest{
+                    .reply = reply,
+                    .kind = pick.kind,
+                    .title = pick.title,
+                    .initialName = pick.initial_name,
+                }, .{}) catch @panic("out of memory requesting a dialog");
+                dev_host.picks.post(io, 0, request) catch @panic("out of memory requesting a dialog");
+            },
+            else => std.debug.panic("ziggy dev host: the core sent a call the dev host does not do: {s}", .{text}),
+        }
+    }
 }
 
 //
-// The core's deliver callback. It runs on any thread: the message goes to the connected page, or waits for one.
+// The dialog thread: shows each dialog the main thread sends it, one at a time, and sends the main thread each result, until it is
+// sent "stop" (from 1). A dialog is a program of its own, which this thread waits for, so the main thread never does.
 //
-fn deliver(user_data: ?*anyopaque, message: [*c]const u8, message_len: usize) callconv(.c) void {
-    const host: *DevHost = @ptrCast(@alignCast(user_data.?));
-    if (host.destroyed.load(.acquire)) {
-        return;
-    }
-    const text = message[0..message_len];
-    host.socket_mutex.lockUncancelable(host.io);
-    defer host.socket_mutex.unlock(host.io);
-    if (host.socket) |socket| {
-        if (socket.web_socket.writeMessage(text, .text)) |_| {
+fn showDialogs(picks: *MessageQueue, hub: *MessageQueue) void {
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+    while (true) {
+        const message = picks.take(io, allocator, .none) orelse {
+            return;
+        };
+        defer allocator.free(message.text);
+        if (message.from == 1) {
             return;
         }
-        else |err| {
-            std.debug.print("ziggy dev host: the page's connection failed while a message was written to it: {s}. The message waits for the next page.\n", .{@errorName(err)});
-            host.socket = null;
-        }
-    }
-    const copy = host.allocator.dupe(u8, text) catch @panic("out of memory keeping a message for the page");
-    host.waiting.append(host.allocator, copy) catch @panic("out of memory keeping a message for the page");
-}
-
-//
-// Makes the socket the one messages go to, and writes it the messages that waited for a page.
-//
-fn connectSocket(host: *DevHost, socket: *Socket) !void {
-    host.socket_mutex.lockUncancelable(host.io);
-    defer host.socket_mutex.unlock(host.io);
-    host.socket = socket;
-    for (host.waiting.items, 0..) |text, index| {
-        socket.web_socket.writeMessage(text, .text) catch |err| {
-            // The ones not yet written keep waiting.
-            for (host.waiting.items[0..index]) |written| {
-                host.allocator.free(written);
-            }
-            host.waiting.replaceRangeAssumeCapacity(0, index, &.{});
-            host.socket = null;
-            return err;
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        const request = std.json.parseFromSliceLeaky(PickRequest, arena, message.text, .{}) catch @panic("the main thread requested a dialog with a message that is not a PickRequest");
+        const result: PickResult = if (pickers.kindFromInt(request.kind)) |dialog_kind| shown: {
+            const json = pickers.pick(io, arena, dialog_kind, request.title, request.initialName) catch |err| {
+                std.debug.print("ziggy dev host: the dialog failed: {s}\n", .{@errorName(err)});
+                break :shown .{
+                    .reply = request.reply,
+                    .succeeded = false,
+                    .text = @errorName(err),
+                };
+            };
+            break :shown .{
+                .reply = request.reply,
+                .succeeded = true,
+                .text = json,
+            };
+        } else .{
+            .reply = request.reply,
+            .succeeded = false,
+            .text = "NoSuchDialogKind",
         };
-    }
-    for (host.waiting.items) |text| {
-        host.allocator.free(text);
-    }
-    host.waiting.clearRetainingCapacity();
-}
-
-//
-// Stops messages going to the socket, when it is still the one they go to.
-//
-fn disconnectSocket(host: *DevHost, socket: *Socket) void {
-    host.socket_mutex.lockUncancelable(host.io);
-    defer host.socket_mutex.unlock(host.io);
-    if (host.socket == socket) {
-        host.socket = null;
+        const text = std.json.Stringify.valueAlloc(arena, result, .{}) catch @panic("out of memory sending a dialog's result");
+        hub.post(io, Hub.picked, text) catch @panic("out of memory sending a dialog's result");
     }
 }
 
 //
-// The core's quit callback: the accepting loop ends, and run destroys the core and returns.
+// What the dev host is told about the app by the app's build.
 //
-fn quit(user_data: ?*anyopaque) callconv(.c) void {
-    const host: *DevHost = @ptrCast(@alignCast(user_data.?));
-    host.stopping.store(true, .release);
-    // Accepting blocks, so a connection made here makes the loop look at the flag.
-    const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", host.port) catch unreachable;
-    if (address.connect(host.io, .{
-        .mode = .stream,
-    })) |stream| {
-        stream.close(host.io);
-    }
-    else |err| {
-        std.debug.panic("ziggy dev host: could not wake the accepting loop to quit: {s}", .{@errorName(err)});
-    }
-}
+pub const AppInfo = struct {
+    // The app's name as people see it, for the messages the dev host writes.
+    title: []const u8,
+};
 
 //
-// The native host callback that gives the operating system's version.
+// The operating system's version as the JSON text of a string, written into the buffer.
 //
-fn osVersion(user_data: ?*anyopaque, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
-    _ = user_data;
+fn osVersion(buffer: []u8) ![]u8 {
     // Windows has no uname, so its version is read from the kernel, as the Windows native app does.
     if (builtin.os.tag == .windows) {
         var windows_info = std.mem.zeroes(std.os.windows.RTL_OSVERSIONINFOW);
         windows_info.dwOSVersionInfoSize = @sizeOf(std.os.windows.RTL_OSVERSIONINFOW);
         if (std.os.windows.ntdll.RtlGetVersion(&windows_info) != .SUCCESS) {
-            return -1;
+            return error.VersionUnavailable;
         }
-        const windows_written = std.fmt.bufPrint(buffer[0..capacity], "\"Windows {d}.{d}.{d} {s}\"", .{
+        return try std.fmt.bufPrint(buffer, "\"Windows {d}.{d}.{d} {s}\"", .{
             windows_info.dwMajorVersion,
             windows_info.dwMinorVersion,
             windows_info.dwBuildNumber,
             @tagName(builtin.cpu.arch),
-        }) catch {
-            return -1;
-        };
-        return @intCast(windows_written.len);
+        });
     }
     var info: std.c.utsname = undefined;
     if (std.c.uname(&info) != 0) {
-        return -1;
+        return error.VersionUnavailable;
     }
     var version_buffer: [256]u8 = undefined;
-    const version = std.fmt.bufPrint(&version_buffer, "{s} {s} {s}", .{
+    const version = try std.fmt.bufPrint(&version_buffer, "{s} {s} {s}", .{
         std.mem.sliceTo(&info.sysname, 0),
         std.mem.sliceTo(&info.release, 0),
         std.mem.sliceTo(&info.machine, 0),
-    }) catch {
-        return -1;
-    };
+    });
     // The version is written as a JSON string, so the JSON writer does the quoting and escaping.
-    const written = std.fmt.bufPrint(buffer[0..capacity], "{f}", .{std.json.fmt(version, .{})}) catch {
-        return -1;
-    };
-    return @intCast(written.len);
+    return try std.fmt.bufPrint(buffer, "{f}", .{std.json.fmt(version, .{})});
 }
 
 //
-// The native host callback that shows a file or folder dialog and writes the paths chosen into the buffer as a JSON array. The core
-// calls it from a worker thread, and the dialog is a program of its own, so it is run and waited for here.
+// Serves the requests of one connection until it closes, on a thread of its own. A request for the WebSocket turns the connection into
+// the page's socket for the rest of its life.
 //
-fn pickPaths(user_data: ?*anyopaque, kind: i32, title: [*c]const u8, initial_name: [*c]const u8, buffer: [*c]u8, capacity: usize) callconv(.c) isize {
-    const host: *DevHost = @ptrCast(@alignCast(user_data.?));
-    const dialog_kind = pickers.kindFromInt(kind) orelse {
-        std.debug.print("ziggy dev host: the core asked for a dialog of a kind ziggy.h does not give: {d}\n", .{kind});
-        return -1;
+fn serveConnection(start: ConnectionStart) void {
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+    const connection: Connection = .{
+        .options = start.options,
+        .hub = start.hub,
     };
-    const title_text: ?[]const u8 = if (title != null) std.mem.span(title) else null;
-    const initial_name_text: ?[]const u8 = if (initial_name != null) std.mem.span(initial_name) else null;
-    const json = pickers.pick(host.io, host.allocator, dialog_kind, title_text, initial_name_text) catch |err| {
-        std.debug.print("ziggy dev host: the dialog failed: {s}\n", .{@errorName(err)});
-        return -1;
-    };
-    defer host.allocator.free(json);
-    if (json.len > capacity) {
-        std.debug.print("ziggy dev host: the paths chosen do not fit in the {d} bytes the core gave for them\n", .{capacity});
-        return -1;
-    }
-    @memcpy(buffer[0..json.len], json);
-    return @intCast(json.len);
-}
-
-//
-// Serves the requests of one connection until it closes. A request for the WebSocket turns the connection into the page's socket
-// for the rest of its life.
-//
-fn serveConnection(host: *DevHost, stream: std.Io.net.Stream) void {
-    const io = host.io;
+    const stream = start.stream;
     defer stream.close(io);
     var read_buffer: [64 * 1024]u8 = undefined;
     var write_buffer: [64 * 1024]u8 = undefined;
@@ -379,7 +670,7 @@ fn serveConnection(host: *DevHost, stream: std.Io.net.Stream) void {
             .websocket => |key| {
                 if (!own) {
                     // The dev server's own WebSocket, such as its live reload, is passed through untouched.
-                    tunnelToDevServer(host, stream, &reader.interface, &request) catch |err| {
+                    tunnelToDevServer(connection, io, stream, &reader.interface, &writer.interface, &request) catch |err| {
                         std.debug.print("ziggy dev host: the dev server's WebSocket ended: {s}\n", .{@errorName(err)});
                     };
                     return;
@@ -391,7 +682,7 @@ fn serveConnection(host: *DevHost, stream: std.Io.net.Stream) void {
                     }) catch {};
                     return;
                 }
-                serveSocket(host, &request, key orelse "") catch |err| {
+                serveSocket(connection, io, allocator, stream, &request, key orelse "") catch |err| {
                     std.debug.print("ziggy dev host: the page's connection ended: {s}\n", .{@errorName(err)});
                 };
                 return;
@@ -400,12 +691,12 @@ fn serveConnection(host: *DevHost, stream: std.Io.net.Stream) void {
         }
         if (!own) {
             // The dev server's response ends with its connection, so this connection ends after it too.
-            forwardToDevServer(host, &request, &writer.interface) catch |err| {
+            forwardToDevServer(connection, io, allocator, &request, &writer.interface) catch |err| {
                 std.debug.print("ziggy dev host: forwarding {s} to the app's dev server failed: {s}\n", .{ request.head.target, @errorName(err) });
             };
             return;
         }
-        answerRequest(host, &request) catch |err| {
+        serveRequest(connection, io, allocator, &request) catch |err| {
             std.debug.print("ziggy dev host: a request for {s} failed: {s}\n", .{ request.head.target, @errorName(err) });
             return;
         };
@@ -415,14 +706,14 @@ fn serveConnection(host: *DevHost, stream: std.Io.net.Stream) void {
 //
 // Serves one ordinary request.
 //
-fn answerRequest(host: *DevHost, request: *std.http.Server.Request) !void {
+fn serveRequest(connection: Connection, io: std.Io, allocator: std.mem.Allocator, request: *std.http.Server.Request) !void {
     const target = request.head.target;
     if (request.head.method == .POST) {
         if (std.mem.startsWith(u8, target, "/__ziggy/dropped-file?")) {
-            return saveDroppedFile(host, request);
+            return saveDroppedFile(connection, io, allocator, request);
         }
         if (std.mem.eql(u8, target, "/__ziggy/drop")) {
-            return recordDrop(host, request);
+            return recordDrop(connection, io, allocator, request);
         }
     }
     else {
@@ -445,7 +736,7 @@ fn answerRequest(host: *DevHost, request: *std.http.Server.Request) !void {
             return respondWithScript(request, script[0..length]);
         }
         if (std.mem.eql(u8, target, "/__ziggy/start")) {
-            return redirectToIndex(host, request);
+            return redirectToIndex(connection, io, allocator, request);
         }
     }
     return request.respond("Not found\n", .{
@@ -472,24 +763,31 @@ fn respondWithScript(request: *std.http.Server.Request, script: []const u8) !voi
 }
 
 //
+// Sends the main thread a request and waits for its reply, which it always sends. The reply's text is the caller's to free with the
+// connection's allocator.
+//
+fn requestFromMain(connection: Connection, io: std.Io, allocator: std.mem.Allocator, replies: *MessageQueue, kind: u32, text: []const u8) !QueueMessage {
+    try connection.hub.postReplyTo(io, kind, text, replies);
+    return replies.take(io, allocator, .none) orelse {
+        @panic("ziggy dev host: a reply queue closed while a thread waited for the main thread");
+    };
+}
+
+//
 // Sends the browser to index.html with the query the app makes, as a native app loads it. A browser opened at /__ziggy/start gets
 // the frontend as a native app shows it, test mode switch included.
 //
-fn redirectToIndex(host: *DevHost, request: *std.http.Server.Request) !void {
-    var query_length: usize = 0;
-    const query_pointer = blk: {
-        host.core_mutex.lockUncancelable(host.io);
-        defer host.core_mutex.unlock(host.io);
-        const core = host.core orelse {
-            return error.CoreDestroyed;
-        };
-        break :blk z.ziggy_ui_query(core, &query_length) orelse {
-            return error.UiQueryFailed;
-        };
-    };
-    const query = query_pointer[0..query_length];
-    const location = try std.fmt.allocPrint(host.allocator, "/index.html{s}{s}", .{ if (query.len > 0) "?" else "", query });
-    defer host.allocator.free(location);
+fn redirectToIndex(connection: Connection, io: std.Io, allocator: std.mem.Allocator, request: *std.http.Server.Request) !void {
+    var replies = MessageQueue.init();
+    defer replies.deinit();
+    const reply = try requestFromMain(connection, io, allocator, &replies, Hub.ui_query, "");
+    defer allocator.free(reply.text);
+    if (reply.from != 0) {
+        return error.UiQueryFailed;
+    }
+    const query = reply.text;
+    const location = try std.fmt.allocPrint(allocator, "/index.html{s}{s}", .{ if (query.len > 0) "?" else "", query });
+    defer allocator.free(location);
     return request.respond("", .{
         .status = .found,
         .extra_headers = &.{
@@ -503,10 +801,10 @@ fn redirectToIndex(host: *DevHost, request: *std.http.Server.Request) !void {
 
 //
 // Saves the body of the request, the contents of one dropped file, as a copy under the data directory, and responds with the copy's
-// path. The name comes from the query's name parameter.
+// path. The name comes from the query's name parameter. Each drop's copies go in a directory of their own, named after the time and a
+// random number.
 //
-fn saveDroppedFile(host: *DevHost, request: *std.http.Server.Request) !void {
-    const io = host.io;
+fn saveDroppedFile(connection: Connection, io: std.Io, allocator: std.mem.Allocator, request: *std.http.Server.Request) !void {
     const encoded_name = request_paths.queryParameter(request.head.target, "name") orelse "";
     var name_buffer: [1024]u8 = undefined;
     const decoded = request_paths.percentDecode(&name_buffer, encoded_name) catch {
@@ -519,18 +817,19 @@ fn saveDroppedFile(host: *DevHost, request: *std.http.Server.Request) !void {
             .status = .bad_request,
         });
     };
-    const drop_number = host.drop_count.fetchAdd(1, .monotonic) + 1;
+    var random_bytes: [4]u8 = undefined;
+    io.random(&random_bytes);
     var drop_name_buffer: [64]u8 = undefined;
-    const drop_name = try std.fmt.bufPrint(&drop_name_buffer, "{d}-{d}", .{ std.Io.Clock.real.now(io).toMilliseconds(), drop_number });
-    const directory = try std.fs.path.join(host.allocator, &.{ host.options.data_dir, "dropped", drop_name });
-    defer host.allocator.free(directory);
+    const drop_name = try std.fmt.bufPrint(&drop_name_buffer, "{d}-{d}", .{ std.Io.Clock.real.now(io).toMilliseconds(), std.mem.readInt(u32, &random_bytes, .little) });
+    const directory = try std.fs.path.join(allocator, &.{ connection.options.dataDir(), "dropped", drop_name });
+    defer allocator.free(directory);
     try std.Io.Dir.cwd().createDirPath(io, directory);
-    const copy_path = try std.fs.path.join(host.allocator, &.{ directory, name });
-    defer host.allocator.free(copy_path);
-    const absolute_directory = try std.Io.Dir.cwd().realPathFileAlloc(io, directory, host.allocator);
-    defer host.allocator.free(absolute_directory);
-    const absolute_copy_path = try std.fs.path.join(host.allocator, &.{ absolute_directory, name });
-    defer host.allocator.free(absolute_copy_path);
+    const copy_path = try std.fs.path.join(allocator, &.{ directory, name });
+    defer allocator.free(copy_path);
+    const absolute_directory = try std.Io.Dir.cwd().realPathFileAlloc(io, directory, allocator);
+    defer allocator.free(absolute_directory);
+    const absolute_copy_path = try std.fs.path.join(allocator, &.{ absolute_directory, name });
+    defer allocator.free(absolute_copy_path);
 
     var body_buffer: [64 * 1024]u8 = undefined;
     const body = try request.readerExpectContinue(&body_buffer);
@@ -551,22 +850,19 @@ fn saveDroppedFile(host: *DevHost, request: *std.http.Server.Request) !void {
 }
 
 //
-// Records a drop with the core: the body is the JSON array of the copies' paths, as a native app records the paths it read.
+// Records a drop with the core, through the main thread: the body is the JSON array of the copies' paths, as a native app records the
+// paths it read.
 //
-fn recordDrop(host: *DevHost, request: *std.http.Server.Request) !void {
+fn recordDrop(connection: Connection, io: std.Io, allocator: std.mem.Allocator, request: *std.http.Server.Request) !void {
     var body_buffer: [64 * 1024]u8 = undefined;
     const body = try request.readerExpectContinue(&body_buffer);
-    const paths_json = try body.allocRemaining(host.allocator, .limited(1024 * 1024));
-    defer host.allocator.free(paths_json);
-    const recorded = blk: {
-        host.core_mutex.lockUncancelable(host.io);
-        defer host.core_mutex.unlock(host.io);
-        const core = host.core orelse {
-            return error.CoreDestroyed;
-        };
-        break :blk z.ziggy_files_dropped(core, paths_json.ptr, paths_json.len);
-    };
-    if (!recorded) {
+    const paths_json = try body.allocRemaining(allocator, .limited(1024 * 1024));
+    defer allocator.free(paths_json);
+    var replies = MessageQueue.init();
+    defer replies.deinit();
+    const reply = try requestFromMain(connection, io, allocator, &replies, Hub.drop, paths_json);
+    defer allocator.free(reply.text);
+    if (!std.mem.eql(u8, reply.text, "true")) {
         return request.respond("The core would not record the drop. The dev host's output says why.", .{
             .status = .bad_request,
         });
@@ -576,13 +872,10 @@ fn recordDrop(host: *DevHost, request: *std.http.Server.Request) !void {
     });
 }
 
-//
 // Forwards one request to the app's dev server and writes its response to the browser. A page gets Ziggy's scripts on the way through,
 // and anything else is passed on as it came. Responds to the browser itself when the dev server cannot be reached.
 //
-fn forwardToDevServer(host: *DevHost, request: *std.http.Server.Request, client: *std.Io.Writer) !void {
-    const io = host.io;
-    const allocator = host.allocator;
+fn forwardToDevServer(connection: Connection, io: std.Io, allocator: std.mem.Allocator, request: *std.http.Server.Request, client: *std.Io.Writer) !void {
     // Copied first: reading the body reuses the buffer the head is in.
     const browser_head = try allocator.dupe(u8, request.head_buffer);
     defer allocator.free(browser_head);
@@ -597,12 +890,12 @@ fn forwardToDevServer(host: *DevHost, request: *std.http.Server.Request, client:
     const upstream_head = try proxy.upstreamRequestHead(allocator, browser_head, if (body) |bytes| bytes.len else null);
     defer allocator.free(upstream_head);
 
-    const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", host.options.ui_port);
+    const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", connection.options.ui_port);
     const upstream = address.connect(io, .{
         .mode = .stream,
     }) catch |err| {
         var message_buffer: [256]u8 = undefined;
-        const message = std.fmt.bufPrint(&message_buffer, "The app's dev server is not answering on 127.0.0.1:{d}: {s}", .{ host.options.ui_port, @errorName(err) }) catch "The app's dev server is not answering.";
+        const message = std.fmt.bufPrint(&message_buffer, "The app's dev server is not answering on 127.0.0.1:{d}: {s}", .{ connection.options.ui_port, @errorName(err) }) catch "The app's dev server is not answering.";
         return request.respond(message, .{
             .status = .bad_gateway,
             .keep_alive = false,
@@ -650,13 +943,14 @@ fn forwardToDevServer(host: *DevHost, request: *std.http.Server.Request, client:
     return client.flush();
 }
 
+
 //
 // Passes a WebSocket the dev server serves, such as its live reload, through to it: the browser's request goes to the dev server as
-// it came, and from then on bytes are copied both ways until either side closes.
+// it came, and from then on bytes are copied both ways, on this one thread, whichever side has something to send, until either side
+// closes.
 //
-fn tunnelToDevServer(host: *DevHost, browser: std.Io.net.Stream, browser_reader: *std.Io.Reader, request: *std.http.Server.Request) !void {
-    const io = host.io;
-    const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", host.options.ui_port);
+fn tunnelToDevServer(connection: Connection, io: std.Io, browser: std.Io.net.Stream, browser_reader: *std.Io.Reader, browser_writer: *std.Io.Writer, request: *std.http.Server.Request) !void {
+    const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", connection.options.ui_port);
     const upstream = try address.connect(io, .{
         .mode = .stream,
     });
@@ -670,60 +964,69 @@ fn tunnelToDevServer(host: *DevHost, browser: std.Io.net.Stream, browser_reader:
     browser_reader.toss(early.len);
     try upstream_writer.interface.flush();
 
-    const back = try std.Thread.spawn(.{}, copyToBrowser, .{ io, upstream, browser });
-    copyAsItComes(browser_reader, &upstream_writer.interface) catch {};
-    // The browser has gone, so the dev server's side is ended too, which ends the copy the other way.
-    upstream.shutdown(io, .both) catch {};
-    back.join();
-}
-
-//
-// Copies what the dev server sends on a tunnelled WebSocket to the browser until either side closes.
-//
-fn copyToBrowser(io: std.Io, upstream: std.Io.net.Stream, browser: std.Io.net.Stream) void {
-    var read_buffer: [64 * 1024]u8 = undefined;
-    var upstream_reader = upstream.reader(io, &read_buffer);
-    var browser_write_buffer: [64 * 1024]u8 = undefined;
-    var browser_writer = browser.writer(io, &browser_write_buffer);
-    copyAsItComes(&upstream_reader.interface, &browser_writer.interface) catch {};
-    // The dev server has gone, so the browser's side is ended too, which ends the copy the other way.
-    browser.shutdown(io, .both) catch {};
-}
-
-//
-// Copies everything the reader gets to the writer as it comes, sending each piece at once, until the reader's side closes. A
-// WebSocket's frames have to reach the other side when they are sent, not when a buffer fills.
-//
-fn copyAsItComes(reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
+    var upstream_read_buffer: [64 * 1024]u8 = undefined;
+    var upstream_reader = upstream.reader(io, &upstream_read_buffer);
+    const handles = [_]std.Io.net.Socket.Handle{ browser.socket.handle, upstream.socket.handle };
     while (true) {
-        const piece = reader.peekGreedy(1) catch |err| switch (err) {
-            error.EndOfStream => return,
-            else => return err,
+        const ready = try socket_wait.waitReadableAny(&handles, -1) orelse {
+            continue;
         };
-        try writer.writeAll(piece);
-        try writer.flush();
-        reader.toss(piece.len);
+        const copied = if (ready == 0)
+            copyWhatCame(browser_reader, &upstream_writer.interface)
+        else
+            copyWhatCame(&upstream_reader.interface, browser_writer);
+        copied catch {
+            // Either side has gone, so both are ended.
+            upstream.shutdown(io, .both) catch {};
+            browser.shutdown(io, .both) catch {};
+            return;
+        };
     }
 }
 
 //
-// Serves the page's WebSocket: every message the page sends goes to the core, until the page closes it.
+// Copies what the reader has, which it has because its socket can be read, to the writer and sends it at once: a WebSocket's frames
+// have to reach the other side when they are sent, not when a buffer fills. Fails with EndOfStream when the reader's side has closed.
 //
-fn serveSocket(host: *DevHost, request: *std.http.Server.Request, key: []const u8) !void {
-    var socket = Socket{
-        .web_socket = try request.respondWebSocket(.{
-            .key = key,
-        }),
-    };
-    try socket.web_socket.flush();
-    try connectSocket(host, &socket);
-    defer disconnectSocket(host, &socket);
+fn copyWhatCame(reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
+    const piece = try reader.peekGreedy(1);
+    try writer.writeAll(piece);
+    try writer.flush();
+    reader.toss(piece.len);
+}
+
+//
+// Serves the page's WebSocket on this thread, which owns it: every message the page sends goes to the core through the main thread,
+// and every message the main thread sends this page is written to it, until the page closes it. The thread waits for the socket no
+// longer than socket_wait_ms at a time, so it writes the main thread's messages in between.
+//
+fn serveSocket(connection: Connection, io: std.Io, allocator: std.mem.Allocator, stream: std.Io.net.Stream, request: *std.http.Server.Request, key: []const u8) !void {
+    var web_socket = try request.respondWebSocket(.{
+        .key = key,
+    });
+    try web_socket.flush();
+    var queue = MessageQueue.init();
+    defer queue.deinit();
+    try connection.hub.postReplyTo(io, Hub.page_connected, "", &queue);
+    // The message the page's socket failed on, which goes back to the main thread when the page is let go, ahead of the ones after it.
+    var unwritten: ?[]u8 = null;
+    defer releasePage(connection, io, allocator, &queue, unwritten);
     var pong = PongContext{
-        .host = host,
-        .socket = &socket,
+        .web_socket = &web_socket,
     };
     while (true) {
-        const message = web_socket_lib.readMessage(socket.web_socket.input, host.allocator, message_limit, .{
+        while (queue.tryTake(io, allocator)) |message| {
+            defer allocator.free(message.text);
+            web_socket.writeMessage(message.text, .text) catch |err| {
+                std.debug.print("ziggy dev host: the page's connection failed while a message was written to it: {s}. The message waits for the next page.\n", .{@errorName(err)});
+                unwritten = try allocator.dupe(u8, message.text);
+                return;
+            };
+        }
+        if (web_socket.input.bufferedLen() == 0 and !try socket_wait.waitReadable(stream.socket.handle, socket_wait_ms)) {
+            continue;
+        }
+        const message = web_socket_lib.readMessage(web_socket.input, allocator, message_limit, .{
             .context = &pong,
             .answer = answerPing,
         }) catch |err| switch (err) {
@@ -732,8 +1035,8 @@ fn serveSocket(host: *DevHost, request: *std.http.Server.Request, key: []const u
         };
         switch (message) {
             .data => |text| {
-                defer host.allocator.free(text);
-                postToCore(host, text);
+                defer allocator.free(text);
+                try connection.hub.post(io, Hub.frontend, text);
             },
             .close => return,
         }
@@ -741,13 +1044,51 @@ fn serveSocket(host: *DevHost, request: *std.http.Server.Request, key: []const u
 }
 
 //
-// What replying to a ping needs: the socket to write the pong to, which only the holder of the host's socket mutex writes to.
+// Tells the main thread the page has gone and waits for it to report it will send the page nothing more. The messages it sent meanwhile,
+// which the page did not write, go back to it, to wait for the next page ahead of everything else.
+//
+fn releasePage(connection: Connection, io: std.Io, allocator: std.mem.Allocator, queue: *MessageQueue, unwritten: ?[]u8) void {
+    connection.hub.postReplyTo(io, Hub.page_disconnected, "", queue) catch @panic("out of memory letting a page go");
+    var undelivered: std.ArrayList([]const u8) = .empty;
+    if (unwritten) |text| {
+        undelivered.append(allocator, text) catch @panic("out of memory letting a page go");
+    }
+    defer {
+        for (undelivered.items) |text| {
+            allocator.free(text);
+        }
+        undelivered.deinit(allocator);
+    }
+    while (true) {
+        const message = queue.take(io, allocator, .none) orelse {
+            @panic("ziggy dev host: a page's queue closed while it was let go");
+        };
+        defer allocator.free(message.text);
+        if (message.from == Page.released) {
+            break;
+        }
+        undelivered.append(allocator, allocator.dupe(u8, message.text) catch @panic("out of memory letting a page go")) catch @panic("out of memory letting a page go");
+    }
+    if (undelivered.items.len > 0) {
+        returnUndelivered(connection, io, allocator, undelivered.items) catch @panic("out of memory letting a page go");
+    }
+}
+
+//
+// Sends the main thread messages for the page that were not written, oldest first, to wait for the next page.
+//
+fn returnUndelivered(connection: Connection, io: std.Io, allocator: std.mem.Allocator, texts: []const []const u8) !void {
+    const json = try std.json.Stringify.valueAlloc(allocator, texts, .{});
+    defer allocator.free(json);
+    try connection.hub.post(io, Hub.undelivered, json);
+}
+
+//
+// What replying to a ping needs: the page's socket, which only the thread serving it writes to.
 //
 const PongContext = struct {
-    // The dev host.
-    host: *DevHost,
-    // The socket the ping came on.
-    socket: *Socket,
+    // The page's socket.
+    web_socket: *std.http.Server.WebSocket,
 };
 
 //
@@ -755,7 +1096,5 @@ const PongContext = struct {
 //
 fn answerPing(context: *anyopaque, payload: []const u8) anyerror!void {
     const pong: *PongContext = @ptrCast(@alignCast(context));
-    pong.host.socket_mutex.lockUncancelable(pong.host.io);
-    defer pong.host.socket_mutex.unlock(pong.host.io);
-    try pong.socket.web_socket.writeMessage(payload, .pong);
+    try pong.web_socket.writeMessage(payload, .pong);
 }

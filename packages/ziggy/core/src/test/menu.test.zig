@@ -5,9 +5,11 @@ const windows_actions = @import("ziggy-native-windows-actions");
 //
 // The function of the `.zig` item of the menu below. It is never called: the tests only look it up.
 //
-fn chosen(core: *ziggy.core.Core, arena: std.mem.Allocator) anyerror!void {
-    _ = core;
-    _ = arena;
+fn chosen(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
 }
 
 //

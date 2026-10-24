@@ -24,7 +24,7 @@ pub const app = ziggy.core.App(.{
 
 ## A message handler
 
-A message handler takes the backend, an arena and the message's data parsed into a type of the handler's own and returns the message response. This is the template's, in `backend/src/lib/hello-world.zig`:
+A message handler takes the [standard arguments](app-declaration.md#what-every-handler-is-given) (the handler services, the timers, the Io and an allocator), then the message's data parsed into a payload type of the handler's own, and returns its result, the message response. This is the template's, in `backend/src/lib/hello-world.zig`:
 
 ```zig
 //
@@ -46,71 +46,74 @@ pub const HelloWorldResponse = struct {
 //
 // Handles the frontend's hello-world message: returns a greeting for the name in the message's data, naming the platform the app runs on.
 //
-pub fn helloWorldHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: HelloWorldRequest) !HelloWorldResponse {
-    _ = core;
+pub fn helloWorldHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: HelloWorldRequest) !HelloWorldResponse {
+    _ = services;
+    _ = timers;
+    _ = io;
 
-    // Ziggy turns the response into JSON and sends it back to the frontend. The greeting is allocated from the arena, which is freed once
-    // the response has been sent.
+    // Ziggy turns the result into JSON and sends it back to the frontend.
     return .{
-        .greeting = try std.fmt.allocPrint(arena, "Hello {s}, from Zig on {s}", .{
-            request.name,
+        .greeting = try std.fmt.allocPrint(allocator, "Hello {s}, from Zig on {s}", .{
+            payload.name,
             @tagName(builtin.os.tag),
         }),
     };
 }
 ```
 
-- Before the handler runs, Ziggy parses the message's data into the type of its third parameter with `std.json`. The request can be a struct or any other type `std.json` can parse into, such as `[]const u8` for a bare string.
-- Fields of the data that the request type does not have are ignored. Data that is null is parsed as an empty object when the request is a struct, so a request with no fields, or with every field optional or given a default, needs no data.
+- Before the handler runs, Ziggy parses the message's data into the type of its `payload` parameter with `std.json`. The payload can be a struct or any other type `std.json` can parse into, such as `[]const u8` for a bare string.
+- Fields of the data that the payload type does not have are ignored. Data that is null is parsed as an empty object when the payload is a struct, so a payload with no fields, or with every field optional or given a default, needs no data.
 - Data that does not fit is refused with `InvalidMessageData` and the handler does not run (see "When a handler fails" below).
 - What the handler returns is turned into the JSON of the message response.
-- Define the request and response types beside the handler, so the handler is where its payload is described.
+- Define the payload and result types beside the handler, so the handler is where its data is described.
 
-Allocate from `arena`. It is freed once the handler has returned and the message response has been sent.
+Allocate what the result holds with `allocator`. Ziggy makes no promise about when it is freed, so anything kept after the handler returns is allocated with an allocator of the app's own.
 
-The handler runs on the native app's main thread on every platform, the thread that handles every message from the frontend, in the order the messages arrived (in dev mode, the dev backend handles them on the thread serving the page's connection). It must be quick, because the window waits while it runs. Anything slow, such as reading many files, hashing or waiting on the network, is a task instead. A task never touches the state the main thread keeps: see [Threads and state](tasks.md#threads-and-state).
+The handler runs on the backend's main thread on every platform, a thread Ziggy starts apart from the native app's UI thread, which handles every message from the frontend in the order the messages arrived (in dev mode too). It must be quick, because every message after it waits while it runs. Anything slow, such as reading many files, hashing or waiting on the network, is a task instead. A task never touches the state the main thread keeps: see [Threads and state](tasks.md#threads-and-state).
 
 ## What a handler returns
 
-A handler is one of these forms, where `Request` is the type the data is parsed into and `Response` the type of the response:
+A handler is one of these forms, where `Payload` is the type the data is parsed into and `Result` the type of the response:
 
 ```zig
-fn (core: *ziggy.core.Core, arena: std.mem.Allocator, request: Request) !Response
-fn (core: *ziggy.core.Core, arena: std.mem.Allocator, request: Request) !ziggy.core.Answer(Response)
-fn (core: *ziggy.core.Core, arena: std.mem.Allocator, request: Request, reply: ziggy.core.Reply(Response)) !ziggy.core.Answer(Response)
-fn (core: *ziggy.core.Core, arena: std.mem.Allocator, message: ziggy.core.Message) !ziggy.core.MessageResult
+fn (services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: Payload) !Result
+fn (services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: Payload) !ziggy.core.Response(Result)
+fn (services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: Payload, reply: ziggy.core.Reply(Result)) !ziggy.core.Response(Result)
+fn (services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, message: ziggy.core.Message) !ziggy.core.MessageResult
 ```
 
 What it returns decides the message response:
 
-- A `Response`: sent at once as the message response.
+- A `Result`: sent at once as the message response.
 - `void`: there is nothing to send back. A message with an id still gets a successful message response holding null, so the frontend's `invoke` never waits for ever.
-- A `ziggy.core.Answer(Response)`, one of:
+- A `ziggy.core.Response(Result)`, one of:
   - `.{ .now = value }`: the response, sent at once.
-  - `.{ .task = .{ .task_type = "...", .data = json_text } }`: a task of that type is queued with `data` (JSON text, which `ziggy.json.stringify` makes from any value) as its input. The task's result is the message response. See "A message answered by a task" below.
-  - `.later`: the message is answered afterwards through the handler's `reply` (see "Answering later" below). Only a handler that takes a `reply` may return it: any other handler that returns `.later` fails with `MessageNotAnswered`.
+  - `.{ .task = .{ .task_type = "...", .data = json_text } }`: a task of that type is queued with `data` (JSON text, which `ziggy.json.stringify` makes from any value) as its input. The task's result is the message response. See "A message whose response is a task's result" below.
+  - `.later`: the response is sent afterwards through the handler's `reply` (see "Sending the response later" below). Only a handler that takes a `reply` may return it: any other handler that returns `.later` fails with `MessageNotAnswered`.
 - A `ziggy.core.MessageResult`, from a handler that takes the message unparsed (see "Taking the message unparsed" below).
 
-## Answering later
+## Sending the response later
 
-A handler that cannot answer before it returns, because the answer comes from something it starts and does not wait for, takes a fourth parameter, `reply: ziggy.core.Reply(Response)`, keeps it and returns `.later`. Here `startLookUp` stands for the app's own code, which keeps the reply and answers with it when the look-up ends:
+A handler whose response comes from something it starts and does not wait for takes a sixth parameter, `reply: ziggy.core.Reply(Result)`, keeps it and returns `.later`. Here `startLookUp` stands for the app's own code, which keeps the reply and sends the response with it when the look-up ends:
 
 ```zig
-pub fn lookUpHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: LookUpRequest, reply: ziggy.core.Reply(LookUpResponse)) !ziggy.core.Answer(LookUpResponse) {
-    _ = arena;
-    try startLookUp(core, request.key, reply);
+pub fn lookUpHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: LookUpRequest, reply: ziggy.core.Reply(LookUpResponse)) !ziggy.core.Response(LookUpResponse) {
+    _ = services;
+    _ = io;
+    _ = allocator;
+    try startLookUp(timers, payload.key, reply);
     return .later;
 }
 ```
 
-- The reply is a small value that can be copied and stored anywhere. It answers the message once, from any thread, with `reply.send(value)` or with `reply.fail(err)`, which gives an error response as a handler's error does.
-- Answering a second time is the error `MessageAlreadyAnswered`.
-- A message whose reply is never answered is reported, when the backend shuts down, as a `core-error` system event naming `MessageNotAnswered` and the message's name. The reply must not be used after that.
-- A handler that takes a reply may still return `.now` or `.task` and then must not use the reply. It returns an `Answer` of the same `Response` its `Reply` has, or the build fails.
+- The reply is a small value that can be copied and stored anywhere. It sends the response once, from any thread, with `reply.send(allocator, value)` or with `reply.fail(allocator, err)`, which gives an error response as a handler's error does. The allocator is the calling thread's own and is used only during the call. Either posts the response to the main thread, which sends it.
+- A second response is reported as a `core-error` system event naming `MessageAlreadyAnswered`, and is not sent.
+- A message whose reply never sends a response is reported, when the backend shuts down, as a `core-error` system event naming `MessageNotAnswered` and the message's name. The reply must not be used after that.
+- A handler that takes a reply may still return `.now` or `.task` and then must not use the reply. It returns an `Response` of the same `Result` its `Reply` has, or the build fails.
 
 ## Taking the message unparsed
 
-A handler can take the message as Ziggy received it, with `ziggy.core.Message` as its third parameter, and return a `ziggy.core.MessageResult`. Ziggy's test app answers its `ping` message this way, in `apps/ziggy-test-app/backend/src/lib/handlers.zig`, because it echoes data of any kind without parsing it.
+A handler can take the message as Ziggy received it, with `message: ziggy.core.Message` as its payload, and return a `ziggy.core.MessageResult`. Ziggy's test app handles its `ping` message this way, in `apps/ziggy-test-app/backend/src/lib/handlers.zig`, because it echoes data of any kind without parsing it.
 
 - `message.name` is the message name the frontend sent.
 - `message.data` is the data the frontend sent, as a `std.json.Value`, null when it sent none.
@@ -118,20 +121,9 @@ A handler can take the message as Ziggy received it, with `ziggy.core.Message` a
 
 What it returns:
 
-- `.{ .response = json_text }`: the JSON text of the message response, allocated with the arena. It is sent when the message has an id.
+- `.{ .response = json_text }`: the JSON text of the message response, allocated with the allocator. It is sent when the message has an id.
 - `.none`: as `void` above.
-- `.answered_by_task`: what `core.answerWithTask(message, task_type, data_json)` returns, which queues a task whose result is the message response, as `.task` does.
-
-## Registering a message later
-
-The messages in `.messages` are registered when the backend starts. The app can register more at any point while the backend runs, from any thread, with `core.registerMessage(name, handler)`, which takes a handler function known when the app is built, in any of the forms above. The message is handled from then on.
-
-- A name that is registered already, in `.messages` or by an earlier call, is the error `DuplicateMessage`. The name is printed.
-- It only ever registers an app message. Ziggy's own system messages are kept apart and an app cannot register one.
-
-```zig
-try core.registerMessage("look-up", lookUpHandler);
-```
+- `.{ .task = .{ .task_type = "...", .data = json_text } }`: a task whose result is the message response, as `Response`'s `.task` is. A message sent with `send` has no response, so it is refused with `MessageHasNoId` and nothing is queued.
 
 ## Sending a message from the frontend
 
@@ -160,22 +152,22 @@ An app that can describe a failure in more detail gives `ziggy.core.App` a `desc
 ```zig
 pub fn describeError(err: anyerror) ?[]const u8 {
     if (err == error.Refused) {
-        return "The test app refused, as it was asked to.";
+        return "The test app refused, as the request told it to.";
     }
     return null;
 }
 ```
 
-## A message answered by a task
+## A message whose response is a task's result
 
-A message whose message response takes time is answered by a task, so it does not hold up the other messages: the handler returns `.{ .task = ... }`. The [Tasks](tasks.md#a-message-answered-by-a-task) guide explains how.
+A message whose message response takes time has a task's result as its response, so it does not hold up the other messages: the handler returns `.{ .task = ... }`. The [Tasks](tasks.md#a-message-whose-response-is-a-tasks-result) guide explains how.
 
 ## Sending an event to the frontend
 
-The backend sends an app event with `core.sendEvent(arena, data_json)`, where `data_json` is the JSON text of the event's data. Like a message, an event's data is the app's to lay out, and the template gives it a `type` field. Events have no message name. Here a handler tells the frontend it queued a task:
+The backend sends an app event with the handler services' `sendEvent(allocator, data_json)`, where `data_json` is the JSON text of the event's data. Like a message, an event's data is the app's to lay out, and the template gives it a `type` field. Events have no message name. Here a handler tells the frontend it queued a task:
 
 ```zig
-try core.sendEvent(arena, try ziggy.json.stringify(arena, .{
+try services.sendEvent(allocator, try ziggy.json.stringify(allocator, .{
     .type = "queued-from-app",
     .queued = task_id,
 }));
@@ -210,6 +202,6 @@ Each `on...` call has a `remove...Listener` call beside it that takes the same c
 
 ## See also
 
-- [Tasks](tasks.md): slow work, and a message answered by a task.
+- [Tasks](tasks.md): slow work, and a message whose response is a task's result.
 - [The message bridge](../development/architecture.md#the-message-bridge): how a message and its message response travel between the frontend and the backend, and what they look like on the way.
 - [Claude Code commands](claude-code-commands.md): `/ziggy:add-message`.

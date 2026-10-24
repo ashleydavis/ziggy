@@ -4,38 +4,38 @@ import android.app.Activity;
 import android.content.Intent;
 import android.os.Bundle;
 import android.webkit.WebView;
-import dev.ziggy.nativeapp.ZiggyShell;
+import dev.ziggy.nativeapp.ZiggyNativeApp;
 
 // The Ziggy template's one screen: a web view run by Ziggy's native app. What is the template's own is the name of its backend library
 // and the mobile limits on the backend's threads.
 public final class MainActivity extends Activity {
-    private ZiggyShell shell;
+    private ZiggyNativeApp nativeApp;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         WebView webView = new WebView(this);
         setContentView(webView);
-        shell = new ZiggyShell(this, webView, "ziggy_template", 5, 2);
-        shell.start();
+        nativeApp = new ZiggyNativeApp(this, webView, "ziggy_template", 5, 2);
+        nativeApp.start();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        shell.onResume();
+        nativeApp.onResume();
     }
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (!shell.onActivityResult(requestCode, resultCode, data)) {
+        if (!nativeApp.onActivityResult(requestCode, resultCode, data)) {
             super.onActivityResult(requestCode, resultCode, data);
         }
     }
 
     @Override
     protected void onDestroy() {
-        shell.destroy();
+        nativeApp.destroy();
         super.onDestroy();
     }
 }

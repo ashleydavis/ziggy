@@ -285,6 +285,9 @@ function startAppOwnCode(): void {
 function startPickers(): void {
     const picked = element("picked");
     element("pick-files").addEventListener("click", async () => {
+        picked.textContent = "pick-files: waiting for the dialog";
+        // Lets a test's click get its reply before the dialog is requested: while a dialog is open the backend waits on it.
+        await new Promise(resolve => setTimeout(resolve, 0));
         const paths = await window.ziggy.invoke<string[] | null>("pick-files", {
             title: "Select files",
         });

@@ -6,7 +6,8 @@
 //
 
 const std = @import("std");
-const core_lib = @import("core.zig");
+const services_lib = @import("services.zig");
+const timers_lib = @import("timers.zig");
 const accelerator = @import("accelerator.zig");
 
 //
@@ -31,10 +32,11 @@ pub const StandardAction = enum {
 };
 
 //
-// A Zig function a menu item runs. The core calls it on the thread that handles messages, with the arena of the menu-action
-// message, so slow work queues a task from it. Its error is reported as the error of that message.
+// A Zig function a menu item runs. The main thread calls it with the same standard arguments as a message handler (the handler
+// services, the timers, the Io and the allocator of the menu-action message), with no payload and no reply, so slow work queues a task
+// from it. Its error is reported as the error of that message.
 //
-pub const MenuFn = *const fn (core: *core_lib.Core, arena: std.mem.Allocator) anyerror!void;
+pub const MenuFn = *const fn (services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void;
 
 //
 // What a menu item runs when it is chosen.

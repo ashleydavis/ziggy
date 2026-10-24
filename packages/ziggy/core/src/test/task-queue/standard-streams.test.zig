@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const utils = @import("ziggy").task_queue.utils;
 const standard_streams = utils.standard_streams;
+const MessageQueue = @import("ziggy").core.MessageQueue;
+const ThreadAllocator = @import("ziggy").thread_allocator.ThreadAllocator;
 
 //
 // How much the writer sends through the pipe: many times the pipe's quota, so the pipe fills and writes
@@ -21,19 +23,50 @@ const IPipeReaderResult = struct {
 };
 
 //
-// Waits before reading, then reads the pipe to its end and records how many bytes came through.
+// What the slow reader of the pipe test sends the test's thread: the number of bytes it took and the number of the error it hit, or
+// null. An error's number is the same on every thread of the process.
 //
-fn readPipeSlowly(readEnd: std.Io.File, result: *IPipeReaderResult) void {
-    const io = std.testing.io;
+const PipeReaderReport = struct {
+    byteCount: usize,
+    readError: ?ErrorNumber,
+};
+
+//
+// The number of an error.
+//
+const ErrorNumber = std.meta.Int(.unsigned, @bitSizeOf(anyerror));
+
+//
+// Waits before reading, then reads the pipe to its end, closes it and sends the test's thread, on the queue given, how many bytes came
+// through, as the JSON text of a PipeReaderReport. It owns the read end from when it starts.
+//
+fn readPipeSlowly(readEnd: std.Io.File, replies: *MessageQueue) void {
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    threaded.allocator = allocator;
+    defer threaded.deinit();
+    const io = threaded.io();
+    defer readEnd.close(io);
 
     // Waits so the pipe is full while the writer is still writing.
     utils.sleep.sleep(io, 300) catch {};
     var buffer: [4096]u8 = undefined;
     var fileReader = readEnd.readerStreaming(io, &buffer);
-    result.byteCount = fileReader.interface.discardRemaining() catch |err| {
-        result.readError = err;
-        return;
+    var report: PipeReaderReport = .{
+        .byteCount = 0,
+        .readError = null,
     };
+    if (fileReader.interface.discardRemaining()) |count| {
+        report.byteCount = count;
+    }
+    else |err| {
+        report.readError = @intFromError(err);
+    }
+    const text = std.json.Stringify.valueAlloc(allocator, report, .{}) catch @panic("out of memory");
+    defer allocator.free(text);
+    replies.post(io, 0, text) catch @panic("out of memory replying to the test");
 }
 
 test "the standard streams are the process's own handles" {
@@ -84,7 +117,9 @@ test "a slow reader of an asynchronous pipe gets every byte written to it" {
             .nonblocking = false,
         },
     };
-    defer readEnd.close(io);
+    // The reader's thread owns the read end once it has started, and closes it.
+    var read_end_given = false;
+    defer if (!read_end_given) readEnd.close(io);
 
     // Described the way std.Io.File.stdout() describes every standard handle, then corrected.
     const writeEnd = standard_streams.withActualMode(.{
@@ -95,11 +130,13 @@ test "a slow reader of an asynchronous pipe gets every byte written to it" {
     });
     try std.testing.expect(writeEnd.flags.nonblocking);
 
-    var result: IPipeReaderResult = .{};
+    var replies = MessageQueue.init();
+    defer replies.deinit();
     const reader = try std.Thread.spawn(.{}, readPipeSlowly, .{
         readEnd,
-        &result,
+        &replies,
     });
+    read_end_given = true;
 
     const payload = try std.testing.allocator.alloc(u8, PIPE_TEST_BYTE_COUNT);
     defer std.testing.allocator.free(payload);
@@ -110,6 +147,14 @@ test "a slow reader of an asynchronous pipe gets every byte written to it" {
     const flushResult = fileWriter.interface.flush();
     windows.CloseHandle(writeEnd.handle);
     reader.join();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const reported = replies.take(io, arena_state.allocator(), .none).?;
+    const report = try std.json.parseFromSliceLeaky(PipeReaderReport, arena_state.allocator(), reported.text, .{});
+    const result: IPipeReaderResult = .{
+        .byteCount = report.byteCount,
+        .readError = if (report.readError) |number| @errorFromInt(number) else null,
+    };
 
     try writeResult;
     try flushResult;

@@ -3,68 +3,130 @@ const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
 
 //
-// One client conversation with the control connection, run on its own thread because the reply waits for the frontend.
+// One client conversation with the control connection, run on its own thread because the reply waits for the frontend. The test's
+// thread and the client's share nothing: the client's thread is sent the line to send as a message, and sends back the reply, or that
+// there was none, as a message.
 //
 const Client = struct {
-    // Where the reply goes.
-    allocator: std.mem.Allocator,
     // The port to connect to.
     port: u16,
     // The line to send, without the newline.
     line: []const u8,
-    // The line the connection replied with.
-    answer: ?[]u8,
-    // Whether the connection was closed without a reply.
-    closed_without_answer: bool,
+    // The client thread's messages: the line to send.
+    messages: ziggy.message_queue.MessageQueue,
+    // Where the client thread sends the reply: the line, from 0, or nothing, from 1, when the connection was closed without a reply.
+    results: ziggy.message_queue.MessageQueue,
+    // The client's thread.
+    thread: std.Thread,
+    // The line the connection replied with, once finish has read it, allocated with the testing allocator.
+    response: ?[]u8,
+    // Whether the connection was closed without a reply, once finish has read it.
+    closed_without_response: bool,
 
-    fn run(self: *Client) void {
+    fn init(port: u16, line: []const u8) Client {
+        return .{
+            .port = port,
+            .line = line,
+            .messages = .init(),
+            .results = .init(),
+            .thread = undefined,
+            .response = null,
+            .closed_without_response = false,
+        };
+    }
+
+    //
+    // Starts the client's thread and sends it the line.
+    //
+    fn start(self: *Client) !void {
+        try self.messages.post(std.testing.io, 0, self.line);
+        self.thread = try std.Thread.spawn(.{}, run, .{ &self.messages, &self.results, self.port });
+    }
+
+    //
+    // Waits for the client's thread to end and reads what it sent back.
+    //
+    fn finish(self: *Client) void {
+        self.thread.join();
+        const result = self.results.take(std.testing.io, std.testing.allocator, .none) orelse @panic("the client's result queue closed");
+        if (result.from == 1) {
+            std.testing.allocator.free(result.text);
+            self.closed_without_response = true;
+        }
+        else {
+            self.response = result.text;
+        }
+        self.messages.deinit();
+        self.results.deinit();
+    }
+
+    fn run(messages: *ziggy.message_queue.MessageQueue, results: *ziggy.message_queue.MessageQueue, port: u16) void {
+        var thread_allocator: ziggy.thread_allocator.ThreadAllocator = .init;
+        defer thread_allocator.deinit();
+        const allocator = thread_allocator.allocator();
         var threaded: std.Io.Threaded = .init_single_threaded;
+        threaded.allocator = allocator;
+        defer threaded.deinit();
         const io = threaded.io();
-        const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", self.port) catch @panic("bad address");
+        const line = messages.take(io, allocator, .none) orelse @panic("the client's message queue closed");
+        defer allocator.free(line.text);
+        const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", port) catch @panic("bad address");
         const stream = address.connect(io, .{ .mode = .stream }) catch @panic("could not connect to the control connection");
         defer stream.close(io);
         var read_buffer: [4096]u8 = undefined;
         var write_buffer: [4096]u8 = undefined;
         var reader = stream.reader(io, &read_buffer);
         var writer = stream.writer(io, &write_buffer);
-        writer.interface.writeAll(self.line) catch @panic("write failed");
+        writer.interface.writeAll(line.text) catch @panic("write failed");
         writer.interface.writeAll("\n") catch @panic("write failed");
         writer.interface.flush() catch @panic("write failed");
-        const answer = reader.interface.takeDelimiter('\n') catch {
-            self.closed_without_answer = true;
+        const response = reader.interface.takeDelimiter('\n') catch {
+            results.post(io, 1, "") catch @panic("out of memory");
             return;
         } orelse {
-            self.closed_without_answer = true;
+            results.post(io, 1, "") catch @panic("out of memory");
             return;
         };
-        self.answer = self.allocator.dupe(u8, answer) catch @panic("out of memory");
+        results.post(io, 0, response) catch @panic("out of memory");
     }
 };
 
-fn startControlledCore(shell: *helpers.FakeShell, tmp: *std.testing.TmpDir) !*ziggy.core.Core {
-    var config = shell.config(1, 1);
+fn startControlledCore(native_app: *helpers.FakeNativeApp, tmp: *std.testing.TmpDir) !void {
+    var config = native_app.config(1, 1);
     var port_file_buffer: [256]u8 = undefined;
     const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
     config.test_port_file = port_file.ptr;
-    return try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+}
+
+//
+// The port of the control connection, which it writes to the port file in the test's directory before the core's start returns.
+//
+fn controlPort(tmp: *std.testing.TmpDir) !u16 {
+    var buffer: [32]u8 = undefined;
+    const text = try tmp.dir.readFile(std.testing.io, "port.txt", &buffer);
+    return try std.fmt.parseInt(u16, std.mem.trim(u8, text, "\n"), 10);
 }
 
 //
 // The failed create test's on_create: fails, as an app's would when it cannot make what its handlers need.
 //
-fn failCreate(core: *ziggy.core.Core) anyerror!void {
-    _ = core;
+fn failCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     return error.AppCouldNotStart;
 }
 
 test "an app's on_create that fails in test mode stops the control connection the core started" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    var config = shell.config(1, 1);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
     var port_file_buffer: [256]u8 = undefined;
     const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
@@ -72,328 +134,267 @@ test "an app's on_create that fails in test mode stops the control connection th
     var failing_app = helpers.app;
     failing_app.on_create = failCreate;
     // The testing allocator fails the test if the control connection the core started is left unreleased.
-    try std.testing.expectError(error.AppCouldNotStart, ziggy.core.Core.create(std.testing.allocator, config, failing_app));
+    try std.testing.expectError(error.AppCouldNotStart, native_app.start(std.testing.io, std.testing.allocator, config, failing_app));
 }
 
-test "a command reaches the UI and its answer comes back" {
+test "a command reaches the UI and its result comes back" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"click\",\"dataId\":\"go\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    try shell.expectMessageContaining("\"kind\":\"system\",\"name\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"click\",\"dataId\":\"go\"}}");
-    core.postMessage("{\"kind\":\"system\",\"id\":9,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"clicked\":true}}}");
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"clicked\":true}", client.answer.?);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"click\",\"dataId\":\"go\"}");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    try client.start();
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"click\",\"dataId\":\"go\"}}");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":9,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"clicked\":true}}}");
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"clicked\":true}", client.response.?);
 }
 
 test "the port is written to the port file" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var buffer: [32]u8 = undefined;
-    const text = try tmp.dir.readFile(core.control.?.io, "port.txt", &buffer);
-    const port = try std.fmt.parseInt(u16, std.mem.trim(u8, text, "\n"), 10);
-    try std.testing.expectEqual(core.control.?.port, port);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    // The connection on the port in the file is the control connection: it reads the command and refuses it as invalid.
+    const reply = try responseFor(&tmp, "{\"command\":\"drop\"}");
+    defer std.testing.allocator.free(reply);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", reply);
 }
 
-test "a line that is not JSON is answered with an error and never reaches the UI" {
+test "a line that is not JSON gets an error reply and never reaches the UI" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "this is not json",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.answer.?);
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "this is not json");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.response.?);
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "test-command"));
 }
 
-test "a JSON object with no command field is answered with an error and never reaches the UI" {
+test "a JSON object with no command field gets an error reply and never reaches the UI" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"dataId\":\"x\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.answer.?);
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"dataId\":\"x\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.response.?);
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "test-command"));
 }
 
-test "the quit command calls the shell's quit callback" {
+test "the quit command calls the native app's quit callback" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"quit\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
-    try std.testing.expect(shell.quit_called.load(.acquire));
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"quit\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", client.response.?);
+    try std.testing.expect(native_app.quitCalled(std.testing.io, std.testing.allocator));
 }
 
 test "a core not in test mode has no control connection" {
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try helpers.createCore(&shell, 1, 1);
-    defer core.destroy();
-    try std.testing.expect(core.control == null);
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    var port_file_buffer: [256]u8 = undefined;
+    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
+    config.test_port_file = port_file.ptr;
+    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    // A control connection writes its port to the file before the core's start returns, and none was started.
+    try std.testing.expectError(error.FileNotFound, controlPort(&tmp));
 }
 
 test "a test-result nobody is waiting for is an error reply" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":99,\"result\":1}}");
-    try shell.expectMessageContaining("{\"id\":1,\"ok\":false,\"error\":\"UnexpectedTestResult\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":99,\"result\":1}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"UnexpectedTestResult\"}");
 }
 
 test "a second connection is served while the first stays open, and stopping ends both" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
     var threaded: std.Io.Threaded = .init_single_threaded;
     const io = threaded.io();
-    const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", core.control.?.port);
+    const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", try controlPort(&tmp));
     // The first connection is opened and left open, and sends nothing.
     const first = try address.connect(io, .{ .mode = .stream });
     defer first.close(io);
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "this is not json",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.answer.?);
-    // Destroying the core must not wait for the first connection to close.
-    core.destroy();
+    var client = Client.init(try controlPort(&tmp), "this is not json");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.response.?);
+    // Stopping the core must not wait for the first connection to close.
+    native_app.stop(std.testing.io, std.testing.allocator);
 }
 
-test "a command waits until the UI says it is listening" {
+test "a command is held until the UI reports it is listening" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"ready\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"ready\"}");
+    try client.start();
     // The frontend has not reported it is listening, so the command is not sent to it.
-    shell.sleepMs(300);
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    try shell.expectMessageContaining("\"kind\":\"system\",\"name\":\"test-command\"");
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
+    ziggy.fake_native_app.sleepMs(std.testing.io, 300);
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "test-command"));
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"test-command\"");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", client.response.?);
 }
 
-test "a test's answer for the next dialog is used once and then the shell's dialog is shown" {
+test "a test's paths for the next dialog are used once and then the native app's dialog is shown" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"pick-answer\",\"paths\":[\"/answer/one.txt\",\"/answer/two.txt\"]}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
-    core.postMessage("{\"kind\":\"app\",\"id\":21,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
-    try shell.expectMessageContaining("{\"id\":21,\"ok\":true,\"data\":[\"/answer/one.txt\",\"/answer/two.txt\"]}");
-    core.postMessage("{\"kind\":\"app\",\"id\":22,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
-    try shell.expectMessageContaining("{\"id\":22,\"ok\":true,\"data\":[\"kind0\",\"Title\",\"-\"]}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"pick-answer\",\"paths\":[\"/picked/one.txt\",\"/picked/two.txt\"]}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", client.response.?);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"app\",\"id\":21,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":21,\"ok\":true,\"data\":[\"/picked/one.txt\",\"/picked/two.txt\"]}");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"app\",\"id\":22,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":22,\"ok\":true,\"data\":[\"kind0\",\"Title\",\"-\"]}");
 }
 
-test "an answer for a dialog that is not an array of strings is refused" {
+test "paths for a dialog that are not an array of strings are refused" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"pick-answer\",\"paths\":[1,2]}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.answer.?);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"pick-answer\",\"paths\":[1,2]}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.response.?);
 }
 
-test "the menu command chooses the menu item through the shell's callback once the UI is listening" {
+test "the menu command chooses the menu item through the native app's callback once the UI is listening" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"menu\",\"action\":\"zoom-in\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"menu\",\"action\":\"zoom-in\"}");
+    try client.start();
     // The frontend is not listening yet, so nothing is chosen.
-    shell.sleepMs(300);
-    try std.testing.expectEqual(@as(usize, 0), shell.chosen_actions.items.len);
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
-    try std.testing.expectEqualStrings("zoom-in\n", shell.chosen_actions.items);
+    ziggy.fake_native_app.sleepMs(std.testing.io, 300);
+    const before = try native_app.chosenActions(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(before);
+    try std.testing.expectEqualStrings("", before);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", client.response.?);
+    const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(actions);
+    try std.testing.expectEqualStrings("zoom-in\n", actions);
 }
 
-test "choosing reload makes commands wait for the UI to say it is listening again" {
+test "choosing reload holds commands until the UI reports it is listening again" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    var reload = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"menu\",\"action\":\"reload\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const reload_thread = try std.Thread.spawn(.{}, Client.run, .{&reload});
-    reload_thread.join();
-    defer if (reload.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"ok\":true}", reload.answer.?);
-    var next = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"ready\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const next_thread = try std.Thread.spawn(.{}, Client.run, .{&next});
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    var reload = Client.init(try controlPort(&tmp), "{\"command\":\"menu\",\"action\":\"reload\"}");
+    try reload.start();
+    reload.finish();
+    defer if (reload.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", reload.response.?);
+    var next = Client.init(try controlPort(&tmp), "{\"command\":\"ready\"}");
+    try next.start();
     // The frontend is reloading, so the next command is held back and not sent to it.
-    shell.sleepMs(300);
-    try std.testing.expectEqual(@as(usize, 0), shell.countContaining("test-command"));
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    try shell.expectMessageContaining("\"kind\":\"system\",\"name\":\"test-command\"");
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
-    next_thread.join();
-    defer if (next.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"ok\":true}", next.answer.?);
+    ziggy.fake_native_app.sleepMs(std.testing.io, 300);
+    try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "test-command"));
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"test-command\"");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"ok\":true}}}");
+    next.finish();
+    defer if (next.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", next.response.?);
 }
 
-test "the menu command on a shell with no menu callback says what is missing" {
+test "the menu command on a native app with no menu callback reports what is missing" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    var config = shell.config(1, 1);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
     var port_file_buffer: [256]u8 = undefined;
     const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
     config.test_port_file = port_file.ptr;
-    config.menu_action = null;
-    const core = try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"menu\",\"action\":\"zoom-in\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"HostCallbackMissing\"}", client.answer.?);
+    config.has_menu_action = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"menu\",\"action\":\"zoom-in\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"NativeCallMissing\"}", client.response.?);
 }
 
-test "the drop command records a drop the way the shell does, so the UI can ask for the paths of a drop" {
+test "the drop command records a drop the way the native app does, so the UI can request the paths of a drop" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(std.testing.io, .{
@@ -404,39 +405,33 @@ test "the drop command records a drop the way the shell does, so the UI can ask 
     defer std.testing.allocator.free(directory_path);
     const path = try std.fs.path.join(std.testing.allocator, &.{ directory_path, "dropped.txt" });
     defer std.testing.allocator.free(path);
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
     // The path is written as a JSON string, so a Windows path's backslashes are escaped.
     const line = try ziggy.json.stringify(std.testing.allocator, .{
         .command = "drop",
         .paths = &[_][]const u8{path},
     });
     defer std.testing.allocator.free(line);
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = line,
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
-    core.postMessage("{\"kind\":\"system\",\"id\":31,\"name\":\"get-dropped-paths\",\"data\":null}");
+    var client = Client.init(try controlPort(&tmp), line);
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", client.response.?);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":31,\"name\":\"get-dropped-paths\",\"data\":null}");
     const expected = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 31,
         .ok = true,
         .data = &[_][]const u8{path},
     });
     defer std.testing.allocator.free(expected);
-    try shell.expectMessageContaining(expected);
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, expected);
 }
 
-test "a drop that names an element is also sent to the UI, and the UI's answer is the answer" {
+test "a drop that names an element is also sent to the UI, and the UI's result is the reply" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(std.testing.io, .{
@@ -447,239 +442,209 @@ test "a drop that names an element is also sent to the UI, and the UI's answer i
     defer std.testing.allocator.free(directory_path);
     const path = try std.fs.path.join(std.testing.allocator, &.{ directory_path, "dropped.txt" });
     defer std.testing.allocator.free(path);
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
     const line = try ziggy.json.stringify(std.testing.allocator, .{
         .command = "drop",
         .dataId = "zone",
         .paths = &[_][]const u8{path},
     });
     defer std.testing.allocator.free(line);
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = line,
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    try shell.expectMessageContaining("\"kind\":\"system\",\"name\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"drop\",\"dataId\":\"zone\"");
-    core.postMessage("{\"kind\":\"system\",\"id\":9,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"dropped\":true}}}");
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"dropped\":true}", client.answer.?);
-    core.postMessage("{\"kind\":\"system\",\"id\":32,\"name\":\"get-dropped-paths\",\"data\":null}");
+    var client = Client.init(try controlPort(&tmp), line);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    try client.start();
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"drop\",\"dataId\":\"zone\"");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":9,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":{\"dropped\":true}}}");
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"dropped\":true}", client.response.?);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":32,\"name\":\"get-dropped-paths\",\"data\":null}");
     const expected = try ziggy.json.stringify(std.testing.allocator, .{
         .id = 32,
         .ok = true,
         .data = &[_][]const u8{path},
     });
     defer std.testing.allocator.free(expected);
-    try shell.expectMessageContaining(expected);
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, expected);
 }
 
-test "the screenshot command asks the shell to write a picture of the window to the path" {
+test "the screenshot command has the native app write a picture of the window to the path" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"ok\":true}", client.answer.?);
-    try std.testing.expectEqualStrings("/shots/home.png\n", shell.screenshot_paths.items);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", client.response.?);
+    const paths = try native_app.screenshotPaths(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(paths);
+    try std.testing.expectEqualStrings("/shots/home.png\n", paths);
 }
 
-test "the screenshot command answers with the reason when the shell cannot capture the window" {
+test "the screenshot command replies with the reason when the native app cannot capture the window" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"screenshot\",\"outputPath\":\"/shots/refused.png\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"The window cannot be captured.\"}", client.answer.?);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"screenshot\",\"outputPath\":\"/shots/refused.png\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"The window cannot be captured.\"}", client.response.?);
 }
 
 test "the screenshot command without an output path is an invalid command and captures nothing" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"screenshot\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.answer.?);
-    try std.testing.expectEqual(@as(usize, 0), shell.screenshot_paths.items.len);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"screenshot\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.response.?);
+    const paths = try native_app.screenshotPaths(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(paths);
+    try std.testing.expectEqualStrings("", paths);
 }
 
-test "the screenshot command on a shell with no screenshot callback says what is missing" {
+test "the screenshot command on a native app with no screenshot callback reports what is missing" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    var config = shell.config(1, 1);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
     var port_file_buffer: [256]u8 = undefined;
     const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
     config.test_port_file = port_file.ptr;
-    config.screenshot = null;
-    const core = try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
-    defer core.destroy();
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}",
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    defer if (client.answer) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"HostCallbackMissing\"}", client.answer.?);
+    config.has_screenshot = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(try controlPort(&tmp), "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"NativeCallMissing\"}", client.response.?);
 }
 
 //
 // Sends one line to the control connection of a core and returns its reply, allocated with the testing allocator.
 //
-fn answerFor(core: *ziggy.core.Core, line: []const u8) ![]u8 {
-    var client = Client{
-        .allocator = std.testing.allocator,
-        .port = core.control.?.port,
-        .line = line,
-        .answer = null,
-        .closed_without_answer = false,
-    };
-    const thread = try std.Thread.spawn(.{}, Client.run, .{&client});
-    thread.join();
-    return client.answer orelse error.ClosedWithoutAnswer;
+fn responseFor(tmp: *std.testing.TmpDir, line: []const u8) ![]u8 {
+    var client = Client.init(try controlPort(tmp), line);
+    try client.start();
+    client.finish();
+    return client.response orelse error.ClosedWithoutResponse;
 }
 
-test "the quit command on a shell with no quit callback says what is missing" {
+test "the quit command on a native app with no quit callback reports what is missing" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    var config = shell.config(1, 1);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
     var port_file_buffer: [256]u8 = undefined;
     const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
     config.test_port_file = port_file.ptr;
-    config.quit = null;
-    const core = try ziggy.core.Core.create(std.testing.allocator, config, helpers.app);
-    defer core.destroy();
-    const answer = try answerFor(core, "{\"command\":\"quit\"}");
-    defer std.testing.allocator.free(answer);
-    try std.testing.expectEqualStrings("{\"error\":\"HostCallbackMissing\"}", answer);
+    config.has_quit = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    const response = try responseFor(&tmp, "{\"command\":\"quit\"}");
+    defer std.testing.allocator.free(response);
+    try std.testing.expectEqualStrings("{\"error\":\"NativeCallMissing\"}", response);
 }
 
 test "the menu command without an action is an invalid command and chooses nothing" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    const answer = try answerFor(core, "{\"command\":\"menu\"}");
-    defer std.testing.allocator.free(answer);
-    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", answer);
-    try std.testing.expectEqual(@as(usize, 0), shell.chosen_actions.items.len);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    const response = try responseFor(&tmp, "{\"command\":\"menu\"}");
+    defer std.testing.allocator.free(response);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", response);
+    const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(actions);
+    try std.testing.expectEqualStrings("", actions);
 }
 
 test "the drop command without paths is an invalid command" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    const answer = try answerFor(core, "{\"command\":\"drop\"}");
-    defer std.testing.allocator.free(answer);
-    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", answer);
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    const response = try responseFor(&tmp, "{\"command\":\"drop\"}");
+    defer std.testing.allocator.free(response);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", response);
 }
 
-test "an answer for a dialog with no paths, or with paths that are not an array, is refused" {
+test "a dialog result with no paths, or with paths that are not an array, is refused" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    const missing = try answerFor(core, "{\"command\":\"pick-answer\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    const missing = try responseFor(&tmp, "{\"command\":\"pick-answer\"}");
     defer std.testing.allocator.free(missing);
     try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", missing);
-    const not_array = try answerFor(core, "{\"command\":\"pick-answer\",\"paths\":\"/one.txt\"}");
+    const not_array = try responseFor(&tmp, "{\"command\":\"pick-answer\",\"paths\":\"/one.txt\"}");
     defer std.testing.allocator.free(not_array);
     try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", not_array);
 }
 
-test "a second answer for the next dialog replaces the first" {
+test "second paths for the next dialog replace the first" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    const first = try answerFor(core, "{\"command\":\"pick-answer\",\"paths\":[\"/first.txt\"]}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    const first = try responseFor(&tmp, "{\"command\":\"pick-answer\",\"paths\":[\"/first.txt\"]}");
     defer std.testing.allocator.free(first);
     try std.testing.expectEqualStrings("{\"ok\":true}", first);
-    const second = try answerFor(core, "{\"command\":\"pick-answer\",\"paths\":[\"/second.txt\"]}");
+    const second = try responseFor(&tmp, "{\"command\":\"pick-answer\",\"paths\":[\"/second.txt\"]}");
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualStrings("{\"ok\":true}", second);
-    core.postMessage("{\"kind\":\"app\",\"id\":31,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
-    try shell.expectMessageContaining("{\"id\":31,\"ok\":true,\"data\":[\"/second.txt\"]}");
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"app\",\"id\":31,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":31,\"ok\":true,\"data\":[\"/second.txt\"]}");
 }
 
 test "a test-result without a request id is an error reply" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
-    var shell: helpers.FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try startControlledCore(&shell, &tmp);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":5,\"name\":\"test-result\",\"data\":{\"result\":null}}");
-    try shell.expectMessageContaining("{\"id\":5,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"requestId\\\" is missing\"}");
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &tmp);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":5,\"name\":\"test-result\",\"data\":{\"result\":null}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":5,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"requestId\\\" is missing\"}");
 }

@@ -5,190 +5,235 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
 
-const core_module = ziggy.core;
+const core = ziggy.core;
 const task_runner = ziggy.task_runner;
+const TaskServices = task_runner.TaskServices;
+const TaskContext = task_runner.TaskContext;
+const HandlerServices = core.HandlerServices;
+const Timers = ziggy.timers.Timers;
+const Raw = ziggy.json.Raw;
 
 //
 // A fake native app that records every message the core delivers.
 //
-pub const FakeShell = ziggy.fake_shell.FakeShell;
+pub const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
+//
 // Sleeps for a task, returning error.Cancelled early when the task is cancelled.
 //
-pub fn sleepOrCancel(context: *task_runner.TaskContext, milliseconds: i64) !void {
+pub fn sleepOrCancel(services: TaskServices, io: std.Io, allocator: std.mem.Allocator, milliseconds: i64) !void {
     var remaining = milliseconds;
     while (remaining > 0) : (remaining -= 1) {
-        try context.checkCancelled();
-        try context.io().sleep(.fromMilliseconds(1), .awake);
+        try services.checkCancelled(io, allocator);
+        try io.sleep(.fromMilliseconds(1), .awake);
     }
-    try context.checkCancelled();
+    try services.checkCancelled(io, allocator);
 }
 
-fn quickTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    try context.sendEvent(.{ .text = "hello" });
-    return try context.arena.dupe(u8, "\"done\"");
+fn quickTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
+    _ = timers;
+    _ = context;
+    _ = payload;
+    try services.sendEvent(io, allocator, .{ .text = "hello" });
+    return "done";
 }
 
-fn spinTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
+fn spinTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = timers;
+    _ = context;
+    _ = payload;
     var step: u32 = 0;
     while (true) : (step += 1) {
-        try context.checkCancelled();
-        try context.sendEvent(.{ .step = step });
-        try context.io().sleep(.fromMilliseconds(2), .awake);
+        try services.checkCancelled(io, allocator);
+        try services.sendEvent(io, allocator, .{ .step = step });
+        try io.sleep(.fromMilliseconds(2), .awake);
     }
 }
 
-fn failTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
+fn failTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     _ = context;
-    _ = data;
+    _ = payload;
     return error.TestFailure;
 }
 
-fn sleepTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const milliseconds = ziggy.json.getInteger(data, "ms") orelse 0;
-    const name = ziggy.json.getString(data, "name") orelse "sleep";
-    try context.sendEvent(.{ .start = name });
-    try sleepOrCancel(context, milliseconds);
-    try context.sendEvent(.{ .end = name });
-    return null;
+fn sleepTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = timers;
+    _ = context;
+    const milliseconds = ziggy.json.getInteger(payload, "ms") orelse 0;
+    const name = ziggy.json.getString(payload, "name") orelse "sleep";
+    try services.sendEvent(io, allocator, .{ .start = name });
+    try sleepOrCancel(services, io, allocator, milliseconds);
+    try services.sendEvent(io, allocator, .{ .end = name });
 }
 
-fn parentTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const children = ziggy.json.getInteger(data, "children") orelse 0;
-    const child_ms = ziggy.json.getInteger(data, "childMs") orelse 5;
-    const parent_name = ziggy.json.getString(data, "name") orelse "parent";
+fn parentTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = context;
+    const children = ziggy.json.getInteger(payload, "children") orelse 0;
+    const child_ms = ziggy.json.getInteger(payload, "childMs") orelse 5;
+    const parent_name = ziggy.json.getString(payload, "name") orelse "parent";
     var index: i64 = 0;
+    var ids: std.ArrayList([]const u8) = .empty;
+    defer ids.deinit(allocator);
     while (index < children) : (index += 1) {
-        _ = try context.queueChild("child", .{ .name = parent_name, .ms = child_ms }, null);
+        try ids.append(allocator, try services.queueChild(io, allocator, timers, "child", .{ .name = parent_name, .ms = child_ms }, null));
     }
-    context.awaitAllTasks();
-    try context.sendEvent(.{ .allChildrenDone = parent_name });
-    return null;
+    for (ids.items) |id| {
+        _ = try services.awaitTask(io, allocator, timers, id);
+    }
+    try services.sendEvent(io, allocator, .{ .allChildrenDone = parent_name });
 }
 
-fn awaitOneTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    const first = try context.queueChild("child-result", .{}, null);
-    const second = try context.queueChild("fail", .{}, null);
-    const first_completion = try context.awaitTask(first);
-    const second_completion = try context.awaitTask(second);
-    return try ziggy.json.stringify(context.arena, .{
-        .first = @tagName(first_completion.status),
-        .firstResult = ziggy.json.Raw{ .text = first_completion.result_json orelse "null" },
-        .second = @tagName(second_completion.status),
-        .secondError = second_completion.error_message orelse "",
-    });
+fn awaitOneTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !Raw {
+    _ = context;
+    _ = payload;
+    const first = try services.queueChild(io, allocator, timers, "child-result", .{}, null);
+    const second = try services.queueChild(io, allocator, timers, "fail", .{}, null);
+    const first_completion = try services.awaitTask(io, allocator, timers, first);
+    const second_completion = try services.awaitTask(io, allocator, timers, second);
+    return .{
+        .text = try ziggy.json.stringify(allocator, .{
+            .first = @tagName(first_completion.status),
+            .firstResult = Raw{ .text = first_completion.result_json orelse "null" },
+            .second = @tagName(second_completion.status),
+            .secondError = second_completion.error_message orelse "",
+        }),
+    };
 }
 
-fn runChildrenInTurnTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+fn runChildrenInTurnTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !Raw {
+    _ = context;
+    _ = payload;
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
-    const allocator = arena_state.allocator();
-    const first = try context.runChild(allocator, "child-result", .{}, null);
-    const second = try context.runChild(allocator, "fail", .{}, null);
-    const third = try context.runChild(allocator, "child-result", .{}, null);
-    return try ziggy.json.stringify(context.arena, .{
-        .first = @tagName(first.status),
-        .firstResult = ziggy.json.Raw{ .text = first.result_json orelse "null" },
-        .second = @tagName(second.status),
-        .secondError = second.error_message orelse "",
-        .third = @tagName(third.status),
-        .thirdResult = ziggy.json.Raw{ .text = third.result_json orelse "null" },
-    });
+    const child_allocator = arena_state.allocator();
+    const first = try services.runChild(io, allocator, timers, child_allocator, "child-result", .{}, null);
+    const second = try services.runChild(io, allocator, timers, child_allocator, "fail", .{}, null);
+    const third = try services.runChild(io, allocator, timers, child_allocator, "child-result", .{}, null);
+    return .{
+        .text = try ziggy.json.stringify(allocator, .{
+            .first = @tagName(first.status),
+            .firstResult = Raw{ .text = first.result_json orelse "null" },
+            .second = @tagName(second.status),
+            .secondError = second.error_message orelse "",
+            .third = @tagName(third.status),
+            .thirdResult = Raw{ .text = third.result_json orelse "null" },
+        }),
+    };
 }
 
-fn childResultTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    return try context.arena.dupe(u8, "\"child answer\"");
+fn childResultTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = context;
+    _ = payload;
+    return "child result";
 }
 
-fn childTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const milliseconds = ziggy.json.getInteger(data, "ms") orelse 0;
-    const name = ziggy.json.getString(data, "name") orelse "child";
-    try context.sendEvent(.{ .childStart = name });
-    try sleepOrCancel(context, milliseconds);
-    try context.sendEvent(.{ .childEnd = name });
-    return null;
+fn childTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = timers;
+    _ = context;
+    const milliseconds = ziggy.json.getInteger(payload, "ms") orelse 0;
+    const name = ziggy.json.getString(payload, "name") orelse "child";
+    try services.sendEvent(io, allocator, .{ .childStart = name });
+    try sleepOrCancel(services, io, allocator, milliseconds);
+    try services.sendEvent(io, allocator, .{ .childEnd = name });
 }
 
-fn blockedParentTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    _ = try context.queueChild("child", .{ .name = "blocked", .ms = 100000 }, null);
-    _ = try context.queueChild("child", .{ .name = "blocked", .ms = 100000 }, null);
-    context.awaitAllTasks();
-    try context.checkCancelled();
-    return null;
+fn blockedParentTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = context;
+    _ = payload;
+    const first = try services.queueChild(io, allocator, timers, "child", .{ .name = "blocked", .ms = 100000 }, null);
+    const second = try services.queueChild(io, allocator, timers, "child", .{ .name = "blocked", .ms = 100000 }, null);
+    _ = try services.awaitTask(io, allocator, timers, first);
+    _ = try services.awaitTask(io, allocator, timers, second);
+    try services.checkCancelled(io, allocator);
 }
 
-fn flooderTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const count = ziggy.json.getInteger(data, "count") orelse 0;
+fn flooderTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = timers;
+    _ = context;
+    const count = ziggy.json.getInteger(payload, "count") orelse 0;
     var index: i64 = 0;
     while (index < count) : (index += 1) {
-        try context.sendEvent(.{ .seq = index });
+        try services.sendEvent(io, allocator, .{ .seq = index });
     }
-    return null;
+}
+
+fn pickOpenTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !Raw {
+    _ = context;
+    const title: ?[]const u8 = if (payload == .string) payload.string else null;
+    return .{
+        .text = try services.pickPaths(io, allocator, timers, .open_files, title, null),
+    };
+}
+
+fn pickSaveTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !Raw {
+    _ = context;
+    const initial_name: ?[]const u8 = if (payload == .string) payload.string else null;
+    return .{
+        .text = try services.pickPaths(io, allocator, timers, .save_file, null, initial_name),
+    };
 }
 
 //
 // The task handlers the tests register.
 //
 pub const task_handlers = [_]task_runner.TaskHandlerEntry{
-    .{ .name = "quick", .handler = quickTask },
-    .{ .name = "spin", .handler = spinTask },
-    .{ .name = "fail", .handler = failTask },
-    .{ .name = "sleep", .handler = sleepTask },
-    .{ .name = "parent", .handler = parentTask },
-    .{ .name = "child", .handler = childTask },
-    .{ .name = "child-result", .handler = childResultTask },
-    .{ .name = "await-one", .handler = awaitOneTask },
-    .{ .name = "run-children-in-turn", .handler = runChildrenInTurnTask },
-    .{ .name = "blocked-parent", .handler = blockedParentTask },
-    .{ .name = "flooder", .handler = flooderTask },
-    .{ .name = "pick-open", .handler = pickOpenTask },
-    .{ .name = "pick-save", .handler = pickSaveTask },
-    .{ .name = "keep-sleep", .handler = sleepTask, .kind = .keep_alive },
-    .{ .name = "keep-parent", .handler = parentTask, .kind = .keep_alive },
+    .{ .name = "quick", .handler = task_runner.wrapTask("quick", quickTask) },
+    .{ .name = "spin", .handler = task_runner.wrapTask("spin", spinTask) },
+    .{ .name = "fail", .handler = task_runner.wrapTask("fail", failTask) },
+    .{ .name = "sleep", .handler = task_runner.wrapTask("sleep", sleepTask) },
+    .{ .name = "parent", .handler = task_runner.wrapTask("parent", parentTask) },
+    .{ .name = "child", .handler = task_runner.wrapTask("child", childTask) },
+    .{ .name = "child-result", .handler = task_runner.wrapTask("child-result", childResultTask) },
+    .{ .name = "await-one", .handler = task_runner.wrapTask("await-one", awaitOneTask) },
+    .{ .name = "run-children-in-turn", .handler = task_runner.wrapTask("run-children-in-turn", runChildrenInTurnTask) },
+    .{ .name = "blocked-parent", .handler = task_runner.wrapTask("blocked-parent", blockedParentTask) },
+    .{ .name = "flooder", .handler = task_runner.wrapTask("flooder", flooderTask) },
+    .{ .name = "pick-open", .handler = task_runner.wrapTask("pick-open", pickOpenTask) },
+    .{ .name = "pick-save", .handler = task_runner.wrapTask("pick-save", pickSaveTask) },
+    .{ .name = "keep-sleep", .handler = task_runner.wrapTask("keep-sleep", sleepTask), .kind = .keep_alive },
+    .{ .name = "keep-parent", .handler = task_runner.wrapTask("keep-parent", parentTask), .kind = .keep_alive },
 };
-fn pickOpenTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const title: ?[]const u8 = if (data == .string) data.string else null;
-    return try context.pickPaths(.open_files, title, null);
-}
-
-fn pickSaveTask(context: *task_runner.TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const initial_name: ?[]const u8 = if (data == .string) data.string else null;
-    return try context.pickPaths(.save_file, null, initial_name);
-}
-
 
 //
 // echo: the message response is the message's data, unparsed.
 //
-fn echoHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
-    _ = core;
+fn echoHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: core.Message) !core.MessageResult {
+    _ = services;
+    _ = timers;
+    _ = io;
     return .{
-        .response = try ziggy.json.stringify(arena, message.data),
+        .response = try ziggy.json.stringify(allocator, message.data),
     };
 }
 
 //
 // fail: fails with error.HandlerFailed, whatever the data.
 //
-fn failHandler(core: *core_module.Core, arena: std.mem.Allocator, request: std.json.Value) anyerror!void {
-    _ = core;
-    _ = arena;
-    _ = request;
+fn failHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: std.json.Value) !void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
     return error.HandlerFailed;
 }
 
 //
 // none: returns none, so a message with an id gets an empty successful message response.
 //
-fn noneHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
-    _ = core;
-    _ = arena;
+fn noneHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: core.Message) !core.MessageResult {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     _ = message;
     return .none;
 }
@@ -196,35 +241,47 @@ fn noneHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_
 //
 // name: the message response is the message's name, so a test can see the name reached the handler unchanged.
 //
-fn nameHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
-    _ = core;
+fn nameHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: core.Message) !core.MessageResult {
+    _ = services;
+    _ = timers;
+    _ = io;
     return .{
-        .response = try ziggy.json.stringify(arena, message.name),
+        .response = try ziggy.json.stringify(allocator, message.name),
     };
 }
-
 
 //
 // raw: the message response is the message's name, id and data as they arrived, so a test can see the handler that takes
 // ziggy.core.Message gets the message unparsed.
 //
-fn rawHandler(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
-    _ = core;
+fn rawHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: core.Message) !core.MessageResult {
+    _ = services;
+    _ = timers;
+    _ = io;
     return .{
-        .response = try ziggy.json.stringify(arena, .{
+        .response = try ziggy.json.stringify(allocator, .{
             .name = message.name,
             .id = message.id,
             .data = message.data,
         }),
     };
 }
+
 //
-// Makes the handler of a message answered by a task of the given type, whose input is the message's data.
+// Makes the handler of a message whose response is the result of a task of the given type, whose input is the message's data.
 //
-fn answeredByTask(comptime task_type: []const u8) fn (core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
+fn respondedByTask(comptime task_type: []const u8) fn (services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: core.Message) anyerror!core.MessageResult {
     return struct {
-        fn handle(core: *core_module.Core, arena: std.mem.Allocator, message: core_module.Message) anyerror!core_module.MessageResult {
-            return try core.answerWithTask(message, task_type, try ziggy.json.stringify(arena, message.data));
+        fn handle(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: core.Message) anyerror!core.MessageResult {
+            _ = services;
+            _ = timers;
+            _ = io;
+            return .{
+                .task = .{
+                    .task_type = task_type,
+                    .data = try ziggy.json.stringify(allocator, message.data),
+                },
+            };
         }
     }.handle;
 }
@@ -252,47 +309,62 @@ pub const GreetResponse = struct {
 };
 
 //
-// greet: a handler with a typed request and response, which answers with a greeting built from the request's fields.
+// greet: a handler with a typed payload and result, whose response is a greeting built from the payload's fields.
 //
-fn greetHandler(core: *core_module.Core, arena: std.mem.Allocator, request: GreetRequest) !GreetResponse {
-    _ = core;
+fn greetHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: GreetRequest) !GreetResponse {
+    _ = services;
+    _ = timers;
+    _ = io;
     return .{
-        .text = try std.fmt.allocPrint(arena, "Hello {s}{s}", .{ request.title orelse "", request.name }),
-        .times = request.times,
+        .text = try std.fmt.allocPrint(allocator, "Hello {s}{s}", .{ payload.title orelse "", payload.name }),
+        .times = payload.times,
     };
 }
 
 //
-// forget: a handler with a typed request that returns nothing, so a message with an id gets a successful message response
-// holding null. It delivers what it was given, so a test can see it ran and with which data.
+// forget: a handler with a typed payload that returns nothing, so a message with an id gets a successful message response holding
+// null. It sends an app event of what it was given, so a test can see it ran and with which data.
 //
-fn forgetHandler(core: *core_module.Core, arena: std.mem.Allocator, request: GreetRequest) !void {
-    core.deliver(try std.fmt.allocPrint(arena, "forgot {s} {d}", .{ request.name, request.times }));
+fn forgetHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: GreetRequest) !void {
+    _ = timers;
+    try services.sendEvent(io, allocator, try ziggy.json.stringify(allocator, try std.fmt.allocPrint(allocator, "forgot {s} {d}", .{ payload.name, payload.times })));
 }
 
 //
-// count: a handler whose request is not a struct.
+// count: a handler whose payload is not a struct.
 //
-fn countHandler(core: *core_module.Core, arena: std.mem.Allocator, request: []const u32) !usize {
-    _ = core;
-    _ = arena;
-    return request.len;
+fn countHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: []const u32) !usize {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    return payload.len;
 }
 
 //
-// The function of the tests' `.zig` menu item "zig-item": it delivers a line, so a test can see it ran on this core.
+// The function of the tests' `.zig` menu item "zig-item": it sends an app event, so a test can see it ran on this core.
 //
-fn menuItemRan(core: *core_module.Core, arena: std.mem.Allocator) anyerror!void {
-    _ = arena;
-    core.deliver("{\"data\":\"the menu item's function ran\"}");
+fn menuItemRan(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+    _ = timers;
+    try services.sendEvent(io, allocator, "\"the menu item's function ran\"");
+}
+
+//
+// send-app-event: sends the frontend the message's data as an app event with the handler services' sendEvent.
+//
+fn sendAppEventHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: std.json.Value) !void {
+    _ = timers;
+    try services.sendEvent(io, allocator, try ziggy.json.stringify(allocator, payload));
 }
 
 //
 // The function of the tests' `.zig` menu item "failing-item", which fails.
 //
-fn menuItemFails(core: *core_module.Core, arena: std.mem.Allocator) anyerror!void {
-    _ = core;
-    _ = arena;
+fn menuItemFails(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     return error.MenuItemFailed;
 }
 
@@ -352,12 +424,12 @@ pub const menu: []const ziggy.menu.Menu = &.{
 
 //
 // The tests' messages: echo, fail, none, name, greet, forget, count, and quick-request, fail-request, pick-open-request and
-// pick-save-request, which are answered by the task quick, fail, pick-open or pick-save. App wants the task types as a struct
-// literal, and the tests also add task types of their own to the list in task_handlers, so the app takes that list after App has
-// made it.
+// pick-save-request, whose response is the result of the task quick, fail, pick-open or pick-save. App wants the task types as a
+// struct literal, and the tests also add task types of their own to the list in task_handlers, so the app takes that list after App
+// has made it.
 //
 pub const app = registered: {
-    var registered = core_module.App(.{
+    var registered = core.App(.{
         .messages = .{
             .echo = echoHandler,
             .fail = failHandler,
@@ -367,10 +439,11 @@ pub const app = registered: {
             .greet = greetHandler,
             .forget = forgetHandler,
             .count = countHandler,
-            .@"quick-request" = answeredByTask("quick"),
-            .@"fail-request" = answeredByTask("fail"),
-            .@"pick-open-request" = answeredByTask("pick-open"),
-            .@"pick-save-request" = answeredByTask("pick-save"),
+            .@"quick-request" = respondedByTask("quick"),
+            .@"fail-request" = respondedByTask("fail"),
+            .@"pick-open-request" = respondedByTask("pick-open"),
+            .@"pick-save-request" = respondedByTask("pick-save"),
+            .@"send-app-event" = sendAppEventHandler,
         },
         .tasks = .{},
         .menu = menu,
@@ -386,8 +459,8 @@ pub const app = registered: {
 };
 
 //
-// Creates a core on the fake native app.
+// Starts a core on the fake native app, with the test thread's Io and allocator. The test stops it with `native_app.stop`.
 //
-pub fn createCore(shell: *FakeShell, worker_threads: u32, max_children: u32) !*core_module.Core {
-    return try core_module.Core.create(std.testing.allocator, shell.config(worker_threads, max_children), app);
+pub fn createCore(native_app: *FakeNativeApp, worker_threads: u32, max_children: u32) !void {
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(worker_threads, max_children), app);
 }

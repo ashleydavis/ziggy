@@ -64,8 +64,9 @@ pub const VirtualTimeIo = struct {
     // The real monotonic time when the Io was started, in nanoseconds.
     start_nanoseconds: i64,
 
-    // How far the waits have moved the monotonic clock, in nanoseconds.
-    jumped_nanoseconds: std.atomic.Value(i64),
+    // How far the waits have moved the monotonic clock, in nanoseconds. Only the thread the Io is used on reads or moves it: the Io
+    // starts no thread of its own, because nothing that uses it runs an operation asynchronously.
+    jumped_nanoseconds: i64,
 
     //
     // Starts a clock at zero that every wait moves and no wait delays.
@@ -86,7 +87,7 @@ pub const VirtualTimeIo = struct {
         self.vtable.batchAwaitConcurrent = virtualBatchAwaitConcurrent;
         self.options = options;
         self.start_nanoseconds = @intCast(self.threaded.io().vtable.now(&self.threaded, .awake).nanoseconds);
-        self.jumped_nanoseconds = .init(0);
+        self.jumped_nanoseconds = 0;
     }
 
     //
@@ -176,7 +177,7 @@ fn waitOf(virtual_time: *VirtualTimeIo, timeout: std.Io.Timeout) Wait {
 fn virtualNow(userdata: ?*anyopaque, clock: std.Io.Clock) std.Io.Timestamp {
     const virtual_time = virtualTimeOf(userdata);
     const real = virtual_time.threaded.io().vtable.now(userdata, clock);
-    const jumped = virtual_time.jumped_nanoseconds.load(.monotonic);
+    const jumped = virtual_time.jumped_nanoseconds;
     switch (clock) {
         .awake => {
             const real_elapsed: i64 = @as(i64, @intCast(real.nanoseconds)) - virtual_time.start_nanoseconds;
@@ -205,7 +206,7 @@ fn virtualSleep(userdata: ?*anyopaque, timeout: std.Io.Timeout) std.Io.Cancelabl
             return virtual_time.threaded.io().vtable.sleep(userdata, timeout);
         },
         .short => |nanoseconds| {
-            _ = virtual_time.jumped_nanoseconds.fetchAdd(nanoseconds, .monotonic);
+            virtual_time.jumped_nanoseconds += nanoseconds;
         },
         .long => |scaled| {
             return virtual_time.threaded.io().vtable.sleep(userdata, scaled);
@@ -223,7 +224,7 @@ fn virtualFutexWait(userdata: ?*anyopaque, ptr: *const u32, expected: u32, timeo
             return virtual_time.threaded.io().vtable.futexWait(userdata, ptr, expected, timeout);
         },
         .short => |nanoseconds| {
-            _ = virtual_time.jumped_nanoseconds.fetchAdd(nanoseconds, .monotonic);
+            virtual_time.jumped_nanoseconds += nanoseconds;
         },
         .long => |scaled| {
             return virtual_time.threaded.io().vtable.futexWait(userdata, ptr, expected, scaled);
@@ -241,7 +242,7 @@ fn virtualBatchAwaitConcurrent(userdata: ?*anyopaque, batch: *std.Io.Batch, time
             return virtual_time.threaded.io().vtable.batchAwaitConcurrent(userdata, batch, timeout);
         },
         .short => |nanoseconds| {
-            _ = virtual_time.jumped_nanoseconds.fetchAdd(nanoseconds, .monotonic);
+            virtual_time.jumped_nanoseconds += nanoseconds;
             return error.Timeout;
         },
         .long => |scaled| {

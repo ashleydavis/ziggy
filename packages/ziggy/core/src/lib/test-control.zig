@@ -3,432 +3,523 @@
 // commands to the running app over a loopback connection.
 //
 // A script connects to the port found in the port file and sends one line per command: a JSON object with a "command"
-// field. The core forwards the command to the frontend as a test-command event, the frontend performs it and replies
-// with Ziggy's own test-result message, and the reply is written back as one line. A line that is not a command gets
-// an error as its reply.
+// field. A command the native app does (quit, menu, screenshot) is posted to the native app's queue as a call, and the connection waits
+// on its own queue for the result of one that has one.
+// Every other command goes to the core's main thread as a message, and the connection waits for the main thread's reply on a queue
+// of its own: the main thread forwards a command for the frontend as a test-command event, the frontend performs it and replies with
+// Ziggy's own test-result message, and the main thread sends that reply back. The reply is written back as one line. A line that is
+// not a command gets an error as its reply.
+//
+// The main thread opens the listening socket and hands it to the accepting thread, which accepts each connection and hands it to a
+// thread of its own. None of these threads shares anything with another: each is given copies of what it needs when it starts and
+// owns its socket, makes its own Io, and talks to the others only by message. Each waits on its socket for no longer than
+// `poll_interval_ms`, so it reads its messages, including stop, every time that passes.
 //
 
 const std = @import("std");
-const builtin = @import("builtin");
 const types = @import("types.zig");
 const json = @import("json.zig");
+const message_queue = @import("message-queue.zig");
+const dropped_files = @import("dropped-files.zig");
+const socket_wait = @import("socket-wait.zig");
+
+const MessageQueue = message_queue.MessageQueue;
+const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
+const NativeApp = @import("native-app.zig").NativeApp;
+const worker_messages = @import("worker-messages.zig");
+
+//
+// The number the messages of a test control connection reach the main thread's queue under.
+//
+pub const from_test_control: u32 = 0xFFFF_FFF2;
 
 //
 // How long the frontend has to reply to a command, in milliseconds.
 //
-const answer_timeout_ms: i64 = 30_000;
+pub const answer_timeout_ms: u64 = 30_000;
 
 //
-// One connection being served: the task serving it and its socket.
+// How long the accepting thread and the connection threads wait on their sockets before they read their messages, in milliseconds.
 //
-const Connection = struct {
-    // The task that reads this connection's commands, cancelled when the control is stopped.
-    task: std.Io.Future(void),
-    // The connection's socket, closed when the control is stopped.
-    stream: std.Io.net.Stream,
-};
+const poll_interval_ms: i32 = 100;
 
 //
-// The control connection of one core.
+// The number the main thread's messages reach the accepting thread's queue under, and the accepting thread's reach a connection
+// thread's under. A connection thread's messages reach the accepting thread under the connection's number, which starts at 1.
+//
+const from_main: u32 = 0;
+
+//
+// A single threaded Io of the calling thread's own.
+//
+fn ownIo(allocator: std.mem.Allocator) std.Io.Threaded {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    threaded.allocator = allocator;
+    return threaded;
+}
+
+//
+// The main thread's side of the control connection of one core.
 //
 pub const TestControl = struct {
-    // Allocates the lines it builds.
-    allocator: std.mem.Allocator,
-    // For the socket, the mutex and the condition.
-    io: std.Io,
-    // The native app's configuration, for the quit callback.
-    config: types.ZiggyConfig,
-    // Sends an event to the frontend.
-    deliver: *const fn (user_data: ?*anyopaque, message: []const u8) void,
-    // The pointer passed to deliver.
-    deliver_user_data: ?*anyopaque,
-    // Records the files of a drop, as the native app does when the user drops them. Called with deliver_user_data.
-    files_dropped: *const fn (user_data: ?*anyopaque, paths_json: []const u8) anyerror!void,
-    // The listening socket.
-    server: std.Io.net.Server,
+    // The accepting thread's messages: "stop" from the main thread, and the ends of the connections. Allocated, so its address stays
+    // the same however this struct is moved.
+    queue: *MessageQueue,
     // The port it listens on.
     port: u16,
-    // One connection being served: its task and its socket.
-    // Every connection is served by a task of its own, and all of them are ended when the control is stopped.
-    connections: std.ArrayList(Connection),
-    // Runs the connection tasks. The core's Io is single threaded and ignores cancel requests, and cancelling is the only way
-    // to end a read that is waiting on a connection: on Windows shutting the socket down does not wake the read.
-    connection_threaded: std.Io.Threaded,
-    // Held while a command is with the frontend, so only one is waiting for a reply at a time.
-    command_mutex: std.Io.Mutex,
     // The thread that accepts connections.
     thread: std.Thread,
-    // Set when the connection is being shut down.
-    stopping: std.atomic.Value(bool),
-    // Guards the fields below.
-    mutex: std.Io.Mutex,
-    // The number of the next command.
-    next_request: u64,
-    // The number of the command waiting for a reply, or null.
-    waiting_request: ?u64,
-    // The reply to the waiting command, as JSON text.
-    answer: ?[]u8,
-    // Set when the frontend has reported it is listening for test commands.
-    ui_ready: std.atomic.Value(bool),
-    // What a test has set the next native dialog to return, as the JSON text of an array of paths, until a dialog takes it. Guarded
-    // by mutex.
-    pick_answer: ?[]u8,
 
     //
-    // Starts listening on a loopback port the operating system chooses, writes the port to the port file when there is
-    // one, and starts the thread that serves connections. It must stay where it is: the thread holds its address.
+    // Starts listening on a loopback port the operating system chooses, writes the port to the port file when there is one, and
+    // starts the thread that accepts connections, which owns the listening socket from then on. `io` is the main thread's.
     //
-    pub fn start(self: *TestControl, allocator: std.mem.Allocator, io: std.Io, config: types.ZiggyConfig, deliver: *const fn (user_data: ?*anyopaque, message: []const u8) void, deliver_user_data: ?*anyopaque, files_dropped: *const fn (user_data: ?*anyopaque, paths_json: []const u8) anyerror!void) !void {
+    pub fn start(allocator: std.mem.Allocator, io: std.Io, config: types.ZiggyConfig, native: NativeApp, main_queue: *MessageQueue) !TestControl {
         const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", 0);
-        const server = try address.listen(io, .{});
-        self.* = .{
-            .allocator = allocator,
-            .io = io,
-            .config = config,
-            .deliver = deliver,
-            .deliver_user_data = deliver_user_data,
-            .files_dropped = files_dropped,
-            .server = server,
-            .port = server.socket.address.getPort(),
-            .thread = undefined,
-            .stopping = .init(false),
-            .connections = .empty,
-            .connection_threaded = .init(allocator, .{}),
-            .command_mutex = .init,
-            .mutex = .init,
-            .next_request = 1,
-            .waiting_request = null,
-            .answer = null,
-            .ui_ready = .init(false),
-            .pick_answer = null,
-        };
-        errdefer self.server.deinit(io);
-        errdefer self.connection_threaded.deinit();
+        var server = try address.listen(io, .{});
+        errdefer server.deinit(io);
+        const port = server.socket.address.getPort();
         if (config.test_port_file) |port_file| {
             var port_buffer: [16]u8 = undefined;
-            const port_text = try std.fmt.bufPrint(&port_buffer, "{d}\n", .{self.port});
+            const port_text = try std.fmt.bufPrint(&port_buffer, "{d}\n", .{port});
             try std.Io.Dir.cwd().writeFile(io, .{
                 .sub_path = std.mem.span(port_file),
                 .data = port_text,
             });
         }
-        self.thread = try std.Thread.spawn(.{}, serve, .{self});
-    }
-
-    //
-    // Stops accepting connections, waits for the thread to end and releases everything.
-    //
-    pub fn stop(self: *TestControl) void {
-        self.stopping.store(true, .release);
-        // Accepting blocks, so a connection made here wakes the thread to see it has been told to stop.
-        const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", self.port) catch unreachable;
-        if (address.connect(self.io, .{ .mode = .stream })) |stream| {
-            stream.close(self.io);
-        }
-        else |_| {}
-        self.thread.join();
-        for (self.connections.items) |*connection| {
-            // Shutting the receiving side down wakes a read that is waiting, so the task ends without a signal being sent to
-            // its thread. That matters on Android: cancelling a blocked read sends the thread SIGIO and relies on a handler Zig
-            // 0.16.0 installs with a sigaction struct laid out for glibc, not for bionic (flags first, then handler, then a
-            // 64-bit mask), so no handler is installed and SIGIO kills the process. The unit tests on the Android emulator died
-            // with "I/O possible" and exit code 157 in "a second connection is served while the first stays open, and stopping
-            // ends both". On Windows shutting down does not wake the read, so the cancel below ends it there.
-            connection.stream.shutdown(self.io, .recv) catch |err| switch (err) {
-                error.ConnectionAborted, error.ConnectionResetByPeer, error.SocketUnconnected => {},
-                else => @panic("test control: could not shut a connection down"),
-            };
-            if (builtin.os.tag == .windows) {
-                connection.task.cancel(self.connection_threaded.io());
-            }
-            else {
-                connection.task.await(self.connection_threaded.io());
-            }
-            connection.stream.close(self.io);
-        }
-        self.connections.deinit(self.allocator);
-        self.connection_threaded.deinit();
-        self.server.deinit(self.io);
-        self.mutex.lockUncancelable(self.io);
-        if (self.pick_answer) |text| {
-            self.allocator.free(text);
-        }
-        if (self.answer) |text| {
-            self.allocator.free(text);
-        }
-        self.mutex.unlock(self.io);
-    }
-
-    //
-    // Called when the frontend replies to a command with Ziggy's own test-result message.
-    //
-    //
-    // Called by a task that is about to show a native dialog: takes the result a test gave for it, copied with the allocator, or
-    // returns null when the test gave none, and the dialog is shown.
-    //
-    pub fn takePickAnswer(user_data: ?*anyopaque, allocator: std.mem.Allocator) ?[]u8 {
-        const self: *TestControl = @ptrCast(@alignCast(user_data.?));
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-        const answer = self.pick_answer orelse {
-            return null;
+        const queue = try allocator.create(MessageQueue);
+        errdefer allocator.destroy(queue);
+        queue.* = MessageQueue.init();
+        errdefer queue.deinit();
+        const thread = try std.Thread.spawn(.{}, acceptConnections, .{AcceptStart{
+            .native = .{
+                .app = native,
+                .has_quit = config.has_quit,
+                .has_menu_action = config.has_menu_action,
+                .has_screenshot = config.has_screenshot,
+            },
+            .main_queue = main_queue,
+            .queue = queue,
+            .server = server,
+        }});
+        return .{
+            .queue = queue,
+            .port = port,
+            .thread = thread,
         };
-        self.pick_answer = null;
-        defer self.allocator.free(answer);
-        return allocator.dupe(u8, answer) catch @panic("out of memory taking the answer for a dialog");
     }
 
     //
-    // Called when the frontend reports it is listening for test commands. A command sent before that would reach a frontend
-    // that is not there to hear it, so commands wait for this.
+    // Tells the accepting thread to stop accepting connections and end every connection. The main thread keeps replying to what the
+    // connections send it, each with ShuttingDown, until the accepting thread sends it "test-control-stopped", then calls finishStop.
+    // `io` is the main thread's.
     //
-    pub fn markUiReady(self: *TestControl) void {
-        self.ui_ready.store(true, .release);
+    pub fn beginStop(self: *TestControl, io: std.Io) void {
+        self.queue.post(io, from_main, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the test control connection");
     }
 
     //
-    // Waits until the frontend has reported it is listening, or fails with UiDidNotAnswer when it never does.
+    // Waits for the accepting thread to end and releases its queue, with the main thread's allocator, which `start` allocated it with.
+    // Called once the accepting thread has sent "test-control-stopped".
     //
-    fn waitForUi(self: *TestControl) !void {
-        const deadline = std.Io.Clock.awake.now(self.io).addDuration(.fromMilliseconds(answer_timeout_ms));
-        while (!self.ui_ready.load(.acquire)) {
-            if (std.Io.Clock.awake.now(self.io).durationTo(deadline).nanoseconds <= 0) {
-                return error.UiDidNotAnswer;
-            }
-            self.io.sleep(.fromMilliseconds(5), .awake) catch @panic("sleep cancelled");
-        }
+    pub fn finishStop(self: *TestControl, allocator: std.mem.Allocator) void {
+        self.thread.join();
+        self.queue.deinit();
+        allocator.destroy(self.queue);
     }
+};
 
-    pub fn setAnswer(self: *TestControl, request: u64, answer_json: []const u8) !void {
-        const copy = try self.allocator.dupe(u8, answer_json);
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-        if (self.waiting_request == null or self.waiting_request.? != request) {
-            self.allocator.free(copy);
-            return error.UnexpectedTestResult;
-        }
-        if (self.answer) |text| {
-            self.allocator.free(text);
-        }
-        self.answer = copy;
-    }
+//
+// How a connection reaches the native app: its queue, and which of the calls the commands make the native app does.
+//
+const NativeAccess = struct {
+    // The native app's queue and how to wake its UI thread.
+    app: NativeApp,
+    // Whether the native app does "quit" calls.
+    has_quit: bool,
+    // Whether the native app does "menu-action" calls.
+    has_menu_action: bool,
+    // Whether the native app does "screenshot" calls.
+    has_screenshot: bool,
+};
 
-    fn serve(self: *TestControl) void {
-        while (!self.stopping.load(.acquire)) {
-            const stream = self.server.accept(self.io) catch {
+//
+// What the accepting thread is given when it starts, which it owns from then on.
+//
+const AcceptStart = struct {
+    // How the connections reach the native app, which each connection thread is given a copy of.
+    native: NativeAccess,
+    // The core's main thread's queue, where the commands that need the core go.
+    main_queue: *MessageQueue,
+    // The accepting thread's messages.
+    queue: *MessageQueue,
+    // The listening socket.
+    server: std.Io.net.Server,
+};
+
+//
+// One connection the accepting thread started a thread for.
+//
+const ConnectionThread = struct {
+    // The connection's number, which its messages to the accepting thread carry.
+    number: u32,
+    // The connection thread's messages: "stop" from the accepting thread. Allocated, so its address stays the same.
+    queue: *MessageQueue,
+    // The connection's thread.
+    thread: std.Thread,
+};
+
+//
+// The accepting thread: accepts connections and starts a thread for each until it is sent "stop", then stops every connection thread,
+// closes the listening socket and tells the main thread it has stopped.
+//
+fn acceptConnections(given: AcceptStart) void {
+    var start = given;
+    // The accepting thread's own allocator, which everything on its thread is allocated with.
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+    var connections: std.ArrayList(ConnectionThread) = .empty;
+    defer connections.deinit(allocator);
+    var next_number: u32 = 1;
+    var stop_requested = false;
+    while (!stop_requested) {
+        while (start.queue.tryTake(io, allocator)) |message| {
+            defer allocator.free(message.text);
+            if (message.from == from_main) {
+                stop_requested = true;
                 continue;
-            };
-            if (self.stopping.load(.acquire)) {
-                stream.close(self.io);
-                return;
             }
-            const task = self.connection_threaded.io().concurrent(serveConnection, .{ self, stream }) catch |err| {
-                std.debug.print("test control: could not serve a connection: {s}\n", .{@errorName(err)});
-                stream.close(self.io);
-                continue;
-            };
-            self.mutex.lockUncancelable(self.io);
-            defer self.mutex.unlock(self.io);
-            self.connections.append(self.allocator, .{
-                .task = task,
-                .stream = stream,
-            }) catch @panic("out of memory serving a test control connection");
+            endConnection(allocator, &connections, message.from);
+        }
+        if (stop_requested) {
+            break;
+        }
+        const readable = socket_wait.waitReadable(start.server.socket.handle, poll_interval_ms) catch {
+            continue;
+        };
+        if (!readable) {
+            continue;
+        }
+        const stream = start.server.accept(io) catch {
+            continue;
+        };
+        const connection_queue = allocator.create(MessageQueue) catch @panic("out of memory serving a test control connection");
+        connection_queue.* = MessageQueue.init();
+        const number = next_number;
+        next_number += 1;
+        const thread = std.Thread.spawn(.{}, serveConnection, .{ConnectionStart{
+            .number = number,
+            .native = start.native,
+            .main_queue = start.main_queue,
+            .accept_queue = start.queue,
+            .queue = connection_queue,
+            .stream = stream,
+        }}) catch |err| {
+            std.debug.print("test control: could not serve a connection: {s}\n", .{@errorName(err)});
+            stream.close(io);
+            connection_queue.deinit();
+            allocator.destroy(connection_queue);
+            continue;
+        };
+        connections.append(allocator, .{
+            .number = number,
+            .queue = connection_queue,
+            .thread = thread,
+        }) catch @panic("out of memory serving a test control connection");
+    }
+    for (connections.items) |connection| {
+        connection.queue.post(io, from_main, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the test control connection");
+    }
+    while (connections.items.len > 0) {
+        const message = start.queue.take(io, allocator, .none) orelse {
+            @panic("test control: the accepting thread's queue closed");
+        };
+        defer allocator.free(message.text);
+        if (message.from != from_main) {
+            endConnection(allocator, &connections, message.from);
         }
     }
+    start.server.deinit(io);
+    start.main_queue.post(io, from_test_control, "{\"type\":\"test-control-stopped\"}") catch @panic("out of memory stopping the test control connection");
+}
+
+//
+// Waits for the thread of the connection that reported it ended, and releases its queue.
+//
+fn endConnection(allocator: std.mem.Allocator, connections: *std.ArrayList(ConnectionThread), number: u32) void {
+    for (connections.items, 0..) |connection, index| {
+        if (connection.number == number) {
+            connection.thread.join();
+            connection.queue.deinit();
+            allocator.destroy(connection.queue);
+            _ = connections.swapRemove(index);
+            return;
+        }
+    }
+}
+
+//
+// What a connection thread is given when it starts, which it owns from then on.
+//
+const ConnectionStart = struct {
+    // The connection's number, which its message to the accepting thread carries when it ends.
+    number: u32,
+    // How the thread reaches the native app.
+    native: NativeAccess,
+    // The core's main thread's queue, where the commands that need the core go.
+    main_queue: *MessageQueue,
+    // The accepting thread's queue, which the thread tells when it ends.
+    accept_queue: *MessageQueue,
+    // The connection thread's messages: "stop" from the accepting thread.
+    queue: *MessageQueue,
+    // The connection's socket, which the thread closes when it ends.
+    stream: std.Io.net.Stream,
+};
+
+//
+// A connection thread: serves the connection's commands until it closes or the thread is sent "stop", then closes the socket and tells
+// the accepting thread it has ended. The command being run finishes first.
+//
+fn serveConnection(given: ConnectionStart) void {
+    // The connection thread's own allocator, which everything on its thread is allocated with.
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    // The connection thread's own Io.
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+    var connection: Connection = .{
+        .start = given,
+        .replies = MessageQueue.init(),
+    };
+    defer connection.replies.deinit();
+    var read_buffer: [64 * 1024]u8 = undefined;
+    var write_buffer: [1024]u8 = undefined;
+    var reader = connection.start.stream.reader(io, &read_buffer);
+    var writer = connection.start.stream.writer(io, &write_buffer);
+    connection.serve(io, allocator, &reader.interface, &writer.interface);
+    connection.start.stream.close(io);
+    connection.start.accept_queue.post(io, connection.start.number, "{\"type\":\"ended\"}") catch @panic("out of memory ending a test control connection");
+}
+
+//
+// A connection thread's own state, on its stack. It keeps no Io or allocator: each function is given the thread's own.
+//
+const Connection = struct {
+    // What the thread was given.
+    start: ConnectionStart,
+    // Where the main thread's replies come.
+    replies: MessageQueue,
 
     //
-    // Serves one connection's commands until it closes or the control is stopped. Stopping cancels this task, and the cancel is
-    // taken only while waiting for the next line: the command being run finishes first, because the waits inside it treat a
-    // cancel as a bug.
+    // Reads commands and writes their replies until the connection closes or the thread is sent "stop".
     //
-    fn serveConnection(self: *TestControl, stream: std.Io.net.Stream) void {
-        const connection_io = self.connection_threaded.io();
-        _ = connection_io.swapCancelProtection(.blocked);
-        var read_buffer: [64 * 1024]u8 = undefined;
-        var write_buffer: [1024]u8 = undefined;
-        var reader = stream.reader(connection_io, &read_buffer);
-        var writer = stream.writer(connection_io, &write_buffer);
+    fn serve(self: *Connection, io: std.Io, allocator: std.mem.Allocator, reader: *std.Io.Reader, writer: *std.Io.Writer) void {
         while (true) {
-            _ = connection_io.swapCancelProtection(.unblocked);
-            const taken = reader.interface.takeDelimiter('\n');
-            _ = connection_io.swapCancelProtection(.blocked);
-            const line = taken catch {
+            // A whole command may already be read into the buffer, and then the socket has nothing more for it.
+            if (std.mem.indexOfScalar(u8, reader.buffered(), '\n') == null) {
+                if (self.stopRequested(io, allocator)) {
+                    return;
+                }
+                const readable = socket_wait.waitReadable(self.start.stream.socket.handle, poll_interval_ms) catch {
+                    return;
+                };
+                if (!readable) {
+                    continue;
+                }
+            }
+            const line = reader.takeDelimiter('\n') catch {
                 return;
             } orelse {
                 return;
             };
-            const answer = self.handleLine(line) catch |err| blk: {
-                const text = json.stringify(self.allocator, .{
+            const reply_line = self.handleLine(io, allocator, line) catch |err| blk: {
+                const text = json.stringify(allocator, .{
                     .@"error" = @errorName(err),
                 }) catch {
                     return;
                 };
                 break :blk text;
             };
-            defer self.allocator.free(answer);
-            writer.interface.writeAll(answer) catch {
+            defer allocator.free(reply_line);
+            writer.writeAll(reply_line) catch {
                 return;
             };
-            writer.interface.writeAll("\n") catch {
+            writer.writeAll("\n") catch {
                 return;
             };
-            writer.interface.flush() catch {
+            writer.flush() catch {
                 return;
             };
         }
+    }
+
+    //
+    // Whether the thread has been sent "stop".
+    //
+    fn stopRequested(self: *Connection, io: std.Io, allocator: std.mem.Allocator) bool {
+        const message = self.start.queue.tryTake(io, allocator) orelse {
+            return false;
+        };
+        allocator.free(message.text);
+        return true;
     }
 
     //
     // Runs one command, a line holding a JSON object with a "command" field, and returns the reply line, allocated with
     // the allocator. A line that is not such an object gets an InvalidCommand error as its reply and nothing is run.
     //
-    fn handleLine(self: *TestControl, line: []const u8) ![]u8 {
+    fn handleLine(self: *Connection, io: std.Io, allocator: std.mem.Allocator, line: []const u8) ![]u8 {
+        const native = self.start.native;
         const command_json = line;
-        var arena_state = std.heap.ArenaAllocator.init(self.allocator);
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
         defer arena_state.deinit();
         const arena = arena_state.allocator();
         const command = std.json.parseFromSliceLeaky(std.json.Value, arena, command_json, .{}) catch {
-            return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+            return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
         };
         const name = json.getString(command, "command") orelse {
-            return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+            return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
         };
         if (std.mem.eql(u8, name, "quit")) {
-            const quit = self.config.quit orelse {
-                return try self.allocator.dupe(u8, "{\"error\":\"HostCallbackMissing\"}");
-            };
-            quit(self.config.user_data);
-            return try self.allocator.dupe(u8, "{\"ok\":true}");
+            if (!native.has_quit) {
+                return try allocator.dupe(u8, "{\"error\":\"NativeCallMissing\"}");
+            }
+            try native.app.call(io, arena, .quit, null);
+            return try allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "menu")) {
             // Chooses a menu item as a user would, through the native app, so the native app's own actions really happen. Reloading unloads the
             // frontend, which is not listening again until it reports it is, so commands wait for that.
             const action = json.getString(command, "action") orelse {
-                return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+                return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
-            const choose = self.config.menu_action orelse {
-                return try self.allocator.dupe(u8, "{\"error\":\"HostCallbackMissing\"}");
-            };
-            try self.waitForUi();
-            if (std.mem.eql(u8, action, "reload")) {
-                self.ui_ready.store(false, .release);
+            if (!native.has_menu_action) {
+                return try allocator.dupe(u8, "{\"error\":\"NativeCallMissing\"}");
             }
-            const action_text = try arena.dupeZ(u8, action);
-            choose(self.config.user_data, action_text.ptr);
-            return try self.allocator.dupe(u8, "{\"ok\":true}");
+            try self.waitForUi(io, allocator);
+            if (std.mem.eql(u8, action, "reload")) {
+                try self.start.main_queue.post(io, from_test_control, "{\"type\":\"test-ui-reloading\"}");
+            }
+            try native.app.call(io, arena, .{
+                .menu_action = action,
+            }, null);
+            return try allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "screenshot")) {
             // Writes a PNG of the app's window to the command's "outputPath" through the native app, which captures what is on screen.
             // The frontend must be showing first, or the picture would be of a window with nothing in it.
             const output_path = json.getString(command, "outputPath") orelse {
-                return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+                return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
-            const capture = self.config.screenshot orelse {
-                return try self.allocator.dupe(u8, "{\"error\":\"HostCallbackMissing\"}");
+            if (!native.has_screenshot) {
+                return try allocator.dupe(u8, "{\"error\":\"NativeCallMissing\"}");
+            }
+            try self.waitForUi(io, allocator);
+            // The native app's result comes back on the connection's own queue.
+            try native.app.call(io, arena, .{
+                .screenshot = output_path,
+            }, .{
+                .queue = &self.replies,
+                .call_id = 0,
+            });
+            const reply = self.replies.take(io, arena, .none) orelse {
+                @panic("test control: a connection's queue closed while it waited for a screenshot");
             };
-            try self.waitForUi();
-            const path_text = try arena.dupeZ(u8, output_path);
-            var reason: [512]u8 = undefined;
-            const result = capture(self.config.user_data, path_text.ptr, &reason, reason.len);
-            if (result < 0) {
-                return try json.stringify(self.allocator, .{
-                    .@"error" = reason[0..@intCast(-result)],
+            const response = try worker_messages.decode(worker_messages.INativeAppResponseMessage, arena, reply.text);
+            if (response.@"error") |reason| {
+                return try json.stringify(allocator, .{
+                    .@"error" = reason,
                 });
             }
-            return try self.allocator.dupe(u8, "{\"ok\":true}");
+            return try allocator.dupe(u8, "{\"ok\":true}");
         }
         if (std.mem.eql(u8, name, "drop")) {
             // Records a drop of files, as the native app does when the user drops files on the window, so a test can use getPathForFile
-            // without dragging anything. The files are the command's "paths", an array of strings.
+            // without dragging anything. The files are the command's "paths", an array of strings, checked here and recorded by the
+            // main thread.
             const paths = command.object.get("paths") orelse {
-                return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+                return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
             const paths_json = try json.stringify(arena, paths);
-            self.files_dropped(self.deliver_user_data, paths_json) catch |err| {
-                return try json.stringify(self.allocator, .{
+            const files_json = dropped_files.check(arena, io, paths_json) catch |err| {
+                return try json.stringify(allocator, .{
                     .@"error" = @errorName(err),
                 });
             };
+            const recorded = try self.callMain(io, allocator, try json.stringify(arena, .{
+                .type = "test-drop",
+                .files = json.Raw{
+                    .text = files_json,
+                },
+            }));
             // A drop that names a "dataId" is also a drop on that element of the frontend, so the command is also sent to the
             // frontend, which drops the same files on it, and its reply is the reply.
             if (command.object.get("dataId") != null) {
-                try self.waitForUi();
-                return try self.askUi(arena, command_json);
+                allocator.free(recorded);
+                return try self.callUi(io, allocator, arena, command_json);
             }
-            return try self.allocator.dupe(u8, "{\"ok\":true}");
+            return recorded;
         }
         if (std.mem.eql(u8, name, "pick-answer")) {
             // Sets what the next native dialog returns, so a test can use the pickers without a dialog being shown. The result is
             // the command's "paths", an array of strings, and is used for one dialog.
             const paths = command.object.get("paths") orelse {
-                return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+                return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             };
             if (paths != .array) {
-                return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+                return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
             }
             for (paths.array.items) |item| {
                 if (item != .string) {
-                    return try self.allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+                    return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
                 }
             }
-            const answer = try json.stringify(self.allocator, paths);
-            self.mutex.lockUncancelable(self.io);
-            defer self.mutex.unlock(self.io);
-            if (self.pick_answer) |old| {
-                self.allocator.free(old);
-            }
-            self.pick_answer = answer;
-            return try self.allocator.dupe(u8, "{\"ok\":true}");
+            return try self.callMain(io, allocator, try json.stringify(arena, .{
+                .type = "test-pick-answer",
+                .paths = paths,
+            }));
         }
-        try self.waitForUi();
-        return try self.askUi(arena, command_json);
+        return try self.callUi(io, allocator, arena, command_json);
     }
 
     //
-    // Sends a command to the frontend and waits for its reply.
+    // Waits until the frontend has reported it is listening, or fails with UiDidNotAnswer when it never does.
     //
-    fn askUi(self: *TestControl, arena: std.mem.Allocator, command_json: []const u8) ![]u8 {
-        self.command_mutex.lockUncancelable(self.io);
-        defer self.command_mutex.unlock(self.io);
-        self.mutex.lockUncancelable(self.io);
-        const request = self.next_request;
-        self.next_request += 1;
-        self.waiting_request = request;
-        if (self.answer) |text| {
-            self.allocator.free(text);
-            self.answer = null;
+    fn waitForUi(self: *Connection, io: std.Io, allocator: std.mem.Allocator) !void {
+        const reply = try self.callMain(io, allocator, "{\"type\":\"test-wait-ui\"}");
+        defer allocator.free(reply);
+        if (!std.mem.eql(u8, reply, "{\"ok\":true}")) {
+            return error.UiDidNotAnswer;
         }
-        self.mutex.unlock(self.io);
-        const event = try json.stringify(arena, .{
-            .kind = "system",
-            .name = "test-command",
-            .data = .{
-                .requestId = request,
-                .command = json.Raw{ .text = command_json },
+    }
+
+    //
+    // Sends a command to the frontend, through the main thread, and waits for its reply.
+    //
+    fn callUi(self: *Connection, io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, command_json: []const u8) ![]u8 {
+        return try self.callMain(io, allocator, try json.stringify(arena, .{
+            .type = "test-ui-command",
+            .command = json.Raw{
+                .text = command_json,
             },
-        });
-        self.deliver(self.deliver_user_data, event);
-        const deadline = std.Io.Clock.awake.now(self.io).addDuration(.fromMilliseconds(answer_timeout_ms));
-        self.mutex.lockUncancelable(self.io);
-        defer self.mutex.unlock(self.io);
-        defer self.waiting_request = null;
-        while (self.answer == null) {
-            const remaining = std.Io.Clock.awake.now(self.io).durationTo(deadline);
-            if (remaining.nanoseconds <= 0) {
-                return try self.allocator.dupe(u8, "{\"error\":\"UiDidNotAnswer\"}");
-            }
-            self.waitAnswer(remaining);
-        }
-        const answer = self.answer.?;
-        self.answer = null;
-        return answer;
+        }));
     }
 
-    fn waitAnswer(self: *TestControl, remaining: std.Io.Duration) void {
-        // The condition has no timed wait, so the lock is released and retaken around a short sleep.
-        _ = remaining;
-        self.mutex.unlock(self.io);
-        self.io.sleep(.fromMilliseconds(5), .awake) catch @panic("sleep cancelled");
-        self.mutex.lockUncancelable(self.io);
+    //
+    // Sends the main thread a message and waits for its reply, which it always sends, and returns the reply's text, allocated with
+    // the allocator.
+    //
+    fn callMain(self: *Connection, io: std.Io, allocator: std.mem.Allocator, message: []const u8) ![]u8 {
+        try self.start.main_queue.postReplyTo(io, from_test_control, message, &self.replies);
+        const reply = self.replies.take(io, allocator, .none) orelse {
+            @panic("test control: a connection's queue closed while it waited for the main thread");
+        };
+        return reply.text;
     }
 };

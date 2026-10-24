@@ -15,6 +15,7 @@ const std = @import("std");
 const utils = @import("utils.zig");
 const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
 const ITimestampProvider = utils.timestamp_provider.ITimestampProvider;
+const Timers = @import("../timers.zig").Timers;
 
 //
 // Task context with all dependencies needed for task execution
@@ -54,13 +55,7 @@ pub const ITaskContext = struct {
     // Has the program hosting the app (the native app) do what only it can do, such as the device keychain and photo library.
     // Null where there is no such program, which is every desktop and the command line.
     //
-    hostRequester: ?utils.host_requester.IHostRequester,
-
-    //
-    // Runs ImageMagick, ffmpeg and ffprobe inside the app's own process, for an app that has them built in. Null where the programs are
-    // started instead, which is the command line.
-    //
-    toolRunner: ?utils.in_process_tools.InProcessRunner,
+    nativeCaller: ?utils.native_caller.INativeCaller,
 
     // Pointer to the implementation of sendEvent and isCancelled.
     ptr: *anyopaque,
@@ -73,25 +68,25 @@ pub const ITaskContext = struct {
     //
     pub const VTable = struct {
         // Sends an event from the task handler back to the caller.
-        sendEvent: *const fn (ptr: *anyopaque, event: std.json.Value) void,
+        sendEvent: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void,
 
         // Returns true if this task has been cancelled and should stop as soon as possible.
-        isCancelled: *const fn (ptr: *anyopaque) bool,
+        isCancelled: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) bool,
     };
 
     //
     // Sends an event from the task handler back to the caller.
     // The event only has to stay valid during the call (it is copied if it has to be kept).
     //
-    pub fn sendEvent(self: ITaskContext, event: std.json.Value) void {
-        self.vtable.sendEvent(self.ptr, event);
+    pub fn sendEvent(self: ITaskContext, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
+        self.vtable.sendEvent(self.ptr, io, allocator, event);
     }
 
     //
     // Returns true if this task has been cancelled and should stop as soon as possible.
     //
-    pub fn isCancelled(self: ITaskContext) bool {
-        return self.vtable.isCancelled(self.ptr);
+    pub fn isCancelled(self: ITaskContext, io: std.Io, allocator: std.mem.Allocator) bool {
+        return self.vtable.isCancelled(self.ptr, io, allocator);
     }
 };
 
@@ -102,7 +97,7 @@ pub const ITaskContext = struct {
 // delivered), so the handler does not free what it allocates. The returned value and everything
 // it points to must be allocated with it (or be static).
 //
-pub const TaskHandler = *const fn (allocator: std.mem.Allocator, io: std.Io, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value;
+pub const TaskHandler = *const fn (allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value;
 
 //
 // How urgent a task is, which decides the order the queue dispatches pending tasks in.
@@ -132,7 +127,41 @@ pub const TaskPriority = enum {
             .Background => "background",
         };
     }
+
+    //
+    // Called by std.json when a priority is written: writes its string value, as the TypeScript enum does.
+    //
+    pub fn jsonStringify(self: TaskPriority, json_writer: anytype) !void {
+        try json_writer.write(self.toString());
+    }
+
+    //
+    // Called by std.json when a priority is read from JSON text: reads its string value.
+    //
+    pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !TaskPriority {
+        return parseEnumString(TaskPriority, try std.json.innerParse([]const u8, allocator, source, options));
+    }
+
+    //
+    // Called by std.json when a priority is read from a parsed JSON value: reads its string value.
+    //
+    pub fn jsonParseFromValue(allocator: std.mem.Allocator, source: std.json.Value, options: std.json.ParseOptions) !TaskPriority {
+        return parseEnumString(TaskPriority, try std.json.innerParseFromValue([]const u8, allocator, source, options));
+    }
 };
+
+//
+// The member of an enum whose toString gives the text, or error.InvalidEnumTag when none does.
+//
+fn parseEnumString(comptime T: type, text: []const u8) error{InvalidEnumTag}!T {
+    inline for (@typeInfo(T).@"enum".fields) |field| {
+        const member: T = @enumFromInt(field.value);
+        if (std.mem.eql(u8, member.toString(), text)) {
+            return member;
+        }
+    }
+    return error.InvalidEnumTag;
+}
 
 //
 // The priority a task runs at when none was passed, and it is not a child of a running task.
@@ -165,6 +194,27 @@ pub const TaskStatus = enum {
             .Succeeded => "succeeded",
             .Failed => "failed",
         };
+    }
+
+    //
+    // Called by std.json when a status is written: writes its string value, as the TypeScript enum does.
+    //
+    pub fn jsonStringify(self: TaskStatus, json_writer: anytype) !void {
+        try json_writer.write(self.toString());
+    }
+
+    //
+    // Called by std.json when a status is read from JSON text: reads its string value.
+    //
+    pub fn jsonParse(allocator: std.mem.Allocator, source: anytype, options: std.json.ParseOptions) !TaskStatus {
+        return parseEnumString(TaskStatus, try std.json.innerParse([]const u8, allocator, source, options));
+    }
+
+    //
+    // Called by std.json when a status is read from a parsed JSON value: reads its string value.
+    //
+    pub fn jsonParseFromValue(allocator: std.mem.Allocator, source: std.json.Value, options: std.json.ParseOptions) !TaskStatus {
+        return parseEnumString(TaskStatus, try std.json.innerParseFromValue([]const u8, allocator, source, options));
     }
 };
 
@@ -276,20 +326,21 @@ pub const ITaskResult = struct {
 
 //
 // Low-level completion callback used by worker pool implementations.
-// (A Zig closure: `function` is called with `context`. Errors are caught and logged by the caller.)
+// (A Zig closure: `function` is called with `context` and the Io, allocator and timers of the thread it runs on. Errors are caught
+// and logged by the caller.)
 //
 pub const WorkerTaskCompletionCallback = struct {
     // The state of the callback, passed to function.
     context: ?*anyopaque,
 
     // The callback function. The result is only valid during the call.
-    function: *const fn (context: ?*anyopaque, result: ITaskResult) anyerror!void,
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, result: ITaskResult) anyerror!void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: WorkerTaskCompletionCallback, result: ITaskResult) anyerror!void {
-        return self.function(self.context, result);
+    pub fn call(self: WorkerTaskCompletionCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, result: ITaskResult) anyerror!void {
+        return self.function(self.context, io, allocator, timers, result);
     }
 };
 
@@ -310,20 +361,21 @@ pub const ITaskEventData = struct {
 
 //
 // Callback invoked when a task sends an arbitrary event to the client.
-// (A Zig closure: `function` is called with `context`. Errors are caught and logged by the caller.)
+// (A Zig closure: `function` is called with `context` and the Io, allocator and timers of the thread it runs on. Errors are caught
+// and logged by the caller.)
 //
 pub const TaskEventCallback = struct {
     // The state of the callback, passed to function.
     context: ?*anyopaque,
 
     // The callback function. The data is only valid during the call.
-    function: *const fn (context: ?*anyopaque, data: ITaskEventData) anyerror!void,
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, data: ITaskEventData) anyerror!void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: TaskEventCallback, data: ITaskEventData) anyerror!void {
-        return self.function(self.context, data);
+    pub fn call(self: TaskEventCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, data: ITaskEventData) anyerror!void {
+        return self.function(self.context, io, allocator, timers, data);
     }
 };
 
@@ -339,13 +391,13 @@ pub const UnsubscribeFn = struct {
     key: usize,
 
     // Removes the registration.
-    function: *const fn (context: ?*anyopaque, key: usize) void,
+    function: *const fn (context: ?*anyopaque, allocator: std.mem.Allocator, key: usize) void,
 
     //
     // Removes the registration.
     //
-    pub fn call(self: UnsubscribeFn) void {
-        self.function(self.context, self.key);
+    pub fn call(self: UnsubscribeFn, allocator: std.mem.Allocator) void {
+        self.function(self.context, allocator, self.key);
     }
 };
 
@@ -446,13 +498,13 @@ pub const TaskAddedCallback = struct {
     context: ?*anyopaque,
 
     // The callback function. The task ID is only valid during the call.
-    function: *const fn (context: ?*anyopaque, taskId: []const u8) void,
+    function: *const fn (context: ?*anyopaque, allocator: std.mem.Allocator, taskId: []const u8) void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: TaskAddedCallback, taskId: []const u8) void {
-        self.function(self.context, taskId);
+    pub fn call(self: TaskAddedCallback, allocator: std.mem.Allocator, taskId: []const u8) void {
+        self.function(self.context, allocator, taskId);
     }
 };
 
@@ -464,13 +516,13 @@ pub const TasksCancelledCallback = struct {
     context: ?*anyopaque,
 
     // The callback function.
-    function: *const fn (context: ?*anyopaque) void,
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator) void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: TasksCancelledCallback) void {
-        self.function(self.context);
+    pub fn call(self: TasksCancelledCallback, io: std.Io, allocator: std.mem.Allocator) void {
+        self.function(self.context, io, allocator);
     }
 };
 

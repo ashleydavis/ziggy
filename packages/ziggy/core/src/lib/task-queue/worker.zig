@@ -10,54 +10,44 @@ const types = @import("types.zig");
 const TaskHandler = types.TaskHandler;
 const ITaskContext = types.ITaskContext;
 const errors = utils.errors;
+const Timers = @import("../timers.zig").Timers;
 
 //
-// Allocator for the handler registry, which lives for the rest of the process.
+// A task type and the handler that runs it, as an app lists its handlers. There is no list of handlers shared by the threads of the
+// process: whoever runs a task is given the list the app declared.
 //
-const registry_allocator = std.heap.smp_allocator;
+pub const IHandlerEntry = struct {
+    // The task type.
+    type: []const u8,
+    // The handler for it.
+    handler: TaskHandler,
+};
 
 //
-// The registered handlers by task type, in registration order (like a JavaScript Map).
-// Handlers are registered at startup (initTaskHandlers) before any task runs, so the registry is
-// not locked; registering while tasks are running on other threads is not supported.
+// Gets the handler for a task type from the list, or null when it has none.
 //
-var handlers: std.StringArrayHashMapUnmanaged(TaskHandler) = .empty;
-
-//
-// Registers the handler for a task type (replacing any previous handler for the type).
-//
-pub fn registerHandler(@"type": []const u8, handler: TaskHandler) !void {
-    if (handlers.getPtr(@"type")) |existing| {
-        existing.* = handler;
-        return;
+pub fn getHandler(handlers: []const IHandlerEntry, @"type": []const u8) ?TaskHandler {
+    for (handlers) |entry| {
+        if (std.mem.eql(u8, entry.type, @"type")) {
+            return entry.handler;
+        }
     }
-    try handlers.put(registry_allocator, try registry_allocator.dupe(u8, @"type"), handler);
-}
-
-//
-// Gets the handler for a task type, or null when none is registered.
-//
-pub fn getHandler(@"type": []const u8) ?TaskHandler {
-    return handlers.get(@"type");
-}
-
-//
-// Gets the registered task types, in registration order.
-//
-pub fn getRegisteredHandlerTypes() []const []const u8 {
-    return handlers.keys();
+    return null;
 }
 
 //
 // Shared function to execute a task handler
 // Returns the handler outputs, or throws an error if the handler is not found or execution fails
 //
-pub fn executeTaskHandler(allocator: std.mem.Allocator, io: std.Io, taskType: []const u8, data: std.json.Value, context: ITaskContext) !std.json.Value {
-    const registeredTypes = getRegisteredHandlerTypes();
-    const handler = getHandler(taskType) orelse {
-        const joined = try std.mem.join(allocator, ", ", registeredTypes);
+pub fn executeTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, handlers: []const IHandlerEntry, taskType: []const u8, data: std.json.Value, context: ITaskContext) !std.json.Value {
+    const handler = getHandler(handlers, taskType) orelse {
+        var registeredTypes: std.ArrayList([]const u8) = .empty;
+        for (handlers) |entry| {
+            try registeredTypes.append(allocator, entry.type);
+        }
+        const joined = try std.mem.join(allocator, ", ", registeredTypes.items);
         return errors.throwError("No handler registered for task type: {s}. Available handlers: {s}", .{ taskType, joined });
     };
 
-    return handler(allocator, io, data, context);
+    return handler(allocator, io, timers, data, context);
 }

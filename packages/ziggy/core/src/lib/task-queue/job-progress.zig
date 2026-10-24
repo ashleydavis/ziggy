@@ -32,7 +32,7 @@ fn jobTagToJson(allocator: std.mem.Allocator, job: IJobTag) !std.json.Value {
 // (Zig: the IJobProgressEvent is sent as its JSON object; progressMessage is left out when there is
 // none, as JSON.stringify leaves out an undefined property.)
 //
-pub fn sendJobProgress(allocator: std.mem.Allocator, context: ITaskContext, job: ?IJobTag, startedAt: i64, progressMessage: ?[]const u8) !void {
+pub fn sendJobProgress(allocator: std.mem.Allocator, io: std.Io, context: ITaskContext, job: ?IJobTag, startedAt: i64, progressMessage: ?[]const u8) !void {
     const jobTag = job orelse {
         return;
     };
@@ -44,5 +44,5 @@ pub fn sendJobProgress(allocator: std.mem.Allocator, context: ITaskContext, job:
     if (progressMessage) |text| {
         try event.put(allocator, "progressMessage", .{ .string = text });
     }
-    context.sendEvent(.{ .object = event });
+    context.sendEvent(io, allocator, .{ .object = event });
 }

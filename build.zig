@@ -50,46 +50,46 @@ pub fn build(b: *std.Build) !void {
 
     // The console writing to the real stdout, which a unit test cannot see: a program writes through it and the build checks what it
     // printed.
-    const console_stdout_module = b.createModule(.{
+    const console_stdout = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/core/src/test/task-queue/fixtures/console-stdout.zig"),
         .target = target,
         .optimize = optimize,
     });
-    console_stdout_module.addImport("ziggy", test_core);
+    console_stdout.addImport("ziggy", test_core);
     const run_console_stdout = b.addRunArtifact(b.addExecutable(.{
         .name = "console-stdout",
-        .root_module = console_stdout_module,
+        .root_module = console_stdout,
     }));
     run_console_stdout.expectStdOutEqual("logged to stdout\ndebugged to stdout\n");
     test_step.dependOn(&run_console_stdout.step);
 
     // The unit tests of the parts of the native apps that do not need the platform's libraries.
-    const linux_tests_module = b.createModule(.{
+    const linux_tests = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/native/linux/src/tests.zig"),
         .target = target,
         .optimize = optimize,
     });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{
         .name = "ziggy-native-linux",
-        .root_module = linux_tests_module,
+        .root_module = linux_tests,
     })).step);
-    const dev_host_tests_module = b.createModule(.{
+    const dev_host_tests = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/dev/src/tests.zig"),
         .target = target,
         .optimize = optimize,
     });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{
         .name = "ziggy-dev",
-        .root_module = dev_host_tests_module,
+        .root_module = dev_host_tests,
     })).step);
-    const windows_tests_module = b.createModule(.{
+    const windows_tests = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/native/windows/src/tests.zig"),
         .target = b.graph.host,
         .optimize = optimize,
     });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{
         .name = "ziggy-native-windows",
-        .root_module = windows_tests_module,
+        .root_module = windows_tests,
     })).step);
 
     // The tests of the Ziggy template and of Ziggy's test app, each a build of its own that takes Ziggy as a dependency, as every app
@@ -249,7 +249,7 @@ fn createAppBackendModule(
     app: IAppBackend,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    ui_files_module: *std.Build.Module,
+    ui_files: *std.Build.Module,
 ) !*std.Build.Module {
     const backend = b.createModule(.{
         .root_source_file = b.path(app.backend_source_file),
@@ -258,7 +258,7 @@ fn createAppBackendModule(
         .link_libc = true,
     });
     backend.addImport("ziggy", ziggy.module);
-    backend.addImport("ui-files", ui_files_module);
+    backend.addImport("ui-files", ui_files);
     for (app.imports) |import| {
         backend.addImport(import.name, import.module);
     }
@@ -292,7 +292,7 @@ fn appPath(b: *std.Build, directory: []const u8, sub_path: []const u8) []const u
 // which means the frontend was not built first, the module does not compile and reports why: the build of anything that does
 // not use the frontend is not affected.
 //
-pub fn embedUi(b: *std.Build, shell_module: *std.Build.Module, shell_import_name: []const u8, ui_directory: []const u8) !*std.Build.Module {
+pub fn embedUi(b: *std.Build, native_app: *std.Build.Module, native_app_import_name: []const u8, ui_directory: []const u8) !*std.Build.Module {
     const io = b.graph.io;
     var source: std.ArrayList(u8) = .empty;
     var embedded_names: std.ArrayList([]const u8) = .empty;
@@ -303,7 +303,7 @@ pub fn embedUi(b: *std.Build, shell_module: *std.Build.Module, shell_import_name
     })) |opened| {
         var directory = opened;
         defer directory.close(io);
-        try source.appendSlice(b.allocator, b.fmt("const shell = @import(\"{s}\");\n\npub const files = [_]shell.UiFile{{\n", .{shell_import_name}));
+        try source.appendSlice(b.allocator, b.fmt("const native_app = @import(\"{s}\");\n\npub const files = [_]native_app.UiFile{{\n", .{native_app_import_name}));
         var walker = try directory.walk(b.allocator);
         defer walker.deinit();
         while (try walker.next(io)) |entry| {
@@ -340,7 +340,7 @@ pub fn embedUi(b: *std.Build, shell_module: *std.Build.Module, shell_import_name
         .root_source_file = generated.add("ui-files.zig", source.items),
     });
     if (has_index) {
-        module.addImport(shell_import_name, shell_module);
+        module.addImport(native_app_import_name, native_app);
     }
     for (embedded_names.items, embedded_paths.items) |import_name, file_path| {
         module.addAnonymousImport(import_name, .{
@@ -418,20 +418,20 @@ pub fn addDirectoryTests(
         try test_root_source.appendSlice(b.allocator, b.fmt("    _ = @import(\"src/test/{s}\");\n", .{import_path}));
     }
     try test_root_source.appendSlice(b.allocator, "}\n");
-    const test_module = b.createModule(.{
+    const tests = b.createModule(.{
         .root_source_file = test_files.add("all-tests.zig", test_root_source.items),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
     for (imports) |import| {
-        test_module.addImport(import.name, import.module);
+        tests.addImport(import.name, import.module);
     }
     // Zig does not look in the iOS SDK for libSystem unless it is given the library directory, which --sysroot then makes the SDK's.
     // A test program for the iOS simulator failed to link with "unable to find libSystem system library" with only the sysroot given,
     // and linked past that once /usr/lib was added as a library path.
     if (target.result.os.tag == .ios) {
-        test_module.addLibraryPath(.{
+        tests.addLibraryPath(.{
             .cwd_relative = "/usr/lib",
         });
     }
@@ -441,7 +441,7 @@ pub fn addDirectoryTests(
     const unit_test = b.addTest(.{
         .name = std.fs.path.basename(directory),
         .filters = filters,
-        .root_module = test_module,
+        .root_module = tests,
     });
     // The NDK has no libc.a for the sysroot's API level directory Zig looks in, only libc.so, so a test program for Android is linked
     // dynamically. Zig's build failed with "failed to parse archive: FileNotFound" on libc.a, libm.a and libdl.a.
@@ -498,7 +498,7 @@ const linux_runtime_libraries = [_][]const u8{
 //
 // What differs between the apps that Ziggy's Linux and Windows native apps are built for.
 //
-pub const IShellApp = struct {
+pub const INativeApp = struct {
     // The name of the app, which names its executable and its steps (`<name>-linux`, `<name>-windows`, `<name>-windows-check`).
     name: []const u8,
     // The name the steps' descriptions use for the app, such as "the Ziggy template".
@@ -518,9 +518,9 @@ pub const IShellApp = struct {
 // WebKitGTK 4.1 through their C headers, and to the core through ziggy.h. The built frontend (made by `bun run bundle:ui`) is embedded in
 // the executable, so the executable is the whole app.
 //
-pub fn addLinuxShell(
+pub fn addLinuxNativeApp(
     b: *std.Build,
-    app: IShellApp,
+    app: INativeApp,
     strip: bool,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
@@ -548,20 +548,21 @@ pub fn addLinuxShell(
         .link_libc = true,
     });
     translate_c.addIncludePath(ziggy.dependency.path("packages/ziggy/core/src/lib"));
-    const shell_module = b.createModule(.{
+    const native_app = b.createModule(.{
         .root_source_file = ziggy.dependency.path("packages/ziggy/native/linux/src/index.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    shell_module.addImport("c", translate_c.createModule());
-    shell_module.addImport("host-reply", b.createModule(.{
-        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/host-reply.zig"),
+    native_app.addImport("c", translate_c.createModule());
+    // The messages the core sends the native app, which the native app reads.
+    native_app.addImport("native-message", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/native-message.zig"),
         .target = target,
         .optimize = optimize,
     }));
     for (runtime_library_paths.items) |path| {
-        shell_module.addObjectFile(.{
+        native_app.addObjectFile(.{
             .cwd_relative = path,
         });
     }
@@ -573,7 +574,7 @@ pub fn addLinuxShell(
         .link_libc = true,
         .strip = strip,
     });
-    module.addImport("ziggy-native-linux", shell_module);
+    module.addImport("ziggy-native-linux", native_app);
     if (app.linux_icon) |icon| {
         module.addAnonymousImport("app-icon", .{
             .root_source_file = b.path(icon),
@@ -595,9 +596,9 @@ pub fn addLinuxShell(
 // compiles the native app without linking it, for a machine that cannot link a Windows executable. With compile_only the loader is not
 // linked, which is how that machine checks the native app.
 //
-pub fn addWindowsShell(
+pub fn addWindowsNativeApp(
     b: *std.Build,
-    app: IShellApp,
+    app: INativeApp,
     compile_only: bool,
     strip: bool,
     target: std.Build.ResolvedTarget,
@@ -606,7 +607,7 @@ pub fn addWindowsShell(
     core_library: *std.Build.Step.Compile,
 ) !void {
     const step = b.step(b.fmt("{s}-windows", .{app.name}), b.fmt("Build {s} for Windows, installed to {s}/{s}.exe", .{ app.title, app.name, app.name }));
-    const check_step = b.step(b.fmt("{s}-windows-check", .{app.name}), b.fmt("Compile {s}'s Windows shell for type errors without linking", .{app.title}));
+    const check_step = b.step(b.fmt("{s}-windows-check", .{app.name}), b.fmt("Compile {s}'s Windows native app for type errors without linking", .{app.title}));
     if (target.result.os.tag != .windows) {
         const message = b.fmt("The {s}-windows steps build for a Windows target.", .{app.name});
         step.dependOn(&b.addFail(message).step);
@@ -634,24 +635,30 @@ pub fn addWindowsShell(
     translate_c.addIncludePath(ziggy.dependency.path("packages/ziggy/core/src/lib"));
     translate_c.addIncludePath(b.path(appPath(b, app.directory, "webview2-sdk/include")));
 
-    const shell_module = b.createModule(.{
+    const native_app = b.createModule(.{
         .root_source_file = ziggy.dependency.path("packages/ziggy/native/windows/src/index.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    shell_module.addImport("c", translate_c.createModule());
-    shell_module.linkSystemLibrary("user32", .{});
-    shell_module.linkSystemLibrary("kernel32", .{});
-    shell_module.linkSystemLibrary("ole32", .{});
-    shell_module.linkSystemLibrary("shell32", .{});
-    shell_module.linkSystemLibrary("uuid", .{});
+    native_app.addImport("c", translate_c.createModule());
+    // The messages the core sends the native app, which the native app reads.
+    native_app.addImport("native-message", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/native-message.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    native_app.linkSystemLibrary("user32", .{});
+    native_app.linkSystemLibrary("kernel32", .{});
+    native_app.linkSystemLibrary("ole32", .{});
+    native_app.linkSystemLibrary("shell32", .{});
+    native_app.linkSystemLibrary("uuid", .{});
     // The WebView2 static loader reads the registry and writes event traces, which live in advapi32.
-    shell_module.linkSystemLibrary("advapi32", .{});
+    native_app.linkSystemLibrary("advapi32", .{});
     // Without the library the module still compiles, which is how a machine that cannot link a Windows executable checks the native app, but
     // nothing built from it links.
     if (!compile_only) {
-        shell_module.addObjectFile(b.path(appPath(b, app.directory, b.fmt("webview2-sdk/{s}/WebView2LoaderStatic.lib", .{sdk_architecture}))));
+        native_app.addObjectFile(b.path(appPath(b, app.directory, b.fmt("webview2-sdk/{s}/WebView2LoaderStatic.lib", .{sdk_architecture}))));
     }
 
     const module = b.createModule(.{
@@ -661,7 +668,7 @@ pub fn addWindowsShell(
         .link_libc = true,
         .strip = strip,
     });
-    module.addImport("ziggy-native-windows", shell_module);
+    module.addImport("ziggy-native-windows", native_app);
     if (app.windows_resource) |resource| {
         module.addWin32ResourceFile(.{
             .file = b.path(resource),
@@ -683,18 +690,18 @@ pub fn addWindowsShell(
     // because the SDK's static loader is built with it.
     // The core library is not linked into the object: a COFF object cannot hold the library's objects, and the check has no link to
     // resolve.
-    const check_module = b.createModule(.{
+    const check = b.createModule(.{
         .root_source_file = b.path(appPath(b, app.directory, "native/windows/src/main.zig")),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    check_module.addImport("ziggy-native-windows", shell_module);
+    check.addImport("ziggy-native-windows", native_app);
     // The icon resource is left out: a resource is not Zig, so it has no type errors to find, and an object cannot hold it ("coff does
     // not support linking multiple objects into one").
     check_step.dependOn(&b.addObject(.{
         .name = b.fmt("{s}-check", .{app.name}),
-        .root_module = check_module,
+        .root_module = check,
     }).step);
     step.dependOn(&b.addInstallArtifact(executable, .{
         .dest_dir = .{
@@ -730,14 +737,14 @@ fn addDevMode(
     const dev_step = b.step(b.fmt("{s}-dev", .{app.name}), b.fmt("Run {s} in dev mode: its dev server and dev host, in the browser, rebuilt as its files change", .{app.title}));
 
     // The app's core with no frontend embedded in it.
-    const no_ui = b.addWriteFiles();
-    const no_ui_module = b.createModule(.{
-        .root_source_file = no_ui.add("ui-files.zig", "const ziggy = @import(\"ziggy\");\n\npub const files = [_]ziggy.UiFile{};\n"),
+    const no_ui_files = b.addWriteFiles();
+    const no_ui = b.createModule(.{
+        .root_source_file = no_ui_files.add("ui-files.zig", "const ziggy = @import(\"ziggy\");\n\npub const files = [_]ziggy.UiFile{};\n"),
     });
-    no_ui_module.addImport("ziggy", ziggy.module);
+    no_ui.addImport("ziggy", ziggy.module);
     const core_library = b.addLibrary(.{
         .name = b.fmt("{s}-dev-host-backend", .{app.name}),
-        .root_module = try createAppBackendModule(b, ziggy, app, target, optimize, no_ui_module),
+        .root_module = try createAppBackendModule(b, ziggy, app, target, optimize, no_ui),
         .linkage = .static,
     });
 
@@ -747,13 +754,36 @@ fn addDevMode(
         .optimize = optimize,
         .link_libc = true,
     });
-    const dev_host_module = b.createModule(.{
+    const dev_host = b.createModule(.{
         .root_source_file = ziggy.dependency.path("packages/ziggy/dev/src/index.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    dev_host_module.addImport("c", translate_c.createModule());
+    dev_host.addImport("c", translate_c.createModule());
+    // The core's queue of messages and its wait for a socket, which the dev host's threads talk and wait with too.
+    dev_host.addImport("message-queue", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/message-queue.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    dev_host.addImport("socket-wait", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/socket-wait.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    // The allocator each of the dev host's threads makes for itself, and the messages the core sends the native app, which the dev
+    // host reads as a native app does.
+    dev_host.addImport("thread-allocator", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/thread-allocator.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+    dev_host.addImport("native-message", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/native-message.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
     const dev_app = b.addOptions();
     dev_app.addOption([]const u8, "title", app.title);
     const module = b.createModule(.{
@@ -762,7 +792,7 @@ fn addDevMode(
         .optimize = optimize,
         .link_libc = true,
     });
-    module.addImport("ziggy-dev", dev_host_module);
+    module.addImport("ziggy-dev", dev_host);
     module.addOptions("dev_app", dev_app);
     module.linkLibrary(core_library);
     const executable = b.addExecutable(.{
@@ -780,6 +810,18 @@ fn addDevMode(
             .optimize = optimize,
         }),
     });
+    // The core's queue of messages, which the supervisor's progress thread is told the build has finished through.
+    supervisor.root_module.addImport("message-queue", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/message-queue.zig"),
+        .target = b.graph.host,
+        .optimize = optimize,
+    }));
+    // The allocator the supervisor's progress thread makes for itself.
+    supervisor.root_module.addImport("thread-allocator", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/thread-allocator.zig"),
+        .target = b.graph.host,
+        .optimize = optimize,
+    }));
     const run_supervisor = b.addRunArtifact(supervisor);
     run_supervisor.addArgs(&.{
         "--zig",       b.graph.zig_exe,

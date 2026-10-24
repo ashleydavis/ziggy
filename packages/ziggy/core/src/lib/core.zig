@@ -1,6 +1,13 @@
 //
-// The core: everything behind one handle. It owns the task runner, knows the app's message handlers and the host callbacks,
-// and routes every message from the frontend: a system message (Ziggy's own) to Ziggy's handlers and an app message to the app's handler for its name.
+// The core: the main thread, separate from the native app's UI thread, and the calls the native app's thread makes to reach it. The
+// main thread's function keeps each piece of its state (the worker pool and its tasks, the timers, the dropped files, the messages
+// whose handlers send their response later and the test control state) as a variable of its own, and gives a piece only to the
+// functions that use it. Every call from the native app and every response a handler sends later is posted to the main thread's queue
+// as a message, and the main thread routes every message from the frontend: a system message (Ziggy's own) to Ziggy's function for its
+// name and an app message to the app's handler for its name. Threads talk only by JSON messages (see message-queue.zig).
+//
+// The app's code reaches the main thread only through the handler services (see services.zig), which every handler, menu item
+// function and callback is given with the timers, the Io and an allocator.
 //
 
 const std = @import("std");
@@ -8,58 +15,33 @@ const build_options = @import("build_options");
 const types = @import("types.zig");
 const json = @import("json.zig");
 const task_runner = @import("task-runner.zig");
-const queue_backend = @import("queue-backend.zig");
 const task_queue = @import("task-queue.zig");
-const origin_check = @import("origin-check.zig");
 const test_control = @import("test-control.zig");
-const ui_files = @import("ui-files.zig");
+const test_commands = @import("test-commands.zig");
 const dropped_files = @import("dropped-files.zig");
 const system_messages = @import("system-messages.zig");
 const app_lib = @import("app.zig");
 const handlers_lib = @import("handlers.zig");
-const message_registry = @import("message-registry.zig");
 const menu_lib = @import("menu.zig");
+const message_queue = @import("message-queue.zig");
+const worker_pool = @import("worker-pool.zig");
+const worker_lib = @import("worker.zig");
+const worker_messages = @import("worker-messages.zig");
+const timers_lib = @import("timers.zig");
+const services_lib = @import("services.zig");
+const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
+const native_app = @import("native-app.zig");
+const native_message = @import("native-message.zig");
+const NativeApp = native_app.NativeApp;
+const native_side_lib = @import("native-side.zig");
+const NativeSide = native_side_lib.NativeSide;
 
 const ZiggyConfig = types.ZiggyConfig;
+const QueueMessage = message_queue.Message;
+const TimerList = timers_lib.TimerList;
+const TestCommands = test_commands.TestCommands;
 
-//
-// One app message from the frontend, unparsed, as the core hands it to a message handler whose request is ziggy.core.Message (see App).
-//
-pub const Message = struct {
-    // The message's id, which its message response carries back to the frontend, or null for a message sent with send, which
-    // gets no message response. A handler that answers with a task passes the message on to answerWithTask unread.
-    id: ?std.json.Value,
-    // The message's name, which the frontend gave as the first argument of invoke or send and which chose the handler. It is
-    // never empty: the core refuses a message without one, with MissingMessageName, before any handler runs. It lives in the
-    // arena the handler is given.
-    name: []const u8,
-    // The data the frontend sent, the app's own to lay out, or null when it sent none. It lives in the arena the handler is given.
-    data: std.json.Value,
-};
-
-//
-// What a message handler that takes ziggy.core.Message did about the message response.
-//
-pub const MessageResult = union(enum) {
-    // The JSON text of the message response, allocated with the arena. It is sent when the message has an id.
-    response: []const u8,
-    // There is nothing to send back. A message with an id still gets a successful message response holding null, so the
-    // frontend's invoke never waits for ever.
-    none,
-    // The message is answered elsewhere, so nothing is sent now: by a task answerWithTask queued, whose result is sent when the
-    // task ends, or (for a handler App wrapped) later through the handler's Reply.
-    answered_by_task,
-};
-
-//
-// A message whose handler took a Reply and has not answered yet, as the core keeps it.
-//
-const LaterReply = struct {
-    // The JSON text of the message's id, owned by the core, or null for a message with no id.
-    id_json: ?[]u8,
-    // The message's name, owned by the core, which an unanswered message is reported by.
-    name: []u8,
-};
+pub const MessageQueue = message_queue.MessageQueue;
 
 //
 // Registers an app with the core: see app.zig.
@@ -67,489 +49,184 @@ const LaterReply = struct {
 pub const App = app_lib.App;
 
 //
-// What a message handler returns when it answers with a task or later: see handlers.zig.
+// An app as App registered it: see app.zig.
 //
-pub const Answer = handlers_lib.Answer;
+pub const RegisteredApp = app_lib.RegisteredApp;
 
 //
-// The task that answers a message, in an Answer: see handlers.zig.
+// The point of the main thread's stop at which the app's on_destroy is called: see app.zig.
 //
-pub const AnswerTask = handlers_lib.AnswerTask;
+pub const DestroyPhase = app_lib.DestroyPhase;
 
 //
-// The handle a message handler that answers later takes: see handlers.zig.
+// An app's function for the query of the frontend's address: see app.zig.
+//
+pub const UiQuery = app_lib.UiQuery;
+
+//
+// One app message, unparsed, for a handler whose payload is ziggy.core.Message: see handlers.zig.
+//
+pub const Message = handlers_lib.Message;
+
+//
+// What a handler that takes ziggy.core.Message returns: see handlers.zig.
+//
+pub const MessageResult = handlers_lib.MessageResult;
+
+//
+// What a message handler returns when its response comes from a task or later: see handlers.zig.
+//
+pub const Response = handlers_lib.Response;
+
+//
+// The task whose result is a message's response: see handlers.zig.
+//
+pub const ResponseTask = handlers_lib.ResponseTask;
+
+//
+// The handle a message handler that sends its response later takes: see handlers.zig.
 //
 pub const Reply = handlers_lib.Reply;
 
 //
-// An app as App registered it: what the app adds to the core. An app makes it with App and never writes one itself.
+// What handlers reach the main thread through: see services.zig.
 //
-pub const RegisteredApp = struct {
-    // The app's message handlers by message name, each wrapped by App. Only app messages reach them, never a system message. A
-    // handler that fails returns an error, which becomes an error message response (or a core-error event for a message with no
-    // id).
-    messages: []const handlers_lib.MessageEntry,
-    // The app's task types.
-    tasks: []const task_runner.TaskHandlerEntry,
-    // The desktop menu as JSON, which App makes from the app's `.menu` (see menuJson in menu.zig). "[]" for an app with no menu.
-    // Native apps show it on desktop only. See "Menus" in the architecture document.
-    menu_json: []const u8,
-    // What the core does for each menu item a native app posts as menu-action, by the item's name, which App makes from the app's
-    // `.menu` (see menuTargets in menu.zig).
-    menu_targets: menu_lib.MenuTargets,
-    // The files of the app's bundled frontend, embedded in the app's library, for a native app that serves the frontend by
-    // calling the core for each file (the MacOS, iOS and Android native apps). Empty for an app whose native app embeds the
-    // frontend itself.
-    ui_files: []const ui_files.UiFile,
-    // Turns the error the message handler returned into the text of the error reply, for an app whose code reports the reason for
-    // a failure somewhere other than the error's name (a Zig error carries no message). It returns null when it has nothing to
-    // add about the error, and the reply then carries the error's name. It is called on the thread that handled the message,
-    // straight after the handler failed, and the text is used before the call returns.
-    describe_error: ?ErrorDescriber = null,
-    // Called when a task has ended, after the frontend has been told, from the thread that ran it, with no lock held. The
-    // values are valid only during the call.
-    on_task_end: ?*const fn (core: *Core, end: types.TaskEnd) void = null,
-    // Called when a task has sent an event, after the frontend has been told, from the thread that sent it, with no lock held.
-    // The values are valid only during the call.
-    on_task_event: ?*const fn (core: *Core, sent: types.TaskSentEvent) void = null,
-    // Gives the query text the native app appends to the address of the frontend, after the question mark, so the frontend's
-    // first render already holds what the app tells it at start-up. Null for an app whose frontend needs no query. See `UiQuery`.
-    ui_query: ?UiQuery = null,
-    // Called once at the end of `Core.create`, on the thread that creates the core, when the core is otherwise ready and before any
-    // message or task can reach the app, so the app can make what its handlers and tasks need. An error fails `Core.create` with
-    // that error after the core has released what it made. Null for an app with nothing to do then. The counterpart of `on_destroy`.
-    on_create: ?*const fn (core: *Core) anyerror!void = null,
-    // Called twice while the core is destroyed, on the thread that destroys it: with `.before_tasks_stop` while tasks can still
-    // be queued, so the app can stop its own threads, and with `.after_tasks_stopped` once every task has ended, so the app can free
-    // its own resources. The core is destroyed whenever the native app ends the backend, which is not only when the app quits (an
-    // Android activity's onDestroy, for one), and in tests. Null for an app with nothing to do then. See `DestroyPhase`.
-    on_destroy: ?*const fn (core: *Core, phase: DestroyPhase) void = null,
-};
+pub const HandlerServices = services_lib.HandlerServices;
 
 //
-// The point of the core's destruction at which the app's `on_destroy` is called.
+// The native app's callbacks a thread of the app's own may call itself: see services.zig.
 //
-pub const DestroyPhase = enum {
-    // First, before the task runner stops: tasks can still be queued and the ones running are still running. For stopping the
-    // app's own threads, which may still queue tasks or use the core.
-    before_tasks_stop,
-    // Second, after the task runner has stopped: every task has ended and no task can be queued, but the core is not yet freed.
-    // For freeing what the app's own code allocated, now that no task can use it.
-    after_tasks_stopped,
-};
+pub const NativeCallbacks = services_lib.NativeCallbacks;
 
 //
-// An app's function for the query of the frontend's address. The core calls it when the native app calls ziggy_ui_query (the native app calls it once the core exists,
-// before it loads the frontend), with whether the test mode switch is on, which the app puts in the query however it likes. It returns
-// the text after the question mark, such as `restApiUrl=...&testMode=1`, or an empty string for no query, allocated with the
-// allocator given, which is an arena that is released when the call returns. Ziggy passes the text through unread, so no native app
-// composes a query and Ziggy names none of its parts.
+// The handler services a timer's callback on the main thread is given: see services.zig.
 //
-pub const UiQuery = *const fn (core: *Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8;
+pub const handlerServicesOf = services_lib.handlerServicesOf;
 
 //
-// A function that gives the text of the error reply for an error a handler returned, or null to use the error's name.
+// Identifies a timer, for clearing it: see timers.zig.
+//
+pub const TimerId = timers_lib.TimerId;
+
+//
+// A function that gives the text of the error response for an error a handler returned, or null to use the error's name.
 //
 pub const ErrorDescriber = types.ErrorDescriber;
 
 //
-// One running core.
+// The number the frontend's messages, which the native app passes on with ziggy_send_message, reach the main thread's queue under.
 //
-pub const Core = struct {
-    // Allocates everything the core owns.
-    allocator: std.mem.Allocator,
-    // The Io used for sleeping, waiting, files and sockets. It lives here so that its address is stable.
-    threaded: std.Io.Threaded,
-    // The app messages, registered from the app's App when the core is created and with registerMessage while it runs.
-    app_messages: message_registry.Registry,
-    // The system messages, which the parts of Ziggy register (see system-messages.zig). It is a message_registry.Registry the core
-    // owns, held untyped so that nothing an app reaches from the core names the registry of system messages.
-    system_messages: *anyopaque,
-    // The number of messages answered by a task so far, which names the next one's task. A message's own id cannot name it: the
-    // frontend numbers its messages from 1 again when it reloads, while a task of the last page can still be running.
-    next_request_task: std.atomic.Value(u64),
-    // The desktop menu as JSON, owned by the app.
-    menu_json: []const u8,
-    // What the core does for each menu item a native app posts, by the item's name, owned by the app.
-    menu_targets: menu_lib.MenuTargets,
-    // The files of the app's bundled frontend, owned by the app.
-    ui_files: []const ui_files.UiFile,
-    // Gives the text of an error reply, or null to use the error's name. Owned by the app.
-    describe_error: ?ErrorDescriber,
-    // The app's function for a task that ended, or null.
-    on_task_end: ?*const fn (core: *Core, end: types.TaskEnd) void,
-    // The app's function for an event a task sent, or null.
-    on_task_event: ?*const fn (core: *Core, sent: types.TaskSentEvent) void,
-    // The app's function for the query of the frontend's address, or null.
-    ui_query: ?UiQuery,
-    // The app's function called before tasks stop and after they have stopped when the core is destroyed, or null.
-    on_destroy: ?*const fn (core: *Core, phase: DestroyPhase) void,
-    // The text the last call to `uiQuery` returned, owned by the core, or null before the first call.
-    ui_query_text: ?[:0]u8,
-    // The native app's configuration. The strings in it are copies owned by the core.
-    config: ZiggyConfig,
-    // The owned copy of the app's URL prefix.
-    app_url_prefix: [:0]u8,
-    // The owned copy of the data directory.
-    data_dir: [:0]u8,
-    // The task runner.
-    runner: task_runner.TaskRunner,
-    // The IQueueBackend that code written against the task queue talks to, backed by the runner.
-    queue_backend: *queue_backend.ZiggyQueueBackend,
-    // The files the user last dropped on the window, for getPathForFile.
-    dropped: dropped_files.DroppedFiles,
-    // The test control connection, only in a test hooks build and only when the native app is in test mode.
-    control: ?*test_control.TestControl,
-    // The messages whose handlers took a Reply and have not answered yet, by the serial each Reply carries.
-    later_replies: std.AutoHashMapUnmanaged(u64, LaterReply),
-    // Guards later_replies and next_later_reply, which handlers and the threads they hand a Reply to use at once.
-    later_mutex: std.Io.Mutex,
-    // The serial of the next message recorded in later_replies.
-    next_later_reply: u64,
+const from_frontend: u32 = 0xFFFF_FFF0;
+
+//
+// The number the core's own messages (a stop, a drop, a response a handler sends later) reach the main thread's queue under.
+//
+const from_core = handlers_lib.from_core;
+
+//
+// How the main thread sends the frontend its messages: through the native app's queue (see native-app.zig).
+//
+pub const Frontend = struct {
+    // The native app's queue and how to wake its UI thread.
+    native: NativeApp,
 
     //
-    // Creates a core. The returned pointer is the handle.
+    // Sends a JSON message to the native app, and so to the frontend, with the main thread's Io.
     //
-    pub fn create(allocator: std.mem.Allocator, config: ZiggyConfig, app: RegisteredApp) !*Core {
-        if (config.deliver == null) {
-            return error.DeliverCallbackMissing;
-        }
-        const core = try allocator.create(Core);
-        errdefer allocator.destroy(core);
-        core.allocator = allocator;
-        core.threaded = .init_single_threaded;
-        // An app's retry (Photosphere's, for one) runs its operations against a timer, which needs the Io to start a task of its own. Everything else
-        // still runs on the calling thread, and a cancel request still has no effect on it.
-        core.threaded.allocator = allocator;
-        core.threaded.concurrent_limit = .unlimited;
-        core.app_messages = message_registry.Registry.init(allocator, core.threaded.io(), "app");
-        errdefer core.app_messages.deinit();
-        for (app.messages) |entry| {
-            try core.app_messages.registerWrapped(entry.name, entry.handler);
-        }
-        const system = try allocator.create(message_registry.Registry);
-        errdefer allocator.destroy(system);
-        system.* = message_registry.Registry.init(allocator, core.threaded.io(), "system");
-        errdefer system.deinit();
-        core.system_messages = system;
-        try system_messages.platform.register(system);
-        try system_messages.menu.register(system);
-        if (build_options.test_hooks) {
-            try system_messages.test_hooks.register(system);
-        }
-        core.next_request_task = .init(0);
-        core.menu_json = app.menu_json;
-        core.menu_targets = app.menu_targets;
-        core.ui_files = app.ui_files;
-        core.describe_error = app.describe_error;
-        core.on_task_end = app.on_task_end;
-        core.on_task_event = app.on_task_event;
-        core.ui_query = app.ui_query;
-        core.on_destroy = app.on_destroy;
-        core.ui_query_text = null;
-        core.config = config;
-        core.app_url_prefix = try allocator.dupeZ(u8, std.mem.span(config.app_url_prefix));
-        errdefer allocator.free(core.app_url_prefix);
-        core.data_dir = try allocator.dupeZ(u8, std.mem.span(config.data_dir));
-        errdefer allocator.free(core.data_dir);
-        // The native app's own strings are valid only during the call, so everything that keeps the configuration keeps it pointing at the copies.
-        core.config.app_url_prefix = core.app_url_prefix.ptr;
-        core.config.data_dir = core.data_dir.ptr;
-        core.dropped = dropped_files.DroppedFiles.init(allocator);
-        errdefer core.dropped.deinit();
-        try system_messages.dropped_files.register(system);
-        core.control = null;
-        core.later_replies = .empty;
-        core.later_mutex = .init;
-        core.next_later_reply = 0;
-        core.queue_backend = try queue_backend.ZiggyQueueBackend.create(allocator, core.threaded.io(), &core.runner);
-        errdefer core.queue_backend.destroy();
-        try core.runner.start(allocator, core.threaded.io(), .{
-            .user_data = core,
-            .emit = emitFromRunner,
-        }, app.tasks, .{
-            .worker_threads = config.worker_threads,
-            .max_concurrent_child_tasks = config.max_concurrent_child_tasks,
-            .describe_error = app.describe_error,
-            .fallback_handler = queue_backend.fallbackHandler(core.queue_backend),
-            .observer = .{
-                .user_data = core,
-                .on_task_end = observeTaskEnd,
-                .on_task_event = observeTaskEvent,
+    pub fn deliver(self: Frontend, io: std.Io, message: []const u8) void {
+        self.native.deliver(io, message) catch @panic("out of memory delivering a message");
+    }
+
+    //
+    // Sends the successful response to a message.
+    //
+    fn sendResponse(self: Frontend, io: std.Io, arena: std.mem.Allocator, id: std.json.Value, data_json: []const u8) !void {
+        self.deliver(io, try json.stringify(arena, .{
+            .id = id,
+            .ok = true,
+            .data = json.Raw{
+                .text = data_json,
             },
-        }, core.config);
-        errdefer core.runner.stop();
-        try system_messages.tasks.register(system);
-        task_queue.queue_backend.setQueueBackend(core.queue_backend.queueBackend());
-        errdefer task_queue.queue_backend.setQueueBackend(null);
-        if (build_options.test_hooks) {
-            if (config.test_mode) {
-                const control = try allocator.create(test_control.TestControl);
-                errdefer allocator.destroy(control);
-                try control.start(allocator, core.threaded.io(), config, emitFromRunner, core, filesDroppedFromControl);
-                core.control = control;
-                core.runner.pick_override = .{
-                    .user_data = control,
-                    .take = test_control.TestControl.takePickAnswer,
-                };
-            }
-        }
-        errdefer if (core.control) |control| {
-            control.stop();
-            allocator.destroy(control);
-        };
-        if (app.on_create) |on_create| {
-            try on_create(core);
-        }
-        return core;
+        }));
     }
 
     //
-    // Cancels every running task, waits for the workers to stop and releases everything. Calls the app's `on_destroy` with
-    // `.before_tasks_stop` first and with `.after_tasks_stopped` once the runner has stopped.
+    // Sends a message an error response, or, when there is nothing to respond to, a core-error event.
     //
-    pub fn destroy(self: *Core) void {
-        if (self.on_destroy) |on_destroy| {
-            on_destroy(self, .before_tasks_stop);
-        }
-        if (self.control) |control| {
-            control.stop();
-            self.allocator.destroy(control);
-        }
-        self.runner.stop();
-        self.reportUnansweredReplies();
-        if (self.on_destroy) |on_destroy| {
-            on_destroy(self, .after_tasks_stopped);
-        }
-        task_queue.queue_backend.setQueueBackend(null);
-        self.queue_backend.destroy();
-        self.threaded.deinit();
-        self.dropped.deinit();
-        self.app_messages.deinit();
-        const system = system_messages.registry(self);
-        system.deinit();
-        self.allocator.destroy(system);
-        if (self.ui_query_text) |text| {
-            self.allocator.free(text);
-        }
-        self.allocator.free(self.app_url_prefix);
-        self.allocator.free(self.data_dir);
-        const allocator = self.allocator;
-        allocator.destroy(self);
-    }
-
-    //
-    // Decides what to do with an address the web view is about to load.
-    //
-    pub fn checkUrl(self: *Core, url: []const u8) types.UrlDecision {
-        return origin_check.checkUrl(self.app_url_prefix, url);
-    }
-
-    //
-    // Calls the app's function for the query of the frontend's address and returns the text after the question mark, empty when the app has none. The
-    // text is owned by the core and stays valid until the next call or until the core is destroyed. The native app calls it once the core
-    // exists, before it loads the frontend.
-    //
-    pub fn uiQuery(self: *Core) ![:0]const u8 {
-        const ui_query = self.ui_query orelse {
-            return "";
-        };
-        // The app allocates from an arena that goes when the call returns, so it need not free what it uses to make the text.
-        var arena_state = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena_state.deinit();
-        const text = try ui_query(self, arena_state.allocator(), self.config.test_mode);
-        const owned = try self.allocator.dupeZ(u8, text);
-        if (self.ui_query_text) |old| {
-            self.allocator.free(old);
-        }
-        self.ui_query_text = owned;
-        return owned;
-    }
-
-    //
-    // Finds the bundled frontend's file for the path of a request, or null when the frontend has no such file. See ui-files.zig.
-    //
-    pub fn uiFile(self: *Core, request_path: []const u8) ?*const ui_files.UiFile {
-        return ui_files.findFile(self.ui_files, request_path);
-    }
-
-    //
-    // Records the files the user dropped on the window, replacing the last drop. The native app calls it when the drop happens, before the
-    // frontend's own drop event, with the paths as the JSON text of an array of strings.
-    //
-    pub fn filesDropped(self: *Core, paths_json: []const u8) !void {
-        try self.dropped.replace(self.io(), paths_json);
-    }
-
-    //
-    // The Io the core's threads sleep and wait with.
-    //
-    pub fn io(self: *Core) std.Io {
-        return self.threaded.io();
-    }
-
-    //
-    // Sends a JSON message to the native app, and so to the frontend.
-    //
-    pub fn deliver(self: *Core, message: []const u8) void {
-        const deliver_fn = self.config.deliver.?;
-        deliver_fn(self.config.user_data, message.ptr, message.len);
-    }
-
-    //
-    // Handles one message from the frontend or the native app: the one entry point into the core for both kinds of message. It
-    // parses the envelope and passes it on by its kind, "app" to postAppMessage and "system" to postSystemMessage, and does
-    // nothing else. A message that is not a JSON object, or has no kind or any other kind, is refused as InvalidMessage, reported as a
-    // core-error system event.
-    //
-    pub fn postMessage(self: *Core, message: []const u8) void {
-        var arena_state = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena_state.deinit();
-        const arena = arena_state.allocator();
-        const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena, message, .{}) catch {
-            self.reportError(arena, null, "InvalidMessage");
-            return;
-        };
-        if (parsed != .object) {
-            self.reportError(arena, null, "InvalidMessage");
+    fn reportError(self: Frontend, io: std.Io, arena: std.mem.Allocator, id: ?std.json.Value, error_name: []const u8) void {
+        if (id) |id_value| {
+            self.deliver(io, json.stringify(arena, .{
+                .id = id_value,
+                .ok = false,
+                .@"error" = error_name,
+            }) catch @panic("out of memory building an error message"));
             return;
         }
-        const kind = parsed.object.get("kind") orelse .null;
-        if (kind == .string and std.mem.eql(u8, kind.string, "app")) {
-            self.postAppMessage(arena, parsed);
-            return;
-        }
-        if (kind == .string and std.mem.eql(u8, kind.string, "system")) {
-            self.postSystemMessage(arena, parsed);
-            return;
-        }
-        self.reportError(arena, null, "InvalidMessage");
-    }
-
-    //
-    // Handles an app message: runs the app's handler for its name and replies when it carries an id. It must carry a name, a
-    // string that is not empty, or it is refused with MissingMessageName, and a name no app message is registered under is
-    // UnknownMessageName; neither runs a handler.
-    //
-    fn postAppMessage(self: *Core, arena: std.mem.Allocator, parsed: std.json.Value) void {
-        const request_id: ?std.json.Value = parsed.object.get("id");
-        const name = messageName(parsed) orelse {
-            self.reportError(arena, request_id, "MissingMessageName");
-            return;
-        };
-        const handler = self.app_messages.find(name) orelse {
-            self.reportError(arena, request_id, "UnknownMessageName");
-            return;
-        };
-        self.runHandler(arena, handler, request_id, name, parsed);
-    }
-
-    //
-    // The name of a message, or null when it has none, an empty one or one that is not a string.
-    //
-    fn messageName(parsed: std.json.Value) ?[]const u8 {
-        const value = parsed.object.get("name") orelse {
-            return null;
-        };
-        if (value != .string or value.string.len == 0) {
-            return null;
-        }
-        return value.string;
-    }
-
-    //
-    // Handles a system message: runs the handler a part of Ziggy registered for its name (see system-messages.zig) and replies
-    // when it carries an id. It never reaches the app's handlers. A message with no name is InvalidMessage, and a name no system
-    // message is registered under is UnknownSystemMessage.
-    //
-    fn postSystemMessage(self: *Core, arena: std.mem.Allocator, parsed: std.json.Value) void {
-        const request_id: ?std.json.Value = parsed.object.get("id");
-        const name = messageName(parsed) orelse {
-            self.reportError(arena, request_id, "InvalidMessage");
-            return;
-        };
-        const handler = system_messages.registry(self).find(name) orelse {
-            self.reportError(arena, request_id, "UnknownSystemMessage");
-            return;
-        };
-        self.runHandler(arena, handler, request_id, name, parsed);
-    }
-
-    //
-    // Runs a message handler, app or system, and replies to the message when it carries an id: with the response, with an error
-    // response when the handler failed, or with the InvalidMessageData text when the data did not fit the handler's request (the
-    // handler then did not run). A failure of a message that has no id is reported as a core-error system event, never dropped
-    // silently. A message answered by a task or later gets its reply then.
-    //
-    fn runHandler(self: *Core, arena: std.mem.Allocator, handler: handlers_lib.WrappedHandler, request_id: ?std.json.Value, name: []const u8, parsed: std.json.Value) void {
-        const outcome = handler(self, arena, .{
-            .id = request_id,
-            .name = name,
-            .data = parsed.object.get("data") orelse .null,
-        }) catch |err| {
-            self.reportHandlerError(arena, request_id, err);
-            return;
-        };
-        const result = switch (outcome) {
-            .result => |returned| returned,
-            .answered_twice => |text| {
-                self.reportError(arena, null, text);
-                return;
+        self.deliver(io, json.stringify(arena, .{
+            .kind = "system",
+            .name = "core-error",
+            .data = .{
+                .@"error" = error_name,
             },
-            .invalid_data => |text| {
-                self.reportError(arena, request_id, text);
-                return;
-            },
-        };
-        const id = request_id orelse {
-            return;
-        };
-        const reply_data = switch (result) {
-            .response => |text| text,
-            .none => "null",
-            .answered_by_task => {
-                return;
-            },
-        };
-        self.sendReply(arena, id, reply_data) catch |err| {
-            self.reportError(arena, null, @errorName(err));
-        };
+        }) catch @panic("out of memory building an error message"));
     }
 
     //
-    // Registers an app message while the core runs, from any thread, in any of the handler forms of an App's `.messages` (see
-    // handlers.zig). It is handled from then on. A name registered already, by App or by an earlier call, is the error
-    // DuplicateMessage, and the name is printed. It only ever adds app messages, never a system message.
+    // Reports the error a handler returned: the text the app's describe_error gives for it, or else its name.
     //
-    pub fn registerMessage(self: *Core, name: []const u8, comptime handler: anytype) !void {
-        try self.app_messages.registerWrapped(name, handlers_lib.wrap(handler));
+    fn reportHandlerError(self: Frontend, io: std.Io, arena: std.mem.Allocator, describe_error: ?ErrorDescriber, id: ?std.json.Value, err: anyerror) void {
+        const described: ?[]const u8 = if (describe_error) |describe| describe(err) else null;
+        self.reportError(io, arena, id, described orelse @errorName(err));
+    }
+};
+
+//
+// A message whose handler took a Reply, as the main thread keeps it until the response comes.
+//
+const LaterReply = struct {
+    // The JSON text of the message's id, or null for a message with no id.
+    id_json: ?[]u8,
+    // The message's name, which a message that never gets its response is reported by.
+    name: []u8,
+};
+
+//
+// The messages whose handlers took a Reply and have not sent their response yet, by the serial each Reply carries. A piece of the main
+// thread's state, whose copies are allocated with the main thread's allocator, which each function that allocates or frees is given.
+//
+const LaterReplies = struct {
+    // The messages by serial.
+    entries: std.AutoHashMapUnmanaged(u64, LaterReply),
+    // The serial of the next message recorded.
+    next_serial: u64,
+
+    const empty: LaterReplies = .{
+        .entries = .empty,
+        .next_serial = 0,
+    };
+
+    //
+    // Releases what is left.
+    //
+    fn deinit(self: *LaterReplies, allocator: std.mem.Allocator) void {
+        var iterator = self.entries.valueIterator();
+        while (iterator.next()) |later| {
+            free(allocator, later.*);
+        }
+        self.entries.deinit(allocator);
     }
 
     //
-    // Registers a task type while the core runs, from any thread: `task` is a task handler, or `.{ .handler = ..., .kind = ... }`
-    // as in an App's `.tasks`. It can be queued from then on. A task type registered already is the error DuplicateTaskType, and
-    // its name is printed.
+    // Records a message whose handler takes a Reply, before the handler runs, and returns the serial its Reply carries.
     //
-    pub fn registerTask(self: *Core, name: []const u8, comptime task: anytype) !void {
-        try self.runner.registerTaskType(app_lib.taskEntry("a task type registered while the core runs", name, task));
-    }
-
-    //
-    // Records a message whose handler takes a Reply, before the handler runs, and returns the serial its Reply carries. App's wrapper
-    // calls it; an app never does.
-    //
-    pub fn openLaterReply(self: *Core, message: Message) !u64 {
-        const id_json: ?[]u8 = if (message.id) |id| try json.stringify(self.allocator, id) else null;
-        errdefer if (id_json) |text| {
-            self.allocator.free(text);
-        };
-        const name = try self.allocator.dupe(u8, message.name);
-        errdefer self.allocator.free(name);
-        self.later_mutex.lockUncancelable(self.io());
-        defer self.later_mutex.unlock(self.io());
-        const serial = self.next_later_reply;
-        self.next_later_reply += 1;
-        try self.later_replies.put(self.allocator, serial, .{
+    fn open(self: *LaterReplies, allocator: std.mem.Allocator, message: Message) !u64 {
+        const id_json: ?[]u8 = if (message.id) |id| try json.stringify(allocator, id) else null;
+        errdefer if (id_json) |text| allocator.free(text);
+        const name = try allocator.dupe(u8, message.name);
+        errdefer allocator.free(name);
+        const serial = self.next_serial;
+        self.next_serial += 1;
+        try self.entries.put(allocator, serial, .{
             .id_json = id_json,
             .name = name,
         });
@@ -557,209 +234,1071 @@ pub const Core = struct {
     }
 
     //
-    // Forgets a message recorded by openLaterReply without answering it, for a handler that answered by what it returned. It is the
-    // error MessageAlreadyAnswered when the message was answered through its Reply already.
+    // Forgets a message whose handler gave its response by what it returned or failed. A message no longer recorded changes nothing.
     //
-    pub fn closeLaterReply(self: *Core, serial: u64) !void {
-        const later = try self.takeLaterReply(serial);
-        self.freeLaterReply(later);
-    }
-
-    //
-    // Answers a message recorded by openLaterReply with the response response_json, JSON text, when it has an id. It is the error
-    // MessageAlreadyAnswered when the message was answered already.
-    //
-    pub fn sendLaterReply(self: *Core, serial: u64, response_json: []const u8) !void {
-        const later = try self.takeLaterReply(serial);
-        defer self.freeLaterReply(later);
-        const id_json = later.id_json orelse {
+    fn close(self: *LaterReplies, allocator: std.mem.Allocator, serial: u64) void {
+        const entry = self.entries.fetchRemove(serial) orelse {
             return;
         };
-        var arena_state = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena_state.deinit();
-        const reply = try json.stringify(arena_state.allocator(), .{
-            .id = json.Raw{
-                .text = id_json,
-            },
-            .ok = true,
-            .data = json.Raw{
-                .text = response_json,
-            },
-        });
-        self.deliver(reply);
+        free(allocator, entry.value);
     }
 
     //
-    // Answers a message recorded by openLaterReply with an error response: the text describe_error gives for the error, or else its
-    // name, as a core-error event for a message with no id. It is the error MessageAlreadyAnswered when the message was answered
-    // already.
+    // Sends the response another thread posted for a recorded message (a "later-reply" message): its data, or its error. A message no
+    // longer recorded has had its response, so a second one is reported as a core-error event naming MessageAlreadyAnswered.
     //
-    pub fn failLaterReply(self: *Core, serial: u64, err: anyerror) !void {
-        const later = try self.takeLaterReply(serial);
-        defer self.freeLaterReply(later);
-        var arena_state = std.heap.ArenaAllocator.init(self.allocator);
-        defer arena_state.deinit();
-        const arena = arena_state.allocator();
-        const id: ?std.json.Value = if (later.id_json) |text| try std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{}) else null;
-        self.reportHandlerError(arena, id, err);
-    }
-
-    //
-    // Removes a message recorded by openLaterReply, or fails with MessageAlreadyAnswered when it is no longer recorded.
-    //
-    fn takeLaterReply(self: *Core, serial: u64) !LaterReply {
-        self.later_mutex.lockUncancelable(self.io());
-        defer self.later_mutex.unlock(self.io());
-        const entry = self.later_replies.fetchRemove(serial) orelse {
-            return error.MessageAlreadyAnswered;
+    fn deliver(self: *LaterReplies, io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, parsed: std.json.Value) void {
+        const serial: u64 = @intCast(json.getInteger(parsed, "serial") orelse 0);
+        const entry = self.entries.fetchRemove(serial) orelse {
+            frontend.reportError(io, arena, null, "MessageAlreadyAnswered");
+            return;
         };
-        return entry.value;
-    }
-
-    //
-    // Releases what openLaterReply copied.
-    //
-    fn freeLaterReply(self: *Core, later: LaterReply) void {
-        if (later.id_json) |text| {
-            self.allocator.free(text);
+        defer free(allocator, entry.value);
+        const later = entry.value;
+        const id: ?std.json.Value = if (later.id_json) |text| std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{}) catch @panic("out of memory sending a response") else null;
+        if (json.getString(parsed, "error")) |text| {
+            frontend.reportError(io, arena, id, text);
+            return;
         }
-        self.allocator.free(later.name);
+        const id_value = id orelse {
+            return;
+        };
+        const data = parsed.object.get("data") orelse .null;
+        frontend.sendResponse(io, arena, id_value, json.stringify(arena, data) catch @panic("out of memory sending a response")) catch @panic("out of memory sending a response");
     }
 
     //
-    // Reports every message whose handler chose to answer later and never did, each as a core-error event naming
-    // MessageNotAnswered and the message's name, and releases them. The core calls it when it is destroyed.
+    // Reports every message whose handler chose to send its response later and never did, each as a core-error event naming
+    // MessageNotAnswered and the message's name, and forgets them. The main thread calls it when it stops.
     //
-    fn reportUnansweredReplies(self: *Core) void {
-        var iterator = self.later_replies.iterator();
-        while (iterator.next()) |entry| {
-            var arena_state = std.heap.ArenaAllocator.init(self.allocator);
+    fn reportWithoutResponse(self: *LaterReplies, io: std.Io, allocator: std.mem.Allocator, frontend: Frontend) void {
+        var iterator = self.entries.valueIterator();
+        while (iterator.next()) |later| {
+            var arena_state = std.heap.ArenaAllocator.init(allocator);
             defer arena_state.deinit();
             const arena = arena_state.allocator();
-            const text = std.fmt.allocPrint(arena, "MessageNotAnswered: {s}", .{entry.value_ptr.name}) catch {
-                @panic("out of memory reporting an unanswered message");
-            };
-            self.reportError(arena, null, text);
-            self.freeLaterReply(entry.value_ptr.*);
+            frontend.reportError(io, arena, null, std.fmt.allocPrint(arena, "MessageNotAnswered: {s}", .{later.name}) catch @panic("out of memory reporting a message with no response"));
+            free(allocator, later.*);
         }
-        self.later_replies.deinit(self.allocator);
+        self.entries.clearRetainingCapacity();
     }
 
-    // Answers a message with a task: queues a task of the type, with data_json as its input, and returns at once. The task's result
-    // is the message's response, sent when the task ends, and a task that fails or is cancelled gives an error message response. The
-    // app's message handler, one that takes ziggy.core.Message, calls it and returns what it returns. A message that has no id, one sent with send, has nothing to
-    // answer, so it is an error (MessageHasNoId) and nothing is queued. The task runs under the source "request".
     //
-    pub fn answerWithTask(self: *Core, message: Message, task_type: []const u8, data_json: []const u8) !MessageResult {
-        const id = message.id orelse {
-            return error.MessageHasNoId;
+    // Releases the copies of a message.
+    //
+    fn free(allocator: std.mem.Allocator, later: LaterReply) void {
+        if (later.id_json) |text| {
+            allocator.free(text);
+        }
+        allocator.free(later.name);
+    }
+};
+
+//
+// The implementation behind the handler services: the pieces of the main thread's state the services reach, on the main thread. It
+// keeps no Io or allocator: each function is given the main thread's.
+//
+const MainServices = struct {
+    // The worker pool.
+    pool: *worker_pool.WorkerPool,
+    // The main thread's queue, which the tasks to add and the sources to cancel are posted to.
+    queue: *MessageQueue,
+    // Where the app's events go.
+    frontend: Frontend,
+    // The native app's configuration, with the main thread's copies of its strings.
+    config: *const ZiggyConfig,
+
+    const vtable: services_lib.HandlerServices.VTable = .{
+        .sendEvent = sendEvent,
+        .addTask = addTask,
+        .cancelTasks = cancelTasks,
+        .holdKeepAlive = holdKeepAlive,
+        .quit = quit,
+        .menuAction = menuAction,
+        .dataDir = dataDir,
+        .isPhone = isPhone,
+        .nativeCallbacks = nativeCallbacks,
+    };
+
+    //
+    // The interface handlers are given.
+    //
+    fn interface(self: *MainServices) services_lib.HandlerServices {
+        return .{
+            .ptr = self,
+            .vtable = &vtable,
         };
-        const id_json = try json.stringify(self.allocator, id);
-        defer self.allocator.free(id_json);
-        var task_id_buffer: [32]u8 = undefined;
-        const task_id = try std.fmt.bufPrint(&task_id_buffer, "request-{d}", .{self.next_request_task.fetchAdd(1, .monotonic)});
-        try self.runner.addTask(task_id, task_type, "request", data_json, .interactive, id_json);
-        return .answered_by_task;
     }
 
-    //
-    // Sends the frontend an event of the app's own, whose data is the JSON text data_json, which the frontend's onEvent listeners
-    // receive.
-    //
-    pub fn sendEvent(self: *Core, arena: std.mem.Allocator, data_json: []const u8) !void {
-        const event = try json.stringify(arena, .{
+    fn sendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, data_json: []const u8) anyerror!void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        const event = try json.stringify(allocator, .{
             .kind = "app",
             .data = json.Raw{
                 .text = data_json,
             },
         });
-        self.deliver(event);
+        defer allocator.free(event);
+        self.frontend.deliver(io, event);
     }
 
     //
-    // Reports the error a handler returned: the text the app's describe_error gives for it, or else its name.
+    // Queues a task. The worker pool keeps its tasks for longer than the handler's allocator lives, so the task is posted to the main
+    // thread's queue and added by the main thread with its own allocator once the handler has returned (see addTaskLater).
     //
-    fn reportHandlerError(self: *Core, arena: std.mem.Allocator, request_id: ?std.json.Value, err: anyerror) void {
-        const described: ?[]const u8 = if (self.describe_error) |describe| describe(err) else null;
-        self.reportError(arena, request_id, described orelse @errorName(err));
-    }
-
-    //
-    // Sends the successful reply to a request.
-    //
-    fn sendReply(self: *Core, arena: std.mem.Allocator, id: std.json.Value, reply_data: []const u8) !void {
-        const reply = try json.stringify(arena, .{
-            .id = id,
-            .ok = true,
+    fn addTask(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, task_id: []const u8, task_type: []const u8, source: []const u8, data_json: []const u8, priority: task_runner.TaskPriority) anyerror!void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        if (self.pool.is_shutting_down) {
+            return error.ShuttingDown;
+        }
+        const message = try json.stringify(allocator, AddTaskMessage{
+            .type = "add-task",
+            .taskId = task_id,
+            .taskType = task_type,
+            .source = source,
             .data = json.Raw{
-                .text = reply_data,
+                .text = data_json,
             },
+            .priority = priority,
         });
-        self.deliver(reply);
+        defer allocator.free(message);
+        try self.queue.post(io, from_core, message);
     }
 
     //
-    // Replies to a request with an error reply, or, when there is nothing to reply to, sends a core-error event.
+    // Cancels the tasks of a source, posted to the main thread's queue as addTask is, so it is carried out after the tasks the handler
+    // added before it.
     //
-    fn reportError(self: *Core, arena: std.mem.Allocator, id: ?std.json.Value, error_name: []const u8) void {
-        if (id) |id_value| {
-            const reply = json.stringify(arena, .{
-                .id = id_value,
-                .ok = false,
-                .@"error" = error_name,
-            }) catch {
-                @panic("out of memory building an error message");
-            };
-            self.deliver(reply);
+    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        const message = json.stringify(allocator, .{
+            .type = "cancel-tasks",
+            .source = source,
+        }) catch @panic("out of memory cancelling tasks");
+        defer allocator.free(message);
+        self.queue.post(io, from_core, message) catch @panic("out of memory cancelling tasks");
+    }
+
+    fn holdKeepAlive(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, keep_running: bool) void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        self.pool.holdKeepAlive(io, allocator, keep_running);
+    }
+
+    fn quit(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        if (!self.config.has_quit) {
             return;
         }
-        const event = json.stringify(arena, .{
-            .kind = "system",
-            .name = "core-error",
-            .data = .{
-                .@"error" = error_name,
-            },
-        }) catch {
-            @panic("out of memory building an error message");
+        self.callNative(io, allocator, .quit);
+    }
+
+    fn menuAction(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, action: []const u8) void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        if (!self.config.has_menu_action) {
+            return;
+        }
+        self.callNative(io, allocator, .{
+            .menu_action = action,
+        });
+    }
+
+    //
+    // Has the native app do something that has no result.
+    //
+    fn callNative(self: *MainServices, io: std.Io, allocator: std.mem.Allocator, call: native_message.Call) void {
+        self.frontend.native.call(io, allocator, call, null) catch @panic("out of memory calling the native app");
+    }
+
+    fn dataDir(ptr: *anyopaque) []const u8 {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        return std.mem.span(self.config.data_dir);
+    }
+
+    fn isPhone(ptr: *anyopaque) bool {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        return self.config.has_native_call;
+    }
+
+    fn nativeCallbacks(ptr: *anyopaque) services_lib.NativeCallbacks {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        return .{
+            .native = self.frontend.native,
+            .has_native_call = self.config.has_native_call,
         };
-        self.deliver(event);
+    }
+
+    //
+    // The pool's sink: delivers a message the pool produced to the frontend.
+    //
+    fn emit(user_data: ?*anyopaque, io: std.Io, message: []const u8) void {
+        const self: *MainServices = @ptrCast(@alignCast(user_data.?));
+        self.frontend.deliver(io, message);
+    }
+
+    //
+    // The pool's keep-alive handler: tells the native app whether the app must keep running for tasks.
+    //
+    fn setKeepAlive(user_data: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, keep_running: bool) void {
+        const self: *MainServices = @ptrCast(@alignCast(user_data.?));
+        if (!self.config.has_keep_alive) {
+            return;
+        }
+        self.callNative(io, allocator, .{
+            .keep_alive = keep_running,
+        });
     }
 };
 
 //
-// The runner calls this when a task has ended: tells the queue backend, then the app.
+// A task a handler added, as it is posted to the main thread's queue (see MainServices.addTask).
 //
-fn observeTaskEnd(user_data: ?*anyopaque, end: types.TaskEnd) void {
-    const core: *Core = @ptrCast(@alignCast(user_data.?));
-    core.queue_backend.taskEnded(end);
-    if (core.on_task_end) |on_task_end| {
-        on_task_end(core, end);
+const AddTaskMessage = struct {
+    // "add-task".
+    type: []const u8,
+    // The task's id.
+    taskId: []const u8,
+    // The task type.
+    taskType: []const u8,
+    // The source the task is cancelled by.
+    source: []const u8,
+    // The task's input, as JSON text when it is written and as a value when it is read.
+    data: json.Raw,
+    // How urgent the task is.
+    priority: task_runner.TaskPriority,
+};
+
+//
+// Adds a task a handler posted (see MainServices.addTask), with the main thread's allocator. A task that cannot be added is reported
+// as a core-error event, because the handler that added it has returned.
+//
+fn addTaskLater(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, pool: *worker_pool.WorkerPool, parsed: std.json.Value) void {
+    const added = worker_messages.decodeValue(struct {
+        taskId: []const u8,
+        taskType: []const u8,
+        source: []const u8,
+        data: std.json.Value = .null,
+        priority: task_runner.TaskPriority,
+    }, arena, parsed) catch |err| {
+        std.debug.panic("the main thread could not read a task a handler added ({s})", .{@errorName(err)});
+    };
+    const data_json = json.stringify(arena, added.data) catch @panic("out of memory adding a task");
+    pool.addTask(io, allocator, added.taskId, added.taskType, added.source, data_json, added.priority, null) catch |err| {
+        frontend.reportError(io, arena, null, @errorName(err));
+    };
+}
+
+//
+// Calls the app's on_task_end and on_task_event for each notice the worker pool kept of a task that ended or an event a task sent
+// (see WorkerPool.takeNotice), with the standard arguments of a handler, in the order they happened.
+//
+fn tellApp(pool: *worker_pool.WorkerPool, app: RegisteredApp, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, allocator: std.mem.Allocator) void {
+    while (pool.takeNotice()) |notice| {
+        defer notice.deinit(allocator);
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
+        defer arena_state.deinit();
+        switch (notice) {
+            .task_end => |end| if (app.on_task_end) |on_task_end| {
+                on_task_end(services, timers, io, arena_state.allocator(), end);
+            },
+            .task_event => |sent| if (app.on_task_event) |on_task_event| {
+                on_task_event(services, timers, io, arena_state.allocator(), sent);
+            },
+        }
     }
 }
 
 //
-// The runner calls this when a task has sent an event: tells the queue backend, then the app.
+// What the main thread handles a task's `native-app-request` with: the native app's configuration and queue, the test commands (for a
+// dialog result a test supplied) and whether the main thread is stopping. It keeps no Io or allocator: each call is given the main
+// thread's.
 //
-fn observeTaskEvent(user_data: ?*anyopaque, sent: types.TaskSentEvent) void {
-    const core: *Core = @ptrCast(@alignCast(user_data.?));
-    core.queue_backend.eventSent(sent);
-    if (core.on_task_event) |on_task_event| {
-        on_task_event(core, sent);
+const NativeCalls = struct {
+    // The native app's configuration.
+    config: *const ZiggyConfig,
+    // The native app's queue.
+    frontend: Frontend,
+    // The test commands.
+    tests: *TestCommands,
+    // Set once the main thread has read the stop, so a request is refused instead of reaching the native app.
+    stopping: *const bool,
+    // Gives the text of the reason a call failed, or null to use the error's name.
+    describe_error: ?ErrorDescriber,
+
+    //
+    // Handles a task's request to the native app: posts the native app a call of the function it names, whose result the native app
+    // sends straight to the worker's queue as a `native-app-response`. A request the main thread can respond to itself is handled here:
+    // once the main thread is stopping the native app is not called and the request fails with ShuttingDown, a dialog whose result a
+    // test supplied gives it, and a function the native app does not have fails with NativeCallMissing.
+    //
+    fn handle(user_data: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, worker: *worker_lib.Worker, request_json: []const u8) void {
+        const self: *NativeCalls = @ptrCast(@alignCast(user_data.?));
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        const request = worker_messages.decode(worker_messages.INativeAppRequestMessage, arena, request_json) catch |err| {
+            std.debug.panic("could not read a native app request ({s}): {s}", .{ @errorName(err), request_json });
+        };
+        const handled = self.respondHere(allocator, arena, request) catch |err| worker_lib.NativeResponse{
+            .failure = if (self.describe_error) |describe| (describe(err) orelse @errorName(err)) else @errorName(err),
+        };
+        const outcome = handled orelse {
+            const call = callOf(arena, request) catch |err| {
+                std.debug.panic("could not read a native app request ({s}): {s}", .{ @errorName(err), request_json });
+            };
+            self.frontend.native.call(io, arena, call, .{
+                .queue = &worker.queue,
+                .call_id = request.requestId,
+            }) catch @panic("out of memory calling the native app");
+            return;
+        };
+        const response = switch (outcome) {
+            .result => |text| json.stringify(arena, .{
+                .type = "native-app-response",
+                .requestId = request.requestId,
+                .result = text,
+            }),
+            .failure => |text| json.stringify(arena, .{
+                .type = "native-app-response",
+                .requestId = request.requestId,
+                .@"error" = text,
+            }),
+        } catch @panic("out of memory sending a native app response");
+        worker.postMessage(io, response) catch @panic("out of memory sending a native app response");
+    }
+
+    //
+    // The outcome of a request the main thread handles without the native app, or null when the native app is to be called.
+    //
+    fn respondHere(self: *NativeCalls, allocator: std.mem.Allocator, arena: std.mem.Allocator, request: worker_messages.INativeAppRequestMessage) !?worker_lib.NativeResponse {
+        if (self.stopping.*) {
+            return .{
+                .failure = "ShuttingDown",
+            };
+        }
+        const Function = worker_messages.NativeAppFunction;
+        const has_function = if (std.mem.eql(u8, request.function, Function.pick_paths)) blk: {
+            if (self.tests.takePickResult()) |picked| {
+                defer allocator.free(picked);
+                return .{
+                    .result = try arena.dupe(u8, picked),
+                };
+            }
+            break :blk self.config.has_pick_paths;
+        } else if (std.mem.eql(u8, request.function, Function.native_call))
+            self.config.has_native_call
+        else if (std.mem.eql(u8, request.function, Function.os_version))
+            self.config.has_os_version
+        else
+            std.debug.panic("a task requested a native app function that does not exist: {s}", .{request.function});
+        if (!has_function) {
+            return .{
+                .failure = "NativeCallMissing",
+            };
+        }
+        return null;
+    }
+};
+
+//
+// The call to the native app a task's request is for.
+//
+fn callOf(arena: std.mem.Allocator, request: worker_messages.INativeAppRequestMessage) !native_message.Call {
+    const Function = worker_messages.NativeAppFunction;
+    if (std.mem.eql(u8, request.function, Function.pick_paths)) {
+        const input = try worker_messages.decodeValue(worker_messages.PickPathsInput, arena, request.input);
+        return .{
+            .pick_paths = .{
+                .kind = input.kind,
+                .title = input.title,
+                .initial_name = input.initialName,
+            },
+        };
+    }
+    if (std.mem.eql(u8, request.function, Function.native_call)) {
+        const input = try worker_messages.decodeValue(worker_messages.NativeCallInput, arena, request.input);
+        return .{
+            .native_call = .{
+                .method = input.method,
+                .request = input.request,
+            },
+        };
+    }
+    return .os_version;
+}
+
+//
+// A single threaded Io of the calling thread's own, for a call from the native app's UI thread, which must not use another thread's.
+//
+fn ownIo(allocator: std.mem.Allocator) std.Io.Threaded {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    threaded.allocator = allocator;
+    return threaded;
+}
+
+//
+// Starts the main thread, which makes its state on its own thread, posts to and reads from `queue` and calls the app's `on_create`
+// there, and waits for it to report that it has started. The main thread reaches the native app only by posting to `native_queue`,
+// the native app's queue (see native-side.zig), and waking the native app's UI thread with the config's wake. The caller owns both
+// queues, which must stay where they are until `stop` has returned, and the returned thread, which it gives to `stop`. An error
+// `on_create` returned is returned here, after the main thread has released what it made and ended.
+//
+pub fn start(allocator: std.mem.Allocator, queue: *MessageQueue, native_queue: *MessageQueue, config: ZiggyConfig, app: RegisteredApp) !std.Thread {
+    const wake = config.wake orelse {
+        return error.WakeCallbackMissing;
+    };
+    var started = MessageQueue.init();
+    defer started.deinit();
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    // The native app's strings are valid only during this call, so they are the first message in the main thread's queue, which it
+    // takes copies of with its own allocator. The main thread is given the configuration with no strings.
+    try queue.post(io, from_core, try startJson(arena, config));
+    var given = config;
+    given.app_url_prefix = "";
+    given.data_dir = "";
+    given.test_port_file = null;
+    const thread = try std.Thread.spawn(.{}, mainThread, .{MainStart{
+        .queue = queue,
+        .started = &started,
+        .native = .{
+            .queue = native_queue,
+            .wake = wake,
+            .wake_data = config.wake_data,
+        },
+        .config = given,
+        .app = app,
+    }});
+    const report = started.take(io, arena, .none) orelse {
+        @panic("the main thread's start queue closed");
+    };
+    const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena, report.text, .{}) catch {
+        std.debug.panic("the main thread reported its start with text that is not JSON: {s}", .{report.text});
+    };
+    if (json.getInteger(parsed, "error")) |error_number| {
+        // The main thread has released what it made and is ending.
+        thread.join();
+        // The error the main thread failed with, by its number, which is the same on every thread of the process.
+        return @errorFromInt(@as(std.meta.Int(.unsigned, @bitSizeOf(anyerror)), @intCast(error_number)));
+    }
+    return thread;
+}
+
+//
+// Has the main thread stop and waits for it to end: it calls the app's `on_destroy` with `.before_tasks_stop`, clears its timers,
+// cancels every task, sends every worker "shutdown", stops the test control connection, waits for all of them to end, calls
+// `on_destroy` with `.after_tasks_stopped`, tells the native app it has stopped and releases its state. Meanwhile the native app's side
+// gives every call the result ShuttingDown (see NativeSide.stop), because the native app's UI thread is the one waiting here, and hands the
+// messages for the frontend to `frontend`, or drops them when it is null. The caller frees the queues afterwards.
+//
+pub fn stop(allocator: std.mem.Allocator, queue: *MessageQueue, native: *NativeSide, frontend: ?native_side_lib.FrontendSink, thread: std.Thread) void {
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    queue.post(threaded.io(), from_core, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the main thread");
+    native.stop(threaded.io(), allocator, frontend);
+    thread.join();
+}
+
+//
+// Passes a message from the frontend to the main thread and returns at once. The message's handler runs later, on the main thread, in
+// the order the messages were sent. The native app calls it for each message, with the text valid only during the call.
+//
+pub fn sendMessage(allocator: std.mem.Allocator, queue: *MessageQueue, message: []const u8) void {
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    queue.post(threaded.io(), from_frontend, message) catch @panic("out of memory passing a message to the main thread");
+}
+
+//
+// Records the files the user dropped on the window, replacing the last drop. The native app calls it when the drop happens, before the
+// frontend's own drop event, with the paths as the JSON text of an array of strings. The paths are checked on the calling thread, which
+// this returns the result of, and the main thread records the drop: it reads it before any message the frontend sends after this
+// returns, such as the frontend's getPathForFile.
+//
+pub fn filesDropped(allocator: std.mem.Allocator, queue: *MessageQueue, paths_json: []const u8) !void {
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const files_json = try dropped_files.check(arena, threaded.io(), paths_json);
+    try queue.post(threaded.io(), from_core, try json.stringify(arena, .{
+        .type = "files-dropped",
+        .files = json.Raw{
+            .text = files_json,
+        },
+    }));
+}
+
+//
+// Has the main thread call the app's function for the query of the frontend's address, waits for it and returns the text after the
+// question mark, empty when the app has none, allocated with the allocator, which the caller frees it with. The native app calls it once
+// the core exists, before it loads the frontend.
+//
+pub fn uiQuery(allocator: std.mem.Allocator, queue: *MessageQueue) ![:0]u8 {
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const call_io = threaded.io();
+    var replies = MessageQueue.init();
+    defer replies.deinit();
+    try queue.postReplyTo(call_io, from_core, "{\"type\":\"ui-query\"}", &replies);
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const reply = replies.take(call_io, arena_state.allocator(), .none) orelse {
+        @panic("the reply queue of ui-query closed");
+    };
+    const parsed = try std.json.parseFromSliceLeaky(std.json.Value, arena_state.allocator(), reply.text, .{});
+    if (json.getString(parsed, "error")) |reason| {
+        std.debug.print("the app's ui_query failed: {s}\n", .{reason});
+        return error.UiQueryFailed;
+    }
+    return try allocator.dupeZ(u8, json.getString(parsed, "text") orelse "");
+}
+
+//
+// What the main thread is given when it starts: the queues it talks to the native side through, the native app's configuration with no
+// strings, and the app's registration, constants of the app's code. The strings come in the start message (see StartMessage).
+//
+const MainStart = struct {
+    // The main thread's messages, which the caller of `start` owns. Its first message is the start message.
+    queue: *MessageQueue,
+    // Where the main thread reports that it has started, or why it could not. It is used only until then.
+    started: *MessageQueue,
+    // The native app's queue and how to wake its UI thread.
+    native: NativeApp,
+    // The native app's configuration, with its strings empty.
+    config: ZiggyConfig,
+    // What the app adds to the core.
+    app: RegisteredApp,
+};
+
+//
+// The first message in the main thread's queue: the native app's strings and the environment of the thread that created the core.
+//
+const StartMessage = struct {
+    // The URL prefix of the app's own bundled frontend.
+    appUrlPrefix: []const u8,
+    // The app's private data directory.
+    dataDir: []const u8,
+    // The file the test control connection writes its port to, or null for none.
+    testPortFile: ?[]const u8 = null,
+    // The environment of the thread that created the core, as a JSON object of names and values, which the main thread sets as its own
+    // (see process-env.zig), or null when that thread had none.
+    environment: ?std.json.Value = null,
+};
+
+//
+// The JSON text of the start message, from the native app's configuration and the calling thread's environment, allocated with the
+// arena.
+//
+fn startJson(arena: std.mem.Allocator, config: ZiggyConfig) ![]u8 {
+    const environment: ?std.json.Value = if (task_queue.utils.process_env.getEnvironMap()) |map| try worker_lib.environmentJson(arena, map) else null;
+    return try json.stringify(arena, StartMessage{
+        .appUrlPrefix = std.mem.span(config.app_url_prefix),
+        .dataDir = std.mem.span(config.data_dir),
+        .testPortFile = if (config.test_port_file) |path| std.mem.span(path) else null,
+        .environment = environment,
+    });
+}
+
+//
+// Reports on the start queue that the main thread could not start, and why.
+//
+fn reportStartFailure(main_start: *MainStart, io: std.Io, err: anyerror) void {
+    var buffer: [64]u8 = undefined;
+    const failure = std.fmt.bufPrint(&buffer, "{{\"error\":{d}}}", .{@intFromError(err)}) catch unreachable;
+    main_start.started.post(io, 0, failure) catch @panic("out of memory reporting that the main thread could not start");
+}
+
+//
+// The main thread: makes each piece of its state, calls the app's on_create, reports that it has started, then reads its messages,
+// waiting no longer than until the next timer is due, and runs the timers that are due, until it has done everything a stop requires. Then
+// it releases its state.
+//
+fn mainThread(given: MainStart) void {
+    var main_start = given;
+    // The main thread's own allocator, which everything on its thread is allocated with.
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    const queue = main_start.queue;
+    const app = main_start.app;
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+    // The main thread's copies of the native app's strings, from the start message, kept until it ends.
+    var start_arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer start_arena_state.deinit();
+    const start_arena = start_arena_state.allocator();
+    const start_message = queue.take(io, start_arena, .none) orelse {
+        @panic("the main thread's queue closed before it was sent its start");
+    };
+    const start_data = std.json.parseFromSliceLeaky(StartMessage, start_arena, start_message.text, .{}) catch |err| {
+        std.debug.panic("the main thread could not read its start message ({s}): {s}", .{ @errorName(err), start_message.text });
+    };
+    var config = main_start.config;
+    config.app_url_prefix = (start_arena.dupeZ(u8, start_data.appUrlPrefix) catch @panic("out of memory starting the main thread")).ptr;
+    config.data_dir = (start_arena.dupeZ(u8, start_data.dataDir) catch @panic("out of memory starting the main thread")).ptr;
+    config.test_port_file = if (start_data.testPortFile) |path| (start_arena.dupeZ(u8, path) catch @panic("out of memory starting the main thread")).ptr else null;
+    var environment: ?std.process.Environ.Map = if (start_data.environment) |value| worker_lib.environmentFromJson(allocator, value) catch |err| {
+        std.debug.panic("the main thread could not read its environment: {s}", .{@errorName(err)});
+    } else null;
+    defer if (environment) |*map| map.deinit();
+    task_queue.utils.process_env.setEnvironMap(if (environment) |*map| map else null);
+    defer task_queue.utils.process_env.setEnvironMap(null);
+    const frontend: Frontend = .{
+        .native = main_start.native,
+    };
+    // The main thread's own timers.
+    var timer_list = TimerList.init();
+    const timers = timer_list.interface();
+    var dropped: dropped_files.DroppedFiles = .empty;
+    defer dropped.deinit(allocator);
+    var later_replies: LaterReplies = .empty;
+    defer later_replies.deinit(allocator);
+    var tests = TestCommands.init(frontend);
+    defer tests.deinit(allocator);
+    var uuid_generator: task_queue.utils.random_uuid_generator.RandomUuidGenerator = .{};
+    const session_id = uuid_generator.generate(allocator, io) catch |err| {
+        reportStartFailure(&main_start, io, err);
+        return;
+    };
+    defer allocator.free(session_id);
+    var stopping = false;
+    var pool: worker_pool.WorkerPool = undefined;
+    var main_services: MainServices = .{
+        .pool = &pool,
+        .queue = queue,
+        .frontend = frontend,
+        .config = &config,
+    };
+    const services = main_services.interface();
+    var native_calls: NativeCalls = .{
+        .config = &config,
+        .frontend = frontend,
+        .tests = &tests,
+        .stopping = &stopping,
+        .describe_error = app.describe_error,
+    };
+    pool = worker_pool.WorkerPool.init(queue, .{
+        .max_workers = @max(config.worker_threads, 1),
+        .tasks = app.tasks,
+        .describe_error = app.describe_error,
+        .worker_options = .{
+            .workerId = 0,
+            .sessionId = session_id,
+            .maxConcurrentChildTasks = config.max_concurrent_child_tasks,
+            .hasNativeCall = config.has_native_call,
+            .hasOsVersion = config.has_os_version,
+            .dataDir = std.mem.span(config.data_dir),
+        },
+        .sink = .{
+            .user_data = &main_services,
+            .emit = MainServices.emit,
+        },
+        .observe = app.on_task_end != null or app.on_task_event != null,
+        .native_request = .{
+            .user_data = &native_calls,
+            .handle = NativeCalls.handle,
+        },
+        .keep_alive = .{
+            .user_data = &main_services,
+            .set = MainServices.setKeepAlive,
+        },
+    });
+    const start_failure: ?anyerror = failed: {
+        if (build_options.test_hooks and config.test_mode) {
+            tests.connection = test_control.TestControl.start(allocator, io, config, frontend.native, queue) catch |err| {
+                break :failed err;
+            };
+        }
+        if (app.on_create) |on_create| {
+            var arena_state = std.heap.ArenaAllocator.init(allocator);
+            defer arena_state.deinit();
+            on_create(services, timers, io, arena_state.allocator()) catch |err| {
+                break :failed err;
+            };
+        }
+        break :failed null;
+    };
+    if (start_failure) |err| {
+        tests.stop(io, allocator, queue);
+        pool.shutdown(io, allocator, timers, null);
+        reportStartFailure(&main_start, io, err);
+        return;
+    }
+    main_start.started.post(io, 0, "{}") catch @panic("out of memory reporting that the main thread has started");
+    var next_request_task: u64 = 0;
+    var stopped = false;
+    while (!stopped) {
+        const taken = queue.take(io, allocator, timer_list.nextTimeout());
+        if (taken) |message| {
+            defer allocator.free(message.text);
+            switch (message.from) {
+                from_frontend => {
+                    if (!stopping) {
+                        handleFrontendMessage(allocator, frontend, app, services, timers, io, queue, &later_replies, &pool, &dropped, &tests, &next_request_task, message.text);
+                    }
+                },
+                from_core => {
+                    var arena_state = std.heap.ArenaAllocator.init(allocator);
+                    defer arena_state.deinit();
+                    const arena = arena_state.allocator();
+                    const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena, message.text, .{}) catch {
+                        std.debug.panic("the core sent the main thread a message that is not JSON: {s}", .{message.text});
+                    };
+                    const message_type = json.getString(parsed, "type") orelse "";
+                    if (std.mem.eql(u8, message_type, "stop")) {
+                        stopping = true;
+                        if (app.on_destroy) |on_destroy| {
+                            on_destroy(services, timers, io, arena, .before_tasks_stop);
+                        }
+                        timer_list.clearAll();
+                        pool.shutdown(io, allocator, timers, .{
+                            .user_data = null,
+                            .handle = refuseWhileStopping,
+                        });
+                        later_replies.reportWithoutResponse(io, allocator, frontend);
+                        tests.refuseWhileStopping(io, allocator);
+                        tests.stop(io, allocator, queue);
+                        if (app.on_destroy) |on_destroy| {
+                            on_destroy(services, timers, io, arena, .after_tasks_stopped);
+                        }
+                        // The last message the native app is sent, which ends its wait for the stop.
+                        frontend.native.call(io, arena, .stopped, null) catch @panic("out of memory stopping the main thread");
+                        stopped = true;
+                    }
+                    else if (std.mem.eql(u8, message_type, "files-dropped")) {
+                        const files = parsed.object.get("files") orelse .null;
+                        dropped.record(allocator, json.stringify(arena, files) catch @panic("out of memory recording a drop")) catch |err| {
+                            frontend.reportError(io, arena, null, @errorName(err));
+                        };
+                    }
+                    else if (std.mem.eql(u8, message_type, "add-task")) {
+                        addTaskLater(io, allocator, arena, frontend, &pool, parsed);
+                    }
+                    else if (std.mem.eql(u8, message_type, "cancel-tasks")) {
+                        pool.cancelSource(io, allocator, json.getString(parsed, "source") orelse "");
+                    }
+                    else if (std.mem.eql(u8, message_type, "later-reply")) {
+                        later_replies.deliver(io, allocator, arena, frontend, parsed);
+                    }
+                    else if (std.mem.eql(u8, message_type, "ui-query")) {
+                        const reply_to = message.reply_to orelse {
+                            @panic("ui-query was sent with nowhere to reply");
+                        };
+                        const reply = runUiQuery(arena, app.ui_query, services, timers, io, config.test_mode) catch |err| json.stringify(arena, .{
+                            .@"error" = @errorName(err),
+                        }) catch @panic("out of memory replying to ui-query");
+                        reply_to.post(io, 0, reply) catch @panic("out of memory replying to ui-query");
+                    }
+                    else {
+                        std.debug.panic("the core sent the main thread a message of an unknown type: {s}", .{message.text});
+                    }
+                },
+                test_control.from_test_control => {
+                    // Only a build with the test hooks has a test control connection, so only it has the code that handles its
+                    // messages.
+                    if (build_options.test_hooks) {
+                        tests.handleMessage(io, allocator, timers, &dropped, message);
+                    }
+                },
+                else => {
+                    if (!pool.receive(io, allocator, timers, message)) {
+                        std.debug.panic("the main thread was sent a message by nobody it knows ({d}): {s}", .{ message.from, message.text });
+                    }
+                },
+            }
+        }
+        if (!stopping) {
+            timer_list.runDue(io, allocator, &services);
+            tellApp(&pool, app, services, timers, io, allocator);
+        }
     }
 }
 
 //
-// Delivers a message the runner or the test control connection produced to the native app.
+// Handles a message that reaches the main thread while the worker pool stops, which no worker sent: a command from the test control
+// connection is refused with ShuttingDown, so the connection stops waiting, and anything else is dropped.
 //
-fn emitFromRunner(user_data: ?*anyopaque, message: []const u8) void {
-    const core: *Core = @ptrCast(@alignCast(user_data.?));
-    core.deliver(message);
+fn refuseWhileStopping(user_data: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, message: QueueMessage) void {
+    _ = user_data;
+    _ = allocator;
+    TestCommands.refuse(io, message);
 }
 
 //
-// What the test control connection calls for its drop command: records the files as the native app does when the user drops them.
+// Calls the app's function for the query of the frontend's address and returns the reply to ui-query: `{"text": ...}`.
 //
-fn filesDroppedFromControl(user_data: ?*anyopaque, paths_json: []const u8) anyerror!void {
-    const core: *Core = @ptrCast(@alignCast(user_data.?));
-    try core.filesDropped(paths_json);
+fn runUiQuery(arena: std.mem.Allocator, ui_query: ?UiQuery, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, test_mode: bool) ![]u8 {
+    const query = ui_query orelse {
+        return try json.stringify(arena, .{
+            .text = "",
+        });
+    };
+    return try json.stringify(arena, .{
+        .text = try query(services, timers, io, arena, test_mode),
+    });
+}
+
+//
+// Handles one message from the frontend or the native app: the one entry point for both kinds of message. It parses the envelope and
+// passes it on by its kind, "app" to runAppMessage and "system" to runSystemMessage, and does nothing else. A message that is not a
+// JSON object, or has no kind or any other kind, is refused as InvalidMessage, reported as a core-error system event.
+//
+fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, next_request_task: *u64, text: []const u8) void {
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena, text, .{}) catch {
+        frontend.reportError(io, arena, null, "InvalidMessage");
+        return;
+    };
+    if (parsed != .object) {
+        frontend.reportError(io, arena, null, "InvalidMessage");
+        return;
+    }
+    const kind = parsed.object.get("kind") orelse .null;
+    if (kind == .string and std.mem.eql(u8, kind.string, "app")) {
+        runAppMessage(allocator, arena, frontend, app, services, timers, io, queue, later_replies, pool, next_request_task, parsed);
+        return;
+    }
+    if (kind == .string and std.mem.eql(u8, kind.string, "system")) {
+        runSystemMessage(allocator, arena, frontend, app, services, timers, io, pool, dropped, tests, parsed);
+        return;
+    }
+    frontend.reportError(io, arena, null, "InvalidMessage");
+}
+
+//
+// The name of a message, or null when it has none, an empty one or one that is not a string.
+//
+fn messageName(parsed: std.json.Value) ?[]const u8 {
+    const value = parsed.object.get("name") orelse {
+        return null;
+    };
+    if (value != .string or value.string.len == 0) {
+        return null;
+    }
+    return value.string;
+}
+
+//
+// The app's handler of a message name, or null when the app has none.
+//
+fn findMessage(messages: []const handlers_lib.MessageEntry, name: []const u8) ?handlers_lib.MessageEntry {
+    for (messages) |entry| {
+        if (std.mem.eql(u8, entry.name, name)) {
+            return entry;
+        }
+    }
+    return null;
+}
+
+//
+// Handles an app message: runs the app's handler for its name, with the standard arguments, and sends the response when the message
+// carries an id: the response, an error response when the handler failed, or the InvalidMessageData text when the data did not fit the
+// handler's payload (the handler then did not run). A failure of a message that has no id is reported as a core-error system event,
+// never dropped silently. A message must carry a name, a string that is not empty, or it is refused with MissingMessageName, and a name
+// the app has no handler for is UnknownMessageName; neither runs a handler. The allocator is the main thread's, which what outlives the
+// message is allocated with, and the arena is freed when the message has been handled.
+//
+fn runAppMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, next_request_task: *u64, parsed: std.json.Value) void {
+    const request_id: ?std.json.Value = parsed.object.get("id");
+    const name = messageName(parsed) orelse {
+        frontend.reportError(io, arena, request_id, "MissingMessageName");
+        return;
+    };
+    const entry = findMessage(app.messages, name) orelse {
+        frontend.reportError(io, arena, request_id, "UnknownMessageName");
+        return;
+    };
+    const message: Message = .{
+        .id = request_id,
+        .name = name,
+        .data = parsed.object.get("data") orelse .null,
+    };
+    var reply: ?handlers_lib.ReplyTarget = null;
+    if (entry.takes_reply) {
+        const serial = later_replies.open(allocator, message) catch |err| {
+            frontend.reportError(io, arena, request_id, @errorName(err));
+            return;
+        };
+        reply = .{
+            .queue = queue,
+            .describe_error = app.describe_error,
+            .serial = serial,
+        };
+    }
+    const outcome = entry.handler(services, timers, io, arena, message, reply) catch |err| {
+        if (reply) |target| {
+            later_replies.close(allocator, target.serial);
+        }
+        frontend.reportHandlerError(io, arena, app.describe_error, request_id, err);
+        return;
+    };
+    const result = switch (outcome) {
+        .result => |returned| returned,
+        .invalid_data => |text| {
+            if (reply) |target| {
+                later_replies.close(allocator, target.serial);
+            }
+            frontend.reportError(io, arena, request_id, text);
+            return;
+        },
+    };
+    if (reply) |target| {
+        if (result != .later) {
+            later_replies.close(allocator, target.serial);
+        }
+    }
+    switch (result) {
+        .response => |text| {
+            const id = request_id orelse {
+                return;
+            };
+            frontend.sendResponse(io, arena, id, text) catch |err| {
+                frontend.reportError(io, arena, null, @errorName(err));
+            };
+        },
+        .none => {
+            const id = request_id orelse {
+                return;
+            };
+            frontend.sendResponse(io, arena, id, "null") catch |err| {
+                frontend.reportError(io, arena, null, @errorName(err));
+            };
+        },
+        .task => |task| {
+            const id = request_id orelse {
+                frontend.reportHandlerError(io, arena, app.describe_error, null, error.MessageHasNoId);
+                return;
+            };
+            queueResponseTask(io, allocator, arena, pool, next_request_task, id, task) catch |err| {
+                frontend.reportHandlerError(io, arena, app.describe_error, id, err);
+            };
+        },
+        .later => {},
+    }
+}
+
+//
+// Queues the task whose result is a message's response, under the source "request". Its result is sent as the message's response when
+// it ends, and a task that fails or is cancelled gives an error response. The number of tasks queued so far names it: a message's own
+// id cannot, because the frontend numbers its messages from 1 again when it reloads, while a task of the last page can still be running.
+//
+fn queueResponseTask(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, pool: *worker_pool.WorkerPool, next_request_task: *u64, id: std.json.Value, task: handlers_lib.ResponseTask) !void {
+    const id_json = try json.stringify(arena, id);
+    const task_id = try std.fmt.allocPrint(arena, "request-{d}", .{next_request_task.*});
+    next_request_task.* += 1;
+    try pool.addTask(io, allocator, task_id, task.task_type, "request", task.data, .interactive, id_json);
+}
+
+//
+// What running a system message came to: its response as JSON text, or the InvalidMessageData text of data that did not fit, or no
+// system message of that name.
+//
+const SystemOutcome = union(enum) {
+    // The JSON text of the response.
+    response: []const u8,
+    // How the data did not fit.
+    invalid_data: []const u8,
+    // There is no system message of the name.
+    unknown,
+};
+
+//
+// Handles a system message: runs Ziggy's function for its name (see system-messages.zig) and sends the response when it carries an id.
+// It never reaches the app's handlers. A message with no name is InvalidMessage, and a name Ziggy has no system message of is
+// UnknownSystemMessage.
+//
+fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, parsed: std.json.Value) void {
+    const request_id: ?std.json.Value = parsed.object.get("id");
+    const name = messageName(parsed) orelse {
+        frontend.reportError(io, arena, request_id, "InvalidMessage");
+        return;
+    };
+    const data = parsed.object.get("data") orelse .null;
+    const outcome = runSystem(allocator, arena, name, data, app.menu_targets, services, timers, io, pool, dropped, tests) catch |err| {
+        frontend.reportHandlerError(io, arena, app.describe_error, request_id, err);
+        return;
+    };
+    switch (outcome) {
+        .response => |text| {
+            const id = request_id orelse {
+                return;
+            };
+            frontend.sendResponse(io, arena, id, text) catch |err| {
+                frontend.reportError(io, arena, null, @errorName(err));
+            };
+        },
+        .invalid_data => |text| frontend.reportError(io, arena, request_id, text),
+        .unknown => frontend.reportError(io, arena, request_id, "UnknownSystemMessage"),
+    }
+}
+
+//
+// Runs the system message of the name with its data, giving its function only the piece of the main thread's state it uses.
+//
+fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []const u8, data: std.json.Value, menu_targets: menu_lib.MenuTargets, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
+    if (std.mem.eql(u8, name, "add-task")) {
+        const payload = switch (try handlers_lib.parsePayload(system_messages.tasks.AddTaskRequest, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.tasks.addTask(pool, io, allocator, payload));
+    }
+    if (std.mem.eql(u8, name, "cancel-tasks")) {
+        const source = switch (try handlers_lib.parsePayload([]const u8, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, system_messages.tasks.cancelTasks(pool, io, allocator, source));
+    }
+    if (std.mem.eql(u8, name, "get-platform")) {
+        return try respond(arena, system_messages.platform.getPlatform());
+    }
+    if (std.mem.eql(u8, name, "menu-action")) {
+        const payload = switch (try handlers_lib.parsePayload(system_messages.menu.MenuActionRequest, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.menu.menuAction(menu_targets, services, timers, io, arena, payload));
+    }
+    if (std.mem.eql(u8, name, "get-dropped-paths")) {
+        return try respond(arena, try system_messages.dropped_files.getDroppedPaths(dropped, arena));
+    }
+    if (build_options.test_hooks) {
+        if (std.mem.eql(u8, name, "test-result")) {
+            const payload = switch (try handlers_lib.parsePayload(system_messages.test_hooks.TestResultRequest, arena, data)) {
+                .parsed => |value| value,
+                .invalid => |text| return .{
+                    .invalid_data = text,
+                },
+            };
+            return try respond(arena, try system_messages.test_hooks.testResult(tests, io, allocator, timers, payload));
+        }
+        if (std.mem.eql(u8, name, "test-ui-ready")) {
+            return try respond(arena, try system_messages.test_hooks.testUiReady(tests, io, allocator, timers));
+        }
+    }
+    return .unknown;
+}
+
+//
+// The outcome of a system message that gave the value as its response.
+//
+fn respond(arena: std.mem.Allocator, value: anytype) !SystemOutcome {
+    return .{
+        .response = try json.stringify(arena, value),
+    };
 }

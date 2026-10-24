@@ -7,13 +7,15 @@ const std = @import("std");
 const builtin = @import("builtin");
 const ziggy = @import("ziggy");
 
+const HandlerServices = ziggy.core.HandlerServices;
+const TaskServices = ziggy.task_runner.TaskServices;
 const TaskContext = ziggy.task_runner.TaskContext;
-const Core = ziggy.core.Core;
+const Timers = ziggy.timers.Timers;
 const json = ziggy.json;
 
 //
-// The handlers of the test app's own messages, each registered by its message name in app.zig, with the request its data is
-// parsed into and the response it returns.
+// The handlers of the test app's own messages, each registered by its message name in app.zig, with the payload its data is
+// parsed into and the result it returns.
 //
 
 //
@@ -34,8 +36,10 @@ pub const PingResponse = struct {
 // Replies with the Zig version, the target operating system and CPU architecture, and an echo of the payload, whatever it is. It
 // takes the message unparsed, the one handler of the test app that does, so the smoke tests drive that form of handler end to end.
 //
-pub fn pingHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, message: ziggy.core.Message) !ziggy.core.MessageResult {
-    _ = core;
+pub fn pingHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: ziggy.core.Message) !ziggy.core.MessageResult {
+    _ = services;
+    _ = timers;
+    _ = io;
     const response: PingResponse = .{
         .zigVersion = builtin.zig_version_string,
         .os = @tagName(builtin.os.tag),
@@ -43,7 +47,7 @@ pub fn pingHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, message: zi
         .echo = message.data,
     };
     return .{
-        .response = try ziggy.json.stringify(arena, response),
+        .response = try ziggy.json.stringify(allocator, response),
     };
 }
 
@@ -71,13 +75,15 @@ pub const PayloadStatsResponse = struct {
 // Replies with the length in bytes and the CRC-32 of the "text" field, so the frontend can check a large
 // payload arrived whole without the payload coming back.
 //
-pub fn payloadStatsHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: PayloadStatsRequest) !PayloadStatsResponse {
-    _ = core;
-    _ = arena;
+pub fn payloadStatsHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: PayloadStatsRequest) !PayloadStatsResponse {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     return .{
-        .length = request.text.len,
-        .crc32 = std.hash.Crc32.hash(request.text),
-        .text = request.text[0..@min(request.text.len, 64)],
+        .length = payload.text.len,
+        .crc32 = std.hash.Crc32.hash(payload.text),
+        .text = payload.text[0..@min(payload.text.len, 64)],
     };
 }
 
@@ -103,18 +109,19 @@ pub const FileRoundtripResponse = struct {
 // Writes the "text" field to a file in the app's private data directory, reads it back and replies with what it read.
 // A data directory that does not exist is an error.
 //
-pub fn fileRoundtripHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: FileRoundtripRequest) !FileRoundtripResponse {
-    const path = try std.fs.path.join(arena, &.{ core.data_dir, "ziggy-test-app-roundtrip.txt" });
-    const io = core.io();
-    var directory = try std.Io.Dir.cwd().openDir(io, core.data_dir, .{});
+pub fn fileRoundtripHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: FileRoundtripRequest) !FileRoundtripResponse {
+    _ = timers;
+    const data_dir = services.dataDir();
+    const path = try std.fs.path.join(allocator, &.{ data_dir, "ziggy-test-app-roundtrip.txt" });
+    var directory = try std.Io.Dir.cwd().openDir(io, data_dir, .{});
     directory.close(io);
     try std.Io.Dir.cwd().writeFile(io, .{
         .sub_path = path,
-        .data = request.text,
+        .data = payload.text,
     });
     return .{
         .path = path,
-        .text = try std.Io.Dir.cwd().readFileAlloc(io, path, arena, .limited(16 * 1024 * 1024)),
+        .text = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .limited(16 * 1024 * 1024)),
     };
 }
 
@@ -126,10 +133,12 @@ pub const FailRequest = struct {};
 //
 // Always fails, so the frontend can check that an error reply reaches it.
 //
-pub fn failHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: FailRequest) !void {
-    _ = core;
-    _ = arena;
-    _ = request;
+pub fn failHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: FailRequest) !void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
     return error.ExampleFailure;
 }
 
@@ -145,10 +154,12 @@ pub const NoRequest = struct {};
 //
 // Always fails with an error the test app's describer has a sentence for, so the frontend can check the sentence is what reaches it.
 //
-pub fn refuseHandler(core: *Core, arena: std.mem.Allocator, request: NoRequest) !void {
-    _ = core;
-    _ = arena;
-    _ = request;
+pub fn refuseHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: NoRequest) !void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
     return error.Refused;
 }
 
@@ -158,7 +169,7 @@ pub fn refuseHandler(core: *Core, arena: std.mem.Allocator, request: NoRequest) 
 //
 pub fn describeError(err: anyerror) ?[]const u8 {
     if (err == error.Refused) {
-        return "The test app refused, as it was asked to.";
+        return "The test app refused, as the request told it to.";
     }
     return null;
 }
@@ -180,10 +191,11 @@ pub const SourceRequest = struct {
 // Queues a hello-short task from the app's own code, under the source given in "source", and tells the frontend with an app event
 // of the type "queued-from-app" that it did. The reply is the id of the task.
 //
-pub fn queueFromAppHandler(core: *Core, arena: std.mem.Allocator, request: SourceRequest) ![]const u8 {
-    const task_id = try std.fmt.allocPrint(arena, "from-app-{s}", .{request.source});
-    try core.runner.addTask(task_id, "hello-short", request.source, "null", .background, null);
-    try core.sendEvent(arena, try json.stringify(arena, .{
+pub fn queueFromAppHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: SourceRequest) ![]const u8 {
+    _ = timers;
+    const task_id = try std.fmt.allocPrint(allocator, "from-app-{s}", .{payload.source});
+    try services.addTask(io, allocator, task_id, "hello-short", payload.source, "null", .background);
+    try services.sendEvent(io, allocator, try json.stringify(allocator, .{
         .type = "queued-from-app",
         .queued = task_id,
     }));
@@ -198,9 +210,9 @@ pub const CancelFromAppResponse = struct {};
 //
 // Cancels, from the app's own code, the tasks queued under the source given in "source".
 //
-pub fn cancelFromAppHandler(core: *Core, arena: std.mem.Allocator, request: SourceRequest) !CancelFromAppResponse {
-    _ = arena;
-    core.runner.cancelSource(request.source);
+pub fn cancelFromAppHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: SourceRequest) !CancelFromAppResponse {
+    _ = timers;
+    services.cancelTasks(io, allocator, payload.source);
     return .{};
 }
 
@@ -246,11 +258,11 @@ fn readJobTag(data: std.json.Value) ?JobTag {
 //
 // Sends a job-progress event, which has the fields of IJobProgressEvent, and does nothing when the task has no job.
 //
-fn sendJobProgress(context: *TaskContext, job: ?JobTag, started_at: i64, progress_message: []const u8) !void {
+fn sendJobProgress(services: TaskServices, io: std.Io, allocator: std.mem.Allocator, job: ?JobTag, started_at: i64, progress_message: []const u8) !void {
     const tag = job orelse {
         return;
     };
-    try context.sendEvent(.{
+    try services.sendEvent(io, allocator, .{
         .type = "job-progress",
         .job = tag,
         .startedAt = started_at,
@@ -261,123 +273,154 @@ fn sendJobProgress(context: *TaskContext, job: ?JobTag, started_at: i64, progres
 //
 // Sends an output event, whose text the frontend shows in its output area.
 //
-fn sendOutput(context: *TaskContext, text: []const u8) !void {
-    try context.sendEvent(.{
+fn sendOutput(services: TaskServices, io: std.Io, allocator: std.mem.Allocator, text: []const u8) !void {
+    try services.sendEvent(io, allocator, .{
         .type = "output",
         .text = text,
     });
 }
 
-fn nowMilliseconds(context: *TaskContext) i64 {
-    return std.Io.Clock.real.now(context.io()).toMilliseconds();
+fn nowMilliseconds(io: std.Io) i64 {
+    return std.Io.Clock.real.now(io).toMilliseconds();
 }
 
 //
 // Does a small amount of work: an output event, a job-progress event, then done.
 //
-pub fn helloShortHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const started_at = nowMilliseconds(context);
-    try sendOutput(context, "hello from a short task");
-    try sendJobProgress(context, readJobTag(data), started_at, "short task working");
-    return try context.arena.dupe(u8, "\"short task done\"");
+pub fn helloShortHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
+    _ = timers;
+    _ = context;
+    const started_at = nowMilliseconds(io);
+    try sendOutput(services, io, allocator, "hello from a short task");
+    try sendJobProgress(services, io, allocator, readJobTag(payload), started_at, "short task working");
+    return "short task done";
 }
+
+//
+// What hello-long gives as its result.
+//
+pub const HelloLongResult = struct {
+    // How many steps it took.
+    steps: i64,
+    // How many children it ran.
+    children: usize,
+};
 
 //
 // Loops for "durationMs" in steps of "stepMs", checking for cancellation at every step and sending an output event
 // and a job-progress event at every step. While it runs it queues "children" hello-child tasks, no more than the
 // child limit at a time, then waits for them all and reports each one's completion in its own output.
 //
-pub fn helloLongHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const duration_ms = json.getInteger(data, "durationMs") orelse 1000;
-    const step_ms = json.getInteger(data, "stepMs") orelse 50;
-    const children = json.getInteger(data, "children") orelse 0;
-    const job = readJobTag(data);
-    const started_at = nowMilliseconds(context);
+pub fn helloLongHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !HelloLongResult {
+    _ = context;
+    const duration_ms = json.getInteger(payload, "durationMs") orelse 1000;
+    const step_ms = json.getInteger(payload, "stepMs") orelse 50;
+    const children = json.getInteger(payload, "children") orelse 0;
+    const job = readJobTag(payload);
+    const started_at = nowMilliseconds(io);
     var child_ids: std.ArrayList([]const u8) = .empty;
     var elapsed: i64 = 0;
     var step: i64 = 0;
     while (elapsed < duration_ms) {
-        try context.checkCancelled();
+        try services.checkCancelled(io, allocator);
         step += 1;
-        const line = try std.fmt.allocPrint(context.arena, "long task step {d}", .{step});
-        try sendOutput(context, line);
-        try sendJobProgress(context, job, started_at, line);
+        const line = try std.fmt.allocPrint(allocator, "long task step {d}", .{step});
+        try sendOutput(services, io, allocator, line);
+        try sendJobProgress(services, io, allocator, job, started_at, line);
         if (@as(i64, @intCast(child_ids.items.len)) < children) {
-            const child_id = try context.queueChild("hello-child", .{
+            const child_id = try services.queueChild(io, allocator, timers, "hello-child", .{
                 .index = child_ids.items.len,
                 .job = job,
             }, null);
-            try child_ids.append(context.arena, child_id);
+            try child_ids.append(allocator, child_id);
         }
-        try context.io().sleep(.fromMilliseconds(step_ms), .awake);
+        try io.sleep(.fromMilliseconds(step_ms), .awake);
         elapsed += step_ms;
     }
     // A task whose input sets more children than it had steps to start them in starts the rest now.
     while (@as(i64, @intCast(child_ids.items.len)) < children) {
-        const child_id = try context.queueChild("hello-child", .{
+        const child_id = try services.queueChild(io, allocator, timers, "hello-child", .{
             .index = child_ids.items.len,
             .job = job,
         }, null);
-        try child_ids.append(context.arena, child_id);
+        try child_ids.append(allocator, child_id);
     }
     for (child_ids.items) |child_id| {
-        const completion = try context.awaitTask(child_id);
-        const line = try std.fmt.allocPrint(context.arena, "child {s} {s}", .{ child_id, @tagName(completion.status) });
-        try sendOutput(context, line);
+        const completion = try services.awaitTask(io, allocator, timers, child_id);
+        const line = try std.fmt.allocPrint(allocator, "child {s} {s}", .{ child_id, @tagName(completion.status) });
+        try sendOutput(services, io, allocator, line);
     }
-    try context.checkCancelled();
-    try sendJobProgress(context, job, started_at, "long task finished");
-    return try json.stringify(context.arena, .{
+    try services.checkCancelled(io, allocator);
+    try sendJobProgress(services, io, allocator, job, started_at, "long task finished");
+    return .{
         .steps = step,
         .children = child_ids.items.len,
-    });
+    };
 }
+
+//
+// What hello-child gives as its result.
+//
+pub const HelloChildResult = struct {
+    // The child's index among its parent's children.
+    index: i64,
+};
 
 //
 // A child of hello-long: an output event, a job-progress event under the parent's job id, a short wait, then done.
 //
-pub fn helloChildHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const started_at = nowMilliseconds(context);
-    const index = json.getInteger(data, "index") orelse 0;
-    const line = try std.fmt.allocPrint(context.arena, "child {d} running", .{index});
-    try sendOutput(context, line);
-    try sendJobProgress(context, readJobTag(data), started_at, line);
+pub fn helloChildHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !HelloChildResult {
+    _ = timers;
+    _ = context;
+    const started_at = nowMilliseconds(io);
+    const index = json.getInteger(payload, "index") orelse 0;
+    const line = try std.fmt.allocPrint(allocator, "child {d} running", .{index});
+    try sendOutput(services, io, allocator, line);
+    try sendJobProgress(services, io, allocator, readJobTag(payload), started_at, line);
     var waited: i64 = 0;
     while (waited < 100) : (waited += 10) {
-        try context.checkCancelled();
-        try context.io().sleep(.fromMilliseconds(10), .awake);
+        try services.checkCancelled(io, allocator);
+        try io.sleep(.fromMilliseconds(10), .awake);
     }
-    return try json.stringify(context.arena, .{
+    return .{
         .index = index,
-    });
+    };
 }
 
 //
 // Always fails, so the failure path is exercised.
 //
-pub fn helloFailHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
+pub fn helloFailHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
     _ = context;
-    _ = data;
+    _ = payload;
     return error.HelloFailure;
 }
 
 //
-// Calls the native app's os_version native host callback for the operating system's version and returns it.
+// Has the native app read the operating system's version through its os-version call, by a request to the main thread,
+// and returns it.
 //
-pub fn osVersionHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    const os_version = context.config().os_version orelse {
-        return error.HostCallbackMissing;
+pub fn osVersionHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !json.Raw {
+    _ = context;
+    _ = payload;
+    const text = try services.osVersion(io, allocator, timers);
+    try sendOutput(services, io, allocator, "requested the operating system's version");
+    return .{
+        .text = text,
     };
-    const buffer = try context.arena.alloc(u8, 1024);
-    const length = os_version(context.config().user_data, buffer.ptr, buffer.len);
-    if (length < 0) {
-        return error.HostCallbackFailed;
-    }
-    const text = buffer[0..@intCast(length)];
-    try sendOutput(context, "asked the operating system for its version");
-    return text;
 }
+
+//
+// What background-count gives as its result.
+//
+pub const BackgroundCountResult = struct {
+    // How many steps it counted.
+    steps: i64,
+};
 
 //
 // Counts in a file in the app's data directory, one step every 100 milliseconds for "durationMs", so something outside the app can
@@ -385,77 +428,107 @@ pub fn osVersionHandler(context: *TaskContext, data: std.json.Value) anyerror!?[
 // "file" field of the data, and it holds the number of steps so far. The test app registers it twice, as a keep-alive task type and as
 // a normal one.
 //
-pub fn backgroundCountHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const duration_ms = json.getInteger(data, "durationMs") orelse 20000;
-    const file_name = json.getString(data, "file") orelse {
+pub fn backgroundCountHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !BackgroundCountResult {
+    _ = timers;
+    const duration_ms = json.getInteger(payload, "durationMs") orelse 20000;
+    const file_name = json.getString(payload, "file") orelse {
         return error.MissingFile;
     };
-    const path = try std.fs.path.join(context.arena, &.{ std.mem.span(context.config().data_dir), file_name });
+    const path = try std.fs.path.join(allocator, &.{ context.data_dir, file_name });
     var elapsed: i64 = 0;
     var step: i64 = 0;
     while (elapsed < duration_ms) {
-        try context.checkCancelled();
+        try services.checkCancelled(io, allocator);
         step += 1;
-        const text = try std.fmt.allocPrint(context.arena, "{d}\n", .{step});
-        try std.Io.Dir.cwd().writeFile(context.io(), .{
+        const text = try std.fmt.allocPrint(allocator, "{d}\n", .{step});
+        try std.Io.Dir.cwd().writeFile(io, .{
             .sub_path = path,
             .data = text,
         });
-        try context.io().sleep(.fromMilliseconds(100), .awake);
+        try io.sleep(.fromMilliseconds(100), .awake);
         elapsed += 100;
     }
-    return try json.stringify(context.arena, .{
+    return .{
         .steps = step,
-    });
+    };
 }
 
 //
-// Task types that work through their task context: one replies with what the context knows about the task, and one runs children
-// through it one after another and stops when the task is cancelled.
+// Task types that work through their task context and services: one replies with what the context holds about the task, and one runs
+// children through the services one after another and stops when the task is cancelled.
 //
+
+//
+// What describe-self gives as its result.
+//
+pub const DescribeSelfResult = struct {
+    // The task's id.
+    taskId: []const u8,
+    // The task's type.
+    taskType: []const u8,
+    // The source the task was queued under.
+    source: []const u8,
+    // The limit on child tasks in flight.
+    maxConcurrentChildTasks: u32,
+};
 
 //
 // Replies with what a task knows about itself from its context: its id, type and source, and the child task limit.
 //
-pub fn describeSelfHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    return try json.stringify(context.arena, .{
-        .taskId = context.taskId(),
-        .taskType = context.taskType(),
-        .source = context.source(),
-        .maxConcurrentChildTasks = context.maxConcurrentChildTasks(),
-    });
+pub fn describeSelfHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !DescribeSelfResult {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
+    return .{
+        .taskId = context.task_id,
+        .taskType = context.task_type,
+        .source = context.source,
+        .maxConcurrentChildTasks = context.max_concurrent_child_tasks,
+    };
 }
+
+//
+// What run-in-turn gives as its result.
+//
+pub const RunInTurnResult = struct {
+    // How many children ran.
+    ran: usize,
+    // How each ended.
+    statuses: []const []const u8,
+};
 
 //
 // Runs "children" hello-child tasks one after another, each freed as soon as it ends, and stops starting them once the task is cancelled,
 // reporting in an output event how many it ran. Replies with how many ran and how each ended.
 //
-pub fn runInTurnHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const children = json.getInteger(data, "children") orelse 0;
+pub fn runInTurnHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !RunInTurnResult {
+    _ = context;
+    const children = json.getInteger(payload, "children") orelse 0;
     var statuses: std.ArrayList([]const u8) = .empty;
     var index: i64 = 0;
-    while (index < children and !context.isCancelled()) : (index += 1) {
+    while (index < children and !services.isCancelled(io, allocator)) : (index += 1) {
         // A cancel that lands while the child is being queued ends the call with error.Cancelled instead of a cancelled completion.
-        const completion = context.runChild(context.arena, "hello-child", .{
+        const completion = services.runChild(io, allocator, timers, allocator, "hello-child", .{
             .index = index,
         }, null) catch |err| switch (err) {
             error.Cancelled => break,
             else => return err,
         };
-        try statuses.append(context.arena, @tagName(completion.status));
+        try statuses.append(allocator, @tagName(completion.status));
     }
-    if (context.isCancelled()) {
-        try context.sendEvent(.{
+    if (services.isCancelled(io, allocator)) {
+        try services.sendEvent(io, allocator, .{
             .type = "output",
-            .text = try std.fmt.allocPrint(context.arena, "run-in-turn stopped after {d} children", .{statuses.items.len}),
+            .text = try std.fmt.allocPrint(allocator, "run-in-turn stopped after {d} children", .{statuses.items.len}),
         });
         return error.Cancelled;
     }
-    return try json.stringify(context.arena, .{
+    return .{
         .ran = statuses.items.len,
         .statuses = statuses.items,
-    });
+    };
 }
 
 //
@@ -566,36 +639,37 @@ pub fn findAsset(request_path: []const u8) ?*const Asset {
 }
 
 //
-// The task: listens, tells the frontend the port and serves connections until the task is cancelled. A connection is served
-// on a thread of its own that owns everything it uses, because a browser opens connections it never sends a request on and a
-// thread waiting on one cannot be woken. Such a thread ends when the browser closes the connection, and the task does not wait
-// for it.
+// How long the accepting loop waits for a connection before it looks for a cancel again, in milliseconds.
 //
-pub fn mediaServerHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    _ = data;
-    const io = context.io();
+const accept_wait_ms: i32 = 50;
+
+//
+// The task: listens, tells the frontend the port and serves connections until the task is cancelled. It waits for each connection
+// no longer than accept_wait_ms, and looks for a cancel each time the wait ends, so it needs no other thread to watch for one. A
+// connection is served on a thread of its own that owns everything it uses, because a browser opens connections it never sends a
+// request on and a thread waiting on one cannot be woken. Such a thread ends when the browser closes the connection, and the task
+// does not wait for it.
+//
+pub fn mediaServerHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = timers;
+    _ = context;
+    _ = payload;
     const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", 0);
     var listener = try address.listen(io, .{});
     defer listener.deinit(io);
     const port = listener.socket.address.getPort();
-    var stopping: std.atomic.Value(bool) = .init(false);
-    const watcher = try std.Thread.spawn(.{}, watchForCancel, .{ context, &stopping, port });
-    try context.sendEvent(.{
+    try services.sendEvent(io, allocator, .{
         .type = "media-server",
         .port = port,
     });
-    while (true) {
+    while (!services.isCancelled(io, allocator)) {
+        if (!try ziggy.socket_wait.waitReadable(listener.socket.handle, accept_wait_ms)) {
+            continue;
+        }
         const stream = listener.accept(io) catch |err| {
-            if (stopping.load(.acquire)) {
-                break;
-            }
             std.debug.print("media server: accept failed: {s}\n", .{@errorName(err)});
             continue;
         };
-        if (stopping.load(.acquire)) {
-            stream.close(io);
-            break;
-        }
         const thread = std.Thread.spawn(.{}, serveConnection, .{stream}) catch |err| {
             std.debug.print("media server: could not serve a connection: {s}\n", .{@errorName(err)});
             stream.close(io);
@@ -603,32 +677,7 @@ pub fn mediaServerHandler(context: *TaskContext, data: std.json.Value) anyerror!
         };
         thread.detach();
     }
-    stopping.store(true, .release);
-    watcher.join();
     return error.Cancelled;
-}
-
-//
-// Wakes the accepting loop when the task is cancelled. Accepting blocks, so a connection made here makes it look at the flag.
-//
-fn watchForCancel(context: *TaskContext, stopping: *std.atomic.Value(bool), port: u16) void {
-    while (!stopping.load(.acquire)) {
-        context.checkCancelled() catch {
-            stopping.store(true, .release);
-            const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", port) catch unreachable;
-            if (address.connect(context.io(), .{ .mode = .stream })) |stream| {
-                stream.close(context.io());
-            }
-            else |err| {
-                // Without the connection the accepting loop never wakes, and the task never ends.
-                std.debug.panic("media server: could not wake the accepting loop to stop it: {s}", .{@errorName(err)});
-            }
-            return;
-        };
-        context.io().sleep(.fromMilliseconds(50), .awake) catch |err| {
-            std.debug.panic("media server: the watch for a cancel could not wait: {s}", .{@errorName(err)});
-        };
-    }
 }
 
 //
@@ -724,52 +773,63 @@ fn answerRequest(reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
 }
 
 //
-// The test app's file and folder pickers. They answer the pick-folder, pick-files and pick-file messages, each handler answering with the task of its name: a
-// cancelled dialog is a reply of null. Each runs as a task, because a dialog waits for the user and must not hold up the thread that handles frontend
-// messages.
+// The test app's file and folder pickers. The pick-folder, pick-files and pick-file messages each have their response from the task of
+// its name: a cancelled dialog is a response of null. Each runs as a task, because a dialog waits for the user and must not hold up the
+// thread that handles frontend messages.
 //
 
 //
 // Shows a dialog and returns the first path chosen as a JSON string, or null when the user cancelled.
 //
-fn firstPath(context: *TaskContext, kind: ziggy.types.PickKind, title: ?[]const u8, initial_name: ?[]const u8) !?[]const u8 {
-    const answer = try context.pickPaths(kind, title, initial_name);
-    const paths = try std.json.parseFromSliceLeaky(std.json.Value, context.arena, answer, .{});
+fn firstPath(services: TaskServices, io: std.Io, allocator: std.mem.Allocator, timers: Timers, kind: ziggy.types.PickKind, title: ?[]const u8, initial_name: ?[]const u8) !json.Raw {
+    const picked = try services.pickPaths(io, allocator, timers, kind, title, initial_name);
+    const paths = try std.json.parseFromSliceLeaky(std.json.Value, allocator, picked, .{});
     if (paths != .array or paths.array.items.len == 0) {
-        return try context.arena.dupe(u8, "null");
+        return .{
+            .text = "null",
+        };
     }
-    return try json.stringify(context.arena, paths.array.items[0]);
+    return .{
+        .text = try json.stringify(allocator, paths.array.items[0]),
+    };
 }
 
 //
 // pick-folder: data is an options object that may name a "title", or null. The reply is the
 // folder's path, or null.
 //
-pub fn pickFolderHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const title = json.getString(data, "title") orelse "Select Folder";
-    return try firstPath(context, .folder, title, null);
+pub fn pickFolderHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !json.Raw {
+    _ = context;
+    const title = json.getString(payload, "title") orelse "Select Folder";
+    return try firstPath(services, io, allocator, timers, .folder, title, null);
 }
 
 //
 // pick-files: data is the dialog's title, a string. The reply is the array of the paths chosen, or null.
 //
-pub fn pickFilesHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const title: []const u8 = if (data == .string) data.string else "Select Files";
-    const answer = try context.pickPaths(.open_files, title, null);
-    const paths = try std.json.parseFromSliceLeaky(std.json.Value, context.arena, answer, .{});
+pub fn pickFilesHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !json.Raw {
+    _ = context;
+    const title: []const u8 = if (payload == .string) payload.string else "Select Files";
+    const picked = try services.pickPaths(io, allocator, timers, .open_files, title, null);
+    const paths = try std.json.parseFromSliceLeaky(std.json.Value, allocator, picked, .{});
     if (paths != .array or paths.array.items.len == 0) {
-        return try context.arena.dupe(u8, "null");
+        return .{
+            .text = "null",
+        };
     }
-    return answer;
+    return .{
+        .text = picked,
+    };
 }
 
 //
 // pick-file: a save dialog, where data is the suggested file name, a string. The reply is the path chosen to
 // save to, or null.
 //
-pub fn pickFileHandler(context: *TaskContext, data: std.json.Value) anyerror!?[]const u8 {
-    const initial_name: []const u8 = if (data == .string) data.string else "";
-    return try firstPath(context, .save_file, "Save As", initial_name);
+pub fn pickFileHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !json.Raw {
+    _ = context;
+    const initial_name: []const u8 = if (payload == .string) payload.string else "";
+    return try firstPath(services, io, allocator, timers, .save_file, "Save As", initial_name);
 }
 
 //
@@ -781,14 +841,16 @@ pub const PickFolderRequest = struct {
 };
 
 //
-// pick-folder: answered by the pick-folder task, which is given the request. The response is the folder's path, or null.
+// pick-folder: the response is the result of the pick-folder task, which is given the payload: the folder's path, or null.
 //
-pub fn pickFolderMessageHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: PickFolderRequest) !ziggy.core.Answer(?[]const u8) {
-    _ = core;
+pub fn pickFolderMessageHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: PickFolderRequest) !ziggy.core.Response(?[]const u8) {
+    _ = services;
+    _ = timers;
+    _ = io;
     return .{
         .task = .{
             .task_type = "pick-folder",
-            .data = try json.stringify(arena, request),
+            .data = try json.stringify(allocator, payload),
         },
     };
 }
@@ -802,14 +864,16 @@ pub const PickFilesRequest = struct {
 };
 
 //
-// pick-files: answered by the pick-files task, which is given the title. The response is the paths chosen, or null.
+// pick-files: the response is the result of the pick-files task, which is given the title: the paths chosen, or null.
 //
-pub fn pickFilesMessageHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: PickFilesRequest) !ziggy.core.Answer(?[]const []const u8) {
-    _ = core;
+pub fn pickFilesMessageHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: PickFilesRequest) !ziggy.core.Response(?[]const []const u8) {
+    _ = services;
+    _ = timers;
+    _ = io;
     return .{
         .task = .{
             .task_type = "pick-files",
-            .data = try json.stringify(arena, request.title),
+            .data = try json.stringify(allocator, payload.title),
         },
     };
 }
@@ -823,14 +887,16 @@ pub const PickFileRequest = struct {
 };
 
 //
-// pick-file: answered by the pick-file task, which is given the suggested name. The response is the path chosen, or null.
+// pick-file: the response is the result of the pick-file task, which is given the suggested name: the path chosen, or null.
 //
-pub fn pickFileMessageHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, request: PickFileRequest) !ziggy.core.Answer(?[]const u8) {
-    _ = core;
+pub fn pickFileMessageHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: PickFileRequest) !ziggy.core.Response(?[]const u8) {
+    _ = services;
+    _ = timers;
+    _ = io;
     return .{
         .task = .{
             .task_type = "pick-file",
-            .data = try json.stringify(arena, request.name),
+            .data = try json.stringify(allocator, payload.name),
         },
     };
 }
@@ -844,17 +910,14 @@ pub fn pickFileMessageHandler(core: *ziggy.core.Core, arena: std.mem.Allocator, 
 // Tells the frontend, with an app event of the type given, which task an observer was called for, so the frontend can count what the
 // backend observed. An event that cannot be made is a panic: an observer has no caller to return an error to.
 //
-fn sendObserved(core: *Core, event_type: []const u8, task_id: []const u8) void {
-    var arena_state = std.heap.ArenaAllocator.init(core.allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const event = json.stringify(arena, .{
+fn sendObserved(services: HandlerServices, io: std.Io, allocator: std.mem.Allocator, event_type: []const u8, task_id: []const u8) void {
+    const event = json.stringify(allocator, .{
         .type = event_type,
         .taskId = task_id,
     }) catch |err| {
         std.debug.panic("the {s} event could not be made: {s}", .{ event_type, @errorName(err) });
     };
-    core.sendEvent(arena, event) catch |err| {
+    services.sendEvent(io, allocator, event) catch |err| {
         std.debug.panic("the {s} event could not be sent: {s}", .{ event_type, @errorName(err) });
     };
 }
@@ -862,16 +925,19 @@ fn sendObserved(core: *Core, event_type: []const u8, task_id: []const u8) void {
 //
 // The backend's observer of a task that has ended: tells the frontend with a "task-ended" app event.
 //
-pub fn onTaskEnd(core: *Core, end: ziggy.types.TaskEnd) void {
-    sendObserved(core, "task-ended", end.task_id);
+pub fn onTaskEnd(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, end: ziggy.types.TaskEnd) void {
+    _ = timers;
+    sendObserved(services, io, allocator, "task-ended", end.task_id);
 }
 
 //
 // The backend's observer of an event a task sent: tells the frontend with a "task-event-sent" app event.
 //
-pub fn onTaskEvent(core: *Core, sent: ziggy.types.TaskSentEvent) void {
-    sendObserved(core, "task-event-sent", sent.task_id);
+pub fn onTaskEvent(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, sent: ziggy.types.TaskSentEvent) void {
+    _ = timers;
+    sendObserved(services, io, allocator, "task-event-sent", sent.task_id);
 }
+
 
 //
 // The test app's desktop menu. The native app draws it with the platform's own menu API on every desktop platform and never on a phone.
@@ -1058,12 +1124,14 @@ pub const menu: []const ziggy.menu.Menu = &.{
 // The Zig functions the test app's menu items run (its `.zig` items).
 //
 
+
 //
 // Send Event From Zig: sends the frontend the app event {"type": "menu-zig-event"}, which shows that a `.zig` item ran in the core
 // and that what it sends reaches the frontend.
 //
-pub fn sendZigEvent(core: *ziggy.core.Core, arena: std.mem.Allocator) !void {
-    try core.sendEvent(arena, "{\"type\":\"menu-zig-event\"}");
+pub fn sendZigEvent(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) !void {
+    _ = timers;
+    try services.sendEvent(io, allocator, "{\"type\":\"menu-zig-event\"}");
 }
 
 //
@@ -1073,8 +1141,10 @@ pub fn sendZigEvent(core: *ziggy.core.Core, arena: std.mem.Allocator) !void {
 //
 // Reports whether the test mode switch is on, which is all the test app's frontend reads from its address.
 //
-pub fn uiQuery(core: *ziggy.core.Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8 {
-    _ = core;
+pub fn uiQuery(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8 {
+    _ = services;
+    _ = timers;
+    _ = io;
     if (test_mode) {
         return try allocator.dupe(u8, "testMode=1");
     }

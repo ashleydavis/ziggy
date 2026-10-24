@@ -16,7 +16,7 @@ This diagram shows the main parts of a Ziggy app and how they interact:
   - Draws the menus.
   - Shows dialogs.
   - Reads files dropped on the window.
-- **The backend** (`backend/`): the app's own Zig code, declared to Ziggy in `backend/src/app.zig`. Its message handlers and task handlers do the work on local files, network sockets, processes and so on. Message handlers run on the native app's main thread, so slow work goes in tasks, which run on worker threads and never block the window. See [Messages](../user-guide/messages.md) and [Tasks](../user-guide/tasks.md).
+- **The backend** (`backend/`): the app's own Zig code, declared to Ziggy in `backend/src/app.zig`. Its message handlers and task handlers do the work on local files, network sockets, processes and so on. Message handlers run on the backend's main thread, which Ziggy starts apart from the native app's UI thread, so slow work goes in tasks, which run on worker threads and never hold up the frontend's other messages. See [Messages](../user-guide/messages.md) and [Tasks](../user-guide/tasks.md).
 - **The scripts** (`scripts/`): set up, build, run, package and clean the app for each platform. See [Scripts](../user-guide/scripts.md).
 - **The tests**: the frontend's unit tests (`frontend/src/test`), the backend's unit tests (`backend/src/test`) and the smoke tests (`smoke-tests`). See [Testing your app](../user-guide/testing.md).
 - **The workflows** (`.github/workflows`): GitHub Actions workflows that test the app and publish a release for each platform. See [Distributing your app](../user-guide/distributing-your-app.md).
@@ -55,7 +55,7 @@ The smoke test scenario `24-ui-address` checks on every platform that the fronte
 ## The message bridge
 
 - The frontend talks to the backend through `window.ziggy`, which the native app injects into the page.
-- The native app passes messages to the backend through a C interface, declared and documented in `ziggy.h`. Every native app hands every message to the one entry point, `ziggy_post_message` (`Core.postMessage` in the core).
+- The native app passes messages to the backend through a C interface, declared and documented in `ziggy.h`. Every native app hands every message to the one entry point, `ziggy_send_message` (`sendMessage` in `core.zig`), which posts it to the core's main thread's queue and returns at once. `ziggy_create` returns that queue, and every other function of the C interface is given it.
 - There are two kinds of message, kept apart from end to end. An app message belongs to the app: the backend handles it by calling the Zig handler the app registered for its name. A system message belongs to Ziggy itself (tasks, the platform, menu actions, dropped files and the test hooks): the backend handles it with Ziggy's own handlers and the app's handlers never see it.
 - What the app's handler returns is sent back to the frontend as the message response.
 
@@ -68,25 +68,24 @@ Each message, message response and event is the JSON text of one object. The nat
 | An app message | The frontend | `{"kind": "app", "id": 1, "name": "<message name>", "data": ...}`, or `{"kind": "app", "name": "<message name>", "data": ...}` for one sent with `send`, which gets no message response |
 | A system message | The frontend script or the native app | `{"kind": "system", "id": 1, "name": "<name>", "data": ...}`, with no `id` when it gets no message response |
 | A message response, of either kind | The backend | `{"id": 1, "ok": true, "data": ...}`, or `{"id": 1, "ok": false, "error": "<text>"}` when the message failed |
-| An app event | The backend | `{"kind": "app", "data": ...}`, sent by `core.sendEvent` |
+| An app event | The backend | `{"kind": "app", "data": ...}`, sent by the handler services' `sendEvent` |
 | A system event | The backend | `{"kind": "system", "name": "<name>", "data": ...}` |
 
 The `kind` field shows which kind a message or event is:
 
-- `Core.postMessage` reads the `kind` and does nothing else. It passes an app message to `postAppMessage`, which looks its name up in the registry of app messages. It passes a system message to `postSystemMessage`, which looks its name up in the registry of system messages. See "Registries and handlers" below.
+- The main thread's `handleFrontendMessage` reads the `kind` and does nothing else. It passes an app message to `runAppMessage`, which finds its name among the app's messages. It passes a system message to `runSystemMessage`, which finds Ziggy's function for its name. See "Handlers" below.
 - A message that is not a JSON object, or has no `kind` or any other value, is refused as `InvalidMessage` and reported as a `core-error` system event.
 - The backend refuses an app message with no name, an empty name or a name that is not a string, with `MissingMessageName` and a name no app message is registered under with `UnknownMessageName`, before any handler runs. A system message with no name is `InvalidMessage`.
 - The frontend script hands an app event to the `onEvent` listeners and a system event only to Ziggy's listener for its name, so an app never sees Ziggy's own traffic.
 - `window.ziggy` has no call that sends a system message of the app's choosing: each of Ziggy's own calls names its own message.
 - The `id` is any JSON value the frontend chooses, and the message response carries it back unchanged.
 
-## Registries and handlers
+## Handlers
 
-The core keeps two registries of message handlers by name, one of app messages and one of system messages (`message-registry.zig`). The task runner keeps the task types. Each can be added to at any point while the core runs, from any thread, while messages are being handled. Registering a name that is registered already fails loudly and prints the name: `DuplicateMessage` for a message, `DuplicateTaskType` for a task type.
-
-- **App messages and task types.** The app declares them in `ziggy.core.App` (`app.zig`), which checks every handler when the app is built and makes the lists the core registers when it is created. The app adds more later with `core.registerMessage` and `core.registerTask`. `registerMessage` only ever adds to the registry of app messages.
-- **System messages.** There is no list of them. Each part of Ziggy registers its own while the core is being created, from its file under `system-messages/`: the platform `get-platform`, the menu `menu-action`, the dropped files `get-dropped-paths`, the task runner `add-task` and `cancel-tasks` once it is running and the test hooks `test-result` and `test-ui-ready` in a test hooks build only. The core holds this registry untyped and no public declaration of the core names it or `system-messages.zig`, so an app cannot reach it, register a system message or call a system handler. The registry's `register(name, handler)` is general enough for a plugin to call later.
-- **One handler mechanism for both kinds.** `handlers.zig` wraps every handler, app or system, in the one function the core calls. The wrapper parses the message's data into the handler's request type, refusing data that does not fit with `InvalidMessageData` without running the handler. It turns what the handler returns (a response, `void`, a `ziggy.core.Answer` of `.now`, `.task` or `.later`, or a `ziggy.core.MessageResult` from a handler that takes the message unparsed) into the message response. A handler that answers `.later` takes a `ziggy.core.Reply`. The core records each such message until it is answered. It reports any that never is as a `core-error` system event naming `MessageNotAnswered` when it is destroyed. The [Messages](../user-guide/messages.md#what-a-handler-returns) guide lists the forms.
+- **App messages and task types.** The app declares them in `ziggy.core.App` (`app.zig`), which checks every handler when the app is built and makes the lists of messages and task types, constants of the app's code that the main thread and every worker read.
+- **System messages.** Each part of Ziggy has a function for each of its system messages, in its file under `system-messages/`: the platform `get-platform`, the menu `menu-action`, the dropped files `get-dropped-paths`, the task runner `add-task` and `cancel-tasks` and the test hooks `test-result` and `test-ui-ready` in a test hooks build only. The main thread finds the function by the message's name and gives it only the piece of its state it uses. No public declaration of the core names them, so an app cannot call one.
+- **The standard arguments.** Every app message handler, menu item function and app function takes the same arguments first: the handler services, the main thread's timers, its Io and an allocator. Every task handler takes the task services, its worker's timers, its worker's Io, an allocator and its context. Ziggy passes them to every handler of a kind alike and never chooses what to pass by reading a handler's parameters. The services are interfaces, as `std.Io` is: the handler services carry out each call on the main thread, and the task services send each call to the main thread as a JSON message (`services.zig`, `task-runner.zig`).
+- **The app's message handlers.** `handlers.zig` wraps every app message handler in the one function the main thread calls. The wrapper parses the message's data into the handler's payload type, refusing data that does not fit with `InvalidMessageData` without running the handler. It turns what the handler returns (a result, `void`, a `ziggy.core.Response` of `.now`, `.task` or `.later`, or a `ziggy.core.MessageResult` from a handler that takes the message unparsed) into the message response. A handler that returns `.later` takes a `ziggy.core.Reply`, which posts the response to the main thread's queue. The main thread records each such message until its response comes. It reports any that never gets one as a `core-error` system event naming `MessageNotAnswered` when it stops. The [Messages](../user-guide/messages.md#what-a-handler-returns) guide lists the forms.
 
 ## The backend library
 
@@ -120,7 +119,7 @@ The system events, each with its own listener on `window.ziggy`:
 ## Tasks
 
 - Background tasks run on a pool of worker threads in the backend, so slow work never blocks the frontend.
-- Message handlers and menu functions run on the native app's main thread. No thread touches another thread's state and they talk only by JSON messages, so the app's own state needs no locks. See [Threads and state](../user-guide/tasks.md#threads-and-state).
+- Message handlers, menu functions and timers run on the backend's main thread, which Ziggy starts apart from the native app's UI thread. No thread touches another thread's state and they talk only by JSON messages, so the app's own state needs no locks. See [Threads and state](../user-guide/tasks.md#threads-and-state).
 - The frontend queues a task with `window.ziggy.addTask`, can cancel it with `cancelTasks` and hears back through `onTaskEvent` and `onTaskCompleted`.
 - A keep-alive task keeps a mobile app running in the background until it ends.
 - The [Tasks](../user-guide/tasks.md) guide explains how to write, queue and cancel one.

@@ -13,6 +13,8 @@ import android.provider.OpenableColumns;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.MessageQueue;
+import android.os.ParcelFileDescriptor;
 import android.graphics.Insets;
 import android.util.Log;
 import android.view.ViewGroup;
@@ -35,6 +37,10 @@ import java.io.OutputStream;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.io.FileDescriptor;
+import java.util.Arrays;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -48,9 +54,11 @@ import org.json.JSONObject;
 // app's bundled frontend from the APK assets, calls the core through JNI and moves messages between the frontend and the
 // core.
 //
-// An activity creates one, calls start from onCreate and destroy from onDestroy. Messages from the core arrive on any
-// thread and are posted to the main thread in order before they touch the web view.
-public final class ZiggyShell implements ZiggyHost {
+// An activity creates one, calls start from onCreate and destroy from onDestroy. The core's messages for the native app reach the
+// main thread only: the main looper watches the core's wake descriptor and takes them when it is readable. A picker and the app's
+// own native calls wait for the user, so they run on the native app's own native call thread, and their results go back to the core from the
+// main thread.
+public final class ZiggyNativeApp implements ZiggyNativeCalls {
     private static final String TAG = "Ziggy";
 
     // The Intent extras a test hooks build reads. They are honoured only when the core library has the test hooks.
@@ -80,6 +88,16 @@ public final class ZiggyShell implements ZiggyHost {
     // The core's handle, or 0 before it is created and after it is destroyed. Guarded by coreLock.
     private long handle;
 
+    // The handle of the core's main thread's queue, which the frontend's messages are posted to from the web view's thread. Guarded by
+    // coreLock, and valid while handle is not 0.
+    private long queueHandle;
+
+    // A copy of the core's wake descriptor, which the main looper watches, or null when the core does not exist.
+    private ParcelFileDescriptor wakeDescriptor;
+
+    // The thread the pickers and the app's native calls run on, one at a time, because they wait for the user.
+    private final ExecutorService nativeCallThread = Executors.newSingleThreadExecutor();
+
     // True once the frontend has finished loading, so window.__ziggyReceive exists. Only the main thread reads or writes it.
     private boolean uiReady;
 
@@ -98,8 +116,8 @@ public final class ZiggyShell implements ZiggyHost {
     // Whether the system refused the last start of the keep-alive service, so the native app starts it again when the activity resumes.
     private boolean keepAliveRefused;
 
-    // Handles the core's host requests, or null when the app gave none.
-    private volatile HostRequestHandler hostRequestHandler;
+    // Handles the core's native calls, or null when the app gave none.
+    private volatile NativeCallHandler nativeCallHandler;
 
     // The request codes of the three pickers, which are the activity's to tell apart in onActivityResult. They are the
     // pick kinds added to this base.
@@ -124,7 +142,7 @@ public final class ZiggyShell implements ZiggyHost {
     // What a picker returns when it is dismissed with no choice, or the native app is being destroyed under it.
     private static final Intent NOTHING_PICKED = new Intent();
 
-    public ZiggyShell(Activity activity, WebView webView, String nativeLibraryName, int workerThreads, int maxConcurrentChildTasks) {
+    public ZiggyNativeApp(Activity activity, WebView webView, String nativeLibraryName, int workerThreads, int maxConcurrentChildTasks) {
         this.activity = activity;
         this.webView = webView;
         this.nativeLibraryName = nativeLibraryName;
@@ -153,23 +171,28 @@ public final class ZiggyShell implements ZiggyHost {
         coreLock.writeLock().lock();
         try {
             handle = created;
+            queueHandle = ZiggyNative.messageQueue(created);
         } finally {
             coreLock.writeLock().unlock();
         }
+        watchCore(created);
 
         configureWebView();
         String query = new String(ZiggyNative.uiQuery(created), StandardCharsets.UTF_8);
         webView.loadUrl(APP_URL_PREFIX + "index.html" + (query.isEmpty() ? "" : "?" + query));
     }
 
-    // Destroys the core once. After it returns nothing more is delivered to the frontend. Call it from onDestroy.
+    // Destroys the core once. After it returns nothing more is delivered to the frontend. Call it from onDestroy, on the UI thread.
     public void destroy() {
         destroyed = true;
-        // Destroying the core waits for its worker threads, and one may be waiting on a picker that will now never return.
-        BlockingQueue<Intent> waiting = pendingPick;
-        if (waiting != null) {
-            waiting.offer(NOTHING_PICKED);
+        // Destroying the core waits for its main thread, which may be waiting on a picker that will now never return, so the picker
+        // on screen is closed and the thread that showed it is told nothing was picked.
+        BlockingQueue<Intent> pick = pendingPick;
+        if (pick != null) {
+            activity.finishActivity(pendingPickRequestCode);
+            pick.offer(NOTHING_PICKED);
         }
+        stopWatchingCore();
         coreLock.writeLock().lock();
         try {
             if (handle == 0) {
@@ -177,11 +200,57 @@ public final class ZiggyShell implements ZiggyHost {
             }
             long destroying = handle;
             handle = 0;
+            queueHandle = 0;
             ZiggyNative.destroy(destroying);
         } finally {
             coreLock.writeLock().unlock();
         }
+        nativeCallThread.shutdown();
         webView.destroy();
+    }
+
+    // Has the main looper take the core's messages for the native app whenever its wake descriptor is readable.
+    private void watchCore(long created) {
+        try {
+            wakeDescriptor = ParcelFileDescriptor.fromFd(ZiggyNative.wakeDescriptor(created));
+        } catch (IOException error) {
+            throw new IllegalStateException("Ziggy could not watch the core's wake descriptor", error);
+        }
+        Looper.getMainLooper().getQueue().addOnFileDescriptorEventListener(
+            wakeDescriptor.getFileDescriptor(),
+            MessageQueue.OnFileDescriptorEventListener.EVENT_INPUT,
+            new MessageQueue.OnFileDescriptorEventListener() {
+                @Override
+                public int onFileDescriptorEvents(FileDescriptor descriptor, int events) {
+                    if (handle != 0) {
+                        ZiggyNative.takeMessages(handle);
+                    }
+                    return EVENT_INPUT;
+                }
+            });
+    }
+
+    // Stops the main looper watching the core's wake descriptor.
+    private void stopWatchingCore() {
+        if (wakeDescriptor == null) {
+            return;
+        }
+        Looper.getMainLooper().getQueue().removeOnFileDescriptorEventListener(wakeDescriptor.getFileDescriptor());
+        try {
+            wakeDescriptor.close();
+        } catch (IOException error) {
+            Log.w(TAG, "Could not close the copy of the core's wake descriptor", error);
+        }
+        wakeDescriptor = null;
+    }
+
+    // Sends the core the result of the call taken under the number reply, on the main thread. A call made before the core was destroyed
+    // was given its result by the destroy, so it is not sent again.
+    private void sendResult(long reply, boolean ok, byte[] text) {
+        if (handle == 0) {
+            return;
+        }
+        ZiggyNative.nativeResult(handle, reply, ok, text);
     }
 
     private void configureWebView() {
@@ -261,8 +330,8 @@ public final class ZiggyShell implements ZiggyHost {
             if (handle == 0) {
                 return new WebResourceResponse("text/plain", "UTF-8", 403, "Blocked", Collections.<String, String>emptyMap(), new ByteArrayInputStream(new byte[0]));
             }
-            content = ZiggyNative.uiFileContent(handle, pathBytes);
-            contentType = ZiggyNative.uiFileContentType(handle, pathBytes);
+            content = ZiggyNative.uiFileContent(pathBytes);
+            contentType = ZiggyNative.uiFileContentType(pathBytes);
         } finally {
             coreLock.readLock().unlock();
         }
@@ -287,7 +356,7 @@ public final class ZiggyShell implements ZiggyHost {
             if (handle == 0) {
                 return 2;
             }
-            return ZiggyNative.checkUrl(handle, url.getBytes(StandardCharsets.UTF_8));
+            return ZiggyNative.checkUrl(APP_URL_PREFIX.getBytes(StandardCharsets.UTF_8), url.getBytes(StandardCharsets.UTF_8));
         } finally {
             coreLock.readLock().unlock();
         }
@@ -295,20 +364,15 @@ public final class ZiggyShell implements ZiggyHost {
 
     @Override
     public void onCoreMessage(byte[] message) {
-        final String text = new String(message, StandardCharsets.UTF_8);
-        mainHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                if (destroyed) {
-                    return;
-                }
-                if (!uiReady) {
-                    beforeUi.add(text);
-                    return;
-                }
-                webView.evaluateJavascript("window.__ziggyReceive(" + text + ");", null);
-            }
-        });
+        String text = new String(message, StandardCharsets.UTF_8);
+        if (destroyed) {
+            return;
+        }
+        if (!uiReady) {
+            beforeUi.add(text);
+            return;
+        }
+        webView.evaluateJavascript("window.__ziggyReceive(" + text + ");", null);
     }
 
     @Override
@@ -392,27 +456,44 @@ public final class ZiggyShell implements ZiggyHost {
         }
     }
 
-    // Gives the native app the object that handles the core's host requests. Call it before start. Without one, every host request
+    // Gives the native app the object that handles the core's native calls. Call it before start. Without one, every native call
     // fails with a reason that reports it.
-    public void setHostRequestHandler(HostRequestHandler handler) {
-        hostRequestHandler = handler;
+    public void setNativeCallHandler(NativeCallHandler handler) {
+        nativeCallHandler = handler;
     }
 
+    // Runs the app's native call on the native call thread, and sends the core its result on the main thread.
     @Override
-    public byte[] hostRequest(byte[] method, byte[] requestJson) {
+    public void nativeCall(final byte[] method, final byte[] requestJson, final long reply) {
+        nativeCallThread.execute(new Runnable() {
+            @Override
+            public void run() {
+                final byte[] result = nativeCallResult(method, requestJson);
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        sendResult(reply, result[0] == 1, Arrays.copyOfRange(result, 1, result.length));
+                    }
+                });
+            }
+        });
+    }
+
+    // Has the app's handler do a native call, on the native call thread, and returns a NativeCallResult.
+    private byte[] nativeCallResult(byte[] method, byte[] requestJson) {
         String methodName = new String(method, StandardCharsets.UTF_8);
-        HostRequestHandler handler = hostRequestHandler;
+        NativeCallHandler handler = nativeCallHandler;
         if (handler == null) {
-            return HostRequestAnswer.failed("This app's Android shell has no handler for the request " + methodName + ".");
+            return NativeCallResult.failed("This app's Android native app has no handler for the native call " + methodName + ".");
         }
         try {
-            return HostRequestAnswer.succeeded(handler.handle(methodName, new String(requestJson, StandardCharsets.UTF_8)));
-        } catch (HostRequestException failure) {
-            Log.w(TAG, "The host request " + methodName + " failed: " + failure.getMessage(), failure);
-            return HostRequestAnswer.failed(failure.getMessage());
+            return NativeCallResult.succeeded(handler.handle(methodName, new String(requestJson, StandardCharsets.UTF_8)));
+        } catch (NativeCallException failure) {
+            Log.w(TAG, "The native call " + methodName + " failed: " + failure.getMessage(), failure);
+            return NativeCallResult.failed(failure.getMessage());
         } catch (RuntimeException error) {
-            Log.e(TAG, "The host request " + methodName + " threw", error);
-            return HostRequestAnswer.failed("The host request " + methodName + " failed: " + error);
+            Log.e(TAG, "The native call " + methodName + " threw", error);
+            return NativeCallResult.failed("The native call " + methodName + " failed: " + error);
         }
     }
 
@@ -433,16 +514,16 @@ public final class ZiggyShell implements ZiggyHost {
     // Feeds a picker's result to the core thread waiting for it. The activity calls this from onActivityResult. Returns whether
     // the result was a picker's.
     public boolean onActivityResult(int requestCode, int resultCode, Intent data) {
-        BlockingQueue<Intent> waiting = pendingPick;
-        if (waiting == null || requestCode != pendingPickRequestCode) {
+        BlockingQueue<Intent> pick = pendingPick;
+        if (pick == null || requestCode != pendingPickRequestCode) {
             return false;
         }
         lastActivityResultOk = resultCode == Activity.RESULT_OK;
-        waiting.offer(resultCode == Activity.RESULT_OK && data != null ? data : NOTHING_PICKED);
+        pick.offer(resultCode == Activity.RESULT_OK && data != null ? data : NOTHING_PICKED);
         return true;
     }
 
-    // Starts an activity for the app's own host request handlers and waits for it to finish, from a thread that is not the main
+    // Starts an activity for the app's own native call handlers and waits for it to finish, from a thread that is not the main
     // thread. Returns the activity's result data, or null when the user backed out, the activity gave no data or the native app is being
     // destroyed. It shares the one slot the pickers use, so only one such activity is on screen at a time.
     public Intent startActivityAndWait(final Intent request) throws InterruptedException, ActivityNotFoundException {
@@ -516,8 +597,30 @@ public final class ZiggyShell implements ZiggyHost {
         }
     }
 
+    // Shows the picker on the native call thread, which waits for the user, and sends the core what was picked on the main thread.
     @Override
-    public byte[] pickPathsJson(int kind, String title, String initialName) {
+    public void pickPaths(final int kind, final String title, final String initialName, final long reply) {
+        nativeCallThread.execute(new Runnable() {
+            @Override
+            public void run() {
+                final byte[] picked = pickPathsJson(kind, title, initialName);
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (picked == null) {
+                            sendResult(reply, false, "The picker could not be shown or read. The app's log says why.".getBytes(StandardCharsets.UTF_8));
+                            return;
+                        }
+                        sendResult(reply, true, picked);
+                    }
+                });
+            }
+        });
+    }
+
+    // Shows a picker and waits for the user, on the native call thread, and returns the UTF-8 JSON of what was picked, or null when the picker
+    // could not be shown or read (the reason has been logged).
+    private byte[] pickPathsJson(int kind, String title, String initialName) {
         // The system's document pickers have no title of their own to set (EXTRA_TITLE on a save is the file name), so the
         // title is not shown.
         synchronized (pickMutex) {
@@ -646,11 +749,11 @@ public final class ZiggyShell implements ZiggyHost {
         public void postMessage(String message) {
             coreLock.readLock().lock();
             try {
-                if (handle == 0) {
+                if (queueHandle == 0) {
                     Log.w(TAG, "A message from the UI arrived after the core was destroyed and was dropped");
                     return;
                 }
-                ZiggyNative.postMessage(handle, message.getBytes(StandardCharsets.UTF_8));
+                ZiggyNative.sendMessage(queueHandle, message.getBytes(StandardCharsets.UTF_8));
             } finally {
                 coreLock.readLock().unlock();
             }

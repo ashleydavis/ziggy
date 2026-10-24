@@ -8,8 +8,10 @@ const ziggy = @import("ziggy");
 //
 // Reports whether the test mode switch is on, which is all the template's frontend reads from its address.
 //
-pub fn uiQuery(core: *ziggy.core.Core, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8 {
-    _ = core;
+pub fn uiQuery(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, test_mode: bool) anyerror![]const u8 {
+    _ = services;
+    _ = timers;
+    _ = io;
     if (test_mode) {
         return try allocator.dupe(u8, "testMode=1");
     }

@@ -3,7 +3,7 @@
 Ziggy's native app code for MacOS, as a Swift package (swift-tools-version 5.7, macOS 11). One class, `ZiggyBridge`, serves the app. Terms are defined in the [glossary](../../../../docs/glossary.md).
 
 - `CZiggy` is a system library target whose `ziggy.h` is a link to the backend's own header (`packages/ziggy/core/src/lib/ziggy.h`).
-- `ZiggyNativeMacOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards frontend messages to `ziggy_post_message`, delivers the backend's messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the backend.
+- `ZiggyNativeMacOS` owns the `WKWebView`, injects `ziggy-inject.js` at document start, forwards frontend messages to `ziggy_send_message`, delivers the backend's messages on the main thread in order (`window.__ziggyReceive(<json>)`), decides every navigation with `ziggy_check_url` and creates and destroys the backend.
 
 The static library with the backend (`libziggy_template.a` for the template) is linked by the app project.
 

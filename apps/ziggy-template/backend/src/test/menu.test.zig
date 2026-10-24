@@ -8,7 +8,7 @@ const std = @import("std");
 const ziggy = @import("ziggy");
 const app = @import("ziggy-template-backend");
 
-const FakeShell = ziggy.fake_shell.FakeShell;
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 test "the Hello menu has a Zig item and a UI item" {
     const from_zig = app.app.menu_targets.get("hello-from-zig") orelse return error.MenuItemMissing;
@@ -18,21 +18,21 @@ test "the Hello menu has a Zig item and a UI item" {
 }
 
 test "Say Hello From Zig sends the UI the hello-from-zig event" {
-    var shell: FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"hello-from-zig\"}}");
-    try shell.expectMessageContaining("{\"kind\":\"app\",\"data\":{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}}");
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"hello-from-zig\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}}");
 }
 
 test "Say Hello From the UI sends the UI the menu event naming it" {
-    var shell: FakeShell = undefined;
-    shell.init(std.testing.allocator);
-    defer shell.deinit();
-    const core = try ziggy.core.Core.create(std.testing.allocator, shell.config(2, 2), app.app);
-    defer core.destroy();
-    core.postMessage("{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"hello-from-ui\"}}");
-    try shell.expectMessageContaining("{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"hello-from-ui\"}}");
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"hello-from-ui\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"hello-from-ui\"}}");
 }

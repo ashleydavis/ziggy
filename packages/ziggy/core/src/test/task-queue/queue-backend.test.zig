@@ -7,6 +7,10 @@ const IQueueBackend = queue_backend.IQueueBackend;
 const setQueueBackend = queue_backend.setQueueBackend;
 const getQueueBackend = queue_backend.getQueueBackend;
 const errors = utils.errors;
+const ziggy = @import("ziggy");
+const Timers = ziggy.timers.Timers;
+const TimerList = ziggy.timers.TimerList;
+const MessageQueue = ziggy.core.MessageQueue;
 
 //
 // Minimal no-op backend for testing the singleton helpers.
@@ -42,6 +46,7 @@ const NoOpBackend = struct {
         .cancelTasks = cancelTasks,
         .onTasksCancelled = onTasksCancelled,
         .shutdown = shutdown,
+        .waitForMessage = waitForMessage,
     };
 
     //
@@ -62,7 +67,8 @@ const NoOpBackend = struct {
     //
     // Does nothing.
     //
-    fn noUnsubscribe(context: ?*anyopaque, key: usize) void {
+    fn noUnsubscribe(context: ?*anyopaque, allocator: std.mem.Allocator, key: usize) void {
+        _ = allocator;
         _ = context;
         _ = key;
     }
@@ -75,7 +81,8 @@ const NoOpBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onTaskAdded(ptr: *anyopaque, source: []const u8, callback: types.TaskAddedCallback) anyerror!types.UnsubscribeFn {
+    fn onTaskAdded(ptr: *anyopaque, allocator: std.mem.Allocator, source: []const u8, callback: types.TaskAddedCallback) anyerror!types.UnsubscribeFn {
+        _ = allocator;
         countCall(ptr);
         _ = source;
         _ = callback;
@@ -85,7 +92,8 @@ const NoOpBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onTaskComplete(ptr: *anyopaque, callback: types.WorkerTaskCompletionCallback) anyerror!types.UnsubscribeFn {
+    fn onTaskComplete(ptr: *anyopaque, allocator: std.mem.Allocator, callback: types.WorkerTaskCompletionCallback) anyerror!types.UnsubscribeFn {
+        _ = allocator;
         countCall(ptr);
         _ = callback;
         return no_unsubscribe;
@@ -94,7 +102,8 @@ const NoOpBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onTaskEvent(ptr: *anyopaque, eventType: []const u8, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
+    fn onTaskEvent(ptr: *anyopaque, allocator: std.mem.Allocator, eventType: []const u8, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
+        _ = allocator;
         countCall(ptr);
         _ = eventType;
         _ = callback;
@@ -104,7 +113,8 @@ const NoOpBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onAnyTaskEvent(ptr: *anyopaque, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
+    fn onAnyTaskEvent(ptr: *anyopaque, allocator: std.mem.Allocator, callback: types.TaskEventCallback) anyerror!types.UnsubscribeFn {
+        _ = allocator;
         countCall(ptr);
         _ = callback;
         return no_unsubscribe;
@@ -113,7 +123,9 @@ const NoOpBackend = struct {
     //
     // Does nothing.
     //
-    fn cancelTasks(ptr: *anyopaque, source: []const u8) void {
+    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+        _ = io;
+        _ = allocator;
         countCall(ptr);
         _ = source;
     }
@@ -121,7 +133,8 @@ const NoOpBackend = struct {
     //
     // Returns a no-op unsubscribe function.
     //
-    fn onTasksCancelled(ptr: *anyopaque, source: []const u8, callback: types.TasksCancelledCallback) anyerror!types.UnsubscribeFn {
+    fn onTasksCancelled(ptr: *anyopaque, allocator: std.mem.Allocator, source: []const u8, callback: types.TasksCancelledCallback) anyerror!types.UnsubscribeFn {
+        _ = allocator;
         countCall(ptr);
         _ = source;
         _ = callback;
@@ -131,7 +144,19 @@ const NoOpBackend = struct {
     //
     // Does nothing.
     //
-    fn shutdown(ptr: *anyopaque) void {
+    fn shutdown(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) void {
+        _ = io;
+        _ = allocator;
+        countCall(ptr);
+    }
+
+    //
+    // Counts the call.
+    //
+    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+        _ = io;
+        _ = allocator;
+        _ = timers;
         countCall(ptr);
     }
 };
@@ -163,22 +188,52 @@ test "queue-backend singleton: calling setQueueBackend a second time replaces th
 test "IQueueBackend forwards every method to the implementation" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+    const allocator = arena.allocator();
+    const io = std.testing.io;
+    var timer_list = TimerList.init();
     var backend: NoOpBackend = .{ .calls = 0 };
     const interface = backend.queueBackend();
-    try std.testing.expectEqualStrings("task-id", try interface.addTask(arena.allocator(), std.testing.io, "t", .null, "s", null, null));
-    const unsubscribe = try interface.onTaskComplete(.{ .context = null, .function = undefined });
-    unsubscribe.call();
-    interface.cancelTasks("s");
-    interface.shutdown();
-    try std.testing.expectEqual(@as(u32, 4), backend.calls);
+    try std.testing.expectEqualStrings("task-id", try interface.addTask(allocator, io, "t", .null, "s", null, null));
+    const unsubscribe = try interface.onTaskComplete(allocator, .{ .context = null, .function = undefined });
+    unsubscribe.call(allocator);
+    interface.cancelTasks(io, allocator, "s");
+    interface.shutdown(io, allocator);
+    interface.waitForMessage(io, allocator, timer_list.interface());
+    try std.testing.expectEqual(@as(u32, 5), backend.calls);
+}
+
+//
+// Tells the test's thread, on the queue given, whether the calling thread has a backend, which no test set on this thread.
+//
+fn readBackendOnThread(replies: *MessageQueue) void {
+    var threaded: std.Io.Threaded = .init_single_threaded;
+    defer threaded.deinit();
+    const found = if (getQueueBackend()) |_| "\"found\"" else |_| "null";
+    replies.post(threaded.io(), 0, found) catch @panic("out of memory replying to the test");
+}
+
+test "queue-backend: each thread has its own backend, and one set on one thread is not seen on another" {
+    const io = std.testing.io;
+    var backend: NoOpBackend = .{ .calls = 0 };
+    setQueueBackend(backend.queueBackend());
+    defer setQueueBackend(null);
+    var replies = MessageQueue.init();
+    defer replies.deinit();
+    const reader = try std.Thread.spawn(.{}, readBackendOnThread, .{&replies});
+    reader.join();
+    const reply = replies.take(io, std.testing.allocator, .none).?;
+    defer std.testing.allocator.free(reply.text);
+    try std.testing.expectEqualStrings("null", reply.text);
+    try std.testing.expect((try getQueueBackend()).ptr == @as(*anyopaque, &backend));
 }
 
 test "IQueueBackend forwards the subscriptions to the implementation" {
+    const allocator = std.testing.allocator;
     var backend: NoOpBackend = .{ .calls = 0 };
     const interface = backend.queueBackend();
-    (try interface.onTaskAdded("s", .{ .context = null, .function = undefined })).call();
-    (try interface.onTaskEvent("progress", .{ .context = null, .function = undefined })).call();
-    (try interface.onAnyTaskEvent(.{ .context = null, .function = undefined })).call();
-    (try interface.onTasksCancelled("s", .{ .context = null, .function = undefined })).call();
+    (try interface.onTaskAdded(allocator, "s", .{ .context = null, .function = undefined })).call(allocator);
+    (try interface.onTaskEvent(allocator, "progress", .{ .context = null, .function = undefined })).call(allocator);
+    (try interface.onAnyTaskEvent(allocator, .{ .context = null, .function = undefined })).call(allocator);
+    (try interface.onTasksCancelled(allocator, "s", .{ .context = null, .function = undefined })).call(allocator);
     try std.testing.expectEqual(@as(u32, 4), backend.calls);
 }

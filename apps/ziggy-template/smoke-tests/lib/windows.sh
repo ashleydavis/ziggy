@@ -76,7 +76,7 @@ ziggy_platform_stop() {
     if [ "${2:-}" = "keep-device" ]; then
         # The app is about to start again on the same data. WebView2 refuses to create its controller while the first run's browser
         # process still holds the user data folder: the Windows job of the Ziggy template workflow failed scenario 17-ui-storage
-        # on its restart with "ziggy shell: creating the WebView2 controller failed with HRESULT 0x800700AA" (ERROR_BUSY). So the
+        # on its restart with "ziggy native app: creating the WebView2 controller failed with HRESULT 0x800700AA" (ERROR_BUSY). So the
         # restart waits until no WebView2 process is left.
         local waited=0
         while tasklist //fo csv //nh //fi "IMAGENAME eq msedgewebview2.exe" | grep -q "msedgewebview2.exe"; do
