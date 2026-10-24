@@ -13,7 +13,6 @@ pub const worker_messages = @import("lib/worker-messages.zig");
 pub const message_queue = @import("lib/message-queue.zig");
 pub const thread_allocator = @import("lib/thread-allocator.zig");
 pub const timers = @import("lib/timers.zig");
-pub const socket_wait = @import("lib/socket-wait.zig");
 pub const core = @import("lib/core.zig");
 pub const ziggy_api = @import("lib/ziggy-api.zig");
 pub const jni = @import("lib/jni.zig");

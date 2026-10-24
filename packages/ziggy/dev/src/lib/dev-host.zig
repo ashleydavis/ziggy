@@ -23,7 +23,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const z = @import("c");
 const message_queue = @import("message-queue");
-const socket_wait = @import("socket-wait");
 const request_paths = @import("request-paths.zig");
 const args_lib = @import("args.zig");
 const web_socket_lib = @import("web-socket.zig");
@@ -43,9 +42,6 @@ const message_limit = 256 * 1024 * 1024;
 
 // The largest request body or page the dev host holds whole while it forwards it.
 const forward_limit = 64 * 1024 * 1024;
-
-// How long a thread that serves a socket waits for it before it reads its own messages again, in milliseconds.
-const socket_wait_ms: i32 = 20;
 
 //
 // What a message to the main thread is, by the number it is sent under.
@@ -107,6 +103,10 @@ const Page = struct {
     const deliver: u32 = 1;
     // The main thread will send no more messages to this page.
     const released: u32 = 2;
+    // From the page's reading thread: a ping came, and its payload, the text, is to go back as a pong.
+    const pong: u32 = 3;
+    // From the page's reading thread: the page closed its socket, and the reading thread has ended.
+    const closed: u32 = 4;
 };
 
 //
@@ -214,6 +214,18 @@ fn ownIo(allocator: std.mem.Allocator) std.Io.Threaded {
 }
 
 //
+// Connects to the dev host's own port and closes the connection at once, which wakes the accepting thread from accept so it reads
+// the "stop" sent to it before. A connection that cannot be made means the listener is gone and the thread is not in accept.
+//
+fn wakeAccepting(io: std.Io, port: u16) void {
+    const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", port) catch unreachable;
+    if (address.connect(io, .{ .mode = .stream })) |stream| {
+        stream.close(io);
+    }
+    else |_| {}
+}
+
+//
 // Runs the dev host and returns the process's exit code.
 //
 pub fn run(init: std.process.Init, app: AppInfo) !u8 {
@@ -298,13 +310,16 @@ pub fn run(init: std.process.Init, app: AppInfo) !u8 {
         handleHubMessage(&dev_host, io, allocator, message);
     }
     try accept_queue.post(io, 0, "stop");
+    // The accepting thread blocks in accept, so a connection made here wakes it to read "stop".
+    wakeAccepting(io, dev_host.port);
     accepting.join();
     return 0;
 }
 
 //
 // The accepting thread: accepts each connection and serves it on a thread of its own, until the main thread sends it "stop", then
-// closes the listening socket. It waits for a connection no longer than socket_wait_ms at a time, so it reads its messages in between.
+// closes the listening socket. It blocks in accept, so the main thread wakes it with a connection of its own after sending "stop"
+// (wakeAccepting), and it reads its messages after each connection it accepts.
 //
 fn acceptConnections(given: AcceptStart) void {
     var start = given;
@@ -316,20 +331,15 @@ fn acceptConnections(given: AcceptStart) void {
     const io = threaded.io();
     defer start.listener.deinit(io);
     while (true) {
-        if (start.queue.tryTake(io, allocator)) |message| {
-            allocator.free(message.text);
-            break;
-        }
-        const ready = socket_wait.waitReadable(start.listener.socket.handle, socket_wait_ms) catch |err| {
-            std.debug.panic("ziggy dev host: waiting for a connection failed: {s}", .{@errorName(err)});
-        };
-        if (!ready) {
-            continue;
-        }
         const stream = start.listener.accept(io) catch |err| {
             std.debug.print("ziggy dev host: accept failed: {s}\n", .{@errorName(err)});
             continue;
         };
+        if (start.queue.tryTake(io, allocator)) |message| {
+            allocator.free(message.text);
+            stream.close(io);
+            break;
+        }
         const thread = std.Thread.spawn(.{}, serveConnection, .{ConnectionStart{
             .options = start.options,
             .hub = start.hub,
@@ -670,7 +680,7 @@ fn serveConnection(start: ConnectionStart) void {
             .websocket => |key| {
                 if (!own) {
                     // The dev server's own WebSocket, such as its live reload, is passed through untouched.
-                    tunnelToDevServer(connection, io, stream, &reader.interface, &writer.interface, &request) catch |err| {
+                    tunnelToDevServer(connection, io, stream, &reader.interface, &request) catch |err| {
                         std.debug.print("ziggy dev host: the dev server's WebSocket ended: {s}\n", .{@errorName(err)});
                     };
                     return;
@@ -946,10 +956,10 @@ fn forwardToDevServer(connection: Connection, io: std.Io, allocator: std.mem.All
 
 //
 // Passes a WebSocket the dev server serves, such as its live reload, through to it: the browser's request goes to the dev server as
-// it came, and from then on bytes are copied both ways, on this one thread, whichever side has something to send, until either side
-// closes.
+// it came, and from then on bytes are copied both ways until either side closes: from the browser on this thread, and from the dev
+// server on a thread of its own (copyToBrowser), each with buffers of its own.
 //
-fn tunnelToDevServer(connection: Connection, io: std.Io, browser: std.Io.net.Stream, browser_reader: *std.Io.Reader, browser_writer: *std.Io.Writer, request: *std.http.Server.Request) !void {
+fn tunnelToDevServer(connection: Connection, io: std.Io, browser: std.Io.net.Stream, browser_reader: *std.Io.Reader, request: *std.http.Server.Request) !void {
     const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", connection.options.ui_port);
     const upstream = try address.connect(io, .{
         .mode = .stream,
@@ -964,41 +974,53 @@ fn tunnelToDevServer(connection: Connection, io: std.Io, browser: std.Io.net.Str
     browser_reader.toss(early.len);
     try upstream_writer.interface.flush();
 
-    var upstream_read_buffer: [64 * 1024]u8 = undefined;
-    var upstream_reader = upstream.reader(io, &upstream_read_buffer);
-    const handles = [_]std.Io.net.Socket.Handle{ browser.socket.handle, upstream.socket.handle };
+    const back = try std.Thread.spawn(.{}, copyToBrowser, .{ upstream, browser });
+    copyAsItComes(browser_reader, &upstream_writer.interface) catch {};
+    // The browser has gone, so the dev server's side is ended too, which ends the copy the other way.
+    upstream.shutdown(io, .both) catch {};
+    back.join();
+}
+
+//
+// Copies what the dev server sends on a tunnelled WebSocket to the browser until either side closes, on a thread of its own with its
+// own Io and buffers. It is given the two sockets and nothing else.
+//
+fn copyToBrowser(upstream: std.Io.net.Stream, browser: std.Io.net.Stream) void {
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    var threaded = ownIo(thread_allocator.allocator());
+    defer threaded.deinit();
+    const io = threaded.io();
+    var read_buffer: [64 * 1024]u8 = undefined;
+    var upstream_reader = upstream.reader(io, &read_buffer);
+    var browser_write_buffer: [64 * 1024]u8 = undefined;
+    var browser_writer = browser.writer(io, &browser_write_buffer);
+    copyAsItComes(&upstream_reader.interface, &browser_writer.interface) catch {};
+    // The dev server has gone, so the browser's side is ended too, which ends the copy the other way.
+    browser.shutdown(io, .both) catch {};
+}
+
+//
+// Copies everything the reader gets to the writer as it comes, sending each piece at once, until the reader's side closes. A
+// WebSocket's frames have to reach the other side when they are sent, not when a buffer fills.
+//
+fn copyAsItComes(reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
     while (true) {
-        const ready = try socket_wait.waitReadableAny(&handles, -1) orelse {
-            continue;
+        const piece = reader.peekGreedy(1) catch |err| switch (err) {
+            error.EndOfStream => return,
+            else => return err,
         };
-        const copied = if (ready == 0)
-            copyWhatCame(browser_reader, &upstream_writer.interface)
-        else
-            copyWhatCame(&upstream_reader.interface, browser_writer);
-        copied catch {
-            // Either side has gone, so both are ended.
-            upstream.shutdown(io, .both) catch {};
-            browser.shutdown(io, .both) catch {};
-            return;
-        };
+        try writer.writeAll(piece);
+        try writer.flush();
+        reader.toss(piece.len);
     }
 }
 
 //
-// Copies what the reader has, which it has because its socket can be read, to the writer and sends it at once: a WebSocket's frames
-// have to reach the other side when they are sent, not when a buffer fills. Fails with EndOfStream when the reader's side has closed.
-//
-fn copyWhatCame(reader: *std.Io.Reader, writer: *std.Io.Writer) !void {
-    const piece = try reader.peekGreedy(1);
-    try writer.writeAll(piece);
-    try writer.flush();
-    reader.toss(piece.len);
-}
-
-//
-// Serves the page's WebSocket on this thread, which owns it: every message the page sends goes to the core through the main thread,
-// and every message the main thread sends this page is written to it, until the page closes it. The thread waits for the socket no
-// longer than socket_wait_ms at a time, so it writes the main thread's messages in between.
+// Serves the page's WebSocket: every message the page sends goes to the core through the main thread, and every message the main
+// thread sends this page is written to it, until the page closes it. This thread writes to the page; a thread of its own
+// (readPage) reads from it, posts the page's messages to the main thread and posts this thread the pings to reply to and the
+// page's close.
 //
 fn serveSocket(connection: Connection, io: std.Io, allocator: std.mem.Allocator, stream: std.Io.net.Stream, request: *std.http.Server.Request, key: []const u8) !void {
     var web_socket = try request.respondWebSocket(.{
@@ -1011,32 +1033,99 @@ fn serveSocket(connection: Connection, io: std.Io, allocator: std.mem.Allocator,
     // The message the page's socket failed on, which goes back to the main thread when the page is let go, ahead of the ones after it.
     var unwritten: ?[]u8 = null;
     defer releasePage(connection, io, allocator, &queue, unwritten);
-    var pong = PongContext{
-        .web_socket = &web_socket,
-    };
+    const reading = try std.Thread.spawn(.{}, readPage, .{ReadPageStart{
+        .hub = connection.hub,
+        .queue = &queue,
+        .stream = stream,
+    }});
+    defer reading.join();
     while (true) {
-        while (queue.tryTake(io, allocator)) |message| {
-            defer allocator.free(message.text);
-            web_socket.writeMessage(message.text, .text) catch |err| {
-                std.debug.print("ziggy dev host: the page's connection failed while a message was written to it: {s}. The message waits for the next page.\n", .{@errorName(err)});
-                unwritten = try allocator.dupe(u8, message.text);
-                return;
-            };
+        const message = queue.take(io, allocator, .none) orelse {
+            @panic("ziggy dev host: a page's queue closed while it was served");
+        };
+        defer allocator.free(message.text);
+        if (message.from == Page.closed) {
+            return;
         }
-        if (web_socket.input.bufferedLen() == 0 and !try socket_wait.waitReadable(stream.socket.handle, socket_wait_ms)) {
+        const kind: std.http.Server.WebSocket.Opcode = if (message.from == Page.pong) .pong else .text;
+        web_socket.writeMessage(message.text, kind) catch |err| {
+            std.debug.print("ziggy dev host: the page's connection failed while a message was written to it: {s}. The message waits for the next page.\n", .{@errorName(err)});
+            if (kind == .text) {
+                unwritten = try allocator.dupe(u8, message.text);
+            }
+            // Ends the reading thread's read of the broken connection, then waits for its close.
+            stream.shutdown(io, .both) catch {};
+            waitForPageClosed(io, allocator, &queue);
+            return;
+        };
+    }
+}
+
+//
+// Waits for the reading thread's report that it has ended, after the writing side failed. Messages from the main thread that come
+// meanwhile are left for releasePage, which takes them in order.
+//
+fn waitForPageClosed(io: std.Io, allocator: std.mem.Allocator, queue: *MessageQueue) void {
+    var kept: std.ArrayList(QueueMessage) = .empty;
+    defer kept.deinit(allocator);
+    while (true) {
+        const message = queue.take(io, allocator, .none) orelse {
+            @panic("ziggy dev host: a page's queue closed while it was served");
+        };
+        if (message.from == Page.closed) {
+            allocator.free(message.text);
+            break;
+        }
+        if (message.from == Page.pong) {
+            allocator.free(message.text);
             continue;
         }
-        const message = web_socket_lib.readMessage(web_socket.input, allocator, message_limit, .{
-            .context = &pong,
+        kept.append(allocator, message) catch @panic("out of memory letting a page go");
+    }
+    for (kept.items) |message| {
+        queue.post(io, message.from, message.text) catch @panic("out of memory letting a page go");
+        allocator.free(message.text);
+    }
+}
+
+//
+// What the page's reading thread is given when it starts.
+//
+const ReadPageStart = struct {
+    // The dev host's main thread's queue, where the page's messages go.
+    hub: *MessageQueue,
+    // The page's writing thread's queue, where pings and the page's close go.
+    queue: *MessageQueue,
+    // The page's socket, which this thread only reads from.
+    stream: std.Io.net.Stream,
+};
+
+//
+// The page's reading thread: reads the page's messages until it closes its socket, with its own Io, allocator and buffer. Each
+// message goes to the main thread, each ping to the writing thread to reply to, and when the page has gone it tells the writing
+// thread so and ends.
+//
+fn readPage(start: ReadPageStart) void {
+    var thread_allocator: ThreadAllocator = .init;
+    defer thread_allocator.deinit();
+    const allocator = thread_allocator.allocator();
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const io = threaded.io();
+    defer start.queue.post(io, Page.closed, "") catch @panic("out of memory ending a page");
+    var read_buffer: [64 * 1024]u8 = undefined;
+    var reader = start.stream.reader(io, &read_buffer);
+    while (true) {
+        const message = web_socket_lib.readMessage(&reader.interface, allocator, message_limit, .{
+            .context = start.queue,
             .answer = answerPing,
-        }) catch |err| switch (err) {
-            error.EndOfStream => return,
-            else => return err,
+        }) catch {
+            return;
         };
         switch (message) {
             .data => |text| {
                 defer allocator.free(text);
-                try connection.hub.post(io, Hub.frontend, text);
+                start.hub.post(io, Hub.frontend, text) catch @panic("out of memory passing on a message from the page");
             },
             .close => return,
         }
@@ -1084,17 +1173,15 @@ fn returnUndelivered(connection: Connection, io: std.Io, allocator: std.mem.Allo
 }
 
 //
-// What replying to a ping needs: the page's socket, which only the thread serving it writes to.
-//
-const PongContext = struct {
-    // The page's socket.
-    web_socket: *std.http.Server.WebSocket,
-};
-
-//
-// Replies to a ping with a pong carrying its payload.
+// Has the writing thread reply to a ping with a pong carrying its payload, since only the writing thread writes to the page. The
+// context is the writing thread's queue.
 //
 fn answerPing(context: *anyopaque, payload: []const u8) anyerror!void {
-    const pong: *PongContext = @ptrCast(@alignCast(context));
-    try pong.web_socket.writeMessage(payload, .pong);
+    const queue: *MessageQueue = @ptrCast(@alignCast(context));
+    // A post needs an Io of the calling thread's own, which allocates nothing for it, so its allocator is a buffer on the stack.
+    var buffer: [1024]u8 = undefined;
+    var fixed = std.heap.FixedBufferAllocator.init(&buffer);
+    var threaded = ownIo(fixed.allocator());
+    defer threaded.deinit();
+    try queue.post(threaded.io(), Page.pong, payload);
 }

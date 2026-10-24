@@ -214,6 +214,8 @@ pub const WaitTarget = union(enum) {
     all_children,
     // The response to a request to the native app, by request id.
     native_response: u64,
+    // The running task's source to be cancelled.
+    cancelled,
 };
 
 //
@@ -406,6 +408,7 @@ pub const WorkerRuntime = struct {
             .child_slot => context.inflight_children < context.maxConcurrentChildTasks(),
             .all_children => context.inflight_children == 0,
             .native_response => |id| self.native_responses.contains(id),
+            .cancelled => context.cancelled,
         };
     }
 
@@ -453,6 +456,12 @@ pub const WorkerRuntime = struct {
                     return false;
                 };
                 return context.hasChild(task_id);
+            },
+            .cancelled => {
+                const context = self.current orelse {
+                    return false;
+                };
+                return cancelsSource(allocator, message, context.task_source);
             },
         }
     }
