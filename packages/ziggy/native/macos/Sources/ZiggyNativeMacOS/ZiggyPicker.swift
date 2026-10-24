@@ -2,7 +2,8 @@
 // Native file and folder pickers, for the core's "pick-paths" calls. The calls reach the app's main thread, which shows the panel and
 // returns at once: the panel's completion gives the outcome, one picker at a time. On MacOS these are NSOpenPanel and NSSavePanel.
 // Everything here runs on the main thread. Before the core is destroyed the bridge closes the pickers: the one showing is cancelled
-// and the ones queued are dropped, because destroying the core gives their calls their results.
+// and given the outcome of a cancelled picker, and the ones queued are dropped, because destroying the core gives their calls their
+// results.
 //
 
 import Foundation
@@ -34,6 +35,8 @@ final class ZiggyPickers {
     private var queued: [ZiggyPickRequest] = []
     // The panel showing, or nil.
     private var showing: NSSavePanel?
+    // The request of the panel showing, or nil.
+    private var showingRequest: ZiggyPickRequest?
     // Set once closed: nothing more is shown and no outcome is given.
     private var closed = false
 
@@ -46,13 +49,19 @@ final class ZiggyPickers {
         showNext()
     }
 
-    // Cancels the picker showing and drops the ones queued, giving none of them an outcome.
+    // Cancels the picker showing, giving it the outcome of a cancelled picker as the Linux and Windows native apps do, so the pick
+    // ends before the core is destroyed, and drops the ones queued, whose calls destroying the core fails. Giving the showing picker
+    // no outcome left it to destroying the core: the MacOS smoke job's 25-close-with-dialog-open failed with "the app was still running
+    // 30 seconds after it was told to quit with a file dialog open".
     func close() {
         closed = true
         queued = []
         if let panel = showing {
+            let request = showingRequest
             showing = nil
+            showingRequest = nil
             panel.cancel(nil)
+            request?.completion(.chosen([]))
         }
     }
 
@@ -68,11 +77,13 @@ final class ZiggyPickers {
             return
         }
         showing = panel
+        showingRequest = request
         panel.begin { [weak self] response in
             guard let self = self, self.showing === panel else {
                 return
             }
             self.showing = nil
+            self.showingRequest = nil
             request.completion(ZiggyPickers.outcome(panel: panel, response: response))
             self.showNext()
         }
