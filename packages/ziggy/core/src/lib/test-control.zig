@@ -174,6 +174,9 @@ const ConnectionThread = struct {
     stream: std.Io.net.Stream,
     // Whether the socket was closed already, to end the connection thread's read on Windows when stopping (wakeConnection).
     closed: bool,
+    // Whether the connection thread is answering a command, as its last "answering" or "answered" message said. Stopping does not end
+    // the read of a connection that is answering, so its reply is not lost: it reads its "stop" when it has answered.
+    answering: bool,
 };
 
 //
@@ -203,7 +206,7 @@ fn acceptConnections(given: AcceptStart) void {
                 stop_requested = true;
                 continue;
             }
-            endConnection(io, allocator, &connections, message.from);
+            handleConnectionMessage(io, allocator, &connections, message, false);
         }
         if (stop_requested) {
             // The connection that woke this thread to read "stop".
@@ -234,11 +237,14 @@ fn acceptConnections(given: AcceptStart) void {
             .thread = thread,
             .stream = stream,
             .closed = false,
+            .answering = false,
         }) catch @panic("out of memory serving a test control connection");
     }
     for (connections.items) |*connection| {
         connection.queue.post(io, from_main, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the test control connection");
-        wakeConnection(io, connection);
+        if (!connection.answering) {
+            wakeConnection(io, connection);
+        }
     }
     while (connections.items.len > 0) {
         const message = start.queue.take(io, allocator, .none) orelse {
@@ -246,11 +252,34 @@ fn acceptConnections(given: AcceptStart) void {
         };
         defer allocator.free(message.text);
         if (message.from != from_main) {
-            endConnection(io, allocator, &connections, message.from);
+            handleConnectionMessage(io, allocator, &connections, message, true);
         }
     }
     start.server.deinit(io);
     start.main_queue.post(io, from_test_control, "{\"type\":\"test-control-stopped\"}") catch @panic("out of memory stopping the test control connection");
+}
+
+//
+// Reads one message from a connection thread: "answering" and "answered" around each command it answers, and "ended" when it has
+// ended. Once stopping, a connection that has answered its command is woken from its next read to read its "stop", since stopping
+// left it alone while it answered. On Windows closing the socket would have thrown its reply away: the Windows smoke job of Photosphere
+// reported "No answer from the control connection to quit" when every connection was woken at once.
+//
+fn handleConnectionMessage(io: std.Io, allocator: std.mem.Allocator, connections: *std.ArrayList(ConnectionThread), message: message_queue.Message, stopping: bool) void {
+    if (std.mem.indexOf(u8, message.text, "\"ended\"") != null) {
+        endConnection(io, allocator, connections, message.from);
+        return;
+    }
+    for (connections.items) |*connection| {
+        if (connection.number != message.from) {
+            continue;
+        }
+        connection.answering = std.mem.indexOf(u8, message.text, "\"answering\"") != null;
+        if (stopping and !connection.answering) {
+            wakeConnection(io, connection);
+        }
+        return;
+    }
 }
 
 //
@@ -259,6 +288,9 @@ fn acceptConnections(given: AcceptStart) void {
 // when the thread has ended.
 //
 fn wakeConnection(io: std.Io, connection: *ConnectionThread) void {
+    if (connection.closed) {
+        return;
+    }
     if (builtin.os.tag == .windows) {
         connection.stream.close(io);
         connection.closed = true;
@@ -356,6 +388,9 @@ const Connection = struct {
             } orelse {
                 return;
             };
+            // Tells the accepting thread a command is being answered, so stopping leaves the connection alone until it has.
+            self.start.accept_queue.post(io, self.start.number, "{\"type\":\"answering\"}") catch @panic("out of memory serving a test control connection");
+            defer self.start.accept_queue.post(io, self.start.number, "{\"type\":\"answered\"}") catch @panic("out of memory serving a test control connection");
             const reply_line = self.handleLine(io, allocator, line) catch |err| blk: {
                 const text = json.stringify(allocator, .{
                     .@"error" = @errorName(err),
