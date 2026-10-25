@@ -97,6 +97,10 @@ open_control_connection() {
 #
 # Sends one command line on the control connection and prints the reply line. Usage: control <json>
 #
+# Called inside $( ), where its fail exits only that subshell, so every caller below ends the scenario with `|| exit 1` when it
+# fails. Without that, the Windows smoke job of the Release run on commit 0367000 kept asking a dead connection "could not write to the control
+# connection" every second for a minute in each scenario, until a wait gave up.
+#
 control() {
     printf '%s\n' "$1" >&3 || fail "could not write to the control connection"
     local answer
@@ -126,7 +130,7 @@ wait_for_ready() {
     local waited=0
     local answer
     while [ "$waited" -lt "$WAIT_TIMEOUT_SECONDS" ]; do
-        answer="$(control '{"command":"ready"}')"
+        answer="$(control '{"command":"ready"}')" || exit 1
         if [ "$(printf '%s' "$answer" | jq -r '.ok')" = "true" ]; then
             return 0
         fi
@@ -141,7 +145,7 @@ wait_for_ready() {
 #
 click() {
     local answer
-    answer="$(control "{\"command\":\"click\",\"dataId\":\"$1\"}")"
+    answer="$(control "{\"command\":\"click\",\"dataId\":\"$1\"}")" || exit 1
     if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
         fail "click $1 failed: $answer"
     fi
@@ -152,7 +156,7 @@ click() {
 #
 text_of() {
     local answer
-    answer="$(control "{\"command\":\"get-text\",\"dataId\":\"$1\"}")"
+    answer="$(control "{\"command\":\"get-text\",\"dataId\":\"$1\"}")" || exit 1
     if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
         fail "get-text $1 failed: $answer"
     fi
@@ -164,7 +168,7 @@ text_of() {
 #
 type_into() {
     local answer
-    answer="$(control "{\"command\":\"type\",\"dataId\":\"$1\",\"text\":\"$2\"}")"
+    answer="$(control "{\"command\":\"type\",\"dataId\":\"$1\",\"text\":\"$2\"}")" || exit 1
     if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
         fail "type into $1 failed: $answer"
     fi
@@ -181,7 +185,7 @@ wait_for_text() {
     local waited=0
     local shown=""
     while [ "$waited" -lt "$seconds" ]; do
-        shown="$(text_of "$data_id")"
+        shown="$(text_of "$data_id")" || exit 1
         case "$shown" in
             *"$wanted"*)
                 return 0
@@ -198,7 +202,7 @@ wait_for_text() {
 #
 expect_text_absent() {
     local shown
-    shown="$(text_of "$1")"
+    shown="$(text_of "$1")" || exit 1
     case "$shown" in
         *"$2"*)
             fail "$1 shows \"$2\" and should not. It showed: $shown"
@@ -211,7 +215,7 @@ expect_text_absent() {
 #
 count_in() {
     local shown
-    shown="$(text_of "$1")"
+    shown="$(text_of "$1")" || exit 1
     printf '%s' "$shown" | grep -o -F -- "$2" | wc -l | tr -d ' '
 }
 
@@ -224,7 +228,7 @@ wait_for_empty() {
     local waited=0
     local shown=""
     while [ "$waited" -lt "$seconds" ]; do
-        shown="$(text_of "$data_id")"
+        shown="$(text_of "$data_id")" || exit 1
         if [ -z "$shown" ]; then
             return 0
         fi
@@ -241,7 +245,7 @@ wait_for_empty() {
 #
 answer_next_dialog() {
     local answer
-    answer="$(control "{\"command\":\"pick-answer\",\"paths\":$1}")"
+    answer="$(control "{\"command\":\"pick-answer\",\"paths\":$1}")" || exit 1
     if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
         fail "the answer for the next dialog was not accepted: $answer"
     fi
@@ -253,7 +257,7 @@ answer_next_dialog() {
 #
 choose_menu_item() {
     local answer
-    answer="$(control "{\"command\":\"menu\",\"action\":\"$1\"}")"
+    answer="$(control "{\"command\":\"menu\",\"action\":\"$1\"}")" || exit 1
     if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
         fail "choosing the menu item $1 failed: $answer"
     fi
@@ -306,7 +310,7 @@ wait_for_viewport() {
 #
 insert_text() {
     local answer
-    answer="$(control "{\"command\":\"insert\",\"dataId\":\"$1\",\"text\":\"$2\"}")"
+    answer="$(control "{\"command\":\"insert\",\"dataId\":\"$1\",\"text\":\"$2\"}")" || exit 1
     if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
         fail "insert into $1 failed: $answer"
     fi
@@ -319,7 +323,8 @@ wait_for_value() {
     local waited=0
     local shown=""
     while [ "$waited" -lt 30 ]; do
-        shown="$(control "{\"command\":\"get-value\",\"dataId\":\"$1\"}" | jq -r '.value')"
+        shown="$(control "{\"command\":\"get-value\",\"dataId\":\"$1\"}")" || exit 1
+        shown="$(printf '%s' "$shown" | jq -r '.value')"
         if [ "$shown" = "$2" ]; then
             return 0
         fi
