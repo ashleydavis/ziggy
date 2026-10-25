@@ -84,10 +84,10 @@ pub fn run(init: std.process.Init) !u8 {
         .host = null,
         .port = options.port,
     };
-    defer stopUiServer(io, allocator, &supervisor);
-    defer stopHost(io, allocator, &supervisor);
+    defer stopUiServer(io, &supervisor);
+    defer stopHost(io, &supervisor);
 
-    try startUiServer(io, allocator, &supervisor);
+    try startUiServer(io, &supervisor);
     if (!try buildHost(io, allocator, &supervisor, supervisor.host_slot)) {
         return 1;
     }
@@ -96,14 +96,14 @@ pub fn run(init: std.process.Init) !u8 {
     const url = try std.fmt.bufPrint(&url_buffer, "http://127.0.0.1:{d}/", .{supervisor.port});
     std.debug.print("ziggy dev: the app is at {s}. Saving a Zig file rebuilds and restarts the dev host. Ctrl+C stops.\n", .{url});
     if (!options.no_open) {
-        openBrowser(io, allocator, &supervisor, url);
+        openBrowser(io, url);
     }
 
     var signature = try zigSignature(io, allocator, &supervisor);
     while (true) {
         try io.sleep(.fromMilliseconds(poll_interval_ms), .awake);
         if (!answers(io, supervisor.port)) {
-            return hostExitCode(io, allocator, &supervisor);
+            return hostExitCode(io, &supervisor);
         }
         const new_signature = try zigSignature(io, allocator, &supervisor);
         if (new_signature == signature) {
@@ -113,7 +113,7 @@ pub fn run(init: std.process.Init) !u8 {
         std.debug.print("ziggy dev: a Zig file changed\n", .{});
         const next_slot = 1 - supervisor.host_slot;
         if (try buildHost(io, allocator, &supervisor, next_slot)) {
-            stopHost(io, allocator, &supervisor);
+            stopHost(io, &supervisor);
             supervisor.host_slot = next_slot;
             try startHost(io, allocator, &supervisor, next_slot);
             std.debug.print("ziggy dev: the dev host restarted, and the page reloads when it reconnects\n", .{});
@@ -162,7 +162,7 @@ fn settledSignature(io: std.Io, allocator: std.mem.Allocator, supervisor: *Super
 // Starts the app's dev server with its `dev:ui` package script, on the supervisor's port for it and the loopback address, and waits
 // until it listens.
 //
-fn startUiServer(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor) !void {
+fn startUiServer(io: std.Io, supervisor: *Supervisor) !void {
     var port_text: [8]u8 = undefined;
     const port_argument = try std.fmt.bufPrint(&port_text, "{d}", .{supervisor.ui_port});
     std.debug.print("ziggy dev: starting the app's dev server (bun run dev:ui) on 127.0.0.1:{d}\n", .{supervisor.ui_port});
@@ -181,7 +181,7 @@ fn startUiServer(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervis
 //
 // Stops the app's dev server and waits for it to end, when it runs.
 //
-fn stopUiServer(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor) void {
+fn stopUiServer(io: std.Io, supervisor: *Supervisor) void {
     if (supervisor.ui_server) |*server| {
         server.kill(io);
         supervisor.ui_server = null;
@@ -191,7 +191,7 @@ fn stopUiServer(io: std.Io, allocator: std.mem.Allocator, supervisor: *Superviso
 //
 // The prefix of one of the two slots the dev host is installed to.
 //
-fn slotPrefix(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor, slot: u1) ![]const u8 {
+fn slotPrefix(allocator: std.mem.Allocator, supervisor: *Supervisor, slot: u1) ![]const u8 {
     return std.fs.path.join(allocator, &.{ supervisor.prefix, if (slot == 0) "host-a" else "host-b" });
 }
 
@@ -202,7 +202,7 @@ fn slotPrefix(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor,
 fn buildHost(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor, slot: u1) !bool {
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
-    try argv.appendSlice(allocator, &.{ supervisor.options.zig, "build", supervisor.options.host_step, "-p", try slotPrefix(io, allocator, supervisor, slot) });
+    try argv.appendSlice(allocator, &.{ supervisor.options.zig, "build", supervisor.options.host_step, "-p", try slotPrefix(allocator, supervisor, slot) });
     if (supervisor.options.test_hooks) {
         try argv.append(allocator, "-Dtest-hooks=true");
     }
@@ -270,7 +270,7 @@ fn reportProgress(queue: *MessageQueue) void {
 //
 fn startHost(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor, slot: u1) !void {
     const executable_name = try std.fmt.allocPrint(allocator, "{s}{s}", .{ supervisor.options.host_name, builtin.target.exeFileExt() });
-    const executable = try std.fs.path.join(allocator, &.{ try slotPrefix(io, allocator, supervisor, slot), "bin", executable_name });
+    const executable = try std.fs.path.join(allocator, &.{ try slotPrefix(allocator, supervisor, slot), "bin", executable_name });
     const port_file = try std.fs.path.join(allocator, &.{ supervisor.prefix, "port.txt" });
     const data_dir = try std.fs.path.join(allocator, &.{ supervisor.prefix, "data" });
     var port_text: [8]u8 = undefined;
@@ -309,7 +309,7 @@ fn startHost(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor, 
 //
 // Stops the dev host and waits for it to end, when it runs.
 //
-fn stopHost(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor) void {
+fn stopHost(io: std.Io, supervisor: *Supervisor) void {
     if (supervisor.host) |*host| {
         host.kill(io);
         supervisor.host = null;
@@ -346,7 +346,7 @@ fn waitUntilListening(io: std.Io, port: u16) !void {
 //
 // Waits for the dev host that stopped responding to end and returns its exit code.
 //
-fn hostExitCode(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor) !u8 {
+fn hostExitCode(io: std.Io, supervisor: *Supervisor) !u8 {
     var host = supervisor.host orelse {
         return error.DevHostNotRunning;
     };
@@ -363,7 +363,7 @@ fn hostExitCode(io: std.Io, allocator: std.mem.Allocator, supervisor: *Superviso
 // Opens the page in the desktop's default browser. A failure is reported and the supervisor carries on, because the address it
 // printed can be opened in a browser.
 //
-fn openBrowser(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor, url: []const u8) void {
+fn openBrowser(io: std.Io, url: []const u8) void {
     const argv: []const []const u8 = switch (builtin.os.tag) {
         .windows => &.{ "cmd", "/c", "start", "", url },
         .macos => &.{ "open", url },
