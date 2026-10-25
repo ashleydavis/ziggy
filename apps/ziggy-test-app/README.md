@@ -40,7 +40,7 @@ The frontend and the backend carry the test hooks that Ziggy's own smoke tests (
 
 ## CI
 
-The repository's release workflow (`.github/workflows/release.yml`) runs Ziggy's smoke tests and the test app's unit tests on Linux, Windows, MacOS, iOS and Android on every push.
+The repository's CI workflow (`.github/workflows/ci.yml`) runs Ziggy's smoke tests and the test app's unit tests on Linux, Windows, MacOS, iOS and Android on every push.
 
 ## See also
 

@@ -11,7 +11,7 @@ Follow [Releasing Ziggy](../../docs/development/releasing-ziggy.md), section "Re
 1. Run `git status -sb`. Stop and say why if the current branch is not `main`, if it has changes that are not committed or if it is ahead of or behind `origin/main`. Do not commit, push or pull to fix it.
 2. Find the latest version tag with `git ls-remote --tags --refs --sort=-version:refname origin 'v*' | head -n 1`.
 3. The new version is the one the human gave. When they gave none, it is the latest with its last number one higher (`v0.0.6` becomes `v0.0.7`). Tell the human the version and the commit it will tag.
-4. Find the run of the `Release` workflow on the commit with `gh run list --workflow release.yml --commit <sha>`. When it has not finished, wait for it with `gh run watch <id> --exit-status`. When it failed, stop and say which job failed. Do not tag a commit whose run did not pass.
+4. Find the run of the `CI` workflow on the commit with `gh run list --workflow ci.yml --commit <sha>`. When it has not finished, wait for it with `gh run watch <id> --exit-status`. When it failed, stop and say which job failed. Do not tag a commit whose run did not pass.
 
 ## Release it
 
