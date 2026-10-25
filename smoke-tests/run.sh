@@ -41,6 +41,7 @@ export ZIGGY_SMOKE_PLATFORM="$PLATFORM"
 export ZIGGY_SMOKE_APP_DIR="$APP_DIR"
 
 cleanup_run() {
+    stop_suite_watchdog
     local pgid
     while read -r kind pgid; do
         if [ "$kind" = "pgid" ]; then
@@ -50,6 +51,11 @@ cleanup_run() {
     rm -f "$ZIGGY_LAUNCHED_GROUPS"
 }
 trap cleanup_run EXIT
+
+# The Windows smoke jobs of four Release workflow runs (the latest 40153891121) ran a smoke step for 45 minutes until the runner
+# lost contact, past the step's own cap, and GitHub kept no log of which scenario hung. The ceiling ends the run
+# well inside every step cap, so the step fails with its log.
+start_suite_watchdog "smoke tests on $PLATFORM" "$ZIGGY_SUITE_TIMEOUT"
 
 source "$SMOKE_DIR/lib/$PLATFORM.sh"
 

@@ -9,7 +9,7 @@ Runs the Ziggy test app's smoke test scenarios for one platform. Invoked by the 
 
 ## Behaviour
 
-Builds the test app twice for the platform, once with the test hooks and once without. Then runs each scenario's `test.sh`, one after another, giving each its own temporary directory and a held-to timeout. A scenario drives the running app through the test control connection (see `lib/common.sh` for what a scenario can do and what a platform library implements). Every process started is recorded as it is launched, and any still running at the end fails the run and is stopped.
+Builds the test app twice for the platform, once with the test hooks and once without. Then runs each scenario's `test.sh`, one after another, giving each its own temporary directory and a held-to timeout. A scenario drives the running app through the test control connection (see `lib/common.sh` for what a scenario can do and what a platform library implements). Every process started is recorded as it is launched, and any still running at the end fails the run and is stopped. The whole run, builds included, is held to `ZIGGY_SUITE_TIMEOUT` (1500 seconds unless set, see `lib/test-timeout.sh`), which ends a stuck run with a report well inside the CI step caps, so the step keeps its log.
 
 ## Scenarios
 
