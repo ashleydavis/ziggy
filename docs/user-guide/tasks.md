@@ -201,7 +201,7 @@ Message handlers, menu functions and timers run on the backend's main thread, a 
 - `on_task_end` and `on_task_event` (see [The app declaration](app-declaration.md)) run on the main thread, when it hears from the worker that the task ended or sent an event.
 - In dev mode the dev backend's core keeps the same main thread for as long as it runs, and a page reload does not change it. Keep the main thread's state in an ordinary top-level `var`.
 
-It works like an Electron app: the main thread is like the main process, and each task is like a worker that shares nothing with it and talks to it only by messages.
+It works like an Electron app: the main thread is like the main process, and each task is like a worker that shares nothing with it and talks to it only by messages. [Threads](threads.md) describes every thread an app runs on and the messages between them.
 
 Here a message handler keeps a count on the main thread and has a task give its response. The task never reads `greeting_count`: it gets the count in its JSON input and sends its greeting back as its result, which reaches the frontend as the message response.
 

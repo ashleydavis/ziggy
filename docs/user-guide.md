@@ -35,9 +35,10 @@ Read the guides in this order:
 4. [Messages](user-guide/messages.md): how to send JSON messages between frontend and backend.
 5. [Menus](user-guide/menus.md): the desktop menu, its keyboard shortcuts and how a chosen item reaches the backend or the frontend.
 6. [Tasks](user-guide/tasks.md): how to run background tasks that don't block the frontend.
-7. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
-8. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the test hooks.
-9. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
+7. [Threads](user-guide/threads.md): the threads an app runs on, what each one may touch and how they talk by messages.
+8. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
+9. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the test hooks.
+10. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
 
 Also:
 

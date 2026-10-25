@@ -9,6 +9,7 @@
 - **Ziggy's core library**: the part of Ziggy every backend is built on: it handles message routing, background task coordination and calls to native functions.
 - **The native app**: the part of the app that is different on each platform. Ziggy provides it and the app developer customizes it. It opens the window, hosts the system web view, draws the menus and file dialogs and passes messages, message responses and events between the frontend and the backend.
 - **The system web view**: the browser engine each platform provides for showing web content: WebKitGTK on Linux, WebView2 on Windows, the Android WebView and WKWebView on macOS and iOS. This is where Ziggy apps render their frontend.
+- **Web view bridge**: the JavaScript object a system web view puts in the page the native app hosts, whose `postMessage` hands text from the frontend to the native app: `window.webkit.messageHandlers.ziggy` on Linux, macOS and iOS, `window.chrome.webview` on Windows and `window.ZiggyAndroid` on Android. Ziggy's injected script posts every message through it. See [Threads](user-guide/threads.md#why-each-platform-has-a-different-web-view-bridge).
 - **Message**: a JSON object the frontend sends to the backend to invoke handlers and trigger functionality there.
 - **App message**: app specific messages sent from the frontend to the backend.
 - **System message**: Ziggy specific messages such as queuing and cancelling background tasks.

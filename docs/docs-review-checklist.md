@@ -23,6 +23,7 @@ Every tracked markdown doc in the repo outside `docs/plans/`. Regenerate the lis
 - [ ] [messages.md](user-guide/messages.md)
 - [ ] [menus.md](user-guide/menus.md)
 - [ ] [tasks.md](user-guide/tasks.md)
+- [ ] [threads.md](user-guide/threads.md)
 - [ ] [native-calls.md](user-guide/native-calls.md)
 - [ ] [testing.md](user-guide/testing.md)
 - [ ] [packages.md](development/packages.md)
