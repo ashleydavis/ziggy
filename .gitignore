@@ -32,3 +32,4 @@ packages/ziggy/native/android/build/
 packages/ziggy/native/android/.gradle/
 .claude/settings.local.json
 .claude/worktrees/
+.what-changed/

@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+
+# Refuses a commit when a check whose files changed fails. It runs scripts/test-everything.sh, which runs only the checks
+# what-changed reports. Named pre-commit, with no .sh extension, because git finds hooks by that exact name. Installed by
+# scripts/install-hooks.sh. See scripts/install-hooks.md.
+
+set -uo pipefail
+
+# The hook is a link in the clone's hooks directory, so the checkout comes from git rather than from the hook's own path. That is
+# also what makes it run the checkout of a worktree, whose hooks directory is the main clone's.
+REPO_DIR="$(git rev-parse --show-toplevel)"
+
+# Git exports these to hooks. A test that runs git in a directory of its own would otherwise act on this repository's index.
+unset GIT_INDEX_FILE GIT_DIR GIT_WORK_TREE GIT_PREFIX
+
+cd "$REPO_DIR"
+
+# Through mise when it is installed, so the checks use the tool versions mise.toml locks.
+if command -v mise > /dev/null 2>&1; then
+    mise exec -- bash ./scripts/test-everything.sh
+else
+    bash ./scripts/test-everything.sh
+fi
+result=$?
+
+if [ $result -ne 0 ]; then
+    echo "" >&2
+    echo "pre-commit FAILED: a check failed, so the commit was refused. Fix it and commit again." >&2
+    exit 1
+fi

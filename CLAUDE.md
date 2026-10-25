@@ -25,6 +25,7 @@ Ziggy and the Ziggy template are developed on Linux and delivered and tested on 
 
 ## Rules
 
+- HIGH PRIORITY: Before changing anything in this repository, check the pre-commit hook is installed: `$(git rev-parse --git-common-dir)/hooks/pre-commit` links to `.githooks/pre-commit`. If it is not, run `bun run install-hooks` without asking. Never bypass the hook.
 - SHARED STATE BETWEEN ZIG THREADS IS BANNED. All communication between threads is done with JSON messages: the only thing two threads both touch is a message queue, and the only thing that crosses it is a copy of JSON text.
   - Never add a mutex or lock to Ziggy's Zig code unless the human explicitly asks for it.
   - Memory allocated on one thread is never freed on another, and no allocator is used by two threads: each thread makes its own.

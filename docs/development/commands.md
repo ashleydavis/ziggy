@@ -17,6 +17,8 @@ Run from the root of Ziggy's repository.
 | `bun run test:zig:ios` | The Zig unit tests of Ziggy's core library and the test app's backend, on a booted iOS simulator. |
 | `bun run test:android-shell` | The JUnit tests of Ziggy's Android native app, on this machine's JVM. Needs no device. |
 | `bun run diagrams` | Draws every diagram under `docs/development/diagrams` from its Mermaid source into the SVG the docs show. |
+| `bun run install-hooks` | Installs the pre-commit hook into this clone. Run once per clone. See `scripts/install-hooks.md`. |
+| `bun run test:everything` | Runs the checks (`compile`, `test`, `compile:zig`, `test:zig`, `test:smoke` and `test:smoke:dev`) whose files changed since each last passed. The pre-commit hook runs it. `-- --force` runs them all. See `scripts/test-everything.md`. |
 | `bun run <command>:ziggy-template:<platform>` | Runs the template's `<command>:<platform>`, for `sync`, `build`, `run`, `open`, `package` and `clean`. |
 | `bun run distribute:ziggy-template:android` | Runs the template's `distribute:android`. |
 | `bun run dev:ziggy-template` | Runs the template's `dev`. |

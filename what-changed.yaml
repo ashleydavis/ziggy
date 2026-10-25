@@ -1,0 +1,65 @@
+# Which checks the pre-commit hook runs, decided by which files changed since each one last passed.
+#
+# Each target is one of the checks the CI workflow runs on Linux. scripts/test-everything.sh runs the ones
+# what-changed reports and records each as it passes. See scripts/test-everything.md.
+
+always:
+  - package.json
+  - bun.lock
+  - mise.toml
+  - build.zig
+  - build.zig.zon
+  - build
+  - what-changed.yaml
+  - scripts/test-everything.sh
+
+ignore:
+  - .md
+  - .txt
+  - .log
+  - .png
+  - .svg
+  - .mmd
+
+targets:
+  - name: compile
+    paths:
+      - packages/ziggy/frontend
+      - apps/ziggy-template/frontend
+      - apps/ziggy-template/package.json
+      - apps/ziggy-template/tsconfig.json
+      - apps/ziggy-test-app/frontend
+      - apps/ziggy-test-app/package.json
+      - apps/ziggy-test-app/tsconfig.json
+
+  - name: test
+    paths:
+      - packages/ziggy/frontend
+      - apps/ziggy-template/frontend
+      - apps/ziggy-template/package.json
+      - apps/ziggy-template/jest.config.js
+      - apps/ziggy-test-app/frontend
+      - apps/ziggy-test-app/package.json
+      - apps/ziggy-test-app/jest.config.js
+
+  - name: compile-zig
+    paths:
+      - packages/ziggy
+      - apps
+
+  - name: test-zig
+    paths:
+      - packages/ziggy
+      - apps
+
+  - name: smoke
+    paths:
+      - packages/ziggy
+      - apps
+      - smoke-tests
+
+  - name: smoke-dev
+    paths:
+      - packages/ziggy
+      - apps
+      - smoke-tests

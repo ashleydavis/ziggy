@@ -54,7 +54,9 @@
     "test:smoke:ios": "bash ./smoke-tests/run.sh ios",
     "test:smoke:dev": "bash ./smoke-tests/run.sh dev",
     "dev:ziggy-template": "bun run --filter=ziggy-template dev",
-    "diagrams": "bash ./scripts/render-diagrams.sh"
+    "diagrams": "bash ./scripts/render-diagrams.sh",
+    "install-hooks": "bash ./scripts/install-hooks.sh",
+    "test:everything": "bash ./scripts/test-everything.sh"
   },
   "workspaces": [
     "apps/*",
