@@ -16,7 +16,7 @@ How the dev backend differs from a native app beyond its native calls:
 
 - **Dropped files.** The inject script hands a drop's files over as it does in WebView2, through `window.chrome.webview.postMessageWithAdditionalObjects`, which the dev script provides. The dev script sends each file to the dev backend, which saves a copy under `<data dir>/dropped` and records the copies' paths with the backend as the drop, holding back the page's messages to the backend until it has, so the inject script's `get-dropped-paths` message gets the copies'. `window.ziggy.getPathForFile` then gives the path of the copy, which the backend can read.
 - **Keeping the app running.** The dev backend runs until it is stopped, whether or not the page is open, so a task that keeps the app running in the background goes on when the page is closed.
-- **The frontend's query.** A native app loads the frontend with the query the backend makes (the test mode switch, in a test build). `/__ziggy/start` sends the browser to the frontend with that query. The plain address has none, which is all a normal run makes anyway.
+- **The frontend's query.** A native app loads the frontend with the query the backend makes (the test mode switch, in a test build). `/__ziggy/start` sends the browser to the frontend with that query, and it is the address the supervisor prints and opens. The plain address has none.
 
 How it works:
 

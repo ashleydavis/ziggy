@@ -92,8 +92,11 @@ pub fn run(init: std.process.Init) !u8 {
         return 1;
     }
     try startHost(io, allocator, &supervisor, supervisor.host_slot);
+    // The browser opens /__ziggy/start, which sends it on to the frontend with the query the app makes, as a native app loads it. The
+    // plain address has no query, and an app whose frontend needs one failed there: Photosphere's threw "restApiUrl query parameter is
+    // required but was not provided".
     var url_buffer: [64]u8 = undefined;
-    const url = try std.fmt.bufPrint(&url_buffer, "http://127.0.0.1:{d}/", .{supervisor.port});
+    const url = try std.fmt.bufPrint(&url_buffer, "http://127.0.0.1:{d}/__ziggy/start", .{supervisor.port});
     std.debug.print("ziggy dev: the app is at {s}. Saving a Zig file rebuilds and restarts the dev host. Ctrl+C stops.\n", .{url});
     if (!options.no_open) {
         openBrowser(io, url);
