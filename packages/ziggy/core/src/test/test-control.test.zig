@@ -214,7 +214,7 @@ test "the quit command calls the native app's quit callback" {
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", client.response.?);
-    try std.testing.expect(native_app.quitCalled(std.testing.io, std.testing.allocator));
+    try native_app.expectQuitCalled(std.testing.io, std.testing.allocator);
 }
 
 test "a core not in test mode has no control connection" {

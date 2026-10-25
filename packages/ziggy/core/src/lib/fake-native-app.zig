@@ -296,6 +296,23 @@ pub const FakeNativeApp = struct {
     }
 
     //
+    // Waits until the native app has been asked to quit, and fails the test when it takes too long. Test control asks only after it
+    // has written its reply to the quit command, so a test that has read the reply cannot check quitCalled straight away: the
+    // Android unit tests (CI run on commit 024a4c8) failed "the quit command calls the native app's quit callback" doing that.
+    //
+    pub fn expectQuitCalled(self: *FakeNativeApp, io: std.Io, allocator: std.mem.Allocator) !void {
+        var waited_ms: u32 = 0;
+        while (waited_ms < 20_000) : (waited_ms += 2) {
+            if (self.quitCalled(io, allocator)) {
+                return;
+            }
+            sleepMs(io, 2);
+        }
+        std.debug.print("the native app was never asked to quit\n", .{});
+        return error.QuitNeverCalled;
+    }
+
+    //
     // Passes a message from the frontend to the core, as a native app does, and waits until the core's main thread has handled it.
     //
     pub fn send(self: *FakeNativeApp, io: std.Io, allocator: std.mem.Allocator, message: []const u8) !void {
