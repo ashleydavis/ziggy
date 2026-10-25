@@ -23,5 +23,10 @@ case "$reply" in
         ;;
 esac
 if ! ziggy_platform_wait_exit "$ZIGGY_TEST_DIR" 30; then
+    # Where the app is waiting, on a platform that can show it.
+    if declare -F ziggy_platform_print_stacks > /dev/null; then
+        echo "The stacks of the app's threads:" >&2
+        ziggy_platform_print_stacks "$ZIGGY_TEST_DIR" >&2
+    fi
     fail "the app was still running 30 seconds after it was told to quit with a file dialog open"
 fi

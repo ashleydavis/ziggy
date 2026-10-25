@@ -113,3 +113,13 @@ ziggy_platform_leave_app() {
 ziggy_platform_process_alive() {
     ziggy_platform_is_running "$1"
 }
+
+#
+# Prints the stack of every thread of the app, for a scenario to show where an app that did not end is waiting. The MacOS smoke
+# job's 25-close-with-dialog-open failed twice with the app still running after it was told to quit, and an empty log. `sample`
+# ships with macOS and reads the stacks of a running process.
+#
+ziggy_platform_print_stacks() {
+    sample "$(cat "$1/$MACOS_PGID_FILE_NAME")" 2 -file "$1/app-stacks.txt" > /dev/null 2>&1
+    head -n 400 "$1/app-stacks.txt"
+}
