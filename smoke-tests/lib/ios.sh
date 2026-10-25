@@ -79,6 +79,16 @@ ziggy_platform_stop() {
         # Fails when the app has already exited, which is a normal end for a scenario that quit it.
         xcrun simctl terminate "$(cat "$test_dir/$IOS_UDID_FILE_NAME")" "$IOS_BUNDLE_ID" > /dev/null 2>&1 || true
     fi
+    # simctl terminate does not wait for the process to end, and the next scenario installs the app again straight away. The
+    # iOS smoke job of the Release workflow (run 40153891121, scenario 6-edges, started just after 5's stop) failed to launch
+    # with "Application "dev.ziggy.testapp" is installing or uninstalling, and cannot be launched". Stopping waits until the
+    # process is gone, so an install never starts while the last run of the app is still ending.
+    if [ -f "$test_dir/$IOS_PID_FILE_NAME" ]; then
+        if ! ziggy_platform_wait_exit "$test_dir" 30; then
+            echo "The app (process $(cat "$test_dir/$IOS_PID_FILE_NAME")) was still running 30 seconds after it was terminated." >&2
+            return 1
+        fi
+    fi
 }
 
 ziggy_platform_data_dir() {
