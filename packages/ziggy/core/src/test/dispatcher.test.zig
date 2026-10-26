@@ -559,7 +559,10 @@ test "the handler services reach the native app's quit and menu action callbacks
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_services_app);
+    // The data directory is only reported, never written to, by this app.
+    var config = native_app.config(1, 1);
+    config.data_dir = "/tmp";
+    try native_app.start(std.testing.io, std.testing.allocator, config, native_services_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-services\"}");
     // The fake native app gives a native call callback, as a phone's native app does.
@@ -578,6 +581,8 @@ test "the handler services report a desktop's native app, which has no native ca
     config.has_native_call = false;
     config.has_quit = false;
     config.has_menu_action = false;
+    // The data directory is only reported, never written to, by this app.
+    config.data_dir = "/tmp";
     try native_app.start(std.testing.io, std.testing.allocator, config, native_services_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-services\"}");

@@ -4,6 +4,7 @@
 - **App developer**: the person building an app on Ziggy.
 - **Ziggy developer**: a person working on the Ziggy framework.
 - **The app**: what the app developer builds on Ziggy: the frontend, the backend and the native app together.
+- **App details**: the app's name, title and version, which it gives Ziggy in the `app.zon` beside its `build.zig`.
 - **The frontend**: the app's HTML, CSS and JavaScript/TypeScript, which runs in the system web view.
 - **The backend**: the app's own Zig code, which does the app's work behind the frontend: it handles the frontend's messages and runs tasks.
 - **Ziggy's core library**: the part of Ziggy every backend is built on: it handles message routing, background task coordination and calls to native functions.
@@ -21,4 +22,6 @@
 - **Task handler**: the app specific Zig function that does background work of a particular type.
 - **Task queue**: where queued tasks wait until a worker thread is free to run them.
 - **Native call**: a call from the backend to the native app, for something only the native app can do, such as showing a file dialog. The backend waits for it to return.
+- **Log file**: the file a program's file log writes every log line to, one for each run of the program.
+- **Error log file**: the file beside the log file that gets only the error, exception and warning lines.
 - **OS call**: a call from the native app or the backend straight to the operating system, such as reading a file or opening a window.

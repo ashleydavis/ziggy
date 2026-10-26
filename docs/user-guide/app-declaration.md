@@ -47,7 +47,7 @@ The fields of `ziggy.core.App`:
 
 `ziggy.core.App` checks every field and every handler when the app is built. A field it does not know, a required field that is missing or a handler of the wrong type fails the build with a message that names it.
 
-The app writes nothing else for Ziggy. Its `build.zig` names this file as `backend_source_file` in `addAppBackend`. Ziggy's build makes the backend library from it: the library exports Ziggy's C interface for the app's `app` and, for Android, the JNI entry points of Ziggy's Android native app.
+Apart from this declaration, the app developer writes no code to connect the backend to Ziggy: no exported functions, no JNI entry points and no `main`. The app's `build.zig` names this file as `backend_source_file` in `addAppBackend`. Ziggy's build makes the backend library from it: the library exports Ziggy's C interface for the app's `app` and, for Android, the JNI entry points of Ziggy's Android native app. The app also gives its details (name, title and version) in an `app.zon` beside its `build.zig` (see [The app's details](building-your-app.md#the-apps-details)).
 
 ## What every handler is given
 
@@ -77,7 +77,7 @@ The handler services are an interface, as `std.Io` is: the handler does not see 
 
 ## When the backend is created
 
-An app that has to make something before its handlers and tasks run (its own state, a log file, task handlers it registers with the task queue) gives `on_create` a function. Ziggy calls it once, on the backend's main thread, when the backend is otherwise ready: tasks can be queued, but no message or task has reached the app yet. If it returns an error, creating the backend fails with that error, Ziggy releases what it made and the native app reports the error. `on_destroy` is not called then, so `on_create` must release what it made itself before it returns the error. Ziggy keeps nothing for the app, so the app keeps what it makes where its handlers can reach it.
+An app that has to make something before its handlers and tasks run (its own state, task handlers it registers with the task queue) gives `on_create` a function. Ziggy calls it once, on the backend's main thread, when the backend is otherwise ready: tasks can be queued, but no message or task has reached the app yet. If it returns an error, creating the backend fails with that error, Ziggy releases what it made and the native app reports the error. `on_destroy` is not called then, so `on_create` must release what it made itself before it returns the error. Ziggy keeps nothing for the app, so the app keeps what it makes where its handlers can reach it.
 
 ```zig
 //

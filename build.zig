@@ -13,6 +13,12 @@ pub fn build(b: *std.Build) !void {
     const test_hooks = b.option(bool, "test-hooks", "Build the test hooks (the test control connection) into the core (never for a release)") orelse false;
     // ReleaseSafe by default: the tests keep the safety checks.
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Prioritize performance, safety, or binary size (default: ReleaseSafe)") orelse .ReleaseSafe;
+    // The name of the app this core is built for, which names its log files. dependency sets it from the app's app.zon.
+    const app_name = b.option([]const u8, "app-name", "The name of the app the core is built for, which names its log files") orelse null;
+    // The title of that app, which heads its log files. dependency sets it from the app's app.zon.
+    const app_title = b.option([]const u8, "app-title", "The title of the app the core is built for, which heads its log files") orelse null;
+    // The version of that app, which its log files give. dependency sets it from the app's app.zon.
+    const app_version = b.option([]const u8, "app-version", "The version of the app the core is built for, which its log files give") orelse null;
 
     const core = b.addModule("ziggy", .{
         .root_source_file = b.path("packages/ziggy/core/src/index.zig"),
@@ -20,7 +26,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
-    try configureCore(b, core, target, optimize, test_hooks);
+    try configureCore(b, core, target, optimize, test_hooks, app_name, app_title, app_version);
 
     // The unit tests of Ziggy's core and its task queue, which run the core with the test hooks compiled in.
     const test_step = b.step("test", "Run the unit tests of Ziggy (the core, the native apps and the dev host), of the Ziggy template and of Ziggy's test app");
@@ -30,7 +36,7 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
-    try configureCore(b, test_core, target, optimize, true);
+    try configureCore(b, test_core, target, optimize, true, null, null, null);
     const core_test_binary_step = b.step("test-binary-ziggy-core", "Build the unit test program of Ziggy's core and install it to test-bin without running it");
     try addDirectoryTests(b, test_step, "packages/ziggy/core", &.{
         .{
@@ -109,7 +115,7 @@ pub fn build(b: *std.Build) !void {
 
 //
 // Gives the core module its build options and imports. The test hooks compile in the test control connection: they are off for a
-// release and on for the tests and for the builds the smoke tests drive.
+// release and on for the tests and for the builds the smoke tests drive. The app's name, title and version, null for Ziggy's own tests, name and head its log files.
 //
 fn configureCore(
     b: *std.Build,
@@ -117,9 +123,15 @@ fn configureCore(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     test_hooks: bool,
+    app_name: ?[]const u8,
+    app_title: ?[]const u8,
+    app_version: ?[]const u8,
 ) !void {
     const options = b.addOptions();
     options.addOption(bool, "test_hooks", test_hooks);
+    options.addOption(?[]const u8, "app_name", app_name);
+    options.addOption(?[]const u8, "app_title", app_title);
+    options.addOption(?[]const u8, "app_version", app_version);
     module.addOptions("build_options", options);
 
     // The Android native app reaches the core through JNI, written in Zig against the NDK's own jni.h. Only an Android target has that
@@ -149,18 +161,49 @@ pub const IZiggy = struct {
 
 //
 // Gets Ziggy for an app's build, from the dependency named "ziggy" in the app's build.zig.zon, built for the target and optimize mode,
-// with the test hooks or without. A build that needs both (an app with test hooks off and its unit tests, which run with them on) calls
-// it twice.
+// with the test hooks or without, and for the app its app.zon describes (see readAppDetails). A build that needs both (an app with test
+// hooks off and its unit tests, which run with them on) calls it twice.
 //
 pub fn dependency(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, test_hooks: bool) IZiggy {
+    const details = readAppDetails(b);
     const ziggy_dependency = b.dependency("ziggy", .{
         .target = target,
         .optimize = optimize,
         .@"test-hooks" = test_hooks,
+        .@"app-name" = details.name,
+        .@"app-title" = details.title,
+        .@"app-version" = details.version,
     });
     return .{
         .dependency = ziggy_dependency,
         .module = ziggy_dependency.module("ziggy"),
+    };
+}
+
+//
+// An app's details, as its app.zon gives them.
+//
+const IAppDetails = struct {
+    // The app's name, such as "ziggy-template", which names its log files.
+    name: []const u8,
+    // The app's name as people read it, such as "Ziggy template", which heads its log files.
+    title: []const u8,
+    // The app's version, which its log files give, or null for an app that gives none. A release build writes it into app.zon.
+    version: ?[]const u8 = null,
+};
+
+//
+// Reads the app's details from the app.zon beside its build.zig, with Zig's own ZON parser. An app.zon that is missing, does not parse,
+// lacks a required field or has a field IAppDetails does not have fails the build, naming the problem.
+//
+fn readAppDetails(b: *std.Build) IAppDetails {
+    const source = b.build_root.handle.readFileAllocOptions(b.graph.io, "app.zon", b.allocator, .limited(1024 * 1024), .of(u8), 0) catch |err| {
+        std.debug.panic("Ziggy could not read the app's app.zon, which gives its name, title and version: {s}", .{@errorName(err)});
+    };
+    var diagnostics: std.zon.parse.Diagnostics = .{};
+    return std.zon.parse.fromSliceAlloc(IAppDetails, b.allocator, source, &diagnostics, .{}) catch |err| switch (err) {
+        error.OutOfMemory => @panic("out of memory reading the app's app.zon"),
+        error.ParseZon => std.debug.panic("the app's app.zon is not valid:\n{f}", .{diagnostics}),
     };
 }
 

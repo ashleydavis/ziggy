@@ -102,7 +102,7 @@ test "ping replies with the Zig version, the platform and an echo of the payload
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"ping\",\"data\":{\"hello\":\"world\"}}");
     const reply = try native_app.messageAt(std.testing.io, std.testing.allocator, 0);
@@ -119,7 +119,7 @@ test "payload-stats reports the length and checksum of a multi-megabyte payload"
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     const payload = try std.testing.allocator.alloc(u8, 5 * 1024 * 1024);
     defer std.testing.allocator.free(payload);
@@ -144,7 +144,7 @@ test "payload-stats counts the bytes of text with non-ASCII characters" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"payload-stats\",\"data\":{\"text\":\"é世界😀\"}}");
     const reply = try native_app.messageAt(std.testing.io, std.testing.allocator, 0);
@@ -155,7 +155,7 @@ test "payload-stats without text is an error reply" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"payload-stats\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"text\\\" is missing\"}");
@@ -178,20 +178,110 @@ test "file-roundtrip writes a file in the data directory and reads it back" {
     const written = try tmp.dir.readFile(std.testing.io, "ziggy-test-app-roundtrip.txt", &buffer);
     try std.testing.expectEqualStrings("kept é", written);
 }
-test "file-roundtrip reports a missing data directory as an error" {
+test "the test app does not start when its data directory cannot hold its log files" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    try tmp.dir.writeFile(std.testing.io, .{
+        .sub_path = "a-file",
+        .data = "not a directory",
+    });
+    var path_buffer: [256]u8 = undefined;
+    const data_dir = try std.fmt.bufPrintZ(&path_buffer, ".zig-cache/tmp/{s}/a-file/data", .{tmp.sub_path});
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/this/directory/does/not/exist");
+    try std.testing.expect(std.meta.isError(createCoreInDataDir(&native_app, data_dir.ptr)));
+}
+
+//
+// Reads the one log file in the logs directory of a data directory whose name starts with the prefix and does not end in
+// "-errors.log", or the error log file when `errors` is true.
+//
+fn readLogFile(allocator: std.mem.Allocator, data_dir: []const u8, errors: bool) ![]u8 {
+    const logs_dir_path = try std.fs.path.join(allocator, &.{ data_dir, "logs" });
+    defer allocator.free(logs_dir_path);
+    var logs_dir = try std.Io.Dir.cwd().openDir(std.testing.io, logs_dir_path, .{
+        .iterate = true,
+    });
+    defer logs_dir.close(std.testing.io);
+    var iterator = logs_dir.iterate();
+    while (try iterator.next(std.testing.io)) |entry| {
+        const is_error_file = std.mem.endsWith(u8, entry.name, "-errors.log");
+        if (std.mem.startsWith(u8, entry.name, "ziggy-test-app-") and is_error_file == errors) {
+            return logs_dir.readFileAlloc(std.testing.io, entry.name, allocator, .limited(1024 * 1024));
+        }
+    }
+    return error.NoLogFile;
+}
+
+test "the test app writes its log files in its data directory, headed with its app.zon title, with ping's line and the tasks' lines tagged with their worker" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [256]u8 = undefined;
+    const data_dir = try std.fmt.bufPrintZ(&path_buffer, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try createCoreInDataDir(&native_app, data_dir.ptr);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"ping\",\"data\":null}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true");
+    try addTask(&native_app, "s1", "hello-short", "src", "null");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"s1\",\"status\":\"succeeded\"");
+    try addTask(&native_app, "f1", "hello-fail", "src", "null");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"f1\",\"status\":\"failed\"");
+    native_app.stop(std.testing.io, std.testing.allocator);
+    const written = try readLogFile(std.testing.allocator, data_dir, false);
+    defer std.testing.allocator.free(written);
+    const errors_written = try readLogFile(std.testing.allocator, data_dir, true);
+    defer std.testing.allocator.free(errors_written);
+    try std.testing.expect(std.mem.startsWith(u8, written, "=" ** 80 ++ "\nZiggy test app\n"));
+    try std.testing.expect(std.mem.indexOf(u8, written, "\nVersion: ") == null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [INFO] ping received\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [INFO] [Worker ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] the short task is running\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [ERROR] [Worker ") != null);
+    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] the failing task is failing\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "\n--- Log End ---\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, errors_written, "\n--- Error Log End ---\n") != null);
+}
+
+test "a line the frontend logs reaches the test app's log files tagged Frontend" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var path_buffer: [256]u8 = undefined;
+    const data_dir = try std.fmt.bufPrintZ(&path_buffer, ".zig-cache/tmp/{s}", .{tmp.sub_path});
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try createCoreInDataDir(&native_app, data_dir.ptr);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"log\",\"data\":{\"level\":\"info\",\"message\":\"the page opened\",\"error\":null}}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"log\",\"data\":{\"level\":\"exception\",\"message\":\"the page failed\",\"error\":\"Error: at line 4\"}}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"log\",\"data\":{\"level\":\"tool\",\"message\":\"magick\",\"toolData\":{\"stdout\":\"converted\"}}}");
+    native_app.stop(std.testing.io, std.testing.allocator);
+    const written = try readLogFile(std.testing.allocator, data_dir, false);
+    defer std.testing.allocator.free(written);
+    const errors_written = try readLogFile(std.testing.allocator, data_dir, true);
+    defer std.testing.allocator.free(errors_written);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [INFO] [Frontend] the page opened\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [EXCEPTION] [Frontend] the page failed\nError: at line 4\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [EXCEPTION] [Frontend] the page failed\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [TOOL] [Frontend] == magick stdout ==\nconverted\n") != null);
+}
+
+test "a line the frontend logs at a level the core does not know is a core-error event" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"file-roundtrip\",\"data\":{\"text\":\"x\"}}");
-    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"FileNotFound\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"log\",\"data\":{\"level\":\"shout\",\"message\":\"x\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"UnknownLogLevel\"}}");
 }
 test "the fail message replies with an error" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"fail\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"ExampleFailure\"}");
@@ -200,7 +290,7 @@ test "hello-short sends an output event and a job-progress event then completes"
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "hello-short", "src", "{\"job\":{\"id\":\"job-1\",\"name\":\"Short job\",\"cancelSource\":\"src\"}}");
     const output = try indexOfMessage(&native_app, "\"source\":\"src\",\"data\":{\"type\":\"output\",\"text\":\"hello from a short task\"}");
@@ -214,7 +304,7 @@ test "a job-progress event leaves out the cancel source when the job has none" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "hello-short", "src", "{\"job\":{\"id\":\"job-1\",\"name\":\"Short job\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"job\":{\"id\":\"job-1\",\"name\":\"Short job\"},\"startedAt\"");
@@ -223,7 +313,7 @@ test "a task with no job sends no job-progress event" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "hello-short", "src", "{}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"succeeded\"");
@@ -233,7 +323,7 @@ test "hello-long sends output and progress at every step, starts its children an
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "long", "hello-long", "src", "{\"durationMs\":200,\"stepMs\":50,\"children\":3,\"job\":{\"id\":\"job-1\",\"name\":\"Long job\",\"cancelSource\":\"src\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"result\":{\"taskId\":\"long\",\"status\":\"succeeded\",\"outputs\":{\"steps\":4,\"children\":3}");
@@ -249,7 +339,7 @@ test "hello-long with no children and more children than steps both complete" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "a", "hello-long", "src", "{\"durationMs\":50,\"stepMs\":50,\"children\":0}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"result\":{\"taskId\":\"a\",\"status\":\"succeeded\",\"outputs\":{\"steps\":1,\"children\":0}");
@@ -260,7 +350,7 @@ test "cancelling hello-long stops it early and its children are cancelled" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "long", "hello-long", "src", "{\"durationMs\":60000,\"stepMs\":20,\"children\":2}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "long task step 3");
@@ -272,7 +362,7 @@ test "hello-fail completes as failed" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "hello-fail", "src", "null");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"failed\",\"error\":{\"message\":\"HelloFailure\"},\"errorMessage\":\"HelloFailure\"");
@@ -281,7 +371,7 @@ test "os-version returns what the native app's os-version call gives" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "os-version", "src", "null");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"succeeded\",\"outputs\":\"Test OS 1.0\"");
@@ -333,7 +423,7 @@ test "file-roundtrip without text is an error reply" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"file-roundtrip\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"text\\\" is missing\"}");
@@ -352,7 +442,7 @@ test "a background task without a file to count in fails with MissingFile" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "bm", "background-normal", "src", "{\"durationMs\":300}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"errorMessage\":\"MissingFile\"");
@@ -361,7 +451,7 @@ test "a message of a name the test app does not know is an UnknownMessageName er
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"no-such-name\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMessageName\"}");
@@ -370,7 +460,7 @@ test "a message with no name, or an empty one, is refused with MissingMessageNam
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try createCoreInDataDir(&native_app, "/tmp");
+    try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"data\":{\"text\":\"x\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"MissingMessageName\"}");

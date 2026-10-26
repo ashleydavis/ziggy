@@ -41,6 +41,11 @@ pub const FakeNativeApp = struct {
     ui_thread: ?std.Thread,
     // Numbers the messages `handled` sends, so each one's reply is told apart.
     next_sync: u64,
+    // The data directory `config` gives the core: a directory of the test's own under the test cache, so two tests running at once
+    // never share one. Removed by deinit.
+    data_tmp: std.testing.TmpDir,
+    // The path of `data_tmp`, which `config` points the core at.
+    data_dir_path: [128:0]u8,
 
     pub fn init(self: *FakeNativeApp) void {
         self.* = .{
@@ -49,7 +54,10 @@ pub const FakeNativeApp = struct {
             .replies = MessageQueue.init(),
             .ui_thread = null,
             .next_sync = 0,
+            .data_tmp = std.testing.tmpDir(.{}),
+            .data_dir_path = undefined,
         };
+        _ = std.fmt.bufPrintZ(&self.data_dir_path, ".zig-cache/tmp/{s}", .{&self.data_tmp.sub_path}) catch unreachable;
     }
 
     pub fn deinit(self: *FakeNativeApp, io: std.Io, allocator: std.mem.Allocator) void {
@@ -57,6 +65,7 @@ pub const FakeNativeApp = struct {
         self.replies.deinit();
         self.native_queue.deinit();
         self.queue.deinit();
+        self.data_tmp.cleanup();
     }
 
     //
@@ -143,7 +152,6 @@ pub const FakeNativeApp = struct {
     // The configuration to give a core: every call the native app can be made is given its result by the fake UI thread.
     //
     pub fn config(self: *FakeNativeApp, worker_threads: u32, max_children: u32) types.ZiggyConfig {
-        _ = self;
         return .{
             .wake_data = null,
             .wake = wake,
@@ -157,7 +165,7 @@ pub const FakeNativeApp = struct {
             .worker_threads = worker_threads,
             .max_concurrent_child_tasks = max_children,
             .app_url_prefix = "file:///app/dist/",
-            .data_dir = "/tmp",
+            .data_dir = &self.data_dir_path,
             .test_mode = false,
             .test_port_file = null,
         };

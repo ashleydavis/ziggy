@@ -85,6 +85,23 @@ fn logExceptionTask(services: TaskServices, timers: Timers, io: std.Io, allocato
 }
 
 //
+// Logs a verbose line and the output of a tool on its worker's log.
+//
+fn logDetailTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = context;
+    _ = payload;
+    utils.log.log.verbose("verbose on a worker");
+    utils.log.log.tool("magick", .{
+        .stdout = "tool output on a worker",
+        .stderr = null,
+    });
+}
+
+//
 // Reads the operating system's version through the native app.
 //
 fn osVersionTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !ziggy.json.Raw {
@@ -116,6 +133,7 @@ const tasks = [_]ziggy.task_runner.TaskHandlerEntry{
     .{ .name = "parent-of-echo", .handler = ziggy.task_runner.wrapTask("parent-of-echo", parentOfEchoTask) },
     .{ .name = "log", .handler = ziggy.task_runner.wrapTask("log", logTask) },
     .{ .name = "log-exception", .handler = ziggy.task_runner.wrapTask("log-exception", logExceptionTask) },
+    .{ .name = "log-detail", .handler = ziggy.task_runner.wrapTask("log-detail", logDetailTask) },
     .{ .name = "os-version", .handler = ziggy.task_runner.wrapTask("os-version", osVersionTask) },
     .{ .name = "pick", .handler = ziggy.task_runner.wrapTask("pick", pickTask) },
 };
@@ -303,8 +321,109 @@ test "a worker's log lines and console lines reach the main thread's output" {
     defer fixture.deinit(timer_list.interface());
     try fixture.pool.addTask(std.testing.io, std.testing.allocator, "l1", "log", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|l1|log|succeeded");
-    try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "logged on a worker") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "[Worker 1] logged on a worker\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, stderr_capture.buffered(), "written to a worker's console") != null);
+}
+
+test "with a file log on the main thread, a worker's lines reach the log file tagged with the worker" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var stdout_buffer: [4096]u8 = undefined;
+    var stderr_buffer: [4096]u8 = undefined;
+    var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
+    var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
+    utils.console.setCapture(&stdout_capture, &stderr_capture);
+    defer utils.console.setCapture(null, null);
+    const allocator = std.testing.allocator;
+    const logs_dir = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/logs", .{&tmp.sub_path});
+    defer allocator.free(logs_dir);
+    // The test's thread is the pool's main thread, so its file log is where the workers' lines are written.
+    const logger = try utils.file_log.FileLog.start(allocator, std.testing.io, .{
+        .file_prefix = "pool-test",
+        .title = "Pool Test Log",
+        .logs_dir = logs_dir,
+        .command = null,
+        .version = "1.0.0",
+        .header_lines = &.{},
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    });
+    defer logger.stop(allocator, std.testing.io);
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "l1", "log", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|l1|log|succeeded");
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "x1", "log-exception", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|x1|log-exception|succeeded");
+    const written = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, logger.getLogFilePath(), allocator, .limited(1024 * 1024));
+    defer allocator.free(written);
+    const errors_written = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, logger.getErrorLogFilePath(), allocator, .limited(1024 * 1024));
+    defer allocator.free(errors_written);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [INFO] [Worker 1] logged on a worker\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [EXCEPTION] [Worker 1] failed on a worker\nError: Boom\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [EXCEPTION] [Worker 1] failed on a worker\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "[Worker 1] logged on a worker\n") != null);
+}
+
+test "a worker started with a file log on the main thread sends its verbose and tool lines, which reach the file and not the console" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var stdout_buffer: [4096]u8 = undefined;
+    var stderr_buffer: [4096]u8 = undefined;
+    var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
+    var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
+    utils.console.setCapture(&stdout_capture, &stderr_capture);
+    defer utils.console.setCapture(null, null);
+    const allocator = std.testing.allocator;
+    const logs_dir = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/logs", .{&tmp.sub_path});
+    defer allocator.free(logs_dir);
+    const logger = try utils.file_log.FileLog.start(allocator, std.testing.io, .{
+        .file_prefix = "pool-test",
+        .title = "Pool Test Log",
+        .logs_dir = logs_dir,
+        .command = null,
+        .version = "1.0.0",
+        .header_lines = &.{},
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    });
+    defer logger.stop(allocator, std.testing.io);
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "d1", "log-detail", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|d1|log-detail|succeeded");
+    const written = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, logger.getLogFilePath(), allocator, .limited(1024 * 1024));
+    defer allocator.free(written);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [VERBOSE] [Worker 1] verbose on a worker\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [TOOL] [Worker 1] == magick stdout ==\ntool output on a worker\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "verbose on a worker") == null);
+    try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "tool output on a worker") == null);
+}
+
+test "a worker started with no file log on the main thread sends no verbose or tool lines" {
+    var stdout_buffer: [4096]u8 = undefined;
+    var stderr_buffer: [4096]u8 = undefined;
+    var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
+    var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
+    utils.console.setCapture(&stdout_capture, &stderr_capture);
+    defer utils.console.setCapture(null, null);
+    var recording: ErrorRecordingLog = .{};
+    defer recording.deinit();
+    utils.log.setLog(recording.ilog());
+    defer utils.log.setLog(null);
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "d1", "log-detail", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|d1|log-detail|succeeded");
+    try std.testing.expectEqual(@as(usize, 0), recording.others);
 }
 
 //
@@ -313,6 +432,8 @@ test "a worker's log lines and console lines reach the main thread's output" {
 const ErrorRecordingLog = struct {
     // Each error line, in order.
     errors: std.ArrayList([]u8) = .empty,
+    // How many verbose and tool lines it was given.
+    others: usize = 0,
 
     fn ilog(self: *ErrorRecordingLog) utils.log.ILog {
         return .{ .ptr = self, .vtable = &vtable };
@@ -327,12 +448,12 @@ const ErrorRecordingLog = struct {
 
     const vtable: utils.log.ILog.VTable = .{
         .info = ignore,
-        .verbose = ignore,
+        .verbose = countVerbose,
         .@"error" = recordError,
         .exception = recordException,
         .warn = ignore,
         .debug = ignore,
-        .tool = ignoreTool,
+        .tool = countTool,
         .event = ignore,
         .verboseEnabled = verboseEnabled,
         .getLogDetails = getLogDetails,
@@ -353,10 +474,17 @@ const ErrorRecordingLog = struct {
         recordError(ptr, message);
     }
 
-    fn ignoreTool(ptr: *anyopaque, tool_name: []const u8, data: utils.log.IToolOutput) void {
-        _ = ptr;
+    fn countVerbose(ptr: *anyopaque, message: []const u8) void {
+        _ = message;
+        const self: *ErrorRecordingLog = @ptrCast(@alignCast(ptr));
+        self.others += 1;
+    }
+
+    fn countTool(ptr: *anyopaque, tool_name: []const u8, data: utils.log.IToolOutput) void {
         _ = tool_name;
         _ = data;
+        const self: *ErrorRecordingLog = @ptrCast(@alignCast(ptr));
+        self.others += 1;
     }
 
     fn verboseEnabled(ptr: *anyopaque) bool {
@@ -385,7 +513,7 @@ test "an error a worker logs with its cause reaches the main thread's log as one
     try fixture.pool.addTask(std.testing.io, std.testing.allocator, "x1", "log-exception", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|x1|log-exception|succeeded");
     try std.testing.expectEqual(@as(usize, 1), recording.errors.items.len);
-    try std.testing.expect(std.mem.startsWith(u8, recording.errors.items[0], "failed on a worker\n"));
+    try std.testing.expect(std.mem.startsWith(u8, recording.errors.items[0], "[Worker 1] failed on a worker\n"));
     try std.testing.expect(std.mem.indexOf(u8, recording.errors.items[0], "Boom") != null);
 }
 

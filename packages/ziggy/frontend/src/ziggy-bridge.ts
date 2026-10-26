@@ -125,6 +125,22 @@ export interface IPlatformInfo {
 }
 
 //
+// The level of a line the frontend writes to the backend's log with log.
+//
+export type LogLevel = "info" | "verbose" | "error" | "exception" | "warn" | "debug" | "tool" | "event";
+
+//
+// What a tool wrote, for a line of the tool level written with log.
+//
+export interface IToolOutput {
+    // What the tool wrote to its standard output.
+    stdout?: string;
+
+    // What the tool wrote to its standard error.
+    stderr?: string;
+}
+
+//
 // A task for addTask to queue.
 //
 export interface IAddTask {
@@ -194,6 +210,13 @@ export interface IZiggyBridge {
     // Cancels every task queued under the source, children included.
     //
     cancelTasks(source: string): void;
+
+    //
+    // Writes a line to the backend's log, tagged Frontend: to its log files when it has a file log, else to its console. For the
+    // exception level, errorText is the text of the error. For the tool level, message is the tool's name and toolOutput what it
+    // wrote. A level the core does not know is reported as a core-error event.
+    //
+    log(level: LogLevel, message: string, errorText?: string, toolOutput?: IToolOutput): void;
 
     //
     // Registers a callback for the events tasks send while they run.

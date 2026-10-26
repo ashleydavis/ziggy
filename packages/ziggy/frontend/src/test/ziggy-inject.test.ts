@@ -16,6 +16,7 @@ interface IFakeWindow {
         getPlatform: () => Promise<object>;
         addTask: (task: object) => void;
         cancelTasks: (source: string) => void;
+        log: (level: string, message: string, errorText?: string, toolOutput?: object) => void;
         sendTestResult: (requestId: number, result: object | null) => Promise<object>;
         testUiReady: () => void;
         getPathForFile: (file: object) => string | undefined;
@@ -327,12 +328,18 @@ describe("ziggy-inject", () => {
         const platform = fakeWindow.ziggy!.getPlatform();
         fakeWindow.ziggy!.addTask({ taskId: "t1", taskType: "quick", source: "s", data: null });
         fakeWindow.ziggy!.cancelTasks("s");
+        fakeWindow.ziggy!.log("info", "opened");
+        fakeWindow.ziggy!.log("exception", "failed", "Error: at line 4");
+        fakeWindow.ziggy!.log("tool", "magick", undefined, { stdout: "done" });
         const result = fakeWindow.ziggy!.sendTestResult(4, { ok: true });
         fakeWindow.ziggy!.testUiReady();
         expect(posted.map(text => JSON.parse(text))).toEqual([
             { kind: "system", id: 1, name: "get-platform", data: null },
             { kind: "system", name: "add-task", data: { taskId: "t1", taskType: "quick", source: "s", data: null } },
             { kind: "system", name: "cancel-tasks", data: "s" },
+            { kind: "system", name: "log", data: { level: "info", message: "opened", error: null, toolData: null } },
+            { kind: "system", name: "log", data: { level: "exception", message: "failed", error: "Error: at line 4", toolData: null } },
+            { kind: "system", name: "log", data: { level: "tool", message: "magick", error: null, toolData: { stdout: "done" } } },
             { kind: "system", id: 2, name: "test-result", data: { requestId: 4, result: { ok: true } } },
             { kind: "system", name: "test-ui-ready", data: null },
         ]);
@@ -422,6 +429,7 @@ describe("ziggy-inject", () => {
             "getPathForFile",
             "getPlatform",
             "invoke",
+            "log",
             "onCoreError",
             "onEvent",
             "onTaskCompleted",

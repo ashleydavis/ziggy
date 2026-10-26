@@ -135,7 +135,7 @@ fn throwRootCause() errors.ThrownError!void {
     return errors.throwError("root cause", .{});
 }
 
-test "default log writes info and event to stdout and error, warn and exception to stderr" {
+test "default log writes info and event to stdout, error, warn and exception to stderr and leaves out verbose, debug and tool lines" {
     var stdout_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer stdout_capture.deinit();
     var stderr_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
@@ -155,7 +155,7 @@ test "default log writes info and event to stdout and error, warn and exception 
         log.exception("Failed.", err);
     };
 
-    try std.testing.expectEqualStrings("info message\ndebug message\n[EVENT] something happened\n", stdout_capture.written());
+    try std.testing.expectEqualStrings("info message\n[EVENT] something happened\n", stdout_capture.written());
     try std.testing.expectEqualStrings("error message\nwarn message\nFailed.\nError: root cause\n", stderr_capture.written());
     try std.testing.expect(!log.verboseEnabled());
 }
@@ -242,9 +242,136 @@ test "ilog of a console log gives a log that writes to the console" {
     defer stdout_capture.deinit();
     console.setCapture(&stdout_capture.writer, null);
     defer console.setCapture(null, null);
-    var consoleLog: utils.log.ConsoleLog = .{ .verbose_enabled = false };
+    var consoleLog: utils.log.ConsoleLog = .{
+        .verbose_enabled = false,
+        .debug_enabled = false,
+        .tools_enabled = false,
+    };
     const log = consoleLog.ilog();
     log.info("from ilog");
     try std.testing.expectEqualStrings("from ilog\n", stdout_capture.written());
     try std.testing.expect(!log.verboseEnabled());
+}
+
+test "a console log with its options on writes verbose to stdout, debug to stderr and the output of tools to stdout" {
+    var stdout_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer stdout_capture.deinit();
+    var stderr_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer stderr_capture.deinit();
+    console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
+    defer console.setCapture(null, null);
+    var consoleLog: utils.log.ConsoleLog = .{
+        .verbose_enabled = true,
+        .debug_enabled = true,
+        .tools_enabled = true,
+    };
+    const log = consoleLog.ilog();
+    log.verbose("verbose message");
+    log.debug("debug message");
+    log.tool("some-tool", .{
+        .stdout = "out",
+        .stderr = "err",
+    });
+    log.tool("quiet-tool", .{
+        .stdout = "",
+        .stderr = null,
+    });
+    try std.testing.expectEqualStrings("verbose message\n== some-tool stdout ==\nout\n== some-tool stderr ==\nerr\n", stdout_capture.written());
+    try std.testing.expectEqualStrings("debug message\n", stderr_capture.written());
+    try std.testing.expect(log.verboseEnabled());
+}
+
+test "each option of a console log turns on only its own lines" {
+    var stdout_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer stdout_capture.deinit();
+    var stderr_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer stderr_capture.deinit();
+    console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
+    defer console.setCapture(null, null);
+    var debugOnly: utils.log.ConsoleLog = .{
+        .verbose_enabled = false,
+        .debug_enabled = true,
+        .tools_enabled = false,
+    };
+    const log = debugOnly.ilog();
+    log.verbose("verbose message");
+    log.debug("debug message");
+    log.tool("some-tool", .{
+        .stdout = "out",
+        .stderr = null,
+    });
+    try std.testing.expectEqualStrings("", stdout_capture.written());
+    try std.testing.expectEqualStrings("debug message\n", stderr_capture.written());
+}
+
+test "writeLine prefixes a line with its source" {
+    var stdout_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer stdout_capture.deinit();
+    var stderr_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer stderr_capture.deinit();
+    console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
+    defer console.setCapture(null, null);
+    const consoleLog: utils.log.ConsoleLog = .{
+        .verbose_enabled = false,
+        .debug_enabled = false,
+        .tools_enabled = true,
+    };
+    consoleLog.writeLine("Worker 2", .{
+        .level = .info,
+        .message = "imported",
+        .error_text = null,
+        .tool_output = null,
+    });
+    consoleLog.writeLine("Worker 2", .{
+        .level = .event,
+        .message = "started",
+        .error_text = null,
+        .tool_output = null,
+    });
+    consoleLog.writeLine("Frontend", .{
+        .level = .exception,
+        .message = "failed",
+        .error_text = "Error: root cause",
+        .tool_output = null,
+    });
+    consoleLog.writeLine("Worker 1", .{
+        .level = .tool,
+        .message = "magick",
+        .error_text = null,
+        .tool_output = .{
+            .stdout = "done",
+            .stderr = null,
+        },
+    });
+    try std.testing.expectEqualStrings("[Worker 2] imported\n[Worker 2] [EVENT] started\n[Worker 1] == magick stdout ==\ndone\n", stdout_capture.written());
+    try std.testing.expectEqualStrings("[Frontend] failed\nError: root cause\n", stderr_capture.written());
+}
+
+test "a console log writes a long tool output, event and error chain whole" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+    var stdout_capture = std.Io.Writer.Allocating.init(allocator);
+    var stderr_capture = std.Io.Writer.Allocating.init(allocator);
+    console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
+    defer console.setCapture(null, null);
+    var consoleLog: utils.log.ConsoleLog = .{
+        .verbose_enabled = false,
+        .debug_enabled = false,
+        .tools_enabled = true,
+    };
+    const log = consoleLog.ilog();
+    const longText = try allocator.alloc(u8, 20000);
+    @memset(longText, 'x');
+    log.tool("ffprobe", .{
+        .stdout = longText,
+        .stderr = null,
+    });
+    log.event(longText);
+    try std.testing.expectEqualStrings(try std.mem.concat(allocator, u8, &.{ "== ffprobe stdout ==\n", longText, "\n[EVENT] ", longText, "\n" }), stdout_capture.written());
+
+    // An error whose message and cause together run past 16 KB.
+    errors.recordError("Error", "{s}", .{longText[0..12000]});
+    log.exception("Something failed", errors.throwErrorWithCause("{s}", .{longText[0..12000]}));
+    try std.testing.expectEqualStrings(try std.mem.concat(allocator, u8, &.{ "Something failed\nError: ", longText[0..12000], "\nCaused by:\nError: ", longText[0..12000], "\n" }), stderr_capture.written());
 }

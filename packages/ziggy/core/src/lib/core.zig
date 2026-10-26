@@ -11,6 +11,7 @@
 //
 
 const std = @import("std");
+const builtin = @import("builtin");
 const build_options = @import("build_options");
 const types = @import("types.zig");
 const json = @import("json.zig");
@@ -40,6 +41,7 @@ const ZiggyConfig = types.ZiggyConfig;
 const QueueMessage = message_queue.Message;
 const TimerList = timers_lib.TimerList;
 const TestCommands = test_commands.TestCommands;
+const FileLog = task_queue.utils.file_log.FileLog;
 
 pub const MessageQueue = message_queue.MessageQueue;
 
@@ -636,8 +638,8 @@ fn ownIo(allocator: std.mem.Allocator) std.Io.Threaded {
 }
 
 //
-// Starts the main thread, which makes its state on its own thread, posts to and reads from `queue` and calls the app's `on_create`
-// there, and waits for it to report that it has started. The main thread reaches the native app only by posting to `native_queue`,
+// Starts the main thread, which makes its state on its own thread, posts to and reads from `queue`, starts the app's file log and calls
+// the app's `on_create` there, and waits for it to report that it has started. The main thread reaches the native app only by posting to `native_queue`,
 // the native app's queue (see native-side.zig), and waking the native app's UI thread with the config's wake. The caller owns both
 // queues, which must stay where they are until `stop` has returned, and the returned thread, which it gives to `stop`. An error
 // `on_create` returned is returned here, after the main thread has released what it made and ended.
@@ -689,8 +691,8 @@ pub fn start(allocator: std.mem.Allocator, queue: *MessageQueue, native_queue: *
 
 //
 // Has the main thread stop and waits for it to end: it calls the app's `on_destroy` with `.before_tasks_stop`, clears its timers,
-// cancels every task, sends every worker "shutdown", stops the test control connection, waits for all of them to end, calls
-// `on_destroy` with `.after_tasks_stopped`, tells the native app it has stopped and releases its state. Meanwhile the native app's side
+// cancels every task, sends every worker "shutdown", stops the test control connection, waits for all of them to end,
+// stops the app's file log, calls `on_destroy` with `.after_tasks_stopped`, tells the native app it has stopped and releases its state. Meanwhile the native app's side
 // gives every call the result ShuttingDown (see NativeSide.stop), because the native app's UI thread is the one waiting here, and hands the
 // messages for the frontend to `frontend`, or drops them when it is null. The caller frees the queues afterwards.
 //
@@ -814,7 +816,57 @@ fn reportStartFailure(main_start: *MainStart, io: std.Io, err: anyerror) void {
 }
 
 //
-// The main thread: makes each piece of its state, calls the app's on_create, reports that it has started, then reads its messages,
+// Starts the app's file log, named after the app and headed with its title and version, and installs it as the main thread's log. The files go in the `logs` directory of the
+// directory `<NAME>_LOG_DIR` names (the app's name in capitals with each dash as an underscore, such as ZIGGY_TEMPLATE_LOG_DIR) when it is
+// set, or else in the `logs` directory of the app's data directory. It is allocated with the main thread's allocator and stopped on the
+// main thread.
+//
+fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u8, version: ?[]const u8, data_dir: []const u8, io: std.Io) !*FileLog {
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    const variable = try std.mem.concat(arena, u8, &.{ name, "_LOG_DIR" });
+    for (variable) |*character| {
+        character.* = if (character.* == '-') '_' else std.ascii.toUpper(character.*);
+    }
+    const logs_parent = try environmentVariable(arena, variable) orelse data_dir;
+    return try FileLog.start(allocator, io, .{
+        .file_prefix = name,
+        .title = title,
+        .logs_dir = try std.fs.path.join(arena, &.{ logs_parent, "logs" }),
+        .command = null,
+        .version = version,
+        .header_lines = &.{},
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    });
+}
+
+//
+// The value of an environment variable: from the environment the native app gave the core when it gave one, or else from the process's.
+// Allocated with the arena when it is read from the process.
+//
+fn environmentVariable(arena: std.mem.Allocator, variable: []const u8) !?[]const u8 {
+    if (task_queue.utils.process_env.getEnvironMap() != null) {
+        return task_queue.utils.process_env.getEnv(variable);
+    }
+    const environ: std.process.Environ = switch (builtin.os.tag) {
+        .windows => .{
+            .block = .global,
+        },
+        else => .{
+            .block = .{
+                .slice = std.mem.span(std.c.environ),
+            },
+        },
+    };
+    const map = try environ.createMap(arena);
+    return map.get(variable);
+}
+
+//
+// The main thread: makes each piece of its state, starts the app's file log, calls the app's on_create, reports that it has started, then reads its messages,
 // waiting no longer than until the next timer is due, and runs the timers that are due, until it has done everything a stop requires. Then
 // it releases its state.
 //
@@ -909,9 +961,16 @@ fn mainThread(given: MainStart) void {
             .set = MainServices.setKeepAlive,
         },
     });
+    // The app's file log, the main thread's log from before on_create until after on_destroy, or null for an app without one.
+    var file_log: ?*FileLog = null;
     const start_failure: ?anyerror = failed: {
         if (build_options.test_hooks and config.test_mode) {
             tests.connection = test_control.TestControl.start(allocator, io, config, frontend.native, queue) catch |err| {
+                break :failed err;
+            };
+        }
+        if (app.name) |name| {
+            file_log = startFileLog(allocator, name, app.title orelse name, app.version, std.mem.span(config.data_dir), io) catch |err| {
                 break :failed err;
             };
         }
@@ -927,6 +986,9 @@ fn mainThread(given: MainStart) void {
     if (start_failure) |err| {
         tests.stop(io, allocator, queue);
         pool.shutdown(io, allocator, timers, null);
+        if (file_log) |logger| {
+            logger.stop(allocator, io);
+        }
         reportStartFailure(&main_start, io, err);
         return;
     }
@@ -964,6 +1026,11 @@ fn mainThread(given: MainStart) void {
                         later_replies.reportWithoutResponse(io, allocator, frontend);
                         tests.refuseWhileStopping(io, allocator);
                         tests.stop(io, allocator, queue);
+                        // Stopped once every task has ended, so the tasks' last lines are written before the footer, and before the
+                        // app frees its resources, so what the app logs then goes to the console.
+                        if (file_log) |logger| {
+                            logger.stop(allocator, io);
+                        }
                         if (app.on_destroy) |on_destroy| {
                             on_destroy(services, timers, io, arena, .after_tasks_stopped);
                         }
@@ -1276,6 +1343,15 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
     }
     if (std.mem.eql(u8, name, "get-dropped-paths")) {
         return try respond(arena, try system_messages.dropped_files.getDroppedPaths(dropped, arena));
+    }
+    if (std.mem.eql(u8, name, "log")) {
+        const payload = switch (try handlers_lib.parsePayload(system_messages.log.LogRequest, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.log.log(arena, payload));
     }
     if (build_options.test_hooks) {
         if (std.mem.eql(u8, name, "test-result")) {

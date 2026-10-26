@@ -1,0 +1,5 @@
+// The app's details, which Ziggy's build reads: its name, which names its log files, and its title, which heads them.
+.{
+    .name = "ziggy-test-app",
+    .title = "Ziggy test app",
+}

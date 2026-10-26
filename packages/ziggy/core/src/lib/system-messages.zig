@@ -26,6 +26,11 @@ pub const menu = @import("system-messages/menu.zig");
 pub const dropped_files = @import("system-messages/dropped-files.zig");
 
 //
+// The system message of the log (log).
+//
+pub const log = @import("system-messages/log.zig");
+
+//
 // The system messages of the test hooks (test-result, test-ui-ready), handled only in a test hooks build.
 //
 pub const test_hooks = @import("system-messages/test-hooks.zig");
@@ -39,6 +44,7 @@ pub const names = [_][]const u8{
     "get-platform",
     "menu-action",
     "get-dropped-paths",
+    "log",
 };
 
 //

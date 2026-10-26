@@ -5,6 +5,7 @@
 pub const console = @import("utils/console.zig");
 pub const errors = @import("utils/errors.zig");
 pub const exec = @import("utils/exec.zig");
+pub const file_log = @import("utils/file-log.zig");
 pub const file_test_uuid_generator = @import("utils/file-test-uuid-generator.zig");
 pub const format = @import("utils/format.zig");
 pub const native_caller = @import("utils/native-caller.zig");
@@ -17,6 +18,7 @@ pub const process_env = @import("utils/process-env.zig");
 pub const random_uuid_generator = @import("utils/random-uuid-generator.zig");
 pub const sleep = @import("utils/sleep.zig");
 pub const standard_streams = @import("utils/standard-streams.zig");
+pub const temp_dir = @import("utils/temp-dir.zig");
 pub const test_timestamp_provider = @import("utils/test-timestamp-provider.zig");
 pub const test_uuid_generator = @import("utils/test-uuid-generator.zig");
 pub const timestamp_provider = @import("utils/timestamp-provider.zig");

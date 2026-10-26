@@ -256,6 +256,15 @@
             cancelTasks: function (source) {
                 postSystem("cancel-tasks", source);
             },
+            // Writes a line to the backend's log, tagged Frontend. A level the core does not know is a core-error event.
+            log: function (level, message, errorText, toolOutput) {
+                postSystem("log", {
+                    level: level,
+                    message: message,
+                    error: errorText === undefined ? null : errorText,
+                    toolData: toolOutput === undefined ? null : toolOutput,
+                });
+            },
             onTaskEvent: taskEvent.on,
             removeTaskEventListener: taskEvent.remove,
             onTaskCompleted: taskCompleted.on,

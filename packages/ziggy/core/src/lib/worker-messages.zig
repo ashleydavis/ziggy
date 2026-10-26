@@ -100,18 +100,9 @@ pub const IWorkerQueueTaskMessage = struct {
 };
 
 //
-// The level of a worker's log line.
+// The level of a worker's log line, the log's own.
 //
-pub const LogLevel = enum {
-    info,
-    verbose,
-    @"error",
-    exception,
-    warn,
-    debug,
-    tool,
-    event,
-};
+pub const LogLevel = @import("task-queue/utils/log.zig").LogLevel;
 
 //
 // The output of a tool that a worker logs at the "tool" level.

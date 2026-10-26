@@ -475,6 +475,12 @@ pub const WorkerPool = struct {
         defer arena_state.deinit();
         var options = self.options.worker_options;
         options.workerId = id;
+        // A file log writes every line, whatever its console shows, so with one on this thread the worker sends its verbose and tool
+        // lines too, and the file log's console options decide what the console shows.
+        if (utils.file_log.FileLog.fromILog(utils.log.currentLog()) != null) {
+            options.verbose = true;
+            options.tools = true;
+        }
         // The worker gets a copy of this thread's environment as its own.
         if (utils.process_env.getEnvironMap()) |environment| {
             options.environment = try worker_lib.environmentJson(arena_state.allocator(), environment);
@@ -575,7 +581,7 @@ pub const WorkerPool = struct {
                 handler.write(handler.user_data, text);
             }
             else {
-                writeLog(arena, text);
+                writeLog(arena, std.fmt.allocPrint(arena, "Worker {d}", .{state.workerId}) catch @panic("out of memory writing a log line"), text);
             }
             return;
         }
@@ -1120,32 +1126,25 @@ pub const OtherMessageHandler = struct {
 };
 
 //
-// Writes a worker's log line to the main thread's log.
+// Writes a worker's log line to the main thread's log, tagged with the source given, such as `Worker 2` (see `file_log.writeFrom`).
 //
-pub fn writeLog(arena: std.mem.Allocator, text: []const u8) void {
+pub fn writeLog(arena: std.mem.Allocator, source: []const u8, text: []const u8) void {
     const message = worker_messages.decode(worker_messages.IWorkerLogMessage, arena, text) catch |err| {
         std.debug.panic("could not read a worker's log message ({s}): {s}", .{ @errorName(err), text });
     };
-    switch (message.level) {
-        .info => log.info(message.message),
-        .verbose => log.verbose(message.message),
-        .@"error" => log.@"error"(message.message),
-        // One error line with the cause under it, as the log of the worker's own thread would write it, so the cause is not a second
-        // error.
-        .exception => if (message.@"error") |details| {
-            log.@"error"(std.fmt.allocPrint(arena, "{s}\n{s}", .{ message.message, details }) catch @panic("out of memory writing a log line"));
-        }
-        else {
-            log.@"error"(message.message);
-        },
-        .warn => log.warn(message.message),
-        .debug => log.debug(message.message),
-        .tool => log.tool(message.message, .{
-            .stdout = if (message.toolData) |data| data.stdout else null,
-            .stderr = if (message.toolData) |data| data.stderr else null,
-        }),
-        .event => log.event(message.message),
+    var tool_output: ?utils.log.IToolOutput = null;
+    if (message.toolData) |data| {
+        tool_output = .{
+            .stdout = data.stdout,
+            .stderr = data.stderr,
+        };
     }
+    utils.file_log.writeFrom(arena, source, .{
+        .level = message.level,
+        .message = message.message,
+        .error_text = message.@"error",
+        .tool_output = tool_output,
+    });
 }
 
 //

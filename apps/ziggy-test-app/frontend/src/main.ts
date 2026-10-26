@@ -129,6 +129,8 @@ function jobTag(name: string, source: string): IJsonValue {
 }
 
 async function showReply(): Promise<void> {
+    // A line from the page, which the backend writes to its log files.
+    window.ziggy.log("info", "the page sent a ping");
     const reply = await window.ziggy.invoke<IPingReply>("ping", {
         greeting: "hello from the UI",
     });

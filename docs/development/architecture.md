@@ -83,13 +83,15 @@ The `kind` field shows which kind a message or event is:
 ## Handlers
 
 - **App messages and task types.** The app declares them in `ziggy.core.App` (`app.zig`), which checks every handler when the app is built and makes the lists of messages and task types, constants of the app's code that the main thread and every worker read.
-- **System messages.** Each part of Ziggy has a function for each of its system messages, in its file under `system-messages/`: the platform `get-platform`, the menu `menu-action`, the dropped files `get-dropped-paths`, the task runner `add-task` and `cancel-tasks` and the test hooks `test-result` and `test-ui-ready` in a test hooks build only. The main thread finds the function by the message's name and gives it only the piece of its state it uses. No public declaration of the core names them, so an app cannot call one.
+- **System messages.** Each part of Ziggy has a function for each of its system messages, in its file under `system-messages/`: the platform `get-platform`, the menu `menu-action`, the dropped files `get-dropped-paths`, the log `log`, the task runner `add-task` and `cancel-tasks` and the test hooks `test-result` and `test-ui-ready` in a test hooks build only. The main thread finds the function by the message's name and gives it only the piece of its state it uses. No public declaration of the core names them, so an app cannot call one.
 - **The standard arguments.** Every app message handler, menu item function and app function takes the same arguments first: the handler services, the main thread's timers, its Io and an allocator. Every task handler takes the task services, its worker's timers, its worker's Io, an allocator and its context. Ziggy passes them to every handler of a kind alike and never chooses what to pass by reading a handler's parameters. The services are interfaces, as `std.Io` is: the handler services carry out each call on the main thread, and the task services send each call to the main thread as a JSON message (`services.zig`, `task-runner.zig`).
 - **The app's message handlers.** `handlers.zig` wraps every app message handler in the one function the main thread calls. The wrapper parses the message's data into the handler's payload type, refusing data that does not fit with `InvalidMessageData` without running the handler. It turns what the handler returns (a result, `void`, a `ziggy.core.Response` of `.now`, `.task` or `.later`, or a `ziggy.core.MessageResult` from a handler that takes the message unparsed) into the message response. A handler that returns `.later` takes a `ziggy.core.Reply`, which posts the response to the main thread's queue. The main thread records each such message until its response comes. It reports any that never gets one as a `core-error` system event naming `MessageNotAnswered` when it stops. The [Messages](../user-guide/messages.md#what-a-handler-returns) guide lists the forms.
 
 ## The backend library
 
 An app's backend library is built by `addAppBackend` in Ziggy's `build.zig`. Its root is Ziggy's `packages/ziggy/core/src/app-root.zig`, not a file of the app's: `createAppBackendModule` imports the app's `backend_source_file` (its `app.zig`) into it as `app-backend`. `app-root.zig` exports Ziggy's C interface (`ziggy-api.zig`) for that file's `pub const app` and, for an Android target, the JNI entry points (`jni.zig`). The app writes no exports and has no file of its own that the build starts from. A backend source file with no `app` declaration fails the build with a message reporting that.
+
+The app's details come from its `app.zon` (see [Building your app](../user-guide/building-your-app.md#the-apps-details)). `dependency` in Ziggy's `build.zig` reads it with Zig's ZON parser (`readAppDetails`) and passes its name, title and version to Ziggy's build as the options `app-name`, `app-title` and `app-version`. They become `build_options` of the core, which `ziggy.core.App` copies into the registered app's `name`, `title` and `version`. The main thread names and heads the app's log files from them (see [Logging](../user-guide/logging.md#in-a-ziggy-app)). A core built for no app, as Ziggy's own tests are, has none, and keeps no log files.
 
 ## Protocol
 
@@ -101,6 +103,7 @@ The system messages, each handled by Ziggy's core library and never by the app:
 | `add-task` | `window.ziggy.addTask(task)` | Queues a task. |
 | `cancel-tasks` | `window.ziggy.cancelTasks(source)` | Cancels the tasks of a source. |
 | `get-dropped-paths` | `window.ziggy.getPathForFile`, when a drop happens | Answers with the paths of the files in the last drop. |
+| `log` | `window.ziggy.log(level, message, errorText, toolOutput)` | Writes a line to the main thread's log tagged `Frontend` (see [Logging](../user-guide/logging.md)). A level it does not know fails with `UnknownLogLevel`. |
 | `menu-action` | The native app | Passes on a menu item the native app does not run itself, by its name: the core calls a `.zig` item's function or sends a `.ui` item to the frontend as the app event `{"type": "menu", "item": "<name>"}`. A name the menu does not have, or a standard action, fails with `UnknownMenuItem`. |
 | `test-result` | `window.ziggy.sendTestResult(requestId, result)` | The frontend's result for a `test-command`. Test hooks builds only. |
 | `test-ui-ready` | `window.ziggy.testUiReady()` | Reports that the frontend is listening for test commands. Test hooks builds only. |
@@ -119,6 +122,7 @@ The system events, each with its own listener on `window.ziggy`:
 ## Tasks
 
 - Background tasks run on a pool of worker threads in the backend, so slow work never blocks the frontend.
+- A worker's log lines are sent to the main thread as messages and written there, tagged `Worker <id>`, to the main thread's log: its log files (see [Logging](../user-guide/logging.md)).
 - Message handlers, menu functions and timers run on the backend's main thread, which Ziggy starts apart from the native app's UI thread. No thread touches another thread's state and they talk only by JSON messages, so the app's own state needs no locks. See [Threads and state](../user-guide/tasks.md#threads-and-state).
 - The frontend queues a task with `window.ziggy.addTask`, can cancel it with `cancelTasks` and hears back through `onTaskEvent` and `onTaskCompleted`.
 - A keep-alive task keeps a mobile app running in the background until it ends.

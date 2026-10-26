@@ -5,6 +5,7 @@
 //
 
 const std = @import("std");
+const build_options = @import("build_options");
 const types = @import("types.zig");
 const handlers = @import("handlers.zig");
 const task_runner = @import("task-runner.zig");
@@ -59,6 +60,15 @@ pub const RegisteredApp = struct {
     // thread stops whenever the native app ends the backend, which is not only when the app quits (an Android activity's onDestroy,
     // for one), and in tests. Null for an app with nothing to do then. See `DestroyPhase`.
     on_destroy: ?OnDestroy = null,
+    // The app's name, from its app.zon (see `dependency` in Ziggy's build.zig), which names its log files: the main thread
+    // writes them from before `on_create` until every task has ended, before `on_destroy`'s `.after_tasks_stopped`. Null for a core built
+    // for no app (Ziggy's own tests), which keeps no log files.
+    name: ?[]const u8,
+    // The app's name as people read it, from its app.zon, which heads its log files. Null for a core built for no app.
+    title: ?[]const u8,
+    // The app's version, from its app.zon, which its log files' header gives. Null for a core built for no app, or an app.zon
+    // that gives none.
+    version: ?[]const u8,
 };
 
 //
@@ -205,6 +215,9 @@ pub fn App(comptime definition: anytype) RegisteredApp {
         .on_create = if (@hasField(Definition, "on_create")) definition.on_create else null,
         .on_destroy = if (@hasField(Definition, "on_destroy")) definition.on_destroy else null,
         .ui_query = if (@hasField(Definition, "ui_query")) definition.ui_query else null,
+        .name = build_options.app_name,
+        .title = build_options.app_title,
+        .version = build_options.app_version,
     };
 }
 

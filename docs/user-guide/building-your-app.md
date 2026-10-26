@@ -162,9 +162,29 @@ Then change what the app does: its frontend, its backend's message handlers and 
 
 Run the `/ziggy:upgrade` Claude Code command in your app's directory, or do it yourself:
 
-1. Read the new release's notes for anything your app has to change.
+1. Read the new release's notes for anything your app has to change. An app made before Ziggy read `app.zon` needs one (see [The app's details](#the-apps-details)).
 2. Change Ziggy's version to the new tag in `build.zig.zon` (run `zig fetch --save=ziggy "git+https://github.com/ashleydavis/ziggy.git#<tag>"`), `package.json`, `native/android/app/build.gradle` and both Xcode projects, then run `bun install`.
 3. Build your app and run its tests on every platform.
+
+## The app's details
+
+Every app has an `app.zon` beside its `build.zig`, which gives Ziggy the app's details:
+
+```zig
+.{
+    .name = "my-app",
+    .title = "My App",
+    .version = "1.2.0",
+}
+```
+
+| Field | Required | What it is for |
+|---|---|---|
+| `name` | Yes | The app's name: its log files are `my-app-<start time>.log`. |
+| `title` | Yes | The app's name as people read it, which heads its log files. |
+| `version` | No | The app's version, which its log files give. A release build writes the release's version here before building. |
+
+Ziggy's build reads it with Zig's ZON parser whenever the app's `build.zig` calls `ziggy_build.dependency`. An app with no `app.zon`, one that does not parse, one missing `name` or `title` or one with a field Ziggy does not know does not build, and the error says why. The template's is `ziggy-template` and `Ziggy template`, which the search and replace of a new app changes with the rest of its names. See [Logging](logging.md) for how the log files use it.
 
 ## The window icon
 
