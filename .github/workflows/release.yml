@@ -352,23 +352,25 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-ziggy-zig-build-
 
       # A step that hits its own timeout fails normally and keeps its log, so a hang shows up in the log.
+      # Each smoke step is capped at 20 minutes, a little above the slowest passing one (iOS, about 18): the dev mode step of the
+      # Windows smoke job of CI run 40484807194 hung for over 30 minutes after it passed in 5 in the Release run of the same commit.
       - name: Run the smoke tests (desktop)
         if: matrix.platform == 'linux' || matrix.platform == 'windows' || matrix.platform == 'macos'
-        timeout-minutes: 45
+        timeout-minutes: 20
         shell: bash
         run: bun run test:smoke
 
       # Dev mode: the dev host and Vite with the frontend in the runner's Chrome, and the supervisor rebuilding the dev host.
       - name: Run the smoke tests in dev mode (desktop)
         if: matrix.platform == 'linux' || matrix.platform == 'windows' || matrix.platform == 'macos'
-        timeout-minutes: 30
+        timeout-minutes: 20
         shell: bash
         run: bun run test:smoke:dev
 
       # The script is one line, because this action runs each line of `script:` in a shell of its own.
       - name: Run the smoke tests on an emulator (Android)
         if: matrix.platform == 'android'
-        timeout-minutes: 45
+        timeout-minutes: 20
         uses: reactivecircus/android-emulator-runner@v2
         env:
           ZIGGY_ANDROID_DEVICES: emulator-5554
@@ -381,7 +383,7 @@ jobs:
       # run.sh picks the first available iPhone simulator and boots it, and builds and installs the app with xcodebuild.
       - name: Run the smoke tests on a simulator (iOS)
         if: matrix.platform == 'ios'
-        timeout-minutes: 60
+        timeout-minutes: 20
         run: bun run test:smoke:ios
 
       # Saved under this platform's own key so the package job, which builds the same release app, finds the Zig part already
