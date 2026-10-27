@@ -380,6 +380,11 @@ const Connection = struct {
                 // thread's read by closing the socket, and a reply still to be written was lost with it: Photosphere's Windows smoke
                 // job reported "No answer from the control connection to quit".
                 self.start.native.app.call(io, allocator, .quit, null) catch @panic("out of memory asking the native app to quit");
+                // Nothing is read after a quit. On Windows stopping closes the socket to end a read still waiting on it, and that
+                // close resets the connection: the Windows smoke job of the Release run of v0.0.17 failed 26-log-files with "read
+                // error: Connection reset by peer" before the quit reply was read. Ending here lets the accepting thread close the
+                // socket with no read waiting on it.
+                return;
             }
         }
     }
