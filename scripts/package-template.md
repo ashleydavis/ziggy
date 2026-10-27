@@ -1,6 +1,6 @@
 # package-template.sh
 
-Packages the Ziggy template of a version tag as `ziggy-template-<tag>.zip`, a new app ready to unpack: the template (`apps/ziggy-template`) as it is at the tag, with every reference to Ziggy pinned to that tag in the same form the [Vite example](https://github.com/ashleydavis/ziggy-example-vite) uses, and Ziggy's top-level `mise.toml` added. The release workflow `.github/workflows/release-version.yml` runs it for each version tag and attaches the archive to the release (see [Releasing Ziggy](../docs/development/releasing-ziggy.md)).
+Packages the Ziggy template of a version tag as `ziggy-template-<tag>.zip`, a new app ready to unpack: the template (`apps/ziggy-template`) as it is at the tag, with every reference to Ziggy pinned to that tag in the same form the [Vite example](https://github.com/ashleydavis/ziggy-example-vite) uses, and Ziggy's top-level `mise.toml` added. The release workflow `.github/workflows/release.yml` runs it for each version tag and attaches the archive to the release (see [Releasing Ziggy](../docs/development/releasing-ziggy.md)).
 
 What it changes in the copy of the template:
 

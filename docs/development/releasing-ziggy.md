@@ -1,6 +1,6 @@
 # Releasing Ziggy
 
-Two workflows build and test this repository: CI tests every push, and the release workflow tests the commit again when a version of the Ziggy package is released by cutting a version tag.
+Two workflows build and test this repository: CI tests every push, and the release workflow tests the commit again and publishes its release when a version of the Ziggy package is released by cutting a version tag.
 
 ## The CI workflow
 
@@ -14,7 +14,11 @@ It packages nothing and creates no release.
 
 ## The release workflow
 
-`.github/workflows/release.yml` runs when a version tag is pushed, and when started from the Actions tab. It runs the same jobs as CI, and packages and publishes nothing.
+`.github/workflows/release.yml` runs when a version tag is pushed, and when started from the Actions tab. It runs the same jobs as CI, then:
+
+- **publish**: only when every job passed, and only for a pushed version tag or a tag given when the run is started: the GitHub release of the tag (see [Releasing a version of the package](#releasing-a-version-of-the-package)).
+
+A run started from the Actions tab without a tag only tests. A run that fails anywhere publishes nothing.
 
 ### Reading a failed run
 
@@ -32,10 +36,10 @@ An app pins Ziggy to a version tag. A version tag is `v` followed by the version
    git push origin v0.1.0
    ```
 
-   Pushing the tag starts `.github/workflows/release.yml` (above) and `.github/workflows/release-version.yml`, which publishes the GitHub release on the tag, with notes listing the commits since the version tag before it and with the tag's `docs/agent-quick-start.md` and the template archive `ziggy-template-<tag>.zip` attached. The archive is the template of the tag with every reference to Ziggy pinned to the tag and Ziggy's `mise.toml` added, made by `scripts/package-template.sh` (see [package-template.md](../../scripts/package-template.md)). A new app starts from that archive, so it needs no pinning of its own. The docs tell app developers to point their agent at `https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md`, which GitHub serves only from the files attached to the newest release.
+   Pushing the tag starts `.github/workflows/release.yml` (above), which, once every build and test has passed, publishes the GitHub release on the tag, with notes listing the commits since the version tag before it and with the tag's `docs/agent-quick-start.md` and the template archive `ziggy-template-<tag>.zip` attached. The archive is the template of the tag with every reference to Ziggy pinned to the tag and Ziggy's `mise.toml` added, made by `scripts/package-template.sh` (see [package-template.md](../../scripts/package-template.md)). A new app starts from that archive, so it needs no pinning of its own. The docs tell app developers to point their agent at `https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md`, which GitHub serves only from the files attached to the newest release.
 
 3. When an app has to change something to move to the new version, add it to the release's notes.
 
 A version tag is never moved or deleted once pushed: an app that pinned it, and the hash in its `build.zig.zon`, depend on it staying the same. A mistake is fixed by releasing the next version.
 
-When the workflow failed for a reason outside the tag, such as a broken step, fix the workflow on `main` and start it again with `gh workflow run release-version.yml --ref main -f tag=<tag>`. That run takes the workflow and its actions from `main` and publishes everything else from the tag.
+When the workflow failed for a reason outside the tag, such as a broken step, fix the workflow on `main` and start it again with `gh workflow run release.yml --ref main -f tag=<tag>`. That run tests `main`, takes the workflow and its actions from `main` and publishes everything else from the tag.

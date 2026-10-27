@@ -22,7 +22,7 @@ Follow [Releasing Ziggy](../../docs/development/releasing-ziggy.md), section "Re
    git push origin <version>
    ```
 
-2. Pushing the tag starts the `Release version` workflow (`release-version.yml`). Find its run with `gh run list --workflow release-version.yml --limit 1` and wait for it with `gh run watch <id> --exit-status`. When it fails, stop and say which step failed and what its log shows.
+2. Pushing the tag starts the `Release` workflow (`release.yml`), which tests the commit and then publishes the release. Find its run with `gh run list --workflow release.yml --limit 1` and wait for it with `gh run watch <id> --exit-status`. When it fails, stop and say which job and step failed and what its log shows.
 3. Check the release with `gh release view <version> --json author,assets,body` and `gh release list --limit 1`: it is marked Latest, its author is `github-actions[bot]` and `agent-quick-start.md` and `ziggy-template-<version>.zip` are attached.
 4. Check `https://github.com/ashleydavis/ziggy/releases/latest/download/agent-quick-start.md` returns the quick start, with `curl -fsSL`, and that `https://github.com/ashleydavis/ziggy/releases/latest/download/ziggy-template-<version>.zip` downloads, with `curl -fsSLI`.
 
