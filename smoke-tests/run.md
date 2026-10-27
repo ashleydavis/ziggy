@@ -1,10 +1,10 @@
 # run.sh
 
-Runs the Ziggy test app's smoke test scenarios for one platform. Invoked by the root `package.json` scripts `test:smoke`, `test:smoke:android`, `test:smoke:ios` and `test:smoke:dev`, never directly. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
+Runs the Ziggy test app's smoke test scenarios for one platform. Invoked by the root `package.json` scripts `test:smoke`, `test:smoke:android` and `test:smoke:ios`, never directly. Terms are defined in [Ziggy's glossary](https://github.com/ashleydavis/ziggy/blob/main/docs/glossary.md).
 
 ## Arguments
 
-- `<platform>`: `linux`, `windows`, `macos`, `android` or `ios` (a connected iPhone or iPad when there is one, see `lib/ios-device.sh`, otherwise a simulator), or `dev` for dev mode: the dev backend in front of Vite's dev server, with the frontend in a headless Chrome or Chromium, on Linux, Windows (Git Bash) or macOS. The browser is the first of `google-chrome`, `chromium` and `chromium-browser` on the PATH, or Chrome where its installer puts it on macOS and Windows, and `ZIGGY_DEV_BROWSER` names another. Each has a platform library in `lib/<platform>.sh` that builds the app, starts it and stops it.
+- `<platform>`: `linux`, `windows`, `macos`, `android` or `ios` (a connected iPhone or iPad when there is one, see `lib/ios-device.sh`, otherwise a simulator). Each has a platform library in `lib/<platform>.sh` that builds the app, starts it and stops it.
 - `[scenario]`: optional scenario number or name, to run one scenario.
 
 ## Behaviour
@@ -30,7 +30,7 @@ Builds the test app twice for the platform, once with the test hooks and once wi
 
 - `26-log-files`: a task's info and error lines, a message handler's line and a line the frontend logs with `window.ziggy.log` reach the log files the test app writes in its data directory, tagged with the worker and `Frontend` (the handler's line, logged on the main thread, has no tag), the error line is in the error log file too, and both files end with their footers when the app quits. On a connected iPhone or iPad, whose data directory the host cannot read, the files are not checked.
 
-The scenarios in `native-only` run in a native app on every platform and not in dev mode, where the frontend comes from the dev server:
+The scenarios in `native-only` run in a native app on every platform:
 
 - `24-ui-address`: the frontend is served from the platform's address (`ziggy-app://app/` on Linux, macOS and iOS, `https://ziggy-app.invalid/` on Windows and Android), the page is a secure context, and `localStorage`, IndexedDB, and `fetch` and `XMLHttpRequest` of the frontend's own files work there.
 
@@ -45,11 +45,6 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mob
 - `20-drop-files`: a file dropped on the window gets its real path from `getPathForFile`, and a file of another size does not. The drop is faked in two steps, because no tool can drag a file into the window: the `drop` command records it with the backend and `drop-file` gives the frontend a drop event. The native app's own reading of a real drop is not covered by any automatic test.
 - `25-close-with-dialog-open`: quitting while a real file dialog is open ends the app. Nothing reports that the dialog is on screen, so the scenario waits a few seconds after the click before it quits.
 
-The scenarios in `dev-only` run in dev mode only:
-
-- `23-drop-files`: a file dropped on the page reaches the frontend with the path of the copy the dev backend saved, holding the file's contents, and only one copy is made.
-
-In dev mode the other scenarios run against the dev backend in front of Vite, and the ones that need something only a native app has (the address it serves the frontend from, a window, the menu) are the `native-only` and `desktop-only` ones, which dev mode does not run. `18-keep-alive-survives-leaving` closes the page there, and the dev backend goes on running the task.
 
 Toggle Full Screen is not smoke tested. The Linux suite runs on a virtual display with no window manager, and nothing honours a request for full screen there, so there is nothing to see change.
 

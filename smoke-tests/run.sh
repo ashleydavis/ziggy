@@ -17,10 +17,10 @@ PLATFORM="${1:-}"
 SCENARIO_FILTER="${2:-}"
 
 case "$PLATFORM" in
-    linux|windows|macos|android|ios|dev)
+    linux|windows|macos|android|ios)
         ;;
     *)
-        echo "Usage: run.sh <linux|windows|macos|android|ios|dev> [scenario number or name]" >&2
+        echo "Usage: run.sh <linux|windows|macos|android|ios> [scenario number or name]" >&2
         exit 2
         ;;
 esac
@@ -67,7 +67,7 @@ fi
 #
 # Prints the scenario directories this platform runs, one per line, in numeric order: the ones every platform runs, in
 # a native app the ones about what only a native app has (such as the address it serves the frontend from), on a desktop
-# platform the ones about desktop features such as the menu, and in dev mode the ones about dev mode.
+# platform the ones about desktop features such as the menu.
 #
 list_scenarios() {
     {
@@ -80,9 +80,6 @@ list_scenarios() {
         case "$PLATFORM" in
             linux|windows|macos)
                 ls -d "$SMOKE_DIR"/desktop-only/[0-9]*
-                ;;
-            dev)
-                ls -d "$SMOKE_DIR"/dev-only/[0-9]*
                 ;;
         esac
     } | while IFS= read -r directory; do

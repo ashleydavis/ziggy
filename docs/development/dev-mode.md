@@ -29,6 +29,3 @@ How it works:
 - The dev server and the dev backend are in the terminal's process group with the supervisor, so Ctrl+C stops them all. The supervisor stops both itself when it ends for any other reason.
 
 The code is in `packages/ziggy/dev`: the dev backend (`src/lib/dev-host.zig`), what it makes of the requests it forwards and the responses that come back (`src/lib/proxy.zig`), the supervisor (`src/lib/supervisor.zig`), the dev script (`src/lib/dev-client.js`, with its unit tests in `packages/ziggy/frontend/src/test/dev-client.test.ts`), the page's WebSocket messages (`src/lib/web-socket.zig`), the zenity dialogs (`src/lib/pickers.zig`), what the two programs make of dropped file names, command lines and files (`src/lib/request-paths.zig`, `src/lib/args.zig` and `src/lib/watch.zig`) and the two programs' entry points (`src/dev-host-main.zig` and `src/supervisor-main.zig`). The commands that start dev mode and the dev backend's options are in [Commands in Ziggy's repository](commands.md#dev-mode).
-
-The Ziggy template's smoke tests run every scenario that does not need a native app in dev mode, against the dev backend in front of Vite with the frontend in a headless Chrome or Chromium (`bun run test:smoke:dev`). The `dev-only` scenario `23-drop-files` checks a dropped file, which only dev mode handles that way.
-

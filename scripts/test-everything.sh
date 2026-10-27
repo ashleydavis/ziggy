@@ -46,9 +46,6 @@ run_target() {
         smoke)
             bun run test:smoke
             ;;
-        smoke-dev)
-            bun run test:smoke:dev
-            ;;
         *)
             echo "ERROR: target \"$1\" is in what-changed.yaml but scripts/test-everything.sh has no command for it. Add one to run_target." >&2
             exit 1

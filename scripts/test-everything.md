@@ -15,7 +15,6 @@ It asks [what-changed](https://github.com/ashleydavis/what-changed) which checks
 | `compile-zig` | `bun run compile:zig` |
 | `test-zig` | `bun run test:zig` |
 | `smoke` | `bun run test:smoke` |
-| `smoke-dev` | `bun run test:smoke:dev` |
 
 It runs them in the order `what-changed.yaml` lists them and stops at the first that fails. After each one passes it runs `what-changed baseline capture <target>`, so a check is recorded as passed only by a run that passed it. The records are in `.what-changed/`, which git ignores.
 

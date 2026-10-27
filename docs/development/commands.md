@@ -18,11 +18,11 @@ Run from the root of Ziggy's repository.
 | `bun run test:android-shell` | The JUnit tests of Ziggy's Android native app, on this machine's JVM. Needs no device. |
 | `bun run diagrams` | Draws every diagram under `docs/development/diagrams` from its Mermaid source into the SVG the docs show. |
 | `bun run install-hooks` | Installs the pre-commit hook into this clone. Run once per clone. See `scripts/install-hooks.md`. |
-| `bun run test:everything` | Runs the checks (`compile`, `test`, `compile:zig`, `test:zig`, `test:smoke` and `test:smoke:dev`) whose files changed since each last passed. The pre-commit hook runs it. `-- --force` runs them all. See `scripts/test-everything.md`. |
+| `bun run test:everything` | Runs the checks (`compile`, `test`, `compile:zig`, `test:zig` and `test:smoke`) whose files changed since each last passed. The pre-commit hook runs it. `-- --force` runs them all. See `scripts/test-everything.md`. |
 | `bun run <command>:ziggy-template:<platform>` | Runs the template's `<command>:<platform>`, for `sync`, `build`, `run`, `open`, `package` and `clean`. |
 | `bun run distribute:ziggy-template:android` | Runs the template's `distribute:android`. |
 | `bun run dev:ziggy-template` | Runs the template's `dev`. |
-| `bun run test:smoke` | Ziggy's smoke tests, which drive its test app (`apps/ziggy-test-app`), on this machine's desktop platform. `test:smoke:android`, `test:smoke:ios` and `test:smoke:dev` run them on an attached Android emulator or device (the ones `ZIGGY_ANDROID_DEVICES` names, when it is set), on a connected iPhone or iPad or else the iOS simulator, and in dev mode in a headless Chrome or Chromium. `-- <number\|name>` after any of them runs one scenario. |
+| `bun run test:smoke` | Ziggy's smoke tests, which drive its test app (`apps/ziggy-test-app`), on this machine's desktop platform. `test:smoke:android` and `test:smoke:ios` run them on an attached Android emulator or device (the ones `ZIGGY_ANDROID_DEVICES` names, when it is set) and on a connected iPhone or iPad or else the iOS simulator. `-- <number\|name>` after any of them runs one scenario. |
 
 Any other command of the template runs from the root with `bun run --filter=ziggy-template <command>`.
 

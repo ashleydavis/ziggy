@@ -57,9 +57,3 @@ targets:
       - packages/ziggy
       - apps
       - smoke-tests
-
-  - name: smoke-dev
-    paths:
-      - packages/ziggy
-      - apps
-      - smoke-tests
