@@ -74,6 +74,7 @@ The handler services are an interface, as `std.Io` is: the handler does not see 
 | `menuAction(action)` | Has the native app run one of its own menu actions, such as `focus-window`. A native app with no `menu_action` callback ignores it. |
 | `dataDir()` | The app's private data directory. |
 | `isPhone()` | Whether the native app is a phone's: the Android and iOS native apps handle the app's own native calls, which no desktop native app does. |
+| `log` | The main thread's log, a field: what a handler, a menu item's function or an app function writes to. It is the app's file log for the whole run, or the console log for an app without a name (see [Logging](logging.md#where-a-line-goes)). |
 
 ## When the backend is created
 

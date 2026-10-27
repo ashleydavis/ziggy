@@ -10,6 +10,7 @@ const app = @import("ziggy-template-backend");
 const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 test "the template writes its two log files in its data directory, with its header and footer, the lines its hello world code logs and none of another thread's lines" {
+    const console_log = ziggy.task_queue.utils.mute_log.MuteLog.init();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buffer: [256]u8 = undefined;
@@ -20,7 +21,7 @@ test "the template writes its two log files in its data directory, with its head
     var config = native_app.config(2, 2);
     config.data_dir = data_dir.ptr;
     try native_app.start(std.testing.io, std.testing.allocator, config, app.app);
-    ziggy.task_queue.utils.log.log.info("not on the template's main thread");
+    console_log.info("not on the template's main thread");
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"hello-world\",\"data\":{\"name\":\"world\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"greeting\":\"Hello world, from Zig on");
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"hello-world-task\",\"source\":\"hello\",\"data\":null}}");

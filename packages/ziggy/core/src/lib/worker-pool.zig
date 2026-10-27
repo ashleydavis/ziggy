@@ -3,7 +3,7 @@
 // (worker-pool-electron-main.ts). It owns the task list and the state of each worker (IWorkerState), starts
 // workers as tasks need them up to the limit, sends each task to an idle worker (dispatchTask, tryDispatchPending) and handles what the
 // workers send back (handleWorkerMessage). Everything here runs on the thread that owns the pool, the main thread, and the workers
-// reach it only by message. The pool keeps no Io, allocator or timers: each function is given the main thread's, and everything the
+// reach it only by message. The pool keeps no Io, allocator, timers or log: each function is given the main thread's, and everything the
 // pool keeps is allocated with the main thread's allocator.
 //
 // It is also an IQueueBackend, as WorkerPoolElectronMain is in TypeScript, for an owner that gives every function of the pool the same
@@ -30,7 +30,7 @@ const TaskHandlerEntry = task_runner.TaskHandlerEntry;
 const utils = task_queue.utils;
 const qtypes = task_queue.types;
 const IQueueBackend = task_queue.queue_backend.IQueueBackend;
-const log = &utils.log.log;
+const ILog = utils.log.ILog;
 
 //
 // Where the pool sends the events it produces for the frontend (task-event and task-completed, and the reply to a message a task
@@ -284,7 +284,7 @@ pub const WorkerPool = struct {
     // due first: how an owner whose queue holds only its workers' messages (the mock pool of the task queue's tests) waits for the
     // tasks it queued, as a turn of JavaScript's event loop runs a timer as well as a message.
     //
-    pub fn waitForWorkerMessage(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers) void {
+    pub fn waitForWorkerMessage(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, log: ILog) void {
         const message = self.main_queue.take(io, allocator, timers.nextTimeout()) orelse {
             if (self.main_queue.isClosed(io)) {
                 @panic("the worker pool's queue closed while its owner waited for a worker");
@@ -293,7 +293,7 @@ pub const WorkerPool = struct {
             return;
         };
         defer allocator.free(message.text);
-        if (!self.receive(io, allocator, timers, message)) {
+        if (!self.receive(io, allocator, timers, log, message)) {
             std.debug.panic("a message reached the worker pool from no worker of it: {s}", .{message.text});
         }
     }
@@ -313,17 +313,17 @@ pub const WorkerPool = struct {
     // Adds a task to the pending queue and tries to dispatch it at once. When reply_id_json is given, the task responds to the
     // frontend's message with that id: its end is that message's reply, and no task-completed event is sent.
     //
-    pub fn addTask(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, task_id: []const u8, task_type: []const u8, source: []const u8, data_json: []const u8, priority: TaskPriority, reply_id_json: ?[]const u8) !void {
+    pub fn addTask(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ILog, task_id: []const u8, task_type: []const u8, source: []const u8, data_json: []const u8, priority: TaskPriority, reply_id_json: ?[]const u8) !void {
         if (self.is_shutting_down) {
             return error.ShuttingDown;
         }
-        _ = try self.addTaskWithParent(io, allocator, task_id, task_type, source, data_json, priority, reply_id_json, null);
+        _ = try self.addTaskWithParent(io, allocator, log, task_id, task_type, source, data_json, priority, reply_id_json, null);
     }
 
     //
     // Adds a task, which a worker's task queued when queued_by is given, and tries to dispatch it.
     //
-    fn addTaskWithParent(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, task_id: []const u8, task_type: []const u8, source: []const u8, data_json: []const u8, priority: TaskPriority, reply_id_json: ?[]const u8, queued_by: ?u32) !*PoolTask {
+    fn addTaskWithParent(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ILog, task_id: []const u8, task_type: []const u8, source: []const u8, data_json: []const u8, priority: TaskPriority, reply_id_json: ?[]const u8, queued_by: ?u32) !*PoolTask {
         const task = try allocator.create(PoolTask);
         errdefer allocator.destroy(task);
         task.* = .{
@@ -356,10 +356,10 @@ pub const WorkerPool = struct {
                 continue;
             };
             if (std.mem.eql(u8, registration.source, source)) {
-                registration.callback.call(allocator, task.id);
+                registration.callback.call(allocator, log, task.id);
             }
         }
-        self.tryDispatchPending(io, allocator);
+        self.tryDispatchPending(io, allocator, log);
         return task;
     }
 
@@ -405,9 +405,9 @@ pub const WorkerPool = struct {
     //
     // Tries to dispatch every pending task to an idle worker, in order.
     //
-    fn tryDispatchPending(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator) void {
+    fn tryDispatchPending(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ILog) void {
         while (self.pending_tasks.items.len > 0) {
-            if (!self.dispatchTask(io, allocator, self.pending_tasks.items[0])) {
+            if (!self.dispatchTask(io, allocator, log, self.pending_tasks.items[0])) {
                 break;
             }
             _ = self.pending_tasks.orderedRemove(0);
@@ -418,7 +418,7 @@ pub const WorkerPool = struct {
     // Sends a task to the idle worker that has run the fewest tasks. Returns false when no worker is idle, after starting one when
     // the pool has room for it and none is starting already.
     //
-    fn dispatchTask(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, task: *PoolTask) bool {
+    fn dispatchTask(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ILog, task: *PoolTask) bool {
         if (self.is_shutting_down) {
             return false;
         }
@@ -440,7 +440,7 @@ pub const WorkerPool = struct {
                     }
                 }
                 if (not_ready == 0) {
-                    self.createWorker(io, allocator) catch |err| {
+                    self.createWorker(io, allocator, log) catch |err| {
                         std.debug.panic("could not start a worker: {s}", .{@errorName(err)});
                     };
                 }
@@ -468,16 +468,16 @@ pub const WorkerPool = struct {
     //
     // Starts a worker, whose messages reach the pool through the main queue.
     //
-    fn createWorker(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator) !void {
+    fn createWorker(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ILog) !void {
         const id = self.next_worker_id;
         self.next_worker_id += 1;
         var arena_state = std.heap.ArenaAllocator.init(allocator);
         defer arena_state.deinit();
         var options = self.options.worker_options;
         options.workerId = id;
-        // A file log writes every line, whatever its console shows, so with one on this thread the worker sends its verbose and tool
-        // lines too, and the file log's console options decide what the console shows.
-        if (utils.file_log.FileLog.fromILog(utils.log.currentLog()) != null) {
+        // A log with a file writes every line, whatever its console shows, so when the main thread's log has one the worker sends its verbose and tool
+        // lines too, and the log's console options decide what the console shows.
+        if (log.logFilePath() != null) {
             options.verbose = true;
             options.tools = true;
         }
@@ -510,10 +510,10 @@ pub const WorkerPool = struct {
     //
     // Hands a message from the main queue to the worker that sent it. Returns false when no worker of the pool sent it.
     //
-    pub fn receive(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, message: Message) bool {
+    pub fn receive(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, log: ILog, message: Message) bool {
         for (self.workers.items) |state| {
             if (state.workerId == message.from) {
-                state.worker.receive(io, allocator, timers, message.text);
+                state.worker.receive(io, allocator, timers, log, message.text);
                 return true;
             }
         }
@@ -523,11 +523,11 @@ pub const WorkerPool = struct {
     //
     // The `onmessage` of every worker.
     //
-    fn onWorkerMessage(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, worker: *Worker, text: []const u8) void {
+    fn onWorkerMessage(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, log: ILog, worker: *Worker, text: []const u8) void {
         const self: *WorkerPool = @ptrCast(@alignCast(context.?));
         for (self.workers.items) |state| {
             if (state.worker == worker) {
-                self.handleWorkerMessage(io, allocator, timers, state, text);
+                self.handleWorkerMessage(io, allocator, timers, log, state, text);
                 return;
             }
         }
@@ -536,7 +536,7 @@ pub const WorkerPool = struct {
     //
     // Handles a message a worker sent (worker-ready, task-completed, task-message, log, queue-task and native-app-request).
     //
-    fn handleWorkerMessage(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, state: *IWorkerState, text: []const u8) void {
+    fn handleWorkerMessage(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, log: ILog, state: *IWorkerState, text: []const u8) void {
         var arena_state = std.heap.ArenaAllocator.init(allocator);
         defer arena_state.deinit();
         const arena = arena_state.allocator();
@@ -549,7 +549,7 @@ pub const WorkerPool = struct {
         if (std.mem.eql(u8, message_type, "worker-ready")) {
             state.isReady = true;
             state.isIdle = true;
-            self.tryDispatchPending(io, allocator);
+            self.tryDispatchPending(io, allocator, log);
             return;
         }
         if (std.mem.eql(u8, message_type, "task-completed")) {
@@ -563,8 +563,8 @@ pub const WorkerPool = struct {
             state.currentTask = null;
             state.tasksProcessed += 1;
             const completion = worker_lib.completionOf(arena, completed.result) catch @panic("out of memory reading a task's end");
-            self.finish(io, allocator, timers, task, completion);
-            self.tryDispatchPending(io, allocator);
+            self.finish(io, allocator, timers, log, task, completion);
+            self.tryDispatchPending(io, allocator, log);
             return;
         }
         if (std.mem.eql(u8, message_type, "task-message")) {
@@ -573,7 +573,7 @@ pub const WorkerPool = struct {
             };
             const message = parsed.object.get("message") orelse .null;
             const event_json = json.stringify(arena, message) catch @panic("out of memory reading a task's event");
-            self.taskSentEvent(io, allocator, timers, task, event_json, message);
+            self.taskSentEvent(io, allocator, timers, log, task, event_json, message);
             return;
         }
         if (std.mem.eql(u8, message_type, "log")) {
@@ -581,7 +581,7 @@ pub const WorkerPool = struct {
                 handler.write(handler.user_data, text);
             }
             else {
-                writeLog(arena, std.fmt.allocPrint(arena, "Worker {d}", .{state.workerId}) catch @panic("out of memory writing a log line"), text);
+                writeLog(arena, log, std.fmt.allocPrint(arena, "Worker {d}", .{state.workerId}) catch @panic("out of memory writing a log line"), text);
             }
             return;
         }
@@ -609,7 +609,7 @@ pub const WorkerPool = struct {
                 state.worker.postMessage(io, reply) catch @panic("out of memory cancelling a child task");
                 return;
             }
-            _ = self.addTaskWithParent(io, allocator, queued.taskId, queued.taskType, queued.source, data_json, task_runner.resolveTaskPriority(requested, parent_priority), null, state.workerId) catch @panic("out of memory queueing a child task");
+            _ = self.addTaskWithParent(io, allocator, log, queued.taskId, queued.taskType, queued.source, data_json, task_runner.resolveTaskPriority(requested, parent_priority), null, state.workerId) catch @panic("out of memory queueing a child task");
             return;
         }
         if (std.mem.eql(u8, message_type, "native-app-request")) {
@@ -641,7 +641,7 @@ pub const WorkerPool = struct {
             }
             state.worker.destroy(allocator);
             allocator.destroy(state);
-            self.tryDispatchPending(io, allocator);
+            self.tryDispatchPending(io, allocator, log);
             return;
         }
         std.debug.panic("a worker sent a message of an unknown type: {s}", .{text});
@@ -650,7 +650,7 @@ pub const WorkerPool = struct {
     //
     // A task sent an event: tells the frontend, then keeps a notice of it, then calls the IQueueBackend callbacks.
     //
-    fn taskSentEvent(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, task: *PoolTask, event_json: []const u8, event: std.json.Value) void {
+    fn taskSentEvent(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, log: ILog, task: *PoolTask, event_json: []const u8, event: std.json.Value) void {
         if (self.is_shutting_down) {
             return;
         }
@@ -696,7 +696,7 @@ pub const WorkerPool = struct {
             if (!std.mem.eql(u8, wanted, registration.callback.eventType)) {
                 continue;
             }
-            registration.callback.callback.call(io, allocator, timers, data) catch |err| {
+            registration.callback.callback.call(io, allocator, timers, log, data) catch |err| {
                 log.exception("Error in task event callback", err);
             };
         }
@@ -706,7 +706,7 @@ pub const WorkerPool = struct {
             const registration = registered(&self.any_event_callbacks, key) orelse {
                 continue;
             };
-            registration.callback.call(io, allocator, timers, data) catch |err| {
+            registration.callback.call(io, allocator, timers, log, data) catch |err| {
                 log.exception("Error in any task event callback", err);
             };
         }
@@ -717,7 +717,7 @@ pub const WorkerPool = struct {
     // queued it, and releases it. The timers are the owner's, which the callbacks are given, or null for a task that never started (a
     // pending task that is dropped), which has no callbacks to call.
     //
-    fn finish(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: ?timers_lib.Timers, task: *PoolTask, completion: Completion) void {
+    fn finish(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: ?timers_lib.Timers, log: ILog, task: *PoolTask, completion: Completion) void {
         defer destroyTask(allocator, task);
         if (!self.is_shutting_down) {
             if (self.options.sink) |sink| {
@@ -746,7 +746,7 @@ pub const WorkerPool = struct {
                 const given = timers orelse {
                     std.debug.panic("a task that started ended where no timers were given: {s}", .{task.id});
                 };
-                self.notifyCompletionCallbacks(io, allocator, given, task, completion);
+                self.notifyCompletionCallbacks(io, allocator, given, log, task, completion);
             }
         }
         if (task.keep_alive) {
@@ -772,7 +772,7 @@ pub const WorkerPool = struct {
     //
     // Invokes the IQueueBackend completion callbacks with the task's result, as ITaskResult lays it out. Callback errors are logged.
     //
-    fn notifyCompletionCallbacks(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, task: *PoolTask, completion: Completion) void {
+    fn notifyCompletionCallbacks(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, log: ILog, task: *PoolTask, completion: Completion) void {
         if (self.completion_callbacks.items.len == 0) {
             return;
         }
@@ -789,7 +789,7 @@ pub const WorkerPool = struct {
             const registration = registered(&self.completion_callbacks, key) orelse {
                 continue;
             };
-            registration.callback.call(io, allocator, timers, decoded.result) catch |err| {
+            registration.callback.call(io, allocator, timers, log, decoded.result) catch |err| {
                 log.exception("Error in task completion callback", err);
             };
         }
@@ -813,7 +813,7 @@ pub const WorkerPool = struct {
     // Drops the pending tasks of the source, each ending as cancelled, tells every worker to cancel the running ones and fires the
     // callbacks registered for the source. Tasks queued under the source afterwards are not affected.
     //
-    pub fn cancelSource(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+    pub fn cancelSource(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ILog, source: []const u8) void {
         var index: usize = 0;
         while (index < self.pending_tasks.items.len) {
             const task = self.pending_tasks.items[index];
@@ -822,7 +822,7 @@ pub const WorkerPool = struct {
                 continue;
             }
             _ = self.pending_tasks.orderedRemove(index);
-            self.finish(io, allocator, null, task, .{
+            self.finish(io, allocator, null, log, task, .{
                 .status = .cancelled,
                 .result_json = null,
                 .error_message = null,
@@ -869,11 +869,11 @@ pub const WorkerPool = struct {
     // to cancel, and the pool reads the main queue until each has ended. A message on the main queue from anyone but a worker is
     // handed to `other`, or freed when it is null. Then every worker is sent "shutdown" and the pool waits for its thread to end.
     //
-    pub fn shutdown(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, other: ?OtherMessageHandler) void {
+    pub fn shutdown(self: *WorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, log: ILog, other: ?OtherMessageHandler) void {
         self.is_shutting_down = true;
         while (self.pending_tasks.items.len > 0) {
             const task = self.pending_tasks.orderedRemove(0);
-            self.finish(io, allocator, null, task, .{
+            self.finish(io, allocator, null, log, task, .{
                 .status = .cancelled,
                 .result_json = null,
                 .error_message = null,
@@ -896,7 +896,7 @@ pub const WorkerPool = struct {
                 break;
             };
             defer allocator.free(message.text);
-            if (self.receive(io, allocator, timers, message)) {
+            if (self.receive(io, allocator, timers, log, message)) {
                 continue;
             }
             if (other) |handler| {
@@ -976,7 +976,7 @@ pub const WorkerPool = struct {
     // Adds a task from the main thread's own code and returns its id (allocated with the allocator, the main thread's). It runs at
     // the priority passed, or at the default (background).
     //
-    fn addTaskFromBackend(self: *WorkerPool, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?qtypes.TaskPriority) ![]const u8 {
+    fn addTaskFromBackend(self: *WorkerPool, allocator: std.mem.Allocator, io: std.Io, log: ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?qtypes.TaskPriority) ![]const u8 {
         if (self.is_shutting_down) {
             return error.ShuttingDown;
         }
@@ -988,7 +988,7 @@ pub const WorkerPool = struct {
             .Interactive => .interactive,
             .Background => .background,
         } else .background;
-        _ = try self.addTaskWithParent(io, allocator, id, @"type", source, data_json, resolved, null, null);
+        _ = try self.addTaskWithParent(io, allocator, log, id, @"type", source, data_json, resolved, null, null);
         return id;
     }
 
@@ -1040,9 +1040,9 @@ pub const WorkerPool = struct {
     //
     // The IQueueBackend addTask of this pool.
     //
-    fn addTaskErased(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?qtypes.TaskPriority) anyerror![]const u8 {
+    fn addTaskErased(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?qtypes.TaskPriority) anyerror![]const u8 {
         const self: *WorkerPool = @ptrCast(@alignCast(ptr));
-        return self.addTaskFromBackend(allocator, io, @"type", data, source, taskId, priority);
+        return self.addTaskFromBackend(allocator, io, log, @"type", data, source, taskId, priority);
     }
 
     //
@@ -1083,9 +1083,9 @@ pub const WorkerPool = struct {
     //
     // The IQueueBackend cancelTasks of this pool.
     //
-    fn cancelTasksErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+    fn cancelTasksErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ILog, source: []const u8) void {
         const self: *WorkerPool = @ptrCast(@alignCast(ptr));
-        self.cancelSource(io, allocator, source);
+        self.cancelSource(io, allocator, log, source);
     }
 
     //
@@ -1109,9 +1109,9 @@ pub const WorkerPool = struct {
     // The IQueueBackend waitForMessage of this pool: reads the next worker message, or runs the timers that are due (see
     // waitForWorkerMessage).
     //
-    fn waitForMessageErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers) void {
+    fn waitForMessageErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: timers_lib.Timers, log: ILog) void {
         const self: *WorkerPool = @ptrCast(@alignCast(ptr));
-        self.waitForWorkerMessage(io, allocator, timers);
+        self.waitForWorkerMessage(io, allocator, timers, log);
     }
 };
 
@@ -1126,9 +1126,37 @@ pub const OtherMessageHandler = struct {
 };
 
 //
-// Writes a worker's log line to the main thread's log, tagged with the source given, such as `Worker 2` (see `file_log.writeFrom`).
+// Writes a line that came from another thread or the page to the log given, the main thread's, through its ordinary functions with
+// `[source] ` in front of it, such as `[Worker 2] `. An exception becomes one error line with its error text under it, as the log of
+// the thread the line came from would write it, so the cause is not a second error. The arena is for building the line.
 //
-pub fn writeLog(arena: std.mem.Allocator, source: []const u8, text: []const u8) void {
+pub fn writeTaggedLine(arena: std.mem.Allocator, log: ILog, source: []const u8, line: utils.log.ILogLine) void {
+    const tagged = std.fmt.allocPrint(arena, "[{s}] {s}", .{ source, line.message }) catch @panic("out of memory writing a log line");
+    switch (line.level) {
+        .info => log.info(tagged),
+        .verbose => log.verbose(tagged),
+        .@"error" => log.@"error"(tagged),
+        .exception => if (line.error_text) |details| {
+            log.@"error"(std.fmt.allocPrint(arena, "{s}\n{s}", .{ tagged, details }) catch @panic("out of memory writing a log line"));
+        }
+        else {
+            log.@"error"(tagged);
+        },
+        .warn => log.warn(tagged),
+        .debug => log.debug(tagged),
+        .tool => log.tool(tagged, line.tool_output orelse .{
+            .stdout = null,
+            .stderr = null,
+        }),
+        .event => log.event(tagged),
+    }
+}
+
+//
+// Writes a worker's log line to the log given, the main thread's, tagged with the source given, such as `Worker 2` (see
+// writeTaggedLine).
+//
+pub fn writeLog(arena: std.mem.Allocator, log: ILog, source: []const u8, text: []const u8) void {
     const message = worker_messages.decode(worker_messages.IWorkerLogMessage, arena, text) catch |err| {
         std.debug.panic("could not read a worker's log message ({s}): {s}", .{ @errorName(err), text });
     };
@@ -1139,7 +1167,7 @@ pub fn writeLog(arena: std.mem.Allocator, source: []const u8, text: []const u8) 
             .stderr = data.stderr,
         };
     }
-    utils.file_log.writeFrom(arena, source, .{
+    writeTaggedLine(arena, log, source, .{
         .level = message.level,
         .message = message.message,
         .error_text = message.@"error",

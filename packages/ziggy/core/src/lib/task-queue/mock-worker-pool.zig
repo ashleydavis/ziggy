@@ -18,6 +18,7 @@ const utils = @import("utils.zig");
 const IQueueBackend = queue_backend.IQueueBackend;
 const Timers = @import("../timers.zig").Timers;
 const errors = utils.errors;
+const ILog = utils.log.ILog;
 
 //
 // The parts of the task context shared by every task.
@@ -73,11 +74,11 @@ pub const MockWorkerPool = struct {
     // Waits for the queued and running tasks to finish, running the owning thread's timers as they come due, stops the workers and frees
     // the pool.
     //
-    pub fn deinit(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+    pub fn deinit(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog) void {
         while (self.pool.isBusy()) {
-            self.waitForMessage(io, allocator, timers);
+            self.waitForMessage(io, allocator, timers, log);
         }
-        self.pool.shutdown(io, allocator, timers, null);
+        self.pool.shutdown(io, allocator, timers, log, null);
         self.queue.deinit();
         allocator.destroy(self);
     }
@@ -92,17 +93,17 @@ pub const MockWorkerPool = struct {
     //
     // Reads the next message a worker sent and handles it, or runs the owning thread's timers that are due when one comes due first.
     //
-    pub fn waitForMessage(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
-        self.pool.waitForWorkerMessage(io, allocator, timers);
+    pub fn waitForMessage(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog) void {
+        self.pool.waitForWorkerMessage(io, allocator, timers, log);
     }
 
     //
     // Handles every message the workers have sent so far, without waiting for more.
     //
-    pub fn handleQueuedMessages(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+    pub fn handleQueuedMessages(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog) void {
         while (self.queue.tryTake(io, allocator)) |message| {
             defer allocator.free(message.text);
-            if (!self.pool.receive(io, allocator, timers, message)) {
+            if (!self.pool.receive(io, allocator, timers, log, message)) {
                 std.debug.panic("a message reached the mock worker pool from no worker of it: {s}", .{message.text});
             }
         }
@@ -122,8 +123,8 @@ pub const MockWorkerPool = struct {
     //
     // Marks the source as cancelled: drops its pending tasks and tells the running ones to stop.
     //
-    pub fn cancelTasks(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
-        self.pool.cancelSource(io, allocator, source);
+    pub fn cancelTasks(self: *MockWorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ILog, source: []const u8) void {
+        self.pool.cancelSource(io, allocator, log, source);
     }
 };
 

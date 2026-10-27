@@ -296,6 +296,15 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
         config.test_mode = true;
         config.test_port_file = c.g_getenv("ZIGGY_TEST_PORT_FILE");
     }
+    // The command-line arguments after the program's name, which the core copies, for the app to read its own options from.
+    const app_args = native_app.args[@min(native_app.args.len, 1)..];
+    const argument_pointers = try std.heap.c_allocator.alloc([*:0]const u8, app_args.len);
+    defer std.heap.c_allocator.free(argument_pointers);
+    for (app_args, argument_pointers) |argument, *pointer| {
+        pointer.* = argument.ptr;
+    }
+    config.arg_count = @intCast(argument_pointers.len);
+    config.args = @ptrCast(argument_pointers.ptr);
     native_app.core = z.ziggy_create(&config) orelse {
         return error.CoreCreateFailed;
     };

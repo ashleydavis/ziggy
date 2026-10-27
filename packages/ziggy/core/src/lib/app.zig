@@ -52,8 +52,9 @@ pub const RegisteredApp = struct {
     // first render already holds what the app tells it at start-up. Null for an app whose frontend needs no query. See `UiQuery`.
     ui_query: ?UiQuery = null,
     // Called once on the main thread when it starts, before any message or task can reach the app, so the app can make what its
-    // handlers and tasks need. An error stops the main thread, after it has released what it made, and the core's start fails with
-    // that error. Null for an app with nothing to do then. The counterpart of `on_destroy`.
+    // handlers and tasks need, and configure its log (`HandlerServices.configureLog`) from its command line. An error stops the main
+    // thread, after it has released what it made, and the core's start fails with that error. Null for an app with nothing to do then.
+    // The counterpart of `on_destroy`.
     on_create: ?OnCreate = null,
     // Called twice on the main thread while it stops: with `.before_tasks_stop` while tasks can still be queued, so the app can stop
     // its own threads, and with `.after_tasks_stopped` once every task has ended, so the app can free its own resources. The main
@@ -72,9 +73,11 @@ pub const RegisteredApp = struct {
 };
 
 //
-// The app's function called when the main thread starts (see `RegisteredApp.on_create`), with the standard arguments of a handler.
+// The app's function called when the main thread starts (see `RegisteredApp.on_create`), with the standard arguments of a handler
+// and the native app's command-line arguments after the program's name, which are empty on a platform with no command line (Android,
+// iOS) and valid only during the call.
 //
-pub const OnCreate = *const fn (services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void;
+pub const OnCreate = *const fn (services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void;
 
 //
 // The app's function called while the main thread stops (see `RegisteredApp.on_destroy`), with the standard arguments of a handler

@@ -263,9 +263,9 @@ test "a line the frontend logs reaches the test app's log files tagged Frontend"
     const errors_written = try readLogFile(std.testing.allocator, data_dir, true);
     defer std.testing.allocator.free(errors_written);
     try std.testing.expect(std.mem.indexOf(u8, written, "] [INFO] [Frontend] the page opened\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, written, "] [EXCEPTION] [Frontend] the page failed\nError: at line 4\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [EXCEPTION] [Frontend] the page failed\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, written, "] [TOOL] [Frontend] == magick stdout ==\nconverted\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [ERROR] [Frontend] the page failed\nError: at line 4\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [ERROR] [Frontend] the page failed\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [TOOL] == [Frontend] magick stdout ==\nconverted\n") != null);
 }
 
 test "a line the frontend logs at a level the core does not know is a core-error event" {
@@ -783,4 +783,22 @@ test "the media server serves the image whole, the video by range, and stops whe
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"cancel-tasks\",\"data\":\"media\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "task-completed");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"errorMessage\":\"Cancelled\"");
+}
+
+test "no log option on the command line turns on no lines" {
+    const options = template.handlers.logOptions(&.{"-geometry=800x600"});
+    try std.testing.expect(!options.verbose);
+    try std.testing.expect(!options.debug);
+    try std.testing.expect(!options.tools);
+}
+
+test "--verbose, --debug and --tools each turn on their lines" {
+    const verbose = template.handlers.logOptions(&.{"--verbose"});
+    try std.testing.expect(verbose.verbose);
+    try std.testing.expect(!verbose.debug);
+    try std.testing.expect(!verbose.tools);
+    const all = template.handlers.logOptions(&.{ "--tools", "-geometry=800x600", "--debug", "--verbose" });
+    try std.testing.expect(all.verbose);
+    try std.testing.expect(all.debug);
+    try std.testing.expect(all.tools);
 }

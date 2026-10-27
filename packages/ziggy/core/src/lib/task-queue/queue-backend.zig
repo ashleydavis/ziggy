@@ -43,7 +43,7 @@ pub const IQueueBackend = struct {
     //
     pub const VTable = struct {
         // Adds a task to the backend. Returns the task ID (allocated with allocator).
-        addTask: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8,
+        addTask: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: utils.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8,
 
         // Registers a callback that fires whenever a task with the given source is added.
         onTaskAdded: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, source: []const u8, callback: TaskAddedCallback) anyerror!UnsubscribeFn,
@@ -58,7 +58,7 @@ pub const IQueueBackend = struct {
         onAnyTaskEvent: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, callback: TaskEventCallback) anyerror!UnsubscribeFn,
 
         // Signals running tasks with the given source to cancel and drops pending tasks with that source.
-        cancelTasks: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void,
+        cancelTasks: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, source: []const u8) void,
 
         // Registers a callback that fires when cancelTasks is called for the given source.
         onTasksCancelled: *const fn (ptr: *anyopaque, allocator: std.mem.Allocator, source: []const u8, callback: TasksCancelledCallback) anyerror!UnsubscribeFn,
@@ -68,7 +68,7 @@ pub const IQueueBackend = struct {
 
         // Reads the thread's next message, waiting for one no longer than until the thread's next timer is due, and runs the timers
         // that are due, so the callbacks of a task that ended or sent an event fire.
-        waitForMessage: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void,
+        waitForMessage: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: utils.log.ILog) void,
     };
 
     //
@@ -83,8 +83,8 @@ pub const IQueueBackend = struct {
     //
     // The backend copies `data` (it only has to be valid during the call).
     //
-    pub fn addTask(self: IQueueBackend, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
-        return self.vtable.addTask(self.ptr, allocator, io, @"type", data, source, taskId, priority);
+    pub fn addTask(self: IQueueBackend, allocator: std.mem.Allocator, io: std.Io, log: utils.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
+        return self.vtable.addTask(self.ptr, allocator, io, log, @"type", data, source, taskId, priority);
     }
 
     //
@@ -123,8 +123,8 @@ pub const IQueueBackend = struct {
     // Signals running tasks with the given source to cancel and drops any pending
     // tasks with that source from the queue.
     //
-    pub fn cancelTasks(self: IQueueBackend, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
-        self.vtable.cancelTasks(self.ptr, io, allocator, source);
+    pub fn cancelTasks(self: IQueueBackend, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, source: []const u8) void {
+        self.vtable.cancelTasks(self.ptr, io, allocator, log, source);
     }
 
     //
@@ -146,8 +146,8 @@ pub const IQueueBackend = struct {
     // Reads the thread's next message, waiting for one no longer than until the thread's next timer is due, and runs the timers that
     // are due, so the callbacks of a task that ended or sent an event fire. A TaskQueue waits for its tasks with it.
     //
-    pub fn waitForMessage(self: IQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
-        self.vtable.waitForMessage(self.ptr, io, allocator, timers);
+    pub fn waitForMessage(self: IQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: utils.log.ILog) void {
+        self.vtable.waitForMessage(self.ptr, io, allocator, timers, log);
     }
 };
 

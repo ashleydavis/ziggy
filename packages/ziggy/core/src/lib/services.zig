@@ -16,6 +16,8 @@ const errors = @import("task-queue.zig").utils.errors;
 const native_app = @import("native-app.zig");
 const worker_messages = @import("worker-messages.zig");
 const MessageQueue = @import("message-queue.zig").MessageQueue;
+const ILog = @import("task-queue.zig").utils.log.ILog;
+const ILogOptions = @import("task-queue.zig").utils.log.ILogOptions;
 
 //
 // How a thread of the app's own (a server, for one) reaches the native app itself: by sending the frontend an event and by native
@@ -103,6 +105,9 @@ pub const HandlerServices = struct {
     ptr: *anyopaque,
     // The implementation's functions.
     vtable: *const VTable,
+    // The main thread's log, which a handler, a menu item's function or an app function writes to: the app's file log for the whole run,
+    // or the console log for an app without one.
+    log: ILog,
 
     //
     // The functions behind the interface.
@@ -117,6 +122,7 @@ pub const HandlerServices = struct {
         dataDir: *const fn (ptr: *anyopaque) []const u8,
         isPhone: *const fn (ptr: *anyopaque) bool,
         nativeCallbacks: *const fn (ptr: *anyopaque) NativeCallbacks,
+        configureLog: *const fn (ptr: *anyopaque, options: ILogOptions) anyerror!void,
     };
 
     //
@@ -184,6 +190,15 @@ pub const HandlerServices = struct {
     //
     pub fn isPhone(self: HandlerServices) bool {
         return self.vtable.isPhone(self.ptr);
+    }
+
+    //
+    // Sets which lines the main thread's log shows on the console, from the options the app read from its own arguments. Optional: a
+    // log never configured shows no verbose, debug or tool lines. The log file gets every line either way. An app calls it once, as
+    // early as it can, which is its `on_create`; a second call fails with error.LogAlreadyConfigured.
+    //
+    pub fn configureLog(self: HandlerServices, options: ILogOptions) !void {
+        try self.vtable.configureLog(self.ptr, options);
     }
 };
 

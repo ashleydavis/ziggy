@@ -61,13 +61,12 @@ fn parentOfEchoTask(services: TaskServices, timers: Timers, io: std.Io, allocato
 // Writes a line to its worker's log and one to its worker's console, which reach the main thread's output.
 //
 fn logTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
-    _ = services;
     _ = timers;
     _ = io;
     _ = allocator;
     _ = context;
     _ = payload;
-    utils.log.log.info("logged on a worker");
+    services.log.info("logged on a worker");
     utils.console.@"error"("written to a worker's console");
 }
 
@@ -75,27 +74,25 @@ fn logTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.me
 // Logs an error with its cause on its worker's log.
 //
 fn logExceptionTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
-    _ = services;
     _ = timers;
     _ = io;
     _ = allocator;
     _ = context;
     _ = payload;
-    utils.log.log.exception("failed on a worker", error.Boom);
+    services.log.exception("failed on a worker", error.Boom);
 }
 
 //
 // Logs a verbose line and the output of a tool on its worker's log.
 //
 fn logDetailTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
-    _ = services;
     _ = timers;
     _ = io;
     _ = allocator;
     _ = context;
     _ = payload;
-    utils.log.log.verbose("verbose on a worker");
-    utils.log.log.tool("magick", .{
+    services.log.verbose("verbose on a worker");
+    services.log.tool("magick", .{
         .stdout = "tool output on a worker",
         .stderr = null,
     });
@@ -148,8 +145,11 @@ const Fixture = struct {
     pool: WorkerPool,
     // Every message the pool sent the frontend, and every line the observer was given, in order.
     seen: std.ArrayList([]u8),
+    // The log the test gives the pool as the main thread's, where the workers' lines are written.
+    log: utils.log.ILog,
 
-    fn init(self: *Fixture, workers: u32, native: bool) void {
+    fn init(self: *Fixture, workers: u32, native: bool, log: utils.log.ILog) void {
+        self.log = log;
         self.queue = MessageQueue.init();
         self.seen = .empty;
         self.pool = WorkerPool.init(&self.queue, .{
@@ -174,7 +174,7 @@ const Fixture = struct {
     }
 
     fn deinit(self: *Fixture, timers: Timers) void {
-        self.pool.shutdown(std.testing.io, std.testing.allocator, timers, null);
+        self.pool.shutdown(std.testing.io, std.testing.allocator, timers, self.log, null);
         self.queue.deinit();
         for (self.seen.items) |text| {
             std.testing.allocator.free(text);
@@ -197,7 +197,7 @@ const Fixture = struct {
     // worker of the pool sent it.
     //
     fn receive(self: *Fixture, timers: Timers, message: ziggy.message_queue.Message) bool {
-        const received = self.pool.receive(std.testing.io, std.testing.allocator, timers, message);
+        const received = self.pool.receive(std.testing.io, std.testing.allocator, timers, self.log, message);
         self.takeNotices();
         return received;
     }
@@ -275,21 +275,23 @@ const Fixture = struct {
 };
 
 test "a task sent to a worker ends, and the frontend and the observer are told how" {
+    const console_log = utils.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, console_log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "t1", "echo", "s", "{\"a\":1}", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "t1", "echo", "s", "{\"a\":1}", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|t1|echo|succeeded|started=true");
     try std.testing.expect(fixture.indexOf("{\"kind\":\"system\",\"name\":\"task-completed\",\"data\":{\"taskId\":\"t1\",\"result\":{\"taskId\":\"t1\",\"status\":\"succeeded\",\"outputs\":{\"a\":1},\"type\":\"echo\",\"inputs\":{\"a\":1}}}}") != null);
 }
 
 test "a task's event reaches the frontend, then the observer" {
+    const console_log = utils.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, console_log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "t1", "echo", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "t1", "echo", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|t1|echo|succeeded");
     const frontend = fixture.indexOf("{\"kind\":\"system\",\"name\":\"task-event\",\"data\":{\"taskId\":\"t1\",\"source\":\"s\",\"data\":{\"type\":\"note\"}}}") orelse return error.NotSeen;
     const observer = fixture.indexOf("event|t1|{\"type\":\"note\"}") orelse return error.NotSeen;
@@ -297,31 +299,39 @@ test "a task's event reaches the frontend, then the observer" {
 }
 
 test "a task that replies to a message ends as that message's reply" {
+    const console_log = utils.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, console_log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "r1", "echo", "request", "\"hi\"", .interactive, "7");
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "r1", "echo", "request", "\"hi\"", .interactive, "7");
     try fixture.waitFor(timer_list.interface(), "end|r1|echo|succeeded");
     try std.testing.expect(fixture.indexOf("{\"id\":7,\"ok\":true,\"data\":\"hi\"}") != null);
     try std.testing.expect(fixture.indexOf("\"name\":\"task-completed\"") == null);
 }
 
 test "a worker's log lines and console lines reach the main thread's output" {
+    // The test's thread is the pool's main thread, so the workers' log lines are written to this log.
+    const memory = try utils.memory_log.MemoryLog.init(std.testing.allocator, .{
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    });
+    defer memory.deinit();
     var stdout_buffer: [4096]u8 = undefined;
     var stderr_buffer: [4096]u8 = undefined;
     var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
     var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
-    // The test's thread is the pool's main thread, so the capture of its console is where the workers' lines are written.
+    // The capture of the main thread's console is where the workers' console lines are written.
     utils.console.setCapture(&stdout_capture, &stderr_capture);
     defer utils.console.setCapture(null, null);
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, memory.log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "l1", "log", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "l1", "log", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|l1|log|succeeded");
-    try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "[Worker 1] logged on a worker\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, memory.stdout(), "[Worker 1] logged on a worker\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, stderr_capture.buffered(), "written to a worker's console") != null);
 }
 
@@ -337,7 +347,6 @@ test "with a file log on the main thread, a worker's lines reach the log file ta
     const allocator = std.testing.allocator;
     const logs_dir = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/logs", .{&tmp.sub_path});
     defer allocator.free(logs_dir);
-    // The test's thread is the pool's main thread, so its file log is where the workers' lines are written.
     const logger = try utils.file_log.FileLog.start(allocator, std.testing.io, .{
         .file_prefix = "pool-test",
         .title = "Pool Test Log",
@@ -352,23 +361,23 @@ test "with a file log on the main thread, a worker's lines reach the log file ta
     defer logger.stop(allocator, std.testing.io);
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, logger.ilog());
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "l1", "log", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "l1", "log", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|l1|log|succeeded");
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "x1", "log-exception", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "x1", "log-exception", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|x1|log-exception|succeeded");
     const written = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, logger.getLogFilePath(), allocator, .limited(1024 * 1024));
     defer allocator.free(written);
     const errors_written = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, logger.getErrorLogFilePath(), allocator, .limited(1024 * 1024));
     defer allocator.free(errors_written);
     try std.testing.expect(std.mem.indexOf(u8, written, "] [INFO] [Worker 1] logged on a worker\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, written, "] [EXCEPTION] [Worker 1] failed on a worker\nError: Boom\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [EXCEPTION] [Worker 1] failed on a worker\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [ERROR] [Worker 1] failed on a worker\nError: Boom\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [ERROR] [Worker 1] failed on a worker\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "[Worker 1] logged on a worker\n") != null);
 }
 
-test "a worker started with a file log on the main thread sends its verbose and tool lines, which reach the file and not the console" {
+test "a worker started while the main thread's log passes its lines to a file log sends its verbose and tool lines, which reach the file and not the console" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var stdout_buffer: [4096]u8 = undefined;
@@ -394,14 +403,15 @@ test "a worker started with a file log on the main thread sends its verbose and 
     defer logger.stop(allocator, std.testing.io);
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    // The main thread's log is the file log, as Ziggy's main thread's is for an app with a name.
+    fixture.init(1, false, logger.ilog());
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "d1", "log-detail", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "d1", "log-detail", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|d1|log-detail|succeeded");
     const written = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, logger.getLogFilePath(), allocator, .limited(1024 * 1024));
     defer allocator.free(written);
     try std.testing.expect(std.mem.indexOf(u8, written, "] [VERBOSE] [Worker 1] verbose on a worker\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, written, "] [TOOL] [Worker 1] == magick stdout ==\ntool output on a worker\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [TOOL] == [Worker 1] magick stdout ==\ntool output on a worker\n") != null);
     try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "verbose on a worker") == null);
     try std.testing.expect(std.mem.indexOf(u8, stdout_capture.buffered(), "tool output on a worker") == null);
 }
@@ -415,19 +425,17 @@ test "a worker started with no file log on the main thread sends no verbose or t
     defer utils.console.setCapture(null, null);
     var recording: ErrorRecordingLog = .{};
     defer recording.deinit();
-    utils.log.setLog(recording.ilog());
-    defer utils.log.setLog(null);
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, recording.ilog());
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "d1", "log-detail", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "d1", "log-detail", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|d1|log-detail|succeeded");
     try std.testing.expectEqual(@as(usize, 0), recording.others);
 }
 
 //
-// A log that records each error line it is given, for the test's thread to set as its own (test-only code).
+// A log that records each error line it is given, for a test to give the pool as the main thread's log.
 //
 const ErrorRecordingLog = struct {
     // Each error line, in order.
@@ -457,6 +465,7 @@ const ErrorRecordingLog = struct {
         .event = ignore,
         .verboseEnabled = verboseEnabled,
         .getLogDetails = getLogDetails,
+        .logFilePath = logFilePath,
     };
 
     fn ignore(ptr: *anyopaque, message: []const u8) void {
@@ -498,19 +507,21 @@ const ErrorRecordingLog = struct {
         _ = io;
         return utils.log.noLogDetails;
     }
+
+    fn logFilePath(ptr: *anyopaque) ?[]const u8 {
+        _ = ptr;
+        return null;
+    }
 };
 
 test "an error a worker logs with its cause reaches the main thread's log as one error line, with the cause under it" {
     var recording: ErrorRecordingLog = .{};
     defer recording.deinit();
-    // The test's thread is the pool's main thread, so its log is where the workers' lines are written.
-    utils.log.setLog(recording.ilog());
-    defer utils.log.setLog(null);
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, recording.ilog());
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "x1", "log-exception", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "x1", "log-exception", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|x1|log-exception|succeeded");
     try std.testing.expectEqual(@as(usize, 1), recording.errors.items.len);
     try std.testing.expect(std.mem.startsWith(u8, recording.errors.items[0], "[Worker 1] failed on a worker\n"));
@@ -518,69 +529,74 @@ test "an error a worker logs with its cause reaches the main thread's log as one
 }
 
 test "a task's request to the native app reaches the main thread's handler, and the task gets its response" {
+    const console_log = utils.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, true);
+    fixture.init(1, true, console_log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "o1", "os-version", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "o1", "os-version", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|o1|os-version|succeeded");
     try std.testing.expect(fixture.indexOf("\"type\":\"native-app-request\",\"requestId\":1,\"function\":\"os-version\"") != null);
     try std.testing.expect(fixture.indexOf("\"outputs\":\"Test OS 2\"") != null);
 }
 
 test "with no handler for the native app's requests, a task's request fails as NativeCallMissing" {
+    const console_log = utils.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, console_log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "p1", "pick", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "p1", "pick", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|p1|pick|failed");
     try std.testing.expect(fixture.indexOf("\"errorMessage\":\"NativeCallMissing\"") != null);
 }
 
 test "a child a task queues runs, and its end goes back to the worker of the task that queued it" {
+    const console_log = utils.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(2, false);
+    fixture.init(2, false, console_log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "p1", "parent-of-echo", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "p1", "parent-of-echo", "s", "null", .background, null);
     try fixture.waitFor(timer_list.interface(), "end|p1|parent-of-echo|succeeded");
     try std.testing.expect(fixture.indexOf("end|p1.c0|echo|succeeded") != null);
     try std.testing.expect(fixture.indexOf("\"taskId\":\"p1\",\"status\":\"succeeded\",\"outputs\":{\"from\":\"child\"}") != null);
 }
 
 test "cancelling a source ends its waiting tasks as cancelled without starting them, and stops its running ones" {
+    const console_log = utils.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, console_log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "running", "wait-for-cancel", "gone", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "running", "wait-for-cancel", "gone", "null", .background, null);
     // The worker is started for the first task, which it runs once it reports it is ready.
     while (fixture.pool.pending_tasks.items.len > 0) {
         const message = fixture.queue.take(std.testing.io, std.testing.allocator, .none).?;
         defer std.testing.allocator.free(message.text);
         _ = fixture.receive(timer_list.interface(), message);
     }
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "waiting", "echo", "gone", "null", .background, null);
-    fixture.pool.cancelSource(std.testing.io, std.testing.allocator, "gone");
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "waiting", "echo", "gone", "null", .background, null);
+    fixture.pool.cancelSource(std.testing.io, std.testing.allocator, console_log, "gone");
     fixture.takeNotices();
     try std.testing.expect(fixture.indexOf("end|waiting|echo|cancelled|started=false") != null);
     try fixture.waitFor(timer_list.interface(), "end|running|wait-for-cancel|cancelled|started=true");
 }
 
 test "cancelling a task that waits on a child stops the child, and then the task" {
+    const console_log = utils.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(2, false);
+    fixture.init(2, false, console_log);
     defer fixture.deinit(timer_list.interface());
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "p1", "parent-of-waiter", "family", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "p1", "parent-of-waiter", "family", "null", .background, null);
     // The child is running once a second worker has been started for it and has taken it.
     while (fixture.pool.pending_tasks.items.len > 0 or fixture.pool.workers.items.len < 2) {
         const message = fixture.queue.take(std.testing.io, std.testing.allocator, .none).?;
         defer std.testing.allocator.free(message.text);
         _ = fixture.receive(timer_list.interface(), message);
     }
-    fixture.pool.cancelSource(std.testing.io, std.testing.allocator, "family");
+    fixture.pool.cancelSource(std.testing.io, std.testing.allocator, console_log, "family");
     fixture.takeNotices();
     try fixture.waitFor(timer_list.interface(), "end|p1|parent-of-waiter|cancelled");
     const child = fixture.indexOf("end|p1.c0|wait-for-cancel|cancelled") orelse return error.NotSeen;
@@ -589,14 +605,15 @@ test "cancelling a task that waits on a child stops the child, and then the task
 }
 
 test "shutting the pool down stops the tasks still running and ends every worker" {
+    const console_log = utils.mute_log.MuteLog.init();
     // The testing allocator fails the test if a worker or a task is left unfreed, and shutdown returns only once every worker's
     // thread has ended.
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(3, false);
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "a", "wait-for-cancel", "a", "null", .background, null);
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "b", "wait-for-cancel", "b", "null", .background, null);
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "c", "echo", "c", "null", .background, null);
+    fixture.init(3, false, console_log);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "a", "wait-for-cancel", "a", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "b", "wait-for-cancel", "b", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "c", "echo", "c", "null", .background, null);
     while (fixture.pool.workers.items.len < 2) {
         const message = fixture.queue.take(std.testing.io, std.testing.allocator, .none).?;
         defer std.testing.allocator.free(message.text);
@@ -606,6 +623,12 @@ test "shutting the pool down stops the tasks still running and ends every worker
 }
 
 test "a worker that cannot start reports why and ends, and the pool logs it and lets it go, leaving its task waiting" {
+    const memory = try utils.memory_log.MemoryLog.init(std.testing.allocator, .{
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    });
+    defer memory.deinit();
     const allocator = std.testing.allocator;
     const io = std.testing.io;
     // The test generator of uuids keeps its counter in TEST_TMP_DIR. Below a file that directory cannot be made, so a worker that
@@ -624,27 +647,21 @@ test "a worker that cannot start reports why and ends, and the pool logs it and 
     try environment.put("TEST_TMP_DIR", test_tmp_dir);
     utils.process_env.setEnvironMap(&environment);
     defer utils.process_env.setEnvironMap(null);
-    var stdout_buffer: [4096]u8 = undefined;
-    var stderr_buffer: [4096]u8 = undefined;
-    var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
-    var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
-    utils.console.setCapture(&stdout_capture, &stderr_capture);
-    defer utils.console.setCapture(null, null);
 
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
-    fixture.init(1, false);
+    fixture.init(1, false, memory.log);
     defer fixture.deinit(timer_list.interface());
     // No session id, so the worker makes its own.
     fixture.pool.options.worker_options.sessionId = "";
-    try fixture.pool.addTask(std.testing.io, std.testing.allocator, "t1", "echo", "s", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "t1", "echo", "s", "null", .background, null);
     // A worker that cannot start is followed by another for the waiting task, which cannot start either, so messages keep coming and
     // the wait has a deadline of its own.
     const deadline = std.Io.Clock.Timestamp.fromNow(io, .{
         .raw = .fromMilliseconds(10_000),
         .clock = .awake,
     });
-    while (std.mem.indexOf(u8, stderr_capture.buffered(), "Worker 1 could not start: ") == null) {
+    while (std.mem.indexOf(u8, memory.stderr(), "Worker 1 could not start: ") == null) {
         const message = fixture.queue.take(std.testing.io, std.testing.allocator, .{ .deadline = deadline }) orelse return error.TimedOut;
         defer std.testing.allocator.free(message.text);
         _ = fixture.receive(timer_list.interface(), message);
@@ -656,3 +673,94 @@ test "a worker that cannot start reports why and ends, and the pool logs it and 
     }
     try std.testing.expect(fixture.indexOf("end|t1") == null);
 }
+
+//
+// A log that keeps the last error line it was given.
+//
+const LastErrorLog = struct {
+    // The last error line, in a buffer of its own.
+    buffer: [256]u8 = undefined,
+    // How much of the buffer the last error line fills.
+    length: usize = 0,
+
+    //
+    // Gets the ILog interface for this log.
+    //
+    fn ilog(self: *LastErrorLog) utils.log.ILog {
+        return .{
+            .ptr = self,
+            .vtable = &vtable,
+        };
+    }
+
+    //
+    // The ILog functions of this log: only an error line is kept.
+    //
+    const vtable: utils.log.ILog.VTable = .{
+        .info = ignore,
+        .verbose = ignore,
+        .@"error" = keepError,
+        .exception = ignoreException,
+        .warn = ignore,
+        .debug = ignore,
+        .tool = ignoreTool,
+        .event = ignore,
+        .verboseEnabled = never,
+        .getLogDetails = noDetails,
+        .logFilePath = noLogFilePath,
+    };
+
+    fn ignore(ptr: *anyopaque, message: []const u8) void {
+        _ = ptr;
+        _ = message;
+    }
+
+    fn keepError(ptr: *anyopaque, message: []const u8) void {
+        const self: *LastErrorLog = @ptrCast(@alignCast(ptr));
+        @memcpy(self.buffer[0..message.len], message);
+        self.length = message.len;
+    }
+
+    fn ignoreException(ptr: *anyopaque, message: []const u8, err: anyerror) void {
+        _ = ptr;
+        _ = message;
+        _ = err catch {};
+    }
+
+    fn ignoreTool(ptr: *anyopaque, tool_name: []const u8, data: utils.log.IToolOutput) void {
+        _ = ptr;
+        _ = tool_name;
+        _ = data;
+    }
+
+    fn never(ptr: *anyopaque) bool {
+        _ = ptr;
+        return false;
+    }
+
+    fn noDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!utils.log.ILogDetails {
+        _ = ptr;
+        _ = allocator;
+        _ = io;
+        return utils.log.noLogDetails;
+    }
+
+    fn noLogFilePath(ptr: *anyopaque) ?[]const u8 {
+        _ = ptr;
+        return null;
+    }
+};
+
+test "writeTaggedLine gives a log the line with its source in front, and an exception as one error line with its cause" {
+    var last_error: LastErrorLog = .{};
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    ziggy.worker_pool.writeTaggedLine(arena_state.allocator(), last_error.ilog(), "Worker 4", .{
+        .level = .exception,
+        .message = "failed",
+        .error_text = "Error: Boom",
+        .tool_output = null,
+    });
+    try std.testing.expectEqualStrings("[Worker 4] failed\nError: Boom", last_error.buffer[0..last_error.length]);
+}
+

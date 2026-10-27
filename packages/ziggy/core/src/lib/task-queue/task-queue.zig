@@ -13,7 +13,7 @@ const TaskPriority = types.TaskPriority;
 const IQueueBackend = queue_backend.IQueueBackend;
 const getQueueBackend = queue_backend.getQueueBackend;
 const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
-const log = &utils.log.log;
+const ILog = utils.log.ILog;
 
 //
 // A caller waiting in awaitAllTasks.
@@ -79,7 +79,7 @@ const IAnyEventCallbackRegistration = struct {
 //
 // Zig threading model: a queue is used on the thread that created it, with the backend that thread registered. The backend fires the
 // queue's callbacks on that thread while the thread reads its messages, which awaitAllTasks and awaitTask do until what they wait for
-// has happened. Values passed to callbacks are only valid during the call. The queue keeps no Io, allocator or timers: each function
+// has happened. Values passed to callbacks are only valid during the call. The queue keeps no Io, allocator, timers or log: each function
 // is given the calling thread's, and everything the queue holds is allocated with the allocator of the thread that owns it.
 //
 pub const TaskQueue = struct {
@@ -197,9 +197,9 @@ pub const TaskQueue = struct {
     //
     // Shuts the queue down (if it is not already) and frees it.
     //
-    pub fn deinit(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, log: ILog) void {
         if (!self.isShutDown) {
-            self.shutdown(io, allocator);
+            self.shutdown(io, allocator, log);
         }
         self.release(allocator);
         allocator.destroy(self);
@@ -232,7 +232,7 @@ pub const TaskQueue = struct {
     //
     // Backend callback: a task with this queue's source was added.
     //
-    fn onBackendTaskAdded(context: ?*anyopaque, allocator: std.mem.Allocator, taskId: []const u8) void {
+    fn onBackendTaskAdded(context: ?*anyopaque, allocator: std.mem.Allocator, log: ILog, taskId: []const u8) void {
         const self: *TaskQueue = @ptrCast(@alignCast(context.?));
         const entry = self.trackedTaskIds.getOrPut(allocator, taskId) catch |err| {
             log.exception("Failed to track task", err);
@@ -251,23 +251,23 @@ pub const TaskQueue = struct {
     //
     // Backend callback: a task completed. The callbacks of a tracked task run now.
     //
-    fn onBackendTaskComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, result: ITaskResult) anyerror!void {
+    fn onBackendTaskComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, result: ITaskResult) anyerror!void {
         const self: *TaskQueue = @ptrCast(@alignCast(context.?));
         if (!self.trackedTaskIds.contains(result.taskId)) {
             return;
         }
-        try self.notifyCompletionCallbacks(io, allocator, timers, result);
+        try self.notifyCompletionCallbacks(io, allocator, timers, log, result);
     }
 
     //
     // Backend callback: a task sent an event. The callbacks of a tracked task run now.
     //
-    fn onBackendAnyTaskEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, sent: ITaskEventData) anyerror!void {
+    fn onBackendAnyTaskEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, sent: ITaskEventData) anyerror!void {
         const self: *TaskQueue = @ptrCast(@alignCast(context.?));
         if (!self.trackedTaskIds.contains(sent.taskId)) {
             return;
         }
-        try self.notifyEventCallbacks(io, allocator, timers, sent.taskId, sent.event);
+        try self.notifyEventCallbacks(io, allocator, timers, log, sent.taskId, sent.event);
     }
 
     //
@@ -300,9 +300,9 @@ pub const TaskQueue = struct {
     // Adds a task to the queue to be executed. Returns the task ID (UUID), allocated with the allocator when the queue made it.
     // If taskId is provided (and not empty), it will be used instead of generating a new one.
     //
-    pub fn addTask(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, @"type": []const u8, data: std.json.Value, taskId: ?[]const u8, priority: ?TaskPriority) ![]const u8 {
+    pub fn addTask(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, log: ILog, @"type": []const u8, data: std.json.Value, taskId: ?[]const u8, priority: ?TaskPriority) ![]const u8 {
         const id = if (taskId != null and taskId.?.len > 0) taskId.? else try self.uuidGenerator.generate(allocator, io);
-        const backend_id = try self.backend.addTask(allocator, io, @"type", data, self.source, id, priority);
+        const backend_id = try self.backend.addTask(allocator, io, log, @"type", data, self.source, id, priority);
         allocator.free(backend_id);
         return id;
     }
@@ -402,13 +402,13 @@ pub const TaskQueue = struct {
     // callbacks for the completions and events that arrive meanwhile, and the thread's timers that come due.
     // Returns immediately if no tasks are in flight.
     //
-    pub fn awaitAllTasks(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers) !void {
+    pub fn awaitAllTasks(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog) !void {
         if (self.numTasksInFlight <= 0) {
             return;
         }
         var resolver: IAwaitAllResolver = .{ .resolved = false };
         try self.awaitAllResolvers.append(allocator, &resolver);
-        self.waitUntilResolved(io, allocator, timers, &resolver.resolved);
+        self.waitUntilResolved(io, allocator, timers, log, &resolver.resolved);
     }
 
     //
@@ -417,7 +417,7 @@ pub const TaskQueue = struct {
     // Returns null when the task ID is not tracked by this queue,
     // or when the queue is shut down / its tasks are cancelled before completion.
     //
-    pub fn awaitTask(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, taskId: []const u8) !?ITaskResult {
+    pub fn awaitTask(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, taskId: []const u8) !?ITaskResult {
         if (!self.trackedTaskIds.contains(taskId)) {
             return null;
         }
@@ -428,7 +428,7 @@ pub const TaskQueue = struct {
             .resolved = false,
         };
         try self.awaitTaskResolvers.append(allocator, &resolver);
-        self.waitUntilResolved(io, allocator, timers, &resolver.resolved);
+        self.waitUntilResolved(io, allocator, timers, log, &resolver.resolved);
         if (resolver.copyError) |err| {
             return err;
         }
@@ -438,9 +438,9 @@ pub const TaskQueue = struct {
     //
     // Reads the thread's messages through the backend until `resolved` is set.
     //
-    fn waitUntilResolved(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, resolved: *bool) void {
+    fn waitUntilResolved(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, resolved: *bool) void {
         while (!resolved.*) {
-            self.backend.waitForMessage(io, allocator, timers);
+            self.backend.waitForMessage(io, allocator, timers, log);
         }
     }
 
@@ -448,7 +448,7 @@ pub const TaskQueue = struct {
     // Invokes all registered completion callbacks with the task result, then resolves the callers waiting for it.
     // Callback errors are caught and logged to prevent breaking the queue.
     //
-    fn notifyCompletionCallbacks(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, result: ITaskResult) !void {
+    fn notifyCompletionCallbacks(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, result: ITaskResult) !void {
         var scratch = std.heap.ArenaAllocator.init(allocator);
         defer scratch.deinit();
         const callbacks = try scratch.allocator().dupe(ICompletionCallbackRegistration, self.completionCallbacks.items);
@@ -458,7 +458,7 @@ pub const TaskQueue = struct {
         self.numTasksInFlight -= 1;
 
         for (callbacks) |registration| {
-            registration.callback.call(io, allocator, timers, result) catch |err| {
+            registration.callback.call(io, allocator, timers, log, result) catch |err| {
                 log.exception("Error in task completion callback", err);
             };
         }
@@ -496,7 +496,7 @@ pub const TaskQueue = struct {
     // Only callbacks that match the event type will be invoked.
     // Callback errors are caught and logged to prevent breaking the queue.
     //
-    fn notifyEventCallbacks(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, taskId: []const u8, event: std.json.Value) !void {
+    fn notifyEventCallbacks(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, taskId: []const u8, event: std.json.Value) !void {
         var scratch = std.heap.ArenaAllocator.init(allocator);
         defer scratch.deinit();
         const eventType = types.eventTypeOf(event);
@@ -511,13 +511,13 @@ pub const TaskQueue = struct {
         const anyCallbacks = try scratch.allocator().dupe(IAnyEventCallbackRegistration, self.anyEventCallbacks.items);
 
         for (callbacks.items) |callback| {
-            callback.call(io, allocator, timers, .{ .taskId = taskId, .event = event }) catch |err| {
+            callback.call(io, allocator, timers, log, .{ .taskId = taskId, .event = event }) catch |err| {
                 log.exception("Error in task event callback", err);
             };
         }
 
         for (anyCallbacks) |registration| {
-            registration.callback.call(io, allocator, timers, .{
+            registration.callback.call(io, allocator, timers, log, .{
                 .taskId = taskId,
                 .event = event,
             }) catch |err| {
@@ -530,9 +530,9 @@ pub const TaskQueue = struct {
     // Cancels all in-flight tasks belonging to this queue and cleans up subscriptions.
     // Any callers waiting in awaitAllTasks() or awaitTask() are resolved immediately.
     //
-    pub fn shutdown(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator) void {
+    pub fn shutdown(self: *TaskQueue, io: std.Io, allocator: std.mem.Allocator, log: ILog) void {
         self.isShutDown = true;
-        self.backend.cancelTasks(io, allocator, self.source);
+        self.backend.cancelTasks(io, allocator, log, self.source);
 
         const unsubscribeFunctions = self.unsubscribeFunctions;
         self.unsubscribeFunctions = .empty;

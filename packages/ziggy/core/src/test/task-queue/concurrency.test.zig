@@ -91,6 +91,7 @@ fn holdTimedOut(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, 
 // Holds the task's worker, reading the worker's messages, until the test cancels `release_source`.
 //
 fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers) !void {
+    const console_log = utils.mute_log.MuteLog.init();
     const backend = try getQueueBackend();
     var hold: Hold = .{
         .released = false,
@@ -107,7 +108,7 @@ fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers) !voi
     }, 30_000);
     defer timers.clearTimeout(timer);
     while (!hold.released and !hold.timed_out) {
-        backend.waitForMessage(io, allocator, timers);
+        backend.waitForMessage(io, allocator, timers, console_log);
     }
     if (!hold.released) {
         return error.ReleaseNeverCame;
@@ -117,12 +118,12 @@ fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers) !voi
 //
 // A handler that sends an event naming the task when it starts, holds its worker when its data requests it, and returns the name.
 //
-fn recordingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn recordingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     const name = data.object.get("name").?.string;
     var event: std.json.ObjectMap = .empty;
     try event.put(allocator, "type", .{ .string = "started" });
     try event.put(allocator, "name", .{ .string = name });
-    context.sendEvent(io, allocator, .{ .object = event });
+    context.sendEvent(io, allocator, log, .{ .object = event });
     if (data.object.get("hold") != null) {
         try waitForRelease(allocator, io, timers);
     }
@@ -132,17 +133,18 @@ fn recordingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers
 //
 // A handler that sends an event and returns the task's name.
 //
-fn eventSendingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn eventSendingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = timers;
     const name = data.object.get("name").?.string;
-    context.sendEvent(io, allocator, try json(allocator, "{\"type\":\"note\"}"));
+    context.sendEvent(io, allocator, log, try json(allocator, "{\"type\":\"note\"}"));
     return .{ .string = name };
 }
 
 //
 // A handler that waits to be cancelled, for up to 30 seconds, and returns whether it saw the cancel.
 //
-fn cancellationCheckingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn cancellationCheckingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = timers;
     _ = data;
     var attempts: usize = 0;
@@ -155,7 +157,8 @@ fn cancellationCheckingHandler(allocator: std.mem.Allocator, io: std.Io, timers:
 //
 // A handler that fails.
 //
-fn failingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn failingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = allocator;
     _ = io;
     _ = timers;
@@ -184,7 +187,8 @@ const ResultRecorder = struct {
     //
     // The completion callback. The copies are allocated with the test thread's allocator, which it is given.
     //
-    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+        _ = log;
         _ = io;
         const self: *ResultRecorder = @ptrCast(@alignCast(context.?));
         try self.statuses.append(allocator, result.status);
@@ -210,7 +214,8 @@ const EventRecorder = struct {
     //
     // The event callback.
     //
-    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, data: ITaskEventData) anyerror!void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, data: ITaskEventData) anyerror!void {
+        _ = log;
         _ = io;
         const self: *EventRecorder = @ptrCast(@alignCast(context.?));
         // The task ID is valid only during the call, so the recorder keeps a copy.
@@ -238,8 +243,9 @@ const EventRecorder = struct {
 // Waits until the pool has sent every task it has to a worker and the first of them has started, reading the pool's messages meanwhile.
 //
 fn waitUntilRunning(io: std.Io, allocator: std.mem.Allocator, timers: Timers, pool: *MockWorkerPool) void {
+    const console_log = utils.mute_log.MuteLog.init();
     while (pool.pool.pending_tasks.items.len > 0) {
-        pool.waitForMessage(io, allocator, timers);
+        pool.waitForMessage(io, allocator, timers, console_log);
     }
 }
 
@@ -247,10 +253,12 @@ fn waitUntilRunning(io: std.Io, allocator: std.mem.Allocator, timers: Timers, po
 // Completes the "other-source" queue's part in a test: cancels the source named in the context when a task of that queue completes,
 // which runs while the test thread waits on its own queue.
 //
-fn cancelSourceOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+fn cancelSourceOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+    const console_log = utils.mute_log.MuteLog.init();
+    _ = log;
     _ = result;
     const target: *SourceCancel = @ptrCast(@alignCast(context.?));
-    target.pool.cancelTasks(io, allocator, target.source);
+    target.pool.cancelTasks(io, allocator, console_log, target.source);
 }
 
 //
@@ -266,10 +274,12 @@ const SourceCancel = struct {
 //
 // Shuts a queue down when a task of another queue completes, which runs while the test thread waits on the queue.
 //
-fn shutDownOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+fn shutDownOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+    const console_log = utils.mute_log.MuteLog.init();
+    _ = log;
     _ = result;
     const queue: *TaskQueue = @ptrCast(@alignCast(context.?));
-    queue.shutdown(io, allocator);
+    queue.shutdown(io, allocator, console_log);
 }
 
 //
@@ -278,19 +288,21 @@ fn shutDownOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Alloc
 // while another is queued. `events` records the queue's events.
 //
 fn withOneWorkerBusy(io: std.Io, allocator: std.mem.Allocator, timers: Timers, uuid_generator: utils.uuid_generator.IUuidGenerator, events: *EventRecorder) !struct { backend: *MockWorkerPool, queue: *TaskQueue } {
+    const console_log = utils.mute_log.MuteLog.init();
     const backend = try MockWorkerPool.init(allocator, 1, base_context, &test_task_types);
     setQueueBackend(backend.queueBackend());
     const queue = try TaskQueue.init(allocator, uuid_generator, "busy-source");
     _ = try queue.onAnyTaskEvent(allocator, .{ .context = events, .function = EventRecorder.record });
-    _ = try queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"busy\",\"hold\":true}"), null, null);
+    _ = try queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"busy\",\"hold\":true}"), null, null);
     // Waits until the busy task has taken the slot, so whatever is added next is definitely still waiting.
     while (!events.sawStart("busy")) {
-        backend.waitForMessage(io, allocator, timers);
+        backend.waitForMessage(io, allocator, timers, console_log);
     }
     return .{ .backend = backend, .queue = queue };
 }
 
 test "a worker takes the next task as soon as the one it is running finishes" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -301,14 +313,14 @@ test "a worker takes the next task as soon as the one it is running finishes" {
     var events: EventRecorder = .empty;
     const busy = try withOneWorkerBusy(io, allocator, timers, uuid_generator.uuidGenerator(), &events);
     defer {
-        busy.queue.deinit(io, allocator);
+        busy.queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        busy.backend.deinit(io, allocator, timers);
+        busy.backend.deinit(io, allocator, timers, console_log);
     }
     var results: ResultRecorder = .empty;
     _ = try busy.queue.onTaskComplete(allocator, .{ .context = &results, .function = ResultRecorder.record });
 
-    _ = try busy.queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"next\"}"), null, null);
+    _ = try busy.queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"next\"}"), null, null);
 
     // The worker is busy, so the second task is waiting rather than running.
     const pendingBefore = try busy.backend.getPendingTaskTypes(allocator);
@@ -316,8 +328,8 @@ test "a worker takes the next task as soon as the one it is running finishes" {
     try std.testing.expectEqualStrings("concurrency-task", pendingBefore[0]);
     try std.testing.expectEqual(@as(usize, 0), results.statuses.items.len);
 
-    busy.backend.cancelTasks(io, allocator, release_source);
-    try busy.queue.awaitAllTasks(io, allocator, timers);
+    busy.backend.cancelTasks(io, allocator, console_log, release_source);
+    try busy.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // It ran as soon as the slot was free, which is what a worker pool is for.
     try std.testing.expectEqual(@as(usize, 2), results.outputs.items.len);
@@ -327,6 +339,7 @@ test "a worker takes the next task as soon as the one it is running finishes" {
 }
 
 test "a task that fails still hands the slot to the next task" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -337,19 +350,19 @@ test "a task that fails still hands the slot to the next task" {
     var events: EventRecorder = .empty;
     const busy = try withOneWorkerBusy(io, allocator, timers, uuid_generator.uuidGenerator(), &events);
     defer {
-        busy.queue.deinit(io, allocator);
+        busy.queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        busy.backend.deinit(io, allocator, timers);
+        busy.backend.deinit(io, allocator, timers, console_log);
     }
     var results: ResultRecorder = .empty;
     _ = try busy.queue.onTaskComplete(allocator, .{ .context = &results, .function = ResultRecorder.record });
 
     // The failing task is queued behind the busy one, so it fails only once the slot is free.
-    _ = try busy.queue.addTask(io, allocator, "concurrency-failing-task", try json(allocator, "{\"name\":\"failing\"}"), null, null);
-    _ = try busy.queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"after-failure\"}"), null, null);
+    _ = try busy.queue.addTask(io, allocator, console_log, "concurrency-failing-task", try json(allocator, "{\"name\":\"failing\"}"), null, null);
+    _ = try busy.queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"after-failure\"}"), null, null);
 
-    busy.backend.cancelTasks(io, allocator, release_source);
-    try busy.queue.awaitAllTasks(io, allocator, timers);
+    busy.backend.cancelTasks(io, allocator, console_log, release_source);
+    try busy.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // Three results: the busy task, then the failure, then the task queued behind it.
     try std.testing.expectEqual(@as(usize, 3), results.statuses.items.len);
@@ -362,6 +375,7 @@ test "a task that fails still hands the slot to the next task" {
 }
 
 test "a running task sees that it has been cancelled" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -373,20 +387,20 @@ test "a running task sees that it has been cancelled" {
     setQueueBackend(backend.queueBackend());
     const queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "cancel-source");
     defer {
-        queue.deinit(io, allocator);
+        queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        backend.deinit(io, allocator, timers);
+        backend.deinit(io, allocator, timers, console_log);
     }
     var results: ResultRecorder = .empty;
     _ = try queue.onTaskComplete(allocator, .{ .context = &results, .function = ResultRecorder.record });
 
-    _ = try queue.addTask(io, allocator, "concurrency-cancellation-task", .null, null, null);
+    _ = try queue.addTask(io, allocator, console_log, "concurrency-cancellation-task", .null, null, null);
 
     // The task polls isCancelled, so cancelling the source once it runs is what it is waiting for.
     waitUntilRunning(io, allocator, timers, backend);
-    backend.cancelTasks(io, allocator, "cancel-source");
+    backend.cancelTasks(io, allocator, console_log, "cancel-source");
 
-    try queue.awaitAllTasks(io, allocator, timers);
+    try queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // The task saw the cancellation through its own context, which is the only way a handler learns it should stop.
     try std.testing.expectEqual(@as(usize, 1), results.outputs.items.len);
@@ -394,6 +408,7 @@ test "a running task sees that it has been cancelled" {
 }
 
 test "cancelTasks drops the waiting tasks of the cancelled source and leaves other sources alone" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -405,10 +420,10 @@ test "cancelTasks drops the waiting tasks of the cancelled source and leaves oth
     const busy = try withOneWorkerBusy(io, allocator, timers, uuid_generator.uuidGenerator(), &events);
     var other_queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "other-source");
     defer {
-        busy.queue.deinit(io, allocator);
-        other_queue.deinit(io, allocator);
+        busy.queue.deinit(io, allocator, console_log);
+        other_queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        busy.backend.deinit(io, allocator, timers);
+        busy.backend.deinit(io, allocator, timers, console_log);
     }
     var busy_results: ResultRecorder = .empty;
     _ = try busy.queue.onTaskComplete(allocator, .{ .context = &busy_results, .function = ResultRecorder.record });
@@ -416,19 +431,19 @@ test "cancelTasks drops the waiting tasks of the cancelled source and leaves oth
     _ = try other_queue.onTaskComplete(allocator, .{ .context = &other_results, .function = ResultRecorder.record });
 
     // Three waiting tasks: two of the cancelled source and one of another.
-    _ = try busy.queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"cancelled-1\"}"), null, null);
-    _ = try busy.queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"cancelled-2\"}"), null, null);
-    _ = try other_queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"other\"}"), null, null);
+    _ = try busy.queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"cancelled-1\"}"), null, null);
+    _ = try busy.queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"cancelled-2\"}"), null, null);
+    _ = try other_queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"other\"}"), null, null);
     try std.testing.expectEqual(@as(usize, 3), (try busy.backend.getPendingTaskTypes(allocator)).len);
 
-    busy.backend.cancelTasks(io, allocator, "busy-source");
+    busy.backend.cancelTasks(io, allocator, console_log, "busy-source");
 
     // Only the other source's task is left waiting.
     const pendingAfter = try busy.backend.getPendingTaskTypes(allocator);
     try std.testing.expectEqual(@as(usize, 1), pendingAfter.len);
 
-    busy.backend.cancelTasks(io, allocator, release_source);
-    try other_queue.awaitAllTasks(io, allocator, timers);
+    busy.backend.cancelTasks(io, allocator, console_log, release_source);
+    try other_queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // The cancelled source's waiting tasks never ran; its running task and the other source's did.
     try std.testing.expectEqual(@as(usize, 1), busy_results.outputs.items.len);
@@ -440,6 +455,7 @@ test "cancelTasks drops the waiting tasks of the cancelled source and leaves oth
 }
 
 test "a task cancelled while it runs still reports its result, and its waiter was already given none" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -453,15 +469,15 @@ test "a task cancelled while it runs still reports its result, and its waiter wa
     const queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "cancel-source");
     var other_queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "other-source");
     defer {
-        other_queue.deinit(io, allocator);
-        queue.deinit(io, allocator);
+        other_queue.deinit(io, allocator, console_log);
+        queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        backend.deinit(io, allocator, timers);
+        backend.deinit(io, allocator, timers, console_log);
     }
 
     var results: ResultRecorder = .empty;
     _ = try queue.onTaskComplete(allocator, .{ .context = &results, .function = ResultRecorder.record });
-    const taskId = try queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"busy\",\"hold\":true}"), null, null);
+    const taskId = try queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"busy\",\"hold\":true}"), null, null);
 
     // Cancelling resolves the waiter with no result, because the task could still have failed or succeeded and the caller is told
     // nothing came of it. The cancel comes from the completion of the other queue's task, while awaitTask waits.
@@ -470,17 +486,17 @@ test "a task cancelled while it runs still reports its result, and its waiter wa
         .source = "cancel-source",
     };
     _ = try other_queue.onTaskComplete(allocator, .{ .context = &cancel, .function = cancelSourceOnComplete });
-    _ = try other_queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"other\"}"), null, null);
-    const outcome = try queue.awaitTask(io, allocator, timers, taskId);
+    _ = try other_queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"other\"}"), null, null);
+    const outcome = try queue.awaitTask(io, allocator, timers, console_log, taskId);
     try std.testing.expect(outcome == null);
 
     // The task was already running, so cancelling does not stop it: it finishes and reports.
-    backend.cancelTasks(io, allocator, release_source);
+    backend.cancelTasks(io, allocator, console_log, release_source);
 
     // Nothing is awaiting the result now (the waiter was resolved by the cancel), so the queue's
     // callbacks run when the thread next waits on it.
-    _ = try queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"after-cancel\"}"), null, null);
-    try queue.awaitAllTasks(io, allocator, timers);
+    _ = try queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"after-cancel\"}"), null, null);
+    try queue.awaitAllTasks(io, allocator, timers, console_log);
 
     try std.testing.expectEqual(@as(usize, 2), results.statuses.items.len);
     try std.testing.expectEqual(TaskStatus.Succeeded, results.statuses.items[0]);
@@ -488,6 +504,7 @@ test "a task cancelled while it runs still reports its result, and its waiter wa
 }
 
 test "shutdown drops the tasks still waiting for a slot" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -498,24 +515,24 @@ test "shutdown drops the tasks still waiting for a slot" {
     var events: EventRecorder = .empty;
     const busy = try withOneWorkerBusy(io, allocator, timers, uuid_generator.uuidGenerator(), &events);
     defer {
-        busy.queue.deinit(io, allocator);
+        busy.queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        busy.backend.deinit(io, allocator, timers);
+        busy.backend.deinit(io, allocator, timers, console_log);
     }
     // Every result the pool gives, whichever queue it is for.
     var results: ResultRecorder = .empty;
     _ = try busy.backend.queueBackend().onTaskComplete(allocator, .{ .context = &results, .function = ResultRecorder.record });
-    _ = try busy.queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"dropped\"}"), null, null);
+    _ = try busy.queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"dropped\"}"), null, null);
     try std.testing.expectEqual(@as(usize, 1), (try busy.backend.getPendingTaskTypes(allocator)).len);
 
     // Shutting the queue down cancels the backend's tasks of its source, which takes the waiting one
     // with it and leaves the running one to finish on its own.
-    busy.queue.shutdown(io, allocator);
+    busy.queue.shutdown(io, allocator, console_log);
     try std.testing.expectEqual(@as(usize, 0), (try busy.backend.getPendingTaskTypes(allocator)).len);
 
-    busy.backend.cancelTasks(io, allocator, release_source);
+    busy.backend.cancelTasks(io, allocator, console_log, release_source);
     while (busy.backend.pool.isBusy()) {
-        busy.backend.waitForMessage(io, allocator, timers);
+        busy.backend.waitForMessage(io, allocator, timers, console_log);
     }
     try std.testing.expectEqual(@as(usize, 1), results.outputs.items.len);
     try std.testing.expectEqualStrings("\"busy\"", results.outputs.items[0]);
@@ -567,7 +584,8 @@ const CountingBackend = struct {
     //
     // Returns the task ID it was given.
     //
-    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?types.TaskPriority) anyerror![]const u8 {
+    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: @import("ziggy").task_queue.utils.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?types.TaskPriority) anyerror![]const u8 {
+        _ = log;
         _ = ptr;
         _ = io;
         _ = @"type";
@@ -636,7 +654,8 @@ const CountingBackend = struct {
     //
     // Records the source.
     //
-    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: @import("ziggy").task_queue.utils.log.ILog, source: []const u8) void {
+        _ = log;
         _ = io;
         _ = allocator;
         const self: *CountingBackend = @ptrCast(@alignCast(ptr));
@@ -672,7 +691,8 @@ const CountingBackend = struct {
     //
     // Has no messages, because nothing it is given ever completes.
     //
-    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: @import("ziggy").task_queue.utils.log.ILog) void {
+        _ = log;
         _ = ptr;
         _ = io;
         _ = allocator;
@@ -682,6 +702,7 @@ const CountingBackend = struct {
 };
 
 test "deinit after an explicit shutdown does not cancel the source a second time" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -697,9 +718,9 @@ test "deinit after an explicit shutdown does not cancel the source a second time
     setQueueBackend(backend.queueBackend());
     const queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "counted-source");
 
-    queue.shutdown(io, allocator);
-    queue.shutdown(io, allocator);
-    queue.deinit(io, allocator);
+    queue.shutdown(io, allocator, console_log);
+    queue.shutdown(io, allocator, console_log);
+    queue.deinit(io, allocator, console_log);
 
     // Repeated shutdowns and the deinit that follows them are two cancels of the source, not three:
     // the deinit must not signal every running task a second time.
@@ -712,6 +733,7 @@ test "deinit after an explicit shutdown does not cancel the source a second time
 }
 
 test "deinit on a queue that was never shut down cancels the source once" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -727,7 +749,7 @@ test "deinit on a queue that was never shut down cancels the source once" {
     setQueueBackend(backend.queueBackend());
     const queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "counted-source");
 
-    queue.deinit(io, allocator);
+    queue.deinit(io, allocator, console_log);
 
     // Nothing else shut it down, so deinit is what cancels the source. Without that, freeing a queue
     // would leave its tasks running with nobody waiting for them.
@@ -740,6 +762,7 @@ test "deinit on a queue that was never shut down cancels the source once" {
 }
 
 test "an event sent by a task of another source is not delivered" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -752,10 +775,10 @@ test "an event sent by a task of another source is not delivered" {
     const queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "event-source");
     var other_queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "other-source");
     defer {
-        queue.deinit(io, allocator);
-        other_queue.deinit(io, allocator);
+        queue.deinit(io, allocator, console_log);
+        other_queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        backend.deinit(io, allocator, timers);
+        backend.deinit(io, allocator, timers, console_log);
     }
 
     var events: EventRecorder = .empty;
@@ -763,9 +786,9 @@ test "an event sent by a task of another source is not delivered" {
     var other_results: ResultRecorder = .empty;
     _ = try other_queue.onTaskComplete(allocator, .{ .context = &other_results, .function = ResultRecorder.record });
 
-    _ = try other_queue.addTask(io, allocator, "concurrency-event-task", try json(allocator, "{\"name\":\"other\"}"), null, null);
-    try other_queue.awaitAllTasks(io, allocator, timers);
-    try queue.awaitAllTasks(io, allocator, timers);
+    _ = try other_queue.addTask(io, allocator, console_log, "concurrency-event-task", try json(allocator, "{\"name\":\"other\"}"), null, null);
+    try other_queue.awaitAllTasks(io, allocator, timers, console_log);
+    try queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // The task ran, but it belongs to a queue that did not add it, so its events are not this
     // queue's business.
@@ -774,13 +797,14 @@ test "an event sent by a task of another source is not delivered" {
     try std.testing.expectEqual(@as(usize, 0), events.taskIds.items.len);
 
     // The queue's own task does deliver.
-    const ownTaskId = try queue.addTask(io, allocator, "concurrency-event-task", try json(allocator, "{\"name\":\"own\"}"), null, null);
-    _ = try queue.awaitTask(io, allocator, timers, ownTaskId);
+    const ownTaskId = try queue.addTask(io, allocator, console_log, "concurrency-event-task", try json(allocator, "{\"name\":\"own\"}"), null, null);
+    _ = try queue.awaitTask(io, allocator, timers, console_log, ownTaskId);
     try std.testing.expectEqual(@as(usize, 1), events.taskIds.items.len);
     try std.testing.expectEqualStrings(ownTaskId, events.taskIds.items[0]);
 }
 
 test "a task with no registered handler fails with the worker's message" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -792,9 +816,9 @@ test "a task with no registered handler fails with the worker's message" {
     setQueueBackend(backend.queueBackend());
     const queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "unhandled-source");
     defer {
-        queue.deinit(io, allocator);
+        queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        backend.deinit(io, allocator, timers);
+        backend.deinit(io, allocator, timers, console_log);
     }
 
     var results: ResultRecorder = .empty;
@@ -803,8 +827,8 @@ test "a task with no registered handler fails with the worker's message" {
     // The pool's task types do not include this one, which is what a task queued for a feature that is not
     // wired up looks like. It must be reported as a failed task, not swallowed, with the worker's message for a task type it has no
     // handler for.
-    _ = try queue.addTask(io, allocator, "concurrency-no-such-handler", .null, null, null);
-    try queue.awaitAllTasks(io, allocator, timers);
+    _ = try queue.addTask(io, allocator, console_log, "concurrency-no-such-handler", .null, null, null);
+    try queue.awaitAllTasks(io, allocator, timers, console_log);
 
     try std.testing.expectEqual(@as(usize, 1), results.statuses.items.len);
     try std.testing.expectEqual(TaskStatus.Failed, results.statuses.items[0]);
@@ -812,6 +836,7 @@ test "a task with no registered handler fails with the worker's message" {
 }
 
 test "shutdown while a task is running resolves a waiter and the task still finishes" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -825,10 +850,10 @@ test "shutdown while a task is running resolves a waiter and the task still fini
     const queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "shutdown-source");
     var other_queue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "other-source");
     defer {
-        other_queue.deinit(io, allocator);
-        queue.deinit(io, allocator);
+        other_queue.deinit(io, allocator, console_log);
+        queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        backend.deinit(io, allocator, timers);
+        backend.deinit(io, allocator, timers, console_log);
     }
 
     var results: ResultRecorder = .empty;
@@ -836,16 +861,16 @@ test "shutdown while a task is running resolves a waiter and the task still fini
     // Every result the pool gives, whichever queue it is for, to see the busy task finish.
     var all_results: ResultRecorder = .empty;
     _ = try backend.queueBackend().onTaskComplete(allocator, .{ .context = &all_results, .function = ResultRecorder.record });
-    _ = try queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"busy\",\"hold\":true}"), null, null);
+    _ = try queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"busy\",\"hold\":true}"), null, null);
 
     // The queue is shut down by the completion of the other queue's task, while awaitAllTasks waits, which then returns.
     _ = try other_queue.onTaskComplete(allocator, .{ .context = queue, .function = shutDownOnComplete });
-    _ = try other_queue.addTask(io, allocator, "concurrency-task", try json(allocator, "{\"name\":\"other\"}"), null, null);
-    try queue.awaitAllTasks(io, allocator, timers);
-    backend.cancelTasks(io, allocator, release_source);
+    _ = try other_queue.addTask(io, allocator, console_log, "concurrency-task", try json(allocator, "{\"name\":\"other\"}"), null, null);
+    try queue.awaitAllTasks(io, allocator, timers, console_log);
+    backend.cancelTasks(io, allocator, console_log, release_source);
     // Waits for the busy task to finish, so its result has arrived before the recorders are read.
     while (backend.pool.isBusy()) {
-        backend.waitForMessage(io, allocator, timers);
+        backend.waitForMessage(io, allocator, timers, console_log);
     }
 
     // The task kept running and finished, but its result reaches nobody: the queue unsubscribed from

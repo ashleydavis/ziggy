@@ -1,4 +1,5 @@
 const std = @import("std");
+const MuteLog = @import("ziggy").task_queue.utils.mute_log.MuteLog;
 const task_queue_zig = @import("ziggy").task_queue;
 const types = task_queue_zig.types;
 
@@ -47,7 +48,8 @@ test "ITaskResult round-trips through JSON" {
 //
 // Counts the calls of a callback closure.
 //
-fn countCall(context: ?*anyopaque, allocator: std.mem.Allocator, taskId: []const u8) void {
+fn countCall(context: ?*anyopaque, allocator: std.mem.Allocator, log: @import("ziggy").task_queue.utils.log.ILog, taskId: []const u8) void {
+    _ = log;
     _ = allocator;
     _ = taskId;
     const counter: *usize = @ptrCast(@alignCast(context.?));
@@ -64,10 +66,11 @@ fn recordUnsubscribe(context: ?*anyopaque, allocator: std.mem.Allocator, key: us
 }
 
 test "callback closures call their function with their context" {
+    const console_log = MuteLog.init();
     var counter: usize = 0;
     const callback: types.TaskAddedCallback = .{ .context = &counter, .function = countCall };
-    callback.call(std.testing.allocator, "a");
-    callback.call(std.testing.allocator, "b");
+    callback.call(std.testing.allocator, console_log, "a");
+    callback.call(std.testing.allocator, console_log, "b");
     try std.testing.expectEqual(@as(usize, 2), counter);
 
     var recorded_key: usize = 0;

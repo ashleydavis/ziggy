@@ -37,11 +37,10 @@ pub const QueueLog = struct {
     }
 
     //
-    // Sets this log as the calling thread's log, and has the thread's console lines sent to the main thread too. The log must stay
+    // Has the calling thread's console lines sent to the main thread through this log's queue. The log must stay
     // where it is until `unset` is called on the same thread.
     //
     pub fn set(self: *QueueLog) void {
-        utils.log.setLog(self.ilog());
         utils.console.setForward(.{
             .context = self,
             .function = forwardConsole,
@@ -49,11 +48,10 @@ pub const QueueLog = struct {
     }
 
     //
-    // Has the calling thread use the console log and its own console again.
+    // Has the calling thread use its own console again.
     //
     pub fn unset() void {
         utils.console.setForward(null);
-        utils.log.setLog(null);
     }
 
     //
@@ -70,6 +68,7 @@ pub const QueueLog = struct {
         .event = event,
         .verboseEnabled = verboseEnabled,
         .getLogDetails = getLogDetails,
+        .logFilePath = logFilePath,
     };
 
     //
@@ -184,6 +183,14 @@ pub const QueueLog = struct {
         _ = allocator;
         _ = io;
         return utils.log.noLogDetails;
+    }
+
+    //
+    // A thread's log writes no log file of its own.
+    //
+    fn logFilePath(ptr: *anyopaque) ?[]const u8 {
+        _ = ptr;
+        return null;
     }
 
     //

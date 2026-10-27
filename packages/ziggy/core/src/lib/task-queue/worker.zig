@@ -39,7 +39,7 @@ pub fn getHandler(handlers: []const IHandlerEntry, @"type": []const u8) ?TaskHan
 // Shared function to execute a task handler
 // Returns the handler outputs, or throws an error if the handler is not found or execution fails
 //
-pub fn executeTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, handlers: []const IHandlerEntry, taskType: []const u8, data: std.json.Value, context: ITaskContext) !std.json.Value {
+pub fn executeTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, handlers: []const IHandlerEntry, taskType: []const u8, data: std.json.Value, context: ITaskContext) !std.json.Value {
     const handler = getHandler(handlers, taskType) orelse {
         var registeredTypes: std.ArrayList([]const u8) = .empty;
         for (handlers) |entry| {
@@ -49,5 +49,5 @@ pub fn executeTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Time
         return errors.throwError("No handler registered for task type: {s}. Available handlers: {s}", .{ taskType, joined });
     };
 
-    return handler(allocator, io, timers, data, context);
+    return handler(allocator, io, timers, log, data, context);
 }

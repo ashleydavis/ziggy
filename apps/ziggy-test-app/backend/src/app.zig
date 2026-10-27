@@ -48,4 +48,5 @@ pub const app = ziggy.core.App(.{
     .menu = handlers.menu,
     .ui_files = &ui.files,
     .ui_query = handlers.uiQuery,
+    .on_create = handlers.onCreate,
 });

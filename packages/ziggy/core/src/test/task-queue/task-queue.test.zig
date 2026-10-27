@@ -84,9 +84,10 @@ const Setup = struct {
     // afterEach: shuts the queue down, waits for the backend's tasks and frees everything.
     //
     fn deinit(self: Setup, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
-        self.queue.deinit(io, allocator);
+        const console_log = utils.mute_log.MuteLog.init();
+        self.queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        self.backend.deinit(io, allocator, timers);
+        self.backend.deinit(io, allocator, timers, console_log);
     }
 
     //
@@ -94,8 +95,9 @@ const Setup = struct {
     // because a worker's messages are read in the order they were sent.
     //
     fn waitUntilDispatched(self: Setup, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+        const console_log = utils.mute_log.MuteLog.init();
         while (self.backend.pool.pending_tasks.items.len > 0) {
-            self.backend.waitForMessage(io, allocator, timers);
+            self.backend.waitForMessage(io, allocator, timers, console_log);
         }
     }
 
@@ -103,8 +105,9 @@ const Setup = struct {
     // Reads the pool's messages until no task is queued or running, so every callback that is going to run has run.
     //
     fn waitUntilIdle(self: Setup, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+        const console_log = utils.mute_log.MuteLog.init();
         while (self.backend.pool.isBusy()) {
-            self.backend.waitForMessage(io, allocator, timers);
+            self.backend.waitForMessage(io, allocator, timers, console_log);
         }
     }
 };
@@ -159,6 +162,7 @@ fn holdTimedOut(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, 
 // Holds the task's worker, reading the worker's messages, until the test cancels the source given.
 //
 fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers, source: []const u8) !void {
+    const console_log = utils.mute_log.MuteLog.init();
     const backend = try getQueueBackend();
     var hold: Hold = .{
         .released = false,
@@ -175,7 +179,7 @@ fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers, sour
     }, 30_000);
     defer timers.clearTimeout(timer);
     while (!hold.released and !hold.timed_out) {
-        backend.waitForMessage(io, allocator, timers);
+        backend.waitForMessage(io, allocator, timers, console_log);
     }
     if (!hold.released) {
         return error.ReleaseNeverCame;
@@ -185,17 +189,18 @@ fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers, sour
 //
 // Sends an event of the type "started" naming the task, so the test sees it has started.
 //
-fn sendStarted(allocator: std.mem.Allocator, io: std.Io, context: ITaskContext, name: std.json.Value) !void {
+fn sendStarted(allocator: std.mem.Allocator, io: std.Io, log: utils.log.ILog, context: ITaskContext, name: std.json.Value) !void {
     var event: std.json.ObjectMap = .empty;
     try event.put(allocator, "type", .{ .string = "started" });
     try event.put(allocator, "name", name);
-    context.sendEvent(io, allocator, .{ .object = event });
+    context.sendEvent(io, allocator, log, .{ .object = event });
 }
 
 //
 // A handler that returns "done".
 //
-fn doneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn doneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = allocator;
     _ = io;
     _ = timers;
@@ -207,7 +212,8 @@ fn doneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: s
 //
 // A handler that holds its worker until the test cancels `release_source`, then returns "done".
 //
-fn slowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn slowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = data;
     _ = context;
     try waitForRelease(allocator, io, timers, release_source);
@@ -217,7 +223,8 @@ fn slowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, 
 //
 // A handler that holds its worker until the test cancels `second_release_source`, then returns "done".
 //
-fn secondSlowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn secondSlowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = data;
     _ = context;
     try waitForRelease(allocator, io, timers, second_release_source);
@@ -227,7 +234,8 @@ fn secondSlowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Ti
 //
 // A handler that returns "Task <id> completed".
 //
-fn countingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn countingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = io;
     _ = timers;
     _ = context;
@@ -237,7 +245,8 @@ fn countingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, dat
 //
 // A handler that sleeps 100ms, then returns "done".
 //
-fn slowCountingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn slowCountingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = allocator;
     _ = timers;
     _ = data;
@@ -249,7 +258,8 @@ fn slowCountingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers,
 //
 // A handler that fails.
 //
-fn failHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn failHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = allocator;
     _ = io;
     _ = timers;
@@ -262,9 +272,9 @@ fn failHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: s
 // A handler that sends "started" with its id, holds its worker until the test cancels `release_source` when its data requests it, and
 // returns its id.
 //
-fn recordingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn recordingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     const id = data.object.get("id").?;
-    try sendStarted(allocator, io, context, id);
+    try sendStarted(allocator, io, log, context, id);
     if (data.object.get("hold") != null) {
         try waitForRelease(allocator, io, timers, release_source);
     }
@@ -274,7 +284,8 @@ fn recordingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, da
 //
 // A handler that returns its data.
 //
-fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = allocator;
     _ = io;
     _ = timers;
@@ -285,17 +296,18 @@ fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: s
 //
 // A handler that sends a "test-event" and returns "done".
 //
-fn eventSendingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn eventSendingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = timers;
     _ = data;
-    context.sendEvent(io, allocator, try json(allocator, "{\"type\":\"test-event\",\"data\":\"test\"}"));
+    context.sendEvent(io, allocator, log, try json(allocator, "{\"type\":\"test-event\",\"data\":\"test\"}"));
     return .{ .string = "done" };
 }
 
 //
 // A handler that returns its name. The task named "running" holds its worker until the test cancels `release_source`.
 //
-fn orderedTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn orderedTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = context;
     const name = data.object.get("name").?;
     if (std.mem.eql(u8, name.string, "running")) {
@@ -307,7 +319,8 @@ fn orderedTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, 
 //
 // Sets a boolean flag (used as a callback that must not be called).
 //
-fn setFlagOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+fn setFlagOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+    _ = log;
     _ = io;
     _ = allocator;
     _ = result;
@@ -318,7 +331,8 @@ fn setFlagOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Alloca
 //
 // Sets a boolean flag (used as an event callback that must not be called).
 //
-fn setFlagOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, data: types.ITaskEventData) anyerror!void {
+fn setFlagOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, data: types.ITaskEventData) anyerror!void {
+    _ = log;
     _ = io;
     _ = allocator;
     _ = data;
@@ -349,7 +363,8 @@ const ResultsRecorder = struct {
     //
     // The completion callback.
     //
-    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+        _ = log;
         _ = io;
         const self: *ResultsRecorder = @ptrCast(@alignCast(context.?));
         try self.statuses.append(allocator, result.status);
@@ -380,7 +395,8 @@ const RunningCounter = struct {
     //
     // The event callback: a task has started.
     //
-    fn taskStarted(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, data: types.ITaskEventData) anyerror!void {
+    fn taskStarted(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, data: types.ITaskEventData) anyerror!void {
+        _ = log;
         _ = io;
         _ = allocator;
         const self: *RunningCounter = @ptrCast(@alignCast(context.?));
@@ -395,7 +411,8 @@ const RunningCounter = struct {
     //
     // The completion callback: a task has ended.
     //
-    fn taskEnded(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+    fn taskEnded(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+        _ = log;
         _ = io;
         _ = allocator;
         _ = result;
@@ -407,22 +424,27 @@ const RunningCounter = struct {
 //
 // Shuts a queue down from a completion callback, which runs while the queue's owner waits.
 //
-fn shutDownQueue(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+fn shutDownQueue(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+    const console_log = utils.mute_log.MuteLog.init();
+    _ = log;
     _ = result;
     const queue: *TaskQueue = @ptrCast(@alignCast(context.?));
-    queue.shutdown(io, allocator);
+    queue.shutdown(io, allocator, console_log);
 }
 
 //
 // Cancels the "test" source of a pool from a completion callback, which runs while the queue's owner waits.
 //
-fn cancelTestSource(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+fn cancelTestSource(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+    const console_log = utils.mute_log.MuteLog.init();
+    _ = log;
     _ = result;
     const pool: *MockWorkerPool = @ptrCast(@alignCast(context.?));
-    pool.cancelTasks(io, allocator, "test");
+    pool.cancelTasks(io, allocator, console_log, "test");
 }
 
 test "should add a task and return a UUID" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -432,12 +454,13 @@ test "should add a task and return a UUID" {
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    const taskId = try setup.queue.addTask(io, allocator, "test-task", try json(allocator, "{\"data\":\"test\"}"), null, null);
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "test-task", try json(allocator, "{\"data\":\"test\"}"), null, null);
     try std.testing.expectEqual(@as(usize, 36), taskId.len);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 }
 
 test "should add multiple tasks with unique IDs" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -447,13 +470,14 @@ test "should add multiple tasks with unique IDs" {
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    const id1 = try setup.queue.addTask(io, allocator, "test-task", try json(allocator, "{\"data\":\"test1\"}"), null, null);
-    const id2 = try setup.queue.addTask(io, allocator, "test-task", try json(allocator, "{\"data\":\"test2\"}"), null, null);
+    const id1 = try setup.queue.addTask(io, allocator, console_log, "test-task", try json(allocator, "{\"data\":\"test1\"}"), null, null);
+    const id2 = try setup.queue.addTask(io, allocator, console_log, "test-task", try json(allocator, "{\"data\":\"test2\"}"), null, null);
     try std.testing.expect(!std.mem.eql(u8, id1, id2));
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 }
 
 test "addTask hands the priority it was given to the backend" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -465,7 +489,7 @@ test "addTask hands the priority it was given to the backend" {
     defer setQueueBackend(null);
     const testQueue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "test");
 
-    _ = try testQueue.addTask(io, allocator, "test-task", try json(allocator, "{\"data\":\"test\"}"), "task-id", .Interactive);
+    _ = try testQueue.addTask(io, allocator, console_log, "test-task", try json(allocator, "{\"data\":\"test\"}"), "task-id", .Interactive);
 
     try std.testing.expectEqual(@as(usize, 1), recordingBackend.capturedCount);
     try std.testing.expectEqualStrings("test-task", recordingBackend.capturedTypes[0]);
@@ -473,10 +497,11 @@ test "addTask hands the priority it was given to the backend" {
     try std.testing.expectEqualStrings("task-id", recordingBackend.capturedIds[0]);
     try std.testing.expectEqual(@as(?TaskPriority, .Interactive), recordingBackend.capturedPriorities[0]);
 
-    testQueue.deinit(io, allocator);
+    testQueue.deinit(io, allocator, console_log);
 }
 
 test "addTask hands no priority to the backend when the caller named none" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -489,16 +514,17 @@ test "addTask hands no priority to the backend when the caller named none" {
     defer setQueueBackend(null);
     const testQueue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "test");
 
-    _ = try testQueue.addTask(io, allocator, "test-task", try json(allocator, "{\"data\":\"test\"}"), "task-id", null);
+    _ = try testQueue.addTask(io, allocator, console_log, "test-task", try json(allocator, "{\"data\":\"test\"}"), "task-id", null);
 
     try std.testing.expectEqual(@as(usize, 1), recordingBackend.capturedCount);
     try std.testing.expectEqualStrings("task-id", recordingBackend.capturedIds[0]);
     try std.testing.expectEqual(@as(?TaskPriority, null), recordingBackend.capturedPriorities[0]);
 
-    testQueue.deinit(io, allocator);
+    testQueue.deinit(io, allocator, console_log);
 }
 
 test "an interactive task is dispatched before background tasks already waiting" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -512,27 +538,27 @@ test "an interactive task is dispatched before background tasks already waiting"
     setQueueBackend(serialBackend.queueBackend());
     const serialQueue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "serial");
     defer {
-        serialQueue.deinit(io, allocator);
+        serialQueue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        serialBackend.deinit(io, allocator, timers);
+        serialBackend.deinit(io, allocator, timers, console_log);
     }
     var results: ResultsRecorder = .empty;
     _ = try serialQueue.onTaskComplete(allocator, .{ .context = &results, .function = ResultsRecorder.record });
 
-    _ = try serialQueue.addTask(io, allocator, "ordered-task", try json(allocator, "{\"name\":\"running\"}"), null, null);
+    _ = try serialQueue.addTask(io, allocator, console_log, "ordered-task", try json(allocator, "{\"name\":\"running\"}"), null, null);
     // The first task is sent to the worker once the worker reports it is ready, and holds it while the rest are queued.
     while (serialBackend.pool.pending_tasks.items.len > 0) {
-        serialBackend.waitForMessage(io, allocator, timers);
+        serialBackend.waitForMessage(io, allocator, timers, console_log);
     }
-    _ = try serialQueue.addTask(io, allocator, "ordered-task", try json(allocator, "{\"name\":\"background-1\"}"), null, null);
-    _ = try serialQueue.addTask(io, allocator, "ordered-task", try json(allocator, "{\"name\":\"background-2\"}"), null, null);
-    _ = try serialQueue.addTask(io, allocator, "ordered-task", try json(allocator, "{\"name\":\"interactive\"}"), null, .Interactive);
+    _ = try serialQueue.addTask(io, allocator, console_log, "ordered-task", try json(allocator, "{\"name\":\"background-1\"}"), null, null);
+    _ = try serialQueue.addTask(io, allocator, console_log, "ordered-task", try json(allocator, "{\"name\":\"background-2\"}"), null, null);
+    _ = try serialQueue.addTask(io, allocator, console_log, "ordered-task", try json(allocator, "{\"name\":\"interactive\"}"), null, .Interactive);
 
     const pendingTypes = try serialBackend.getPendingTaskTypes(allocator);
     try std.testing.expectEqual(@as(usize, 3), pendingTypes.len);
 
-    serialBackend.cancelTasks(io, allocator, release_source);
-    try serialQueue.awaitAllTasks(io, allocator, timers);
+    serialBackend.cancelTasks(io, allocator, console_log, release_source);
+    try serialQueue.awaitAllTasks(io, allocator, timers, console_log);
 
     // One worker runs the tasks one after another, so they end in the order they started.
     const expected = [_][]const u8{ "\"running\"", "\"interactive\"", "\"background-1\"", "\"background-2\"" };
@@ -543,6 +569,7 @@ test "an interactive task is dispatched before background tasks already waiting"
 }
 
 test "awaitTask resolves when the specific task completes" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -552,14 +579,15 @@ test "awaitTask resolves when the specific task completes" {
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    const taskId = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
-    const result = (try setup.queue.awaitTask(io, allocator, timers, taskId)).?;
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    const result = (try setup.queue.awaitTask(io, allocator, timers, console_log, taskId)).?;
     try std.testing.expectEqualStrings(taskId, result.taskId);
     try std.testing.expectEqual(TaskStatus.Succeeded, result.status);
     try std.testing.expectEqualStrings("done", result.outputs.?.string);
 }
 
 test "awaitTask resolves immediately when the task ID is not tracked" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -569,10 +597,11 @@ test "awaitTask resolves immediately when the task ID is not tracked" {
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    try std.testing.expect((try setup.queue.awaitTask(io, allocator, timers, "unknown-task-id")) == null);
+    try std.testing.expect((try setup.queue.awaitTask(io, allocator, timers, console_log, "unknown-task-id")) == null);
 }
 
 test "awaitTask resolves for each task awaited in turn, the second after the first has resolved" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -582,16 +611,17 @@ test "awaitTask resolves for each task awaited in turn, the second after the fir
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    const slowId = try setup.queue.addTask(io, allocator, "slow-task", .null, null, null);
-    const quickId = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
-    const quick = (try setup.queue.awaitTask(io, allocator, timers, quickId)).?;
+    const slowId = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
+    const quickId = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    const quick = (try setup.queue.awaitTask(io, allocator, timers, console_log, quickId)).?;
     try std.testing.expectEqual(TaskStatus.Succeeded, quick.status);
-    setup.backend.cancelTasks(io, allocator, release_source);
-    const slow = (try setup.queue.awaitTask(io, allocator, timers, slowId)).?;
+    setup.backend.cancelTasks(io, allocator, console_log, release_source);
+    const slow = (try setup.queue.awaitTask(io, allocator, timers, console_log, slowId)).?;
     try std.testing.expectEqualStrings("done", slow.outputs.?.string);
 }
 
 test "awaitTask resolves immediately when shutdown is called while waiting" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -600,18 +630,19 @@ test "awaitTask resolves immediately when shutdown is called while waiting" {
     const timers = timer_list.interface();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    defer setup.backend.cancelTasks(io, allocator, release_source);
+    defer setup.backend.cancelTasks(io, allocator, console_log, release_source);
 
-    const taskId = try setup.queue.addTask(io, allocator, "slow-task", .null, null, null);
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
     // The queue is shut down while awaitTask waits, by the callback of another task's completion, before the slow task completes.
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = setup.queue, .function = shutDownQueue });
-    _ = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
-    const result = try setup.queue.awaitTask(io, allocator, timers, taskId);
+    _ = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    const result = try setup.queue.awaitTask(io, allocator, timers, console_log, taskId);
 
     try std.testing.expect(result == null);
 }
 
 test "should wait for all tasks to complete" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -623,16 +654,17 @@ test "should wait for all tasks to complete" {
     var results: ResultsRecorder = .empty;
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = &results, .function = ResultsRecorder.record });
 
-    _ = try setup.queue.addTask(io, allocator, "counting-task", try json(allocator, "{\"id\":1}"), null, null);
-    _ = try setup.queue.addTask(io, allocator, "counting-task", try json(allocator, "{\"id\":2}"), null, null);
-    _ = try setup.queue.addTask(io, allocator, "counting-task", try json(allocator, "{\"id\":3}"), null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "counting-task", try json(allocator, "{\"id\":1}"), null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "counting-task", try json(allocator, "{\"id\":2}"), null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "counting-task", try json(allocator, "{\"id\":3}"), null, null);
 
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     try std.testing.expectEqual(@as(usize, 3), results.statuses.items.len);
 }
 
 test "should resolve immediately if no tasks" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -642,10 +674,11 @@ test "should resolve immediately if no tasks" {
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 }
 
 test "should handle mixed success and failure" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -655,16 +688,17 @@ test "should handle mixed success and failure" {
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    _ = try setup.queue.addTask(io, allocator, "success-task", .null, null, null);
-    _ = try setup.queue.addTask(io, allocator, "fail-task", .null, null, null);
-    _ = try setup.queue.addTask(io, allocator, "success-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "success-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "fail-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "success-task", .null, null, null);
 
     // awaitAllTasks returns after all tasks complete, whether succeeded or failed.
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
     try std.testing.expectEqual(@as(i64, 0), setup.queue.numTasksInFlight);
 }
 
 test "should handle empty queue" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -674,10 +708,11 @@ test "should handle empty queue" {
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 }
 
 test "awaitAllTasks resolves immediately when shutdown is called while waiting" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -686,16 +721,17 @@ test "awaitAllTasks resolves immediately when shutdown is called while waiting" 
     const timers = timer_list.interface();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    defer setup.backend.cancelTasks(io, allocator, release_source);
+    defer setup.backend.cancelTasks(io, allocator, console_log, release_source);
 
-    _ = try setup.queue.addTask(io, allocator, "slow-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
     // Shut down before the slow task completes, from the callback of another task's completion: awaitAllTasks should return then.
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = setup.queue, .function = shutDownQueue });
-    _ = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    _ = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 }
 
 test "onTasksCancelled fires resolveAllWaiters, unblocking awaitAllTasks and awaitTask callers" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -704,19 +740,20 @@ test "onTasksCancelled fires resolveAllWaiters, unblocking awaitAllTasks and awa
     const timers = timer_list.interface();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    defer setup.backend.cancelTasks(io, allocator, release_source);
+    defer setup.backend.cancelTasks(io, allocator, console_log, release_source);
 
-    const taskId = try setup.queue.addTask(io, allocator, "slow-task", .null, null, null);
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
     // cancelTasks fires onTasksCancelled, which calls resolveAllWaiters, while the queue waits. Each quick task's completion cancels
     // the source while the slow task is still running: the first while awaitAllTasks waits, the second while awaitTask waits.
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = setup.backend, .function = cancelTestSource });
-    _ = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
-    _ = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
-    try std.testing.expect((try setup.queue.awaitTask(io, allocator, timers, taskId)) == null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
+    _ = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    try std.testing.expect((try setup.queue.awaitTask(io, allocator, timers, console_log, taskId)) == null);
 }
 
 test "should wait for all tasks including slow ones" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -728,12 +765,12 @@ test "should wait for all tasks including slow ones" {
     var results: ResultsRecorder = .empty;
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = &results, .function = ResultsRecorder.record });
 
-    _ = try setup.queue.addTask(io, allocator, "slow-counting-task", .null, null, null);
-    _ = try setup.queue.addTask(io, allocator, "slow-counting-task", .null, null, null);
-    _ = try setup.queue.addTask(io, allocator, "slow-counting-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "slow-counting-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "slow-counting-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "slow-counting-task", .null, null, null);
 
     const startTime = nowMs();
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
     const duration = nowMs() - startTime;
 
     try std.testing.expectEqual(@as(usize, 3), results.statuses.items.len);
@@ -743,6 +780,7 @@ test "should wait for all tasks including slow ones" {
 }
 
 test "should execute tasks in parallel up to maxWorkers" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -762,23 +800,23 @@ test "should execute tasks in parallel up to maxWorkers" {
             .id = task_number,
             .hold = true,
         }));
-        _ = try setup.queue.addTask(io, allocator, "recording-task", data, null, null);
+        _ = try setup.queue.addTask(io, allocator, console_log, "recording-task", data, null, null);
     }
     while (counter.started < 2) {
-        setup.backend.waitForMessage(io, allocator, timers);
+        setup.backend.waitForMessage(io, allocator, timers, console_log);
     }
     try std.testing.expectEqual(@as(u32, 2), counter.running);
-    setup.backend.cancelTasks(io, allocator, release_source);
+    setup.backend.cancelTasks(io, allocator, console_log, release_source);
 
     // Three more, which run in the workers the first two leave.
     while (task_number <= 5) : (task_number += 1) {
         const data = try json(allocator, try utils.json.stringify(allocator, .{
             .id = task_number,
         }));
-        _ = try setup.queue.addTask(io, allocator, "recording-task", data, null, null);
+        _ = try setup.queue.addTask(io, allocator, console_log, "recording-task", data, null, null);
     }
 
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // All tasks should complete.
     try std.testing.expectEqual(@as(u32, 5), counter.started);
@@ -786,6 +824,7 @@ test "should execute tasks in parallel up to maxWorkers" {
 }
 
 test "should respect maxWorkers limit" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -798,9 +837,9 @@ test "should respect maxWorkers limit" {
     setQueueBackend(limitedBackend.queueBackend());
     const queueWithLimit = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "test-limited");
     defer {
-        queueWithLimit.deinit(io, allocator);
+        queueWithLimit.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        limitedBackend.deinit(io, allocator, timers);
+        limitedBackend.deinit(io, allocator, timers, console_log);
     }
     var counter: RunningCounter = .empty;
     _ = try queueWithLimit.onAnyTaskEvent(allocator, .{ .context = &counter, .function = RunningCounter.taskStarted });
@@ -812,10 +851,10 @@ test "should respect maxWorkers limit" {
         const data = try json(allocator, try utils.json.stringify(allocator, .{
             .id = task_number,
         }));
-        _ = try queueWithLimit.addTask(io, allocator, "recording-task", data, null, null);
+        _ = try queueWithLimit.addTask(io, allocator, console_log, "recording-task", data, null, null);
     }
 
-    try queueWithLimit.awaitAllTasks(io, allocator, timers);
+    try queueWithLimit.awaitAllTasks(io, allocator, timers, console_log);
 
     // Should never exceed maxWorkers (2).
     try std.testing.expect(counter.most <= 2);
@@ -823,6 +862,7 @@ test "should respect maxWorkers limit" {
 }
 
 test "should process tasks in FIFO order" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -835,9 +875,9 @@ test "should process tasks in FIFO order" {
     setQueueBackend(singleWorkerBackend.queueBackend());
     const singleQueue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "test-fifo");
     defer {
-        singleQueue.deinit(io, allocator);
+        singleQueue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        singleWorkerBackend.deinit(io, allocator, timers);
+        singleWorkerBackend.deinit(io, allocator, timers, console_log);
     }
     var results: ResultsRecorder = .empty;
     _ = try singleQueue.onTaskComplete(allocator, .{ .context = &results, .function = ResultsRecorder.record });
@@ -848,10 +888,10 @@ test "should process tasks in FIFO order" {
         const data = try json(allocator, try utils.json.stringify(allocator, .{
             .id = task_number,
         }));
-        _ = try singleQueue.addTask(io, allocator, "recording-task", data, null, null);
+        _ = try singleQueue.addTask(io, allocator, console_log, "recording-task", data, null, null);
     }
 
-    try singleQueue.awaitAllTasks(io, allocator, timers);
+    try singleQueue.awaitAllTasks(io, allocator, timers, console_log);
 
     // One worker runs the tasks one after another, so they end in the order they were processed: FIFO.
     const expected = [_][]const u8{ "1", "2", "3", "4", "5" };
@@ -865,10 +905,11 @@ test "should process tasks in FIFO order" {
 // Runs a task of the type "echo-task" with the data and returns its output as JSON text.
 //
 fn echoedJson(io: std.Io, allocator: std.mem.Allocator, timers: Timers, data: std.json.Value) ![]const u8 {
+    const console_log = utils.mute_log.MuteLog.init();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    const taskId = try setup.queue.addTask(io, allocator, "echo-task", data, null, null);
-    const result = (try setup.queue.awaitTask(io, allocator, timers, taskId)).?;
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "echo-task", data, null, null);
+    const result = (try setup.queue.awaitTask(io, allocator, timers, console_log, taskId)).?;
     return try std.json.Stringify.valueAlloc(allocator, result.outputs orelse .null, .{});
 }
 
@@ -925,6 +966,7 @@ test "should handle array data" {
 }
 
 test "should terminate all workers" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -935,10 +977,11 @@ test "should terminate all workers" {
     defer setup.deinit(io, allocator, timers);
 
     // Should not throw.
-    setup.queue.shutdown(io, allocator);
+    setup.queue.shutdown(io, allocator, console_log);
 }
 
 test "should allow shutdown multiple times" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -949,11 +992,12 @@ test "should allow shutdown multiple times" {
     defer setup.deinit(io, allocator, timers);
 
     // Should not throw.
-    setup.queue.shutdown(io, allocator);
-    setup.queue.shutdown(io, allocator);
+    setup.queue.shutdown(io, allocator, console_log);
+    setup.queue.shutdown(io, allocator, console_log);
 }
 
 test "should prevent callbacks from being called after shutdown" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -967,19 +1011,20 @@ test "should prevent callbacks from being called after shutdown" {
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = &callbackCalled, .function = setFlagOnComplete });
 
     // Shutdown the queue.
-    setup.queue.shutdown(io, allocator);
+    setup.queue.shutdown(io, allocator, console_log);
 
-    _ = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
 
     // Read every message the task sends, so any callback that is going to fire has fired.
     setup.waitUntilIdle(io, allocator, timers);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // Callback should not be called after shutdown.
     try std.testing.expect(!callbackCalled);
 }
 
 test "should prevent task events from being received after shutdown" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -993,13 +1038,13 @@ test "should prevent task events from being received after shutdown" {
     _ = try setup.queue.onTaskEvent(allocator, "test-event", .{ .context = &callbackCalled, .function = setFlagOnEvent });
 
     // Shutdown the queue.
-    setup.queue.shutdown(io, allocator);
+    setup.queue.shutdown(io, allocator, console_log);
 
-    _ = try setup.queue.addTask(io, allocator, "event-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "event-task", .null, null, null);
 
     // Read every message the task sends, so any callback that is going to fire has fired.
     setup.waitUntilIdle(io, allocator, timers);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // Callback should not be called after shutdown.
     try std.testing.expect(!callbackCalled);
@@ -1058,7 +1103,8 @@ const RecordingBackend = struct {
     //
     // Records the task ID.
     //
-    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
+    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: @import("ziggy").task_queue.utils.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
+        _ = log;
         _ = io;
         _ = data;
         const self: *RecordingBackend = @ptrCast(@alignCast(ptr));
@@ -1125,7 +1171,8 @@ const RecordingBackend = struct {
     //
     // Does nothing.
     //
-    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: @import("ziggy").task_queue.utils.log.ILog, source: []const u8) void {
+        _ = log;
         _ = ptr;
         _ = io;
         _ = allocator;
@@ -1154,7 +1201,8 @@ const RecordingBackend = struct {
     //
     // Has no messages, because nothing it is given ever completes.
     //
-    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: @import("ziggy").task_queue.utils.log.ILog) void {
+        _ = log;
         _ = ptr;
         _ = io;
         _ = allocator;
@@ -1164,6 +1212,7 @@ const RecordingBackend = struct {
 };
 
 test "should unsubscribe from all backend events on shutdown" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1177,15 +1226,16 @@ test "should unsubscribe from all backend events on shutdown" {
     const testQueue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "test-unsub");
 
     // Shutdown should call all unsubscribe functions.
-    testQueue.shutdown(io, allocator);
+    testQueue.shutdown(io, allocator, console_log);
 
     try std.testing.expect(mockTestBackend.onTaskCompleteUnsubscribeCalled);
     try std.testing.expect(mockTestBackend.onAnyTaskEventUnsubscribeCalled);
     try std.testing.expect(mockTestBackend.onTaskAddedUnsubscribeCalled);
-    testQueue.deinit(io, allocator);
+    testQueue.deinit(io, allocator, console_log);
 }
 
 test "tasks from source A do not trigger completion callbacks of source B" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1197,20 +1247,21 @@ test "tasks from source A do not trigger completion callbacks of source B" {
     defer setup.deinit(io, allocator, timers);
 
     const queueB = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "source-b");
-    defer queueB.deinit(io, allocator);
+    defer queueB.deinit(io, allocator, console_log);
     var callbackBFired = false;
     _ = try queueB.onTaskComplete(allocator, .{ .context = &callbackBFired, .function = setFlagOnComplete });
 
     // Add a task to queue A (source "test").
-    _ = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    _ = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     // Nothing is queued for queue B.
-    try queueB.awaitAllTasks(io, allocator, timers);
+    try queueB.awaitAllTasks(io, allocator, timers, console_log);
     try std.testing.expect(!callbackBFired);
 }
 
 test "addTask with an explicit taskId passes that ID through to the backend" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1223,16 +1274,17 @@ test "addTask with an explicit taskId passes that ID through to the backend" {
     defer setQueueBackend(null);
     const testQueue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "test-explicit");
 
-    const returnedId = try testQueue.addTask(io, allocator, "test-task", .null, explicitId, null);
+    const returnedId = try testQueue.addTask(io, allocator, console_log, "test-task", .null, explicitId, null);
 
     try std.testing.expectEqualStrings(explicitId, returnedId);
     try std.testing.expectEqual(@as(usize, 1), recordingBackend.capturedCount);
     try std.testing.expectEqualStrings(explicitId, recordingBackend.capturedIds[0]);
 
-    testQueue.deinit(io, allocator);
+    testQueue.deinit(io, allocator, console_log);
 }
 
 test "should use custom UUID generator" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1252,20 +1304,21 @@ test "should use custom UUID generator" {
 
     var customUuidGenerator = try utils.file_test_uuid_generator.TestUuidGenerator.init(allocator);
     const customQueue = try TaskQueue.init(allocator, customUuidGenerator.uuidGenerator(), "test-custom");
-    defer customQueue.deinit(io, allocator);
+    defer customQueue.deinit(io, allocator, console_log);
 
-    const taskId1 = try customQueue.addTask(io, allocator, "test-task", .null, null, null);
-    const taskId2 = try customQueue.addTask(io, allocator, "test-task", .null, null, null);
+    const taskId1 = try customQueue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    const taskId2 = try customQueue.addTask(io, allocator, console_log, "test-task", .null, null, null);
 
     // TestUuidGenerator creates deterministic UUIDs.
     try std.testing.expect(taskId1.len > 0);
     try std.testing.expect(taskId2.len > 0);
     try std.testing.expect(!std.mem.eql(u8, taskId1, taskId2));
 
-    try customQueue.awaitAllTasks(io, allocator, timers);
+    try customQueue.awaitAllTasks(io, allocator, timers, console_log);
 }
 
 test "should use default UUID generator when not provided" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1277,23 +1330,24 @@ test "should use default UUID generator when not provided" {
 
     var customUuidGenerator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     const defaultQueue = try TaskQueue.init(allocator, customUuidGenerator.uuidGenerator(), "test-default");
-    defer defaultQueue.deinit(io, allocator);
+    defer defaultQueue.deinit(io, allocator, console_log);
 
-    const taskId1 = try defaultQueue.addTask(io, allocator, "test-task", .null, null, null);
-    const taskId2 = try defaultQueue.addTask(io, allocator, "test-task", .null, null, null);
+    const taskId1 = try defaultQueue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    const taskId2 = try defaultQueue.addTask(io, allocator, console_log, "test-task", .null, null, null);
 
     try std.testing.expect(taskId1.len > 0);
     try std.testing.expect(taskId2.len > 0);
     try std.testing.expect(!std.mem.eql(u8, taskId1, taskId2));
 
-    try defaultQueue.awaitAllTasks(io, allocator, timers);
+    try defaultQueue.awaitAllTasks(io, allocator, timers, console_log);
 }
 
 //
 // A handler that fails with a plain Zig error that has no recorded message
 // (the closest Zig equivalent of throwing a value that is not an Error).
 //
-fn plainZigErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn plainZigErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = allocator;
     _ = io;
     _ = timers;
@@ -1305,7 +1359,8 @@ fn plainZigErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers
 //
 // A handler that throws "Custom error message".
 //
-fn customErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn customErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+    _ = log;
     _ = allocator;
     _ = io;
     _ = timers;
@@ -1315,6 +1370,7 @@ fn customErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, 
 }
 
 test "should handle handler throwing non-Error objects" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1327,8 +1383,8 @@ test "should handle handler throwing non-Error objects" {
     var recorder: ResultsRecorder = .empty;
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = &recorder, .function = ResultsRecorder.record });
 
-    _ = try setup.queue.addTask(io, allocator, "throw-string", .null, null, null);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    _ = try setup.queue.addTask(io, allocator, console_log, "throw-string", .null, null, null);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     try std.testing.expectEqual(@as(usize, 1), recorder.statuses.items.len);
     try std.testing.expectEqual(TaskStatus.Failed, recorder.statuses.items[0]);
@@ -1337,6 +1393,7 @@ test "should handle handler throwing non-Error objects" {
 }
 
 test "should preserve error messages" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1349,8 +1406,8 @@ test "should preserve error messages" {
     var recorder: ResultsRecorder = .empty;
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = &recorder, .function = ResultsRecorder.record });
 
-    _ = try setup.queue.addTask(io, allocator, "custom-error", .null, null, null);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    _ = try setup.queue.addTask(io, allocator, console_log, "custom-error", .null, null, null);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     try std.testing.expectEqual(@as(usize, 1), recorder.statuses.items.len);
     try std.testing.expectEqual(TaskStatus.Failed, recorder.statuses.items[0]);
@@ -1368,7 +1425,8 @@ const ProgressRecorder = struct {
     //
     // The event callback.
     //
-    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, data: types.ITaskEventData) anyerror!void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, data: types.ITaskEventData) anyerror!void {
+        _ = log;
         _ = io;
         const self: *ProgressRecorder = @ptrCast(@alignCast(context.?));
         try self.progress.append(allocator, try allocator.dupe(u8, data.event.object.get("progress").?.string));
@@ -1378,16 +1436,17 @@ const ProgressRecorder = struct {
 //
 // A handler that sends two progress events and an event of another type, then returns.
 //
-fn progressHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn progressHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = timers;
     _ = data;
-    context.sendEvent(io, allocator, try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"one\"}"));
-    context.sendEvent(io, allocator, try json(allocator, "{\"type\":\"other\",\"progress\":\"ignored\"}"));
-    context.sendEvent(io, allocator, try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"two\"}"));
+    context.sendEvent(io, allocator, log, try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"one\"}"));
+    context.sendEvent(io, allocator, log, try json(allocator, "{\"type\":\"other\",\"progress\":\"ignored\"}"));
+    context.sendEvent(io, allocator, log, try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"two\"}"));
     return json(allocator, "{\"filesCopied\":2}");
 }
 
 test "onTaskEvent delivers only events of the registered type, in order, before awaitTask returns" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1400,8 +1459,8 @@ test "onTaskEvent delivers only events of the registered type, in order, before 
     var recorder: ProgressRecorder = .{ .progress = .empty };
     const unsubscribe = try setup.queue.onTaskEvent(allocator, "replicate-progress", .{ .context = &recorder, .function = ProgressRecorder.record });
 
-    const taskId = try setup.queue.addTask(io, allocator, "progress-task", .null, null, null);
-    const result = (try setup.queue.awaitTask(io, allocator, timers, taskId)).?;
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "progress-task", .null, null, null);
+    const result = (try setup.queue.awaitTask(io, allocator, timers, console_log, taskId)).?;
 
     try std.testing.expectEqual(TaskStatus.Succeeded, result.status);
     try std.testing.expectEqual(@as(i64, 2), result.outputs.?.object.get("filesCopied").?.integer);
@@ -1411,12 +1470,13 @@ test "onTaskEvent delivers only events of the registered type, in order, before 
 
     // After unsubscribing no more events are delivered.
     unsubscribe.call(allocator);
-    const secondTaskId = try setup.queue.addTask(io, allocator, "progress-task", .null, null, null);
-    _ = try setup.queue.awaitTask(io, allocator, timers, secondTaskId);
+    const secondTaskId = try setup.queue.addTask(io, allocator, console_log, "progress-task", .null, null, null);
+    _ = try setup.queue.awaitTask(io, allocator, timers, console_log, secondTaskId);
     try std.testing.expectEqual(@as(usize, 2), recorder.progress.items.len);
 }
 
 test "onTaskComplete unsubscribe removes the callback" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1430,8 +1490,8 @@ test "onTaskComplete unsubscribe removes the callback" {
     const unsubscribe = try setup.queue.onTaskComplete(allocator, .{ .context = &callbackCalled, .function = setFlagOnComplete });
     unsubscribe.call(allocator);
 
-    _ = try setup.queue.addTask(io, allocator, "test-task", .null, null, null);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    _ = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
     try std.testing.expect(!callbackCalled);
 }
 
@@ -1454,7 +1514,8 @@ const EventTypeRecorder = struct {
     //
     // The event callback.
     //
-    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, data: types.ITaskEventData) anyerror!void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, data: types.ITaskEventData) anyerror!void {
+        _ = log;
         _ = io;
         const self: *EventTypeRecorder = @ptrCast(@alignCast(context.?));
         try self.eventTypes.append(allocator, try allocator.dupe(u8, data.event.object.get("type").?.string));
@@ -1466,6 +1527,7 @@ const EventTypeRecorder = struct {
 // progress with, so what it does is pinned here.
 //
 test "onAnyTaskEvent delivers every event of a tracked task, whatever its type, in order" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1483,8 +1545,8 @@ test "onAnyTaskEvent delivers every event of a tracked task, whatever its type, 
         .function = EventTypeRecorder.record,
     });
 
-    const taskId = try setup.queue.addTask(io, allocator, "progress-task", .null, null, null);
-    _ = try setup.queue.awaitTask(io, allocator, timers, taskId);
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "progress-task", .null, null, null);
+    _ = try setup.queue.awaitTask(io, allocator, timers, console_log, taskId);
 
     try std.testing.expectEqual(@as(usize, 3), recorder.eventTypes.items.len);
     try std.testing.expectEqualStrings("replicate-progress", recorder.eventTypes.items[0]);
@@ -1493,12 +1555,13 @@ test "onAnyTaskEvent delivers every event of a tracked task, whatever its type, 
 
     // After unsubscribing no more events are delivered.
     unsubscribe.call(allocator);
-    const secondTaskId = try setup.queue.addTask(io, allocator, "progress-task", .null, null, null);
-    _ = try setup.queue.awaitTask(io, allocator, timers, secondTaskId);
+    const secondTaskId = try setup.queue.addTask(io, allocator, console_log, "progress-task", .null, null, null);
+    _ = try setup.queue.awaitTask(io, allocator, timers, console_log, secondTaskId);
     try std.testing.expectEqual(@as(usize, 3), recorder.eventTypes.items.len);
 }
 
 test "onAnyTaskEvent callbacks receive nothing after shutdown" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1516,12 +1579,12 @@ test "onAnyTaskEvent callbacks receive nothing after shutdown" {
         .function = EventTypeRecorder.record,
     });
 
-    setup.queue.shutdown(io, allocator);
+    setup.queue.shutdown(io, allocator, console_log);
 
-    _ = try setup.queue.addTask(io, allocator, "progress-task", .null, null, null);
+    _ = try setup.queue.addTask(io, allocator, console_log, "progress-task", .null, null, null);
     // Read every message the task sends, so any callback that is going to fire has fired.
     setup.waitUntilIdle(io, allocator, timers);
-    try setup.queue.awaitAllTasks(io, allocator, timers);
+    try setup.queue.awaitAllTasks(io, allocator, timers, console_log);
 
     try std.testing.expectEqual(@as(usize, 0), recorder.eventTypes.items.len);
 }
@@ -1529,7 +1592,8 @@ test "onAnyTaskEvent callbacks receive nothing after shutdown" {
 //
 // A completion callback that fails.
 //
-fn failOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: ITaskResult) anyerror!void {
+fn failOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: ITaskResult) anyerror!void {
+    _ = log;
     _ = context;
     _ = io;
     _ = allocator;
@@ -1540,7 +1604,8 @@ fn failOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator
 //
 // An event callback that fails.
 //
-fn failOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, data: types.ITaskEventData) anyerror!void {
+fn failOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, data: types.ITaskEventData) anyerror!void {
+    _ = log;
     _ = context;
     _ = io;
     _ = allocator;
@@ -1549,6 +1614,13 @@ fn failOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _
 }
 
 test "callbacks that fail are logged and the other callbacks still run" {
+    const memory = try utils.memory_log.MemoryLog.init(std.testing.allocator, .{
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    });
+    defer memory.deinit();
+    const console_log = memory.log;
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1558,13 +1630,6 @@ test "callbacks that fail are logged and the other callbacks still run" {
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
 
-    var stderrCapture = std.Io.Writer.Allocating.init(std.testing.allocator);
-    defer stderrCapture.deinit();
-    var stdoutCapture = std.Io.Writer.Allocating.init(std.testing.allocator);
-    defer stdoutCapture.deinit();
-    utils.console.setCapture(&stdoutCapture.writer, &stderrCapture.writer);
-    defer utils.console.setCapture(null, null);
-
     _ = try setup.queue.onTaskComplete(allocator, .{ .context = null, .function = failOnComplete });
     _ = try setup.queue.onTaskEvent(allocator, "replicate-progress", .{ .context = null, .function = failOnEvent });
     _ = try setup.queue.onAnyTaskEvent(allocator, .{ .context = null, .function = failOnEvent });
@@ -1573,19 +1638,20 @@ test "callbacks that fail are logged and the other callbacks still run" {
     var progress: ProgressRecorder = .{ .progress = .empty };
     _ = try setup.queue.onTaskEvent(allocator, "replicate-progress", .{ .context = &progress, .function = ProgressRecorder.record });
 
-    const taskId = try setup.queue.addTask(io, allocator, "progress-task", .null, null, null);
-    const result = (try setup.queue.awaitTask(io, allocator, timers, taskId)).?;
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "progress-task", .null, null, null);
+    const result = (try setup.queue.awaitTask(io, allocator, timers, console_log, taskId)).?;
     try std.testing.expectEqual(TaskStatus.Succeeded, result.status);
     try std.testing.expect(completed);
     try std.testing.expectEqual(@as(usize, 2), progress.progress.items.len);
 
-    const logged = stderrCapture.written();
+    const logged = memory.stderr();
     try std.testing.expect(std.mem.indexOf(u8, logged, "Error in task completion callback") != null);
     try std.testing.expect(std.mem.indexOf(u8, logged, "Error in task event callback") != null);
     try std.testing.expect(std.mem.indexOf(u8, logged, "Error in any task event callback") != null);
 }
 
 test "unsubscribing leaves the other callbacks, and unsubscribing twice does nothing" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1614,14 +1680,15 @@ test "unsubscribing leaves the other callbacks, and unsubscribing twice does not
         unsubscribeAnyEvent.call(allocator);
     }
 
-    const taskId = try setup.queue.addTask(io, allocator, "progress-task", .null, null, null);
-    _ = try setup.queue.awaitTask(io, allocator, timers, taskId);
+    const taskId = try setup.queue.addTask(io, allocator, console_log, "progress-task", .null, null, null);
+    _ = try setup.queue.awaitTask(io, allocator, timers, console_log, taskId);
     try std.testing.expect(firstCompleted and !secondCompleted);
     try std.testing.expect(firstNotified and !secondNotified);
     try std.testing.expect(firstAnyNotified and !secondAnyNotified);
 }
 
 test "callers awaiting different tasks each resolve when their own task completes" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1630,17 +1697,17 @@ test "callers awaiting different tasks each resolve when their own task complete
     const timers = timer_list.interface();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    defer setup.backend.cancelTasks(io, allocator, second_release_source);
+    defer setup.backend.cancelTasks(io, allocator, console_log, second_release_source);
 
-    const firstTaskId = try setup.queue.addTask(io, allocator, "slow-task", .null, null, null);
-    const secondTaskId = try setup.queue.addTask(io, allocator, "second-slow-task", .null, null, null);
+    const firstTaskId = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
+    const secondTaskId = try setup.queue.addTask(io, allocator, console_log, "second-slow-task", .null, null, null);
     // The second task is held until the first has been awaited. A task that ends while nothing waits for it is no longer tracked, and
     // awaitTask returns null for it. A release reaches only the workers that have been sent their task, so both are sent first.
     setup.waitUntilDispatched(io, allocator, timers);
-    setup.backend.cancelTasks(io, allocator, release_source);
-    const first = (try setup.queue.awaitTask(io, allocator, timers, firstTaskId)).?;
-    setup.backend.cancelTasks(io, allocator, second_release_source);
-    const second = (try setup.queue.awaitTask(io, allocator, timers, secondTaskId)).?;
+    setup.backend.cancelTasks(io, allocator, console_log, release_source);
+    const first = (try setup.queue.awaitTask(io, allocator, timers, console_log, firstTaskId)).?;
+    setup.backend.cancelTasks(io, allocator, console_log, second_release_source);
+    const second = (try setup.queue.awaitTask(io, allocator, timers, console_log, secondTaskId)).?;
     try std.testing.expectEqualStrings(firstTaskId, first.taskId);
     try std.testing.expectEqualStrings(secondTaskId, second.taskId);
     try std.testing.expectEqual(TaskStatus.Succeeded, first.status);

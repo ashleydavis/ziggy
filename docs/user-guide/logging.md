@@ -6,16 +6,29 @@ Ziggy has one logging system for every program built on it: a Ziggy app's backen
 
 ## Logging a line
 
-Code logs through `ziggy.task_queue.utils.log.log`, from any thread:
+There is no global log. Code logs to the `ILog` (`ziggy.task_queue.utils.log.ILog`) it is given:
+
+- A message handler, a menu item's function or an app function writes to `services.log`, the main thread's log on its handler services.
+- A task's handler writes to `services.log` on its task services, the worker's log. A task queue handler reads the same log from its context, `context.log`.
+- Any other function that logs takes the log as an argument, `log: ILog`, after its `std.Io` when it has one, and its caller passes its own down.
 
 ```zig
-const ziggy = @import("ziggy");
-const log = &ziggy.task_queue.utils.log.log;
+fn importPhotos(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, request: ImportRequest) !void {
+    const log = services.log;
+    log.info("Imported 12 photos");
+    log.warn("The thumbnail is missing");
+    try readThumbnail(io, log, request.path);
+}
 
-log.info("Imported 12 photos");
-log.warn("The thumbnail is missing");
-log.exception("Could not read the file", err);
+fn readThumbnail(io: std.Io, log: ziggy.task_queue.utils.log.ILog, path: []const u8) !void {
+    readFile(io, path) catch |err| {
+        log.exception("Could not read the file", err);
+        return err;
+    };
+}
 ```
+
+There is no function that gives a log. Code that has been given no log, such as a test, `main` before it has made its log or a thread of a program's own, makes a `ziggy.task_queue.utils.log.ConsoleLog` where it starts (`var console_log: ConsoleLog = .{};`, every option off unless it sets one) and passes `console_log.ilog()` down.
 
 | Function | What it logs |
 |---|---|
@@ -32,13 +45,13 @@ log.exception("Could not read the file", err);
 
 ## Where a line goes
 
-Each thread has its own log. A line goes to the log of the thread that writes it:
+A line goes to the log it is written to, and each thread has a log of its own to hand down:
 
-- **The main thread** writes the console and, once a file log is started, the log files.
-- **A worker thread** sends each line to the main thread as a message, and the main thread writes it, tagged with its source, `Worker <id>`. A task handler needs to do nothing for this.
+- **The main thread's log** is `services.log` on the handler services. It is set once, before the handler services are made, and does not change: for an app with a name it is the app's file log, which writes the console and the log files, and otherwise it is the console log.
+- **A worker's log** is `services.log` on its task services. It sends each line to the main thread as a message, and the main thread writes it to its own log, tagged with its source, `Worker <id>`. A task handler needs to do nothing for this.
 - **The frontend** sends lines with `window.ziggy.log` (see [Logging from the frontend](#logging-from-the-frontend)), and the main thread writes them tagged `Frontend`.
 
-Until a file log is started, the main thread's log is the console log, with verbose, debug and tool lines off.
+Until a file log is its target, the main thread's log writes to the console log, with verbose, debug and tool lines off.
 
 ### The console
 
@@ -113,7 +126,7 @@ Duration: 307000ms (307.00s)
 
 ## Starting the file log
 
-A Ziggy app's file log is started and stopped by Ziggy (see [In a Ziggy app](#in-a-ziggy-app)). Any other program starts the file log once, on its main thread, with `FileLog.start`, and stops it once at the end with `stop`. Starting it makes it the main thread's log.
+A Ziggy app's file log is started and stopped by Ziggy (see [In a Ziggy app](#in-a-ziggy-app)). Any other program starts the file log once, on its main thread, with `FileLog.start`, and stops it once at the end with `stop`. Starting it does not make it anyone's log: the program passes `logger.ilog()` down to the code that logs.
 
 ```zig
 const file_log = ziggy.task_queue.utils.file_log;
@@ -153,15 +166,15 @@ A Ziggy app writes no code to have log files. It gives its details in `app.zon`,
 | `title` | Yes | The first line of each file's header. |
 | `version` | No | The header's `Version:` line. Without it the header has none. |
 
-Ziggy's build reads `app.zon` with Zig's ZON parser when the app's `build.zig` calls `dependency`. A missing `app.zon`, one that does not parse, a missing required field or a field it does not know fails the build. The main thread starts the file log before `on_create` and stops it once every task has ended, just before the `.after_tasks_stopped` call of `on_destroy`. The files go in the `logs` directory of the directory `<NAME>_LOG_DIR` names when that environment variable is set (the name in capitals with each dash as an underscore, such as `MY_APP_LOG_DIR`), or else in the `logs` directory of the app's data directory, which exists on every platform.
+Ziggy's build reads `app.zon` with Zig's ZON parser when the app's `build.zig` calls `dependency`. A missing `app.zon`, one that does not parse, a missing required field or a field it does not know fails the build. The main thread starts the file log before it makes the handler services, so `services.log` is the file log for the whole run, and stops it after the `.after_tasks_stopped` call of `on_destroy`. The files go in the `logs` directory of the directory `<NAME>_LOG_DIR` names when that environment variable is set (the name in capitals with each dash as an underscore, such as `MY_APP_LOG_DIR`), or else in the `logs` directory of the app's data directory, which exists on every platform.
 
-The app's first lines, its lines while it stops and every task's lines are in the files. What the app logs in `.after_tasks_stopped`, while it frees its resources, goes to the console. The app's code never holds the logger: on the main thread, `FileLog.fromILog(log.currentLog())` finds it. A worker needs nothing: its lines reach the file log through the main thread. An app whose log files cannot be made does not start: creating the backend fails before `on_create` is called, and the native app reports the error.
+The app's first lines, its lines while it stops, its lines in `.after_tasks_stopped` and every task's lines are in the files. The app's code never holds the logger: on the main thread, `FileLog.fromILog(services.log)` finds it. A worker needs nothing: its lines reach the file log through the main thread. An app whose log files cannot be made does not start: creating the backend fails before `on_create` is called, and the native app reports the error.
 
 To give a release its version in the log, the release build writes it into `app.zon`'s `.version` before building.
 
 ### In a plain Zig program
 
-Start it in `main`, after handing the environment to `process_env.setEnvironMap` and reading the program's options, and stop it on every way out of the program, including an exit after an error, so the footer is written.
+Start it in `main`, after handing the environment to `process_env.setEnvironMap` and reading the program's options, pass `logger.ilog()` to everything `main` calls that logs, and stop it on every way out of the program, including an exit after an error, so the footer is written.
 
 ### The configuration
 
@@ -190,7 +203,7 @@ To let a user or a test choose the directory, read an environment variable of th
 
 ## When a write fails
 
-A log line that cannot be written to its file is reported on stderr, as `Could not write to the log file <path>: <error>`, and the line still goes to the console: logging never stops what is being logged. `stop(allocator, io)` reports a failure to write the footers the same way. `close(io)` writes the footers and stops writing to the files without freeing the logger or uninstalling it, and returns the first failure instead of reporting it. After `close`, lines still reach the console.
+A log line that cannot be written to its file is reported on stderr, as `Could not write to the log file <path>: <error>`, and the line still goes to the console: logging never stops what is being logged. `stop(allocator, io)` reports a failure to write the footers the same way. `close(io)` writes the footers and stops writing to the files without freeing the logger, and returns the first failure instead of reporting it. After `close`, lines still reach the console.
 
 When the file log is closed and anything was written to the error file, it prints:
 
@@ -215,20 +228,20 @@ window.ziggy.log("tool", "ffprobe", undefined, { stdout: probeOutput });
 
 ## Reading the log back
 
-`file_log.readLogDetails(allocator, io, log_file_path)` gives the path of a log file and its header (everything up to `--- Log Start ---`), as `ILogDetails`, for a bug report. `log.getLogDetails(allocator, io)` gives the same for the main thread's file log, and a null path for the console log. It reads the file, so call it from a task when the frontend is waiting.
+`file_log.readLogDetails(allocator, io, log_file_path)` gives the path of a log file and its header (everything up to `--- Log Start ---`), as `ILogDetails`, for a bug report. `log.getLogDetails(allocator, io)` on a log gives the same for a file log, and a null path for the console log; on `services.log` it is the main thread's file log's. It reads the file, so call it from a task when the frontend is waiting.
 
-The logger also gives `getLogFilePath()`, `getErrorLogFilePath()` and `hasLoggedErrors()`, and `FileLog.fromILog(log.currentLog())` gives the main thread's file log, or null when there is none.
+The logger also gives `getLogFilePath()`, `getErrorLogFilePath()` and `hasLoggedErrors()`, and `FileLog.fromILog(services.log)` gives the main thread's file log, or null when there is none.
 
 ## Writing lines that came from elsewhere
 
-A program with a worker pool of its own, or anything else that receives log lines from another thread, writes them on the main thread with `file_log.writeFrom(arena, source, line)`, where `line` is a `log.ILogLine` (level, message, error text, tool output). With a file log it is `logFrom`, which tags the line with the source in the files and on the console. With a console log it is the console log's `writeLine`, which puts `[source] ` in front of everything else on the line, `[EVENT]` included. With any other log, the line is given to the log with `[source] ` in front of it, and an exception becomes one error line with its error text under it. Ziggy's own worker pool writes its workers' lines this way, with the source `Worker <id>`, and starts its workers sending verbose and tool lines whenever the main thread has a file log, since the file always takes them.
+A program with a worker pool of its own, or anything else that receives log lines from another thread, writes them on the main thread with `worker_pool.writeTaggedLine(arena, log, source, line)`, where `log` is the log to write them to (for the main thread's, `services.log`) and `line` is a `log.ILogLine` (level, message, error text, tool output). It writes the line through the log's ordinary functions with `[source] ` in front of it, and an exception becomes one error line with its error text under it. Ziggy's own worker pool writes its workers' lines this way, with the source `Worker <id>`, and starts its workers sending verbose and tool lines whenever the main thread's log writes a file (`log.logFilePath()` is not null), since the file always takes them.
 
 ## Key files
 
 | File | What it holds |
 |---|---|
-| `packages/ziggy/core/src/lib/task-queue/utils/log.zig` | The `ILog` interface, the console log and each thread's log. |
-| `packages/ziggy/core/src/lib/task-queue/utils/file-log.zig` | The file log, `writeFrom`, `defaultLogsDir` and `readLogDetails`. |
+| `packages/ziggy/core/src/lib/task-queue/utils/log.zig` | The `ILog` interface and the console log. |
+| `packages/ziggy/core/src/lib/task-queue/utils/file-log.zig` | The file log, `defaultLogsDir` and `readLogDetails`. |
 | `packages/ziggy/core/src/lib/task-queue/utils/temp-dir.zig` | `osTmpDir`, the operating system's temporary directory. |
 | `packages/ziggy/core/src/lib/thread-log.zig` | A worker's log, which sends its lines to the main thread. |
 | `packages/ziggy/core/src/lib/worker-pool.zig` | `writeLog`, which writes a worker's line to the main thread's log. |

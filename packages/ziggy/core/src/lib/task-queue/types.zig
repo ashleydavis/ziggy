@@ -67,19 +67,19 @@ pub const ITaskContext = struct {
     // The functions an implementation of ITaskContext provides.
     //
     pub const VTable = struct {
-        // Sends an event from the task handler back to the caller.
-        sendEvent: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void,
+        // Sends an event from the task handler back to the caller, writing to the log when it cannot.
+        sendEvent: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, event: std.json.Value) void,
 
         // Returns true if this task has been cancelled and should stop as soon as possible.
         isCancelled: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) bool,
     };
 
     //
-    // Sends an event from the task handler back to the caller.
+    // Sends an event from the task handler back to the caller, writing to the log when it cannot.
     // The event only has to stay valid during the call (it is copied if it has to be kept).
     //
-    pub fn sendEvent(self: ITaskContext, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
-        self.vtable.sendEvent(self.ptr, io, allocator, event);
+    pub fn sendEvent(self: ITaskContext, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, event: std.json.Value) void {
+        self.vtable.sendEvent(self.ptr, io, allocator, log, event);
     }
 
     //
@@ -97,7 +97,7 @@ pub const ITaskContext = struct {
 // delivered), so the handler does not free what it allocates. The returned value and everything
 // it points to must be allocated with it (or be static).
 //
-pub const TaskHandler = *const fn (allocator: std.mem.Allocator, io: std.Io, timers: Timers, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value;
+pub const TaskHandler = *const fn (allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: utils.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value;
 
 //
 // How urgent a task is, which decides the order the queue dispatches pending tasks in.
@@ -326,7 +326,7 @@ pub const ITaskResult = struct {
 
 //
 // Low-level completion callback used by worker pool implementations.
-// (A Zig closure: `function` is called with `context` and the Io, allocator and timers of the thread it runs on. Errors are caught
+// (A Zig closure: `function` is called with `context` and the Io, allocator, timers and log of the thread it runs on. Errors are caught
 // and logged by the caller.)
 //
 pub const WorkerTaskCompletionCallback = struct {
@@ -334,13 +334,13 @@ pub const WorkerTaskCompletionCallback = struct {
     context: ?*anyopaque,
 
     // The callback function. The result is only valid during the call.
-    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, result: ITaskResult) anyerror!void,
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: utils.log.ILog, result: ITaskResult) anyerror!void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: WorkerTaskCompletionCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, result: ITaskResult) anyerror!void {
-        return self.function(self.context, io, allocator, timers, result);
+    pub fn call(self: WorkerTaskCompletionCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: utils.log.ILog, result: ITaskResult) anyerror!void {
+        return self.function(self.context, io, allocator, timers, log, result);
     }
 };
 
@@ -361,7 +361,7 @@ pub const ITaskEventData = struct {
 
 //
 // Callback invoked when a task sends an arbitrary event to the client.
-// (A Zig closure: `function` is called with `context` and the Io, allocator and timers of the thread it runs on. Errors are caught
+// (A Zig closure: `function` is called with `context` and the Io, allocator, timers and log of the thread it runs on. Errors are caught
 // and logged by the caller.)
 //
 pub const TaskEventCallback = struct {
@@ -369,13 +369,13 @@ pub const TaskEventCallback = struct {
     context: ?*anyopaque,
 
     // The callback function. The data is only valid during the call.
-    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, data: ITaskEventData) anyerror!void,
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: utils.log.ILog, data: ITaskEventData) anyerror!void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: TaskEventCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, data: ITaskEventData) anyerror!void {
-        return self.function(self.context, io, allocator, timers, data);
+    pub fn call(self: TaskEventCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: utils.log.ILog, data: ITaskEventData) anyerror!void {
+        return self.function(self.context, io, allocator, timers, log, data);
     }
 };
 
@@ -498,13 +498,13 @@ pub const TaskAddedCallback = struct {
     context: ?*anyopaque,
 
     // The callback function. The task ID is only valid during the call.
-    function: *const fn (context: ?*anyopaque, allocator: std.mem.Allocator, taskId: []const u8) void,
+    function: *const fn (context: ?*anyopaque, allocator: std.mem.Allocator, log: utils.log.ILog, taskId: []const u8) void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: TaskAddedCallback, allocator: std.mem.Allocator, taskId: []const u8) void {
-        self.function(self.context, allocator, taskId);
+    pub fn call(self: TaskAddedCallback, allocator: std.mem.Allocator, log: utils.log.ILog, taskId: []const u8) void {
+        self.function(self.context, allocator, log, taskId);
     }
 };
 

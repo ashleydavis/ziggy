@@ -588,12 +588,11 @@ pub const IValidate = struct {
 };
 
 //
-// Runs the command and adds logging for the tool used.
+// Runs the command and logs it, its failure and what the tool wrote to the log given.
 //
-pub fn execLogged(allocator: std.mem.Allocator, io: std.Io, tool: []const u8, command: []const u8, validate: ?IValidate) !ExecResult {
-    const log = &utils.log.log;
+pub fn execLogged(allocator: std.mem.Allocator, io: std.Io, log: utils.log.ILog, tool: []const u8, command: []const u8, validate: ?IValidate) !ExecResult {
     log.verbose(try std.fmt.allocPrint(allocator, "Executing {s} with command: \"{s}\"", .{ tool, command }));
-    return execLoggedInner(allocator, io, tool, command, validate) catch |err| {
+    return execLoggedInner(allocator, io, log, tool, command, validate) catch |err| {
         const msg = try std.fmt.allocPrint(allocator, "Failed to execute command: {s}", .{command});
         log.exception(msg, err);
         return errors.throwError("{s}", .{msg});
@@ -603,8 +602,7 @@ pub fn execLogged(allocator: std.mem.Allocator, io: std.Io, tool: []const u8, co
 //
 // The body of the try block of execLogged.
 //
-fn execLoggedInner(allocator: std.mem.Allocator, io: std.Io, tool: []const u8, command: []const u8, validate: ?IValidate) !ExecResult {
-    const log = &utils.log.log;
+fn execLoggedInner(allocator: std.mem.Allocator, io: std.Io, log: utils.log.ILog, tool: []const u8, command: []const u8, validate: ?IValidate) !ExecResult {
     const result = try exec(allocator, io, command);
     log.tool(tool, .{ .stdout = result.stdout, .stderr = result.stderr });
     if (validate) |check| {

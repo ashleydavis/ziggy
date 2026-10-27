@@ -55,6 +55,21 @@ test "a thread whose console lines are forwarded writes none of them, and the fo
     try std.testing.expectEqualStrings("three\n", stdout_capture.written());
 }
 
+test "currentForward gives the forward that is set, and null once it is cleared" {
+    var forwarded: Forwarded = .{};
+    defer forwarded.lines.deinit(std.testing.allocator);
+    try std.testing.expect(console.currentForward() == null);
+    console.setForward(.{
+        .context = &forwarded,
+        .function = Forwarded.take,
+    });
+    const current = console.currentForward().?;
+    try std.testing.expect(current.context == @as(?*anyopaque, &forwarded));
+    try std.testing.expect(current.function == &Forwarded.take);
+    console.setForward(null);
+    try std.testing.expect(console.currentForward() == null);
+}
+
 //
 // Writes a line to the console of a thread of its own, into a capture of that thread's own, and sends the test's thread what the
 // capture took on the queue given.

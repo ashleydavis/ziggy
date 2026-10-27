@@ -19,7 +19,8 @@ const EventRecorder = struct {
     //
     // ITaskContext.sendEvent for the recorder.
     //
-    fn sendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
+    fn sendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, event: std.json.Value) void {
+        _ = log;
         _ = io;
         const self: *EventRecorder = @ptrCast(@alignCast(ptr));
         self.calls += 1;
@@ -73,6 +74,7 @@ fn makeContext(recorder: *EventRecorder, generators: *Generators) ITaskContext {
 }
 
 test "sends the whole job with every report, so a listener that joined late learns all of it" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var recorder: EventRecorder = .{
@@ -85,7 +87,7 @@ test "sends the whole job with every report, so a listener that joined late lear
     };
     const context = makeContext(&recorder, &generators);
 
-    try sendJobProgress(arena.allocator(), std.testing.io, context, .{
+    try sendJobProgress(arena.allocator(), std.testing.io, console_log, context, .{
         .id = "job-1",
         .name = "Importing photos",
         .cancelSource = "session-1",
@@ -96,6 +98,7 @@ test "sends the whole job with every report, so a listener that joined late lear
 }
 
 test "carries a job that has not said what it is doing yet" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var recorder: EventRecorder = .{
@@ -108,7 +111,7 @@ test "carries a job that has not said what it is doing yet" {
     };
     const context = makeContext(&recorder, &generators);
 
-    try sendJobProgress(arena.allocator(), std.testing.io, context, .{
+    try sendJobProgress(arena.allocator(), std.testing.io, console_log, context, .{
         .id = "job-1",
         .name = "Syncing database",
     }, 5000, null);
@@ -119,6 +122,7 @@ test "carries a job that has not said what it is doing yet" {
 }
 
 test "sends nothing for a task that carries no job tag" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var recorder: EventRecorder = .{
@@ -131,7 +135,7 @@ test "sends nothing for a task that carries no job tag" {
     };
     const context = makeContext(&recorder, &generators);
 
-    try sendJobProgress(arena.allocator(), std.testing.io, context, null, 5000, "12 imported");
+    try sendJobProgress(arena.allocator(), std.testing.io, console_log, context, null, 5000, "12 imported");
 
     try std.testing.expectEqual(@as(usize, 0), recorder.calls);
 }

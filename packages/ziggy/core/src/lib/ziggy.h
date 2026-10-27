@@ -60,6 +60,12 @@ typedef struct ziggy_config {
     bool test_mode;
     // The file the test control connection writes its port to, or NULL for none. Used only in a test hooks build.
     const char *test_port_file;
+    // The number of the native app's command-line arguments in args, after the program's name. 0 for a native app with none (Android,
+    // iOS).
+    uint32_t arg_count;
+    // The native app's command-line arguments after the program's name (NUL terminated), or NULL when arg_count is 0. The app reads them
+    // through HandlerServices.arguments.
+    const char *const *args;
 } ziggy_config;
 
 // The kinds of message ziggy_take_native_message gives.

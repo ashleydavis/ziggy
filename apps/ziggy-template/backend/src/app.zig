@@ -7,6 +7,7 @@ const ziggy = @import("ziggy");
 const hello_world = @import("lib/hello-world.zig");
 const menu = @import("lib/menu.zig");
 const ui_query = @import("lib/ui-query.zig");
+pub const on_create = @import("lib/on-create.zig");
 const ui = @import("ui-files");
 
 //
@@ -22,4 +23,5 @@ pub const app = ziggy.core.App(.{
     .menu = menu.menu,
     .ui_files = &ui.files,
     .ui_query = ui_query.uiQuery,
+    .on_create = on_create.onCreate,
 });

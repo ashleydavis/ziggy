@@ -93,6 +93,7 @@ The task services are what the task reaches outside its worker through. Each cal
 | `nativeCaller(storage)` | Hands this task's native calls to code that does not know about tasks, or null when the native app has no `native_call` native call. |
 | `pickPaths(kind, title, initial_name)` | Shows a native file or directory dialog and returns the JSON text of the paths chosen, an empty array when the user cancelled. In a test hooks build a test can supply the paths instead. |
 | `osVersion()` | The operating system's version, through the native app's `os_version` native call. |
+| `log` | The worker's log, a field: each line written to it is sent to the main thread, which writes it to its own log tagged `Worker <id>` (see [Logging](logging.md#where-a-line-goes)). |
 
 The timers are the worker's own: a timer the task sets runs on its worker while the task waits for a message, and is cleared when the task ends.
 

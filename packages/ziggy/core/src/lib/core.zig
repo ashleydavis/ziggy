@@ -42,6 +42,9 @@ const QueueMessage = message_queue.Message;
 const TimerList = timers_lib.TimerList;
 const TestCommands = test_commands.TestCommands;
 const FileLog = task_queue.utils.file_log.FileLog;
+const ILog = task_queue.utils.log.ILog;
+const ILogOptions = task_queue.utils.log.ILogOptions;
+const ConsoleLog = task_queue.utils.log.ConsoleLog;
 
 pub const MessageQueue = message_queue.MessageQueue;
 
@@ -309,6 +312,13 @@ const MainServices = struct {
     frontend: Frontend,
     // The native app's configuration, with the main thread's copies of its strings.
     config: *const ZiggyConfig,
+    // The main thread's log for the whole run: the app's file log, or the console log for an app without one.
+    log: ILog,
+    // The console log that decides which of the log's lines the console shows: the file log's own, or the log itself for an app
+    // without a file log.
+    console_log: *ConsoleLog,
+    // Whether the app has configured the log, which it does once.
+    log_configured: bool,
 
     const vtable: services_lib.HandlerServices.VTable = .{
         .sendEvent = sendEvent,
@@ -320,6 +330,7 @@ const MainServices = struct {
         .dataDir = dataDir,
         .isPhone = isPhone,
         .nativeCallbacks = nativeCallbacks,
+        .configureLog = configureLog,
     };
 
     //
@@ -329,6 +340,7 @@ const MainServices = struct {
         return .{
             .ptr = self,
             .vtable = &vtable,
+            .log = self.log,
         };
     }
 
@@ -411,6 +423,15 @@ const MainServices = struct {
         self.frontend.native.call(io, allocator, call, null) catch @panic("out of memory calling the native app");
     }
 
+    fn configureLog(ptr: *anyopaque, options: ILogOptions) anyerror!void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        if (self.log_configured) {
+            return error.LogAlreadyConfigured;
+        }
+        self.log_configured = true;
+        self.console_log.configure(options);
+    }
+
     fn dataDir(ptr: *anyopaque) []const u8 {
         const self: *MainServices = @ptrCast(@alignCast(ptr));
         return std.mem.span(self.config.data_dir);
@@ -473,7 +494,7 @@ const AddTaskMessage = struct {
 // Adds a task a handler posted (see MainServices.addTask), with the main thread's allocator. A task that cannot be added is reported
 // as a core-error event, because the handler that added it has returned.
 //
-fn addTaskLater(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, pool: *worker_pool.WorkerPool, parsed: std.json.Value) void {
+fn addTaskLater(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, log: ILog, frontend: Frontend, pool: *worker_pool.WorkerPool, parsed: std.json.Value) void {
     const added = worker_messages.decodeValue(struct {
         taskId: []const u8,
         taskType: []const u8,
@@ -484,7 +505,7 @@ fn addTaskLater(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocat
         std.debug.panic("the main thread could not read a task a handler added ({s})", .{@errorName(err)});
     };
     const data_json = json.stringify(arena, added.data) catch @panic("out of memory adding a task");
-    pool.addTask(io, allocator, added.taskId, added.taskType, added.source, data_json, added.priority, null) catch |err| {
+    pool.addTask(io, allocator, log, added.taskId, added.taskType, added.source, data_json, added.priority, null) catch |err| {
         frontend.reportError(io, arena, null, @errorName(err));
     };
 }
@@ -692,7 +713,7 @@ pub fn start(allocator: std.mem.Allocator, queue: *MessageQueue, native_queue: *
 //
 // Has the main thread stop and waits for it to end: it calls the app's `on_destroy` with `.before_tasks_stop`, clears its timers,
 // cancels every task, sends every worker "shutdown", stops the test control connection, waits for all of them to end,
-// stops the app's file log, calls `on_destroy` with `.after_tasks_stopped`, tells the native app it has stopped and releases its state. Meanwhile the native app's side
+// calls `on_destroy` with `.after_tasks_stopped`, stops the app's file log, tells the native app it has stopped and releases its state. Meanwhile the native app's side
 // gives every call the result ShuttingDown (see NativeSide.stop), because the native app's UI thread is the one waiting here, and hands the
 // messages for the frontend to `frontend`, or drops them when it is null. The caller frees the queues afterwards.
 //
@@ -787,6 +808,8 @@ const StartMessage = struct {
     dataDir: []const u8,
     // The file the test control connection writes its port to, or null for none.
     testPortFile: ?[]const u8 = null,
+    // The native app's command-line arguments after the program's name.
+    arguments: []const []const u8 = &.{},
     // The environment of the thread that created the core, as a JSON object of names and values, which the main thread sets as its own
     // (see process-env.zig), or null when that thread had none.
     environment: ?std.json.Value = null,
@@ -800,6 +823,7 @@ fn startJson(arena: std.mem.Allocator, config: ZiggyConfig) ![]u8 {
     const environment: ?std.json.Value = if (task_queue.utils.process_env.getEnvironMap()) |map| try worker_lib.environmentJson(arena, map) else null;
     return try json.stringify(arena, StartMessage{
         .appUrlPrefix = std.mem.span(config.app_url_prefix),
+        .arguments = try types.configArguments(arena, config),
         .dataDir = std.mem.span(config.data_dir),
         .testPortFile = if (config.test_port_file) |path| std.mem.span(path) else null,
         .environment = environment,
@@ -816,7 +840,7 @@ fn reportStartFailure(main_start: *MainStart, io: std.Io, err: anyerror) void {
 }
 
 //
-// Starts the app's file log, named after the app and headed with its title and version, and installs it as the main thread's log. The files go in the `logs` directory of the
+// Starts the app's file log, named after the app and headed with its title and version, which is the main thread's log for the whole run. The files go in the `logs` directory of the
 // directory `<NAME>_LOG_DIR` names (the app's name in capitals with each dash as an underscore, such as ZIGGY_TEMPLATE_LOG_DIR) when it is
 // set, or else in the `logs` directory of the app's data directory. It is allocated with the main thread's allocator and stopped on the
 // main thread.
@@ -871,6 +895,7 @@ fn environmentVariable(arena: std.mem.Allocator, variable: []const u8) !?[]const
 // it releases its state.
 //
 fn mainThread(given: MainStart) void {
+    var console_log: ConsoleLog = .{};
     var main_start = given;
     // The main thread's own allocator, which everything on its thread is allocated with.
     var thread_allocator: ThreadAllocator = .init;
@@ -895,6 +920,10 @@ fn mainThread(given: MainStart) void {
     config.app_url_prefix = (start_arena.dupeZ(u8, start_data.appUrlPrefix) catch @panic("out of memory starting the main thread")).ptr;
     config.data_dir = (start_arena.dupeZ(u8, start_data.dataDir) catch @panic("out of memory starting the main thread")).ptr;
     config.test_port_file = if (start_data.testPortFile) |path| (start_arena.dupeZ(u8, path) catch @panic("out of memory starting the main thread")).ptr else null;
+    // The native app's argument strings were valid only while it created the core, so the main thread keeps the start message's copies
+    // (given to the app's on_create) and its configuration points at none.
+    config.arg_count = 0;
+    config.args = null;
     var environment: ?std.process.Environ.Map = if (start_data.environment) |value| worker_lib.environmentFromJson(allocator, value) catch |err| {
         std.debug.panic("the main thread could not read its environment: {s}", .{@errorName(err)});
     } else null;
@@ -921,11 +950,22 @@ fn mainThread(given: MainStart) void {
     defer allocator.free(session_id);
     var stopping = false;
     var pool: worker_pool.WorkerPool = undefined;
+    // The app's file log, the main thread's log for the whole run, or null for an app without one.
+    var file_log: ?*FileLog = null;
+    if (app.name) |name| {
+        file_log = startFileLog(allocator, name, app.title orelse name, app.version, std.mem.span(config.data_dir), io) catch |err| {
+            reportStartFailure(&main_start, io, err);
+            return;
+        };
+    }
     var main_services: MainServices = .{
         .pool = &pool,
         .queue = queue,
         .frontend = frontend,
         .config = &config,
+        .log = if (file_log) |logger| logger.ilog() else console_log.ilog(),
+        .console_log = if (file_log) |logger| &logger.console_log else &console_log,
+        .log_configured = false,
     };
     const services = main_services.interface();
     var native_calls: NativeCalls = .{
@@ -961,23 +1001,16 @@ fn mainThread(given: MainStart) void {
             .set = MainServices.setKeepAlive,
         },
     });
-    // The app's file log, the main thread's log from before on_create until after on_destroy, or null for an app without one.
-    var file_log: ?*FileLog = null;
     const start_failure: ?anyerror = failed: {
         if (build_options.test_hooks and config.test_mode) {
             tests.connection = test_control.TestControl.start(allocator, io, config, frontend.native, queue) catch |err| {
                 break :failed err;
             };
         }
-        if (app.name) |name| {
-            file_log = startFileLog(allocator, name, app.title orelse name, app.version, std.mem.span(config.data_dir), io) catch |err| {
-                break :failed err;
-            };
-        }
         if (app.on_create) |on_create| {
             var arena_state = std.heap.ArenaAllocator.init(allocator);
             defer arena_state.deinit();
-            on_create(services, timers, io, arena_state.allocator()) catch |err| {
+            on_create(services, timers, io, arena_state.allocator(), start_data.arguments) catch |err| {
                 break :failed err;
             };
         }
@@ -985,7 +1018,7 @@ fn mainThread(given: MainStart) void {
     };
     if (start_failure) |err| {
         tests.stop(io, allocator, queue);
-        pool.shutdown(io, allocator, timers, null);
+        pool.shutdown(io, allocator, timers, services.log, null);
         if (file_log) |logger| {
             logger.stop(allocator, io);
         }
@@ -1019,20 +1052,20 @@ fn mainThread(given: MainStart) void {
                             on_destroy(services, timers, io, arena, .before_tasks_stop);
                         }
                         timer_list.clearAll();
-                        pool.shutdown(io, allocator, timers, .{
+                        pool.shutdown(io, allocator, timers, services.log, .{
                             .user_data = null,
                             .handle = refuseWhileStopping,
                         });
                         later_replies.reportWithoutResponse(io, allocator, frontend);
                         tests.refuseWhileStopping(io, allocator);
                         tests.stop(io, allocator, queue);
-                        // Stopped once every task has ended, so the tasks' last lines are written before the footer, and before the
-                        // app frees its resources, so what the app logs then goes to the console.
-                        if (file_log) |logger| {
-                            logger.stop(allocator, io);
-                        }
                         if (app.on_destroy) |on_destroy| {
                             on_destroy(services, timers, io, arena, .after_tasks_stopped);
+                        }
+                        // Stopped once every task has ended and the app has made its last call, so every line is written before the
+                        // footer.
+                        if (file_log) |logger| {
+                            logger.stop(allocator, io);
                         }
                         // The last message the native app is sent, which ends its wait for the stop.
                         frontend.native.call(io, arena, .stopped, null) catch @panic("out of memory stopping the main thread");
@@ -1045,10 +1078,10 @@ fn mainThread(given: MainStart) void {
                         };
                     }
                     else if (std.mem.eql(u8, message_type, "add-task")) {
-                        addTaskLater(io, allocator, arena, frontend, &pool, parsed);
+                        addTaskLater(io, allocator, arena, services.log, frontend, &pool, parsed);
                     }
                     else if (std.mem.eql(u8, message_type, "cancel-tasks")) {
-                        pool.cancelSource(io, allocator, json.getString(parsed, "source") orelse "");
+                        pool.cancelSource(io, allocator, services.log, json.getString(parsed, "source") orelse "");
                     }
                     else if (std.mem.eql(u8, message_type, "later-reply")) {
                         later_replies.deliver(io, allocator, arena, frontend, parsed);
@@ -1074,7 +1107,7 @@ fn mainThread(given: MainStart) void {
                     }
                 },
                 else => {
-                    if (!pool.receive(io, allocator, timers, message)) {
+                    if (!pool.receive(io, allocator, timers, services.log, message)) {
                         std.debug.panic("the main thread was sent a message by nobody it knows ({d}): {s}", .{ message.from, message.text });
                     }
                 },
@@ -1244,7 +1277,7 @@ fn runAppMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fronten
                 frontend.reportHandlerError(io, arena, app.describe_error, null, error.MessageHasNoId);
                 return;
             };
-            queueResponseTask(io, allocator, arena, pool, next_request_task, id, task) catch |err| {
+            queueResponseTask(io, allocator, arena, services.log, pool, next_request_task, id, task) catch |err| {
                 frontend.reportHandlerError(io, arena, app.describe_error, id, err);
             };
         },
@@ -1257,11 +1290,11 @@ fn runAppMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fronten
 // it ends, and a task that fails or is cancelled gives an error response. The number of tasks queued so far names it: a message's own
 // id cannot, because the frontend numbers its messages from 1 again when it reloads, while a task of the last page can still be running.
 //
-fn queueResponseTask(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, pool: *worker_pool.WorkerPool, next_request_task: *u64, id: std.json.Value, task: handlers_lib.ResponseTask) !void {
+fn queueResponseTask(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, log: ILog, pool: *worker_pool.WorkerPool, next_request_task: *u64, id: std.json.Value, task: handlers_lib.ResponseTask) !void {
     const id_json = try json.stringify(arena, id);
     const task_id = try std.fmt.allocPrint(arena, "request-{d}", .{next_request_task.*});
     next_request_task.* += 1;
-    try pool.addTask(io, allocator, task_id, task.task_type, "request", task.data, .interactive, id_json);
+    try pool.addTask(io, allocator, log, task_id, task.task_type, "request", task.data, .interactive, id_json);
 }
 
 //
@@ -1318,7 +1351,7 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
                 .invalid_data = text,
             },
         };
-        return try respond(arena, try system_messages.tasks.addTask(pool, io, allocator, payload));
+        return try respond(arena, try system_messages.tasks.addTask(pool, io, allocator, services.log, payload));
     }
     if (std.mem.eql(u8, name, "cancel-tasks")) {
         const source = switch (try handlers_lib.parsePayload([]const u8, arena, data)) {
@@ -1327,7 +1360,7 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
                 .invalid_data = text,
             },
         };
-        return try respond(arena, system_messages.tasks.cancelTasks(pool, io, allocator, source));
+        return try respond(arena, system_messages.tasks.cancelTasks(pool, io, allocator, services.log, source));
     }
     if (std.mem.eql(u8, name, "get-platform")) {
         return try respond(arena, system_messages.platform.getPlatform());
@@ -1351,7 +1384,7 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
                 .invalid_data = text,
             },
         };
-        return try respond(arena, try system_messages.log.log(arena, payload));
+        return try respond(arena, try system_messages.log.log(arena, services.log, payload));
     }
     if (build_options.test_hooks) {
         if (std.mem.eql(u8, name, "test-result")) {

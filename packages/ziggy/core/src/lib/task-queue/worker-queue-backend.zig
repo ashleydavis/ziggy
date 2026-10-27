@@ -26,6 +26,7 @@ const IEventCallbackEntry = types.IEventCallbackEntry;
 const TaskAddedCallback = types.TaskAddedCallback;
 const TasksCancelledCallback = types.TasksCancelledCallback;
 const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
+const ILog = utils.log.ILog;
 
 //
 // Sends a message to the main thread: the worker's `parentPort.postMessage`.
@@ -191,7 +192,7 @@ pub const WorkerQueueBackend = struct {
     // The priority travels with the message but is only a request: the main thread knows which task queued this one, so an omitted
     // priority becomes that task's, which is what stops an import's children overtaking work the user is waiting on.
     //
-    pub fn addTask(self: *WorkerQueueBackend, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) ![]const u8 {
+    pub fn addTask(self: *WorkerQueueBackend, allocator: std.mem.Allocator, io: std.Io, log: ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) ![]const u8 {
         const id = if (taskId) |given| try allocator.dupe(u8, given) else try self.uuidGenerator.generate(allocator, io);
         const message = try std.json.Stringify.valueAlloc(allocator, .{
             .type = "queue-task",
@@ -212,7 +213,7 @@ pub const WorkerQueueBackend = struct {
                 continue;
             };
             if (std.mem.eql(u8, registration.source, source)) {
-                registration.callback.call(allocator, id);
+                registration.callback.call(allocator, log, id);
             }
         }
         return id;
@@ -252,7 +253,8 @@ pub const WorkerQueueBackend = struct {
     //
     // Fires onTasksCancelled callbacks for the given source. Called when the worker reads a "cancel-tasks" message.
     //
-    pub fn cancelTasks(self: *WorkerQueueBackend, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+    pub fn cancelTasks(self: *WorkerQueueBackend, io: std.Io, allocator: std.mem.Allocator, log: ILog, source: []const u8) void {
+        _ = log;
         const keys = callbackKeys(allocator, &self.tasksCancelledCallbacks) catch @panic("out of memory calling callbacks");
         defer allocator.free(keys);
         for (keys) |key| {
@@ -275,28 +277,30 @@ pub const WorkerQueueBackend = struct {
     //
     // Reads the worker's next message, so the callbacks of a task that ended fire.
     //
-    pub fn waitForMessage(self: *WorkerQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+    pub fn waitForMessage(self: *WorkerQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog) void {
+        // The worker reads its messages with its own log, which is the log the caller was given.
+        _ = log;
         self.waitForMessageFn.function(self.waitForMessageFn.context, io, allocator, timers);
     }
 
     //
     // Fires all registered onTaskComplete callbacks with the given result. Called when the worker reads a "task-completed" message.
     //
-    pub fn notifyTaskCompleted(self: *WorkerQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers, result: ITaskResult) !void {
+    pub fn notifyTaskCompleted(self: *WorkerQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, result: ITaskResult) !void {
         const keys = try callbackKeys(allocator, &self.completionCallbacks);
         defer allocator.free(keys);
         for (keys) |key| {
             const registration = registered(&self.completionCallbacks, key) orelse {
                 continue;
             };
-            try registration.callback.call(io, allocator, timers, result);
+            try registration.callback.call(io, allocator, timers, log, result);
         }
     }
 
     //
     // Fires all registered onTaskEvent / onAnyTaskEvent callbacks for a child task's event.
     //
-    pub fn notifyTaskMessage(self: *WorkerQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers, taskId: []const u8, message: std.json.Value) !void {
+    pub fn notifyTaskMessage(self: *WorkerQueueBackend, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, taskId: []const u8, message: std.json.Value) !void {
         const eventType = types.eventTypeOf(message);
         const data: ITaskEventData = .{
             .taskId = taskId,
@@ -311,7 +315,7 @@ pub const WorkerQueueBackend = struct {
             if (eventType == null or !std.mem.eql(u8, eventType.?, registration.callback.eventType)) {
                 continue;
             }
-            try registration.callback.callback.call(io, allocator, timers, data);
+            try registration.callback.callback.call(io, allocator, timers, log, data);
         }
         const any_keys = try callbackKeys(allocator, &self.anyEventCallbacks);
         defer allocator.free(any_keys);
@@ -319,7 +323,7 @@ pub const WorkerQueueBackend = struct {
             const registration = registered(&self.anyEventCallbacks, key) orelse {
                 continue;
             };
-            try registration.callback.call(io, allocator, timers, data);
+            try registration.callback.call(io, allocator, timers, log, data);
         }
     }
 
@@ -368,9 +372,9 @@ pub const WorkerQueueBackend = struct {
         }
     }
 
-    fn addTaskErased(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
+    fn addTaskErased(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
         const self: *WorkerQueueBackend = @ptrCast(@alignCast(ptr));
-        return self.addTask(allocator, io, @"type", data, source, taskId, priority);
+        return self.addTask(allocator, io, log, @"type", data, source, taskId, priority);
     }
 
     fn onTaskAddedErased(ptr: *anyopaque, allocator: std.mem.Allocator, source: []const u8, callback: TaskAddedCallback) anyerror!UnsubscribeFn {
@@ -393,9 +397,9 @@ pub const WorkerQueueBackend = struct {
         return self.onAnyTaskEvent(allocator, callback);
     }
 
-    fn cancelTasksErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+    fn cancelTasksErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ILog, source: []const u8) void {
         const self: *WorkerQueueBackend = @ptrCast(@alignCast(ptr));
-        self.cancelTasks(io, allocator, source);
+        self.cancelTasks(io, allocator, log, source);
     }
 
     fn onTasksCancelledErased(ptr: *anyopaque, allocator: std.mem.Allocator, source: []const u8, callback: TasksCancelledCallback) anyerror!UnsubscribeFn {
@@ -412,8 +416,8 @@ pub const WorkerQueueBackend = struct {
         _ = allocator;
     }
 
-    fn waitForMessageErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+    fn waitForMessageErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog) void {
         const self: *WorkerQueueBackend = @ptrCast(@alignCast(ptr));
-        self.waitForMessage(io, allocator, timers);
+        self.waitForMessage(io, allocator, timers, log);
     }
 };

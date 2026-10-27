@@ -799,7 +799,8 @@ test "an app's on_destroy is called before tasks stop, while a task can still be
 // The create test's on_create: queues a task, which shows the worker pool is ready, and sends the app event `{ "created": true }`, so
 // the test reads it from the messages the fake native app recorded.
 //
-fn recordCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+fn recordCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void {
+    _ = arguments;
     _ = timers;
     try services.addTask(io, allocator, "created", "quick", "create-test", "{}", .background);
     try services.sendEvent(io, allocator, "{\"created\":true}");
@@ -820,7 +821,8 @@ test "an app's on_create is called once while the core is created, when a task c
 //
 // The thread test's on_create: sends the id of the thread it runs on as an app event.
 //
-fn recordCreateThread(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+fn recordCreateThread(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void {
+    _ = arguments;
     _ = timers;
     var buffer: [64]u8 = undefined;
     try services.sendEvent(io, allocator, try std.fmt.bufPrint(&buffer, "{{\"createdOnThread\":{d}}}", .{std.Thread.getCurrentId()}));
@@ -843,7 +845,8 @@ test "an app's on_create runs on the core's main thread, not on the thread that 
 //
 // The failed create test's on_create: fails, as an app's would when it cannot make what its handlers need.
 //
-fn failCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+fn failCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void {
+    _ = arguments;
     _ = services;
     _ = timers;
     _ = io;

@@ -71,7 +71,29 @@ pub const ZiggyConfig = extern struct {
     test_mode: bool,
     // The file the test control connection writes its port to, or null for none. Used only in a test hooks build.
     test_port_file: ?[*:0]const u8,
+    // The number of the native app's command-line arguments in `args`, after the program's name. 0 for a native app with none (Android,
+    // iOS).
+    arg_count: u32,
+    // The native app's command-line arguments after the program's name (NUL terminated), or null when arg_count is 0. The app reads them
+    // through `HandlerServices.arguments`.
+    args: ?[*]const [*:0]const u8,
 };
+
+//
+// The native app's command-line arguments from its configuration, as slices of its strings, in a list allocated with the arena. The
+// strings are the configuration's, valid only as long as it is.
+//
+pub fn configArguments(arena: std.mem.Allocator, config: ZiggyConfig) ![]const []const u8 {
+    if (config.arg_count == 0) {
+        return &.{};
+    }
+    const args = config.args orelse return error.ArgumentsMissing;
+    const arguments = try arena.alloc([]const u8, config.arg_count);
+    for (arguments, 0..) |*argument, index| {
+        argument.* = std.mem.span(args[index]);
+    }
+    return arguments;
+}
 
 //
 // The result of a URL check.

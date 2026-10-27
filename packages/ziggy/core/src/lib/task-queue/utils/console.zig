@@ -64,6 +64,14 @@ pub fn setForward(lines_to: ?Forward) void {
 }
 
 //
+// The forward the calling thread's console lines go to, or null when they go to the process's streams, for a caller that sets a
+// forward of its own for a while and then puts this one back.
+//
+pub fn currentForward() ?Forward {
+    return forward;
+}
+
+//
 // Writes a line to stdout, ignoring write errors (like console.log).
 //
 fn writeStdoutLine(message: []const u8) void {

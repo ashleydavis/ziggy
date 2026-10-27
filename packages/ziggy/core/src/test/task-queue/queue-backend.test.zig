@@ -52,7 +52,8 @@ const NoOpBackend = struct {
     //
     // Returns "task-id".
     //
-    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?types.TaskPriority) anyerror![]const u8 {
+    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: @import("ziggy").task_queue.utils.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?types.TaskPriority) anyerror![]const u8 {
+        _ = log;
         countCall(ptr);
         _ = allocator;
         _ = io;
@@ -123,7 +124,8 @@ const NoOpBackend = struct {
     //
     // Does nothing.
     //
-    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, source: []const u8) void {
+    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: @import("ziggy").task_queue.utils.log.ILog, source: []const u8) void {
+        _ = log;
         _ = io;
         _ = allocator;
         countCall(ptr);
@@ -153,7 +155,8 @@ const NoOpBackend = struct {
     //
     // Counts the call.
     //
-    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
+    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: @import("ziggy").task_queue.utils.log.ILog) void {
+        _ = log;
         _ = io;
         _ = allocator;
         _ = timers;
@@ -186,6 +189,7 @@ test "queue-backend singleton: calling setQueueBackend a second time replaces th
 }
 
 test "IQueueBackend forwards every method to the implementation" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -193,12 +197,12 @@ test "IQueueBackend forwards every method to the implementation" {
     var timer_list = TimerList.init();
     var backend: NoOpBackend = .{ .calls = 0 };
     const interface = backend.queueBackend();
-    try std.testing.expectEqualStrings("task-id", try interface.addTask(allocator, io, "t", .null, "s", null, null));
+    try std.testing.expectEqualStrings("task-id", try interface.addTask(allocator, io, console_log, "t", .null, "s", null, null));
     const unsubscribe = try interface.onTaskComplete(allocator, .{ .context = null, .function = undefined });
     unsubscribe.call(allocator);
-    interface.cancelTasks(io, allocator, "s");
+    interface.cancelTasks(io, allocator, console_log, "s");
     interface.shutdown(io, allocator);
-    interface.waitForMessage(io, allocator, timer_list.interface());
+    interface.waitForMessage(io, allocator, timer_list.interface(), console_log);
     try std.testing.expectEqual(@as(u32, 5), backend.calls);
 }
 

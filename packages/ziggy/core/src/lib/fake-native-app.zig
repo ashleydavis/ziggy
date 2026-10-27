@@ -95,6 +95,8 @@ pub const FakeNativeApp = struct {
         copied.app_url_prefix = "";
         copied.data_dir = "";
         copied.test_port_file = null;
+        copied.arg_count = 0;
+        copied.args = null;
         self.ui_thread = try std.Thread.spawn(.{}, runUiThread, .{ &self.queue, &self.native_queue, copied, app });
         var arena_state = std.heap.ArenaAllocator.init(allocator);
         defer arena_state.deinit();
@@ -106,6 +108,7 @@ pub const FakeNativeApp = struct {
             .appUrlPrefix = std.mem.span(given_config.app_url_prefix),
             .dataDir = std.mem.span(given_config.data_dir),
             .testPortFile = if (given_config.test_port_file) |path| std.mem.span(path) else null,
+            .arguments = try types.configArguments(arena_state.allocator(), given_config),
             .environment = environment,
         });
         defer allocator.free(reply);
@@ -168,6 +171,8 @@ pub const FakeNativeApp = struct {
             .data_dir = &self.data_dir_path,
             .test_mode = false,
             .test_port_file = null,
+            .arg_count = 0,
+            .args = null,
         };
     }
 
@@ -390,6 +395,7 @@ const Request = struct {
     appUrlPrefix: ?[]const u8 = null,
     dataDir: ?[]const u8 = null,
     testPortFile: ?[]const u8 = null,
+    arguments: ?[]const []const u8 = null,
     environment: ?std.json.Value = null,
     type: ?[]const u8 = null,
     succeeded: ?bool = null,
@@ -546,6 +552,13 @@ fn runUiThread(main_queue: *MessageQueue, native_queue: *MessageQueue, given_con
                     config.app_url_prefix = (arena.dupeZ(u8, request.appUrlPrefix.?) catch @panic("out of memory starting the core")).ptr;
                     config.data_dir = (arena.dupeZ(u8, request.dataDir.?) catch @panic("out of memory starting the core")).ptr;
                     config.test_port_file = if (request.testPortFile) |path| (arena.dupeZ(u8, path) catch @panic("out of memory starting the core")).ptr else null;
+                    const arguments = request.arguments orelse &.{};
+                    const argument_pointers = arena.alloc([*:0]const u8, arguments.len) catch @panic("out of memory starting the core");
+                    for (arguments, argument_pointers) |argument, *pointer| {
+                        pointer.* = (arena.dupeZ(u8, argument) catch @panic("out of memory starting the core")).ptr;
+                    }
+                    config.arg_count = @intCast(arguments.len);
+                    config.args = if (arguments.len > 0) argument_pointers.ptr else null;
                     // The test thread's environment is this thread's while it creates the core, which copies it.
                     var environment: ?std.process.Environ.Map = if (request.environment) |value| worker_lib.environmentFromJson(arena, value) catch @panic("out of memory starting the core") else null;
                     process_env.setEnvironMap(if (environment) |*map| map else null);

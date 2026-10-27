@@ -233,6 +233,10 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
                 config.test_port_file = UnsafePointer(portFileText)
             }
         }
+        // The command-line arguments after the program's name, for the app to read its own options from. They live as long as the
+        // process.
+        config.arg_count = UInt32(CommandLine.argc - 1)
+        config.args = UnsafeRawPointer(CommandLine.unsafeArgv + 1).assumingMemoryBound(to: UnsafePointer<CChar>?.self)
         guard let created = ziggy_create(&config) else {
             ZiggyBridge.fail("ziggy_create failed")
         }

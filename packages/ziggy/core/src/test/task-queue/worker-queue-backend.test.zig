@@ -47,13 +47,15 @@ const Sent = struct {
         self.lines.append(std.testing.allocator, std.fmt.allocPrint(std.testing.allocator, format, arguments) catch @panic("out of memory")) catch @panic("out of memory");
     }
 
-    fn onAdded(context: ?*anyopaque, allocator: std.mem.Allocator, task_id: []const u8) void {
+    fn onAdded(context: ?*anyopaque, allocator: std.mem.Allocator, log: @import("ziggy").task_queue.utils.log.ILog, task_id: []const u8) void {
+        _ = log;
         _ = allocator;
         const self: *Sent = @ptrCast(@alignCast(context.?));
         self.line("added|{s}", .{task_id});
     }
 
-    fn onComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, result: types.ITaskResult) anyerror!void {
+    fn onComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, result: types.ITaskResult) anyerror!void {
+        _ = log;
         _ = io;
         _ = allocator;
         const self: *Sent = @ptrCast(@alignCast(context.?));
@@ -67,14 +69,16 @@ const Sent = struct {
         self.line("cancelled", .{});
     }
 
-    fn onTyped(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, data: types.ITaskEventData) anyerror!void {
+    fn onTyped(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, data: types.ITaskEventData) anyerror!void {
+        _ = log;
         _ = io;
         _ = allocator;
         const self: *Sent = @ptrCast(@alignCast(context.?));
         self.line("typed|{s}", .{data.taskId});
     }
 
-    fn onAny(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, data: types.ITaskEventData) anyerror!void {
+    fn onAny(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").task_queue.utils.log.ILog, data: types.ITaskEventData) anyerror!void {
+        _ = log;
         _ = io;
         _ = allocator;
         const self: *Sent = @ptrCast(@alignCast(context.?));
@@ -96,6 +100,7 @@ fn makeBackend(sent: *Sent, uuid_generator: *utils.random_uuid_generator.RandomU
 }
 
 test "addTask sends the main thread a queue-task message, with the priority requested, and fires the callbacks of its source" {
+    const console_log = utils.mute_log.MuteLog.init();
     var sent: Sent = .{};
     defer sent.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
@@ -105,13 +110,13 @@ test "addTask sends the main thread a queue-task message, with the priority requ
         .context = &sent,
         .function = Sent.onAdded,
     });
-    const id = try backend.addTask(std.testing.allocator, std.testing.io, "hash", .{ .integer = 3 }, "db", "child-1", .Interactive);
+    const id = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "hash", .{ .integer = 3 }, "db", "child-1", .Interactive);
     defer std.testing.allocator.free(id);
     try std.testing.expectEqualStrings("child-1", id);
     try std.testing.expectEqualStrings("{\"type\":\"queue-task\",\"taskId\":\"child-1\",\"taskType\":\"hash\",\"data\":3,\"source\":\"db\",\"priority\":\"interactive\"}", sent.messages.items[0]);
     try std.testing.expectEqualStrings("added|child-1", sent.lines.items[0]);
     unsubscribe.call(std.testing.allocator);
-    const other = try backend.addTask(std.testing.allocator, std.testing.io, "hash", .null, "db", null, null);
+    const other = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "hash", .null, "db", null, null);
     defer std.testing.allocator.free(other);
     // An id is made for a task given none, and a priority not requested is left out for the main thread to choose.
     try std.testing.expectEqual(@as(usize, 36), other.len);
@@ -120,6 +125,7 @@ test "addTask sends the main thread a queue-task message, with the priority requ
 }
 
 test "notifyTaskCompleted fires the completion callbacks, and cancelTasks the callbacks of the source cancelled" {
+    const console_log = utils.mute_log.MuteLog.init();
     var sent: Sent = .{};
     defer sent.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
@@ -134,20 +140,21 @@ test "notifyTaskCompleted fires the completion callbacks, and cancelTasks the ca
         .context = &sent,
         .function = Sent.onCancelled,
     });
-    try backend.notifyTaskCompleted(std.testing.io, std.testing.allocator, timer_list.interface(), .{
+    try backend.notifyTaskCompleted(std.testing.io, std.testing.allocator, timer_list.interface(), console_log, .{
         .taskId = "c1",
         .status = .Succeeded,
         .type = "hash",
         .inputs = .null,
     });
-    backend.cancelTasks(std.testing.io, std.testing.allocator, "other");
-    backend.cancelTasks(std.testing.io, std.testing.allocator, "db");
+    backend.cancelTasks(std.testing.io, std.testing.allocator, console_log, "other");
+    backend.cancelTasks(std.testing.io, std.testing.allocator, console_log, "db");
     try std.testing.expectEqual(@as(usize, 2), sent.lines.items.len);
     try std.testing.expectEqualStrings("complete|c1|succeeded", sent.lines.items[0]);
     try std.testing.expectEqualStrings("cancelled", sent.lines.items[1]);
 }
 
 test "notifyTaskMessage fires the callbacks for the event's type and those for every event" {
+    const console_log = utils.mute_log.MuteLog.init();
     var sent: Sent = .{};
     defer sent.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
@@ -165,8 +172,8 @@ test "notifyTaskMessage fires the callbacks for the event's type and those for e
     var event: std.json.ObjectMap = .empty;
     defer event.deinit(std.testing.allocator);
     try event.put(std.testing.allocator, "type", .{ .string = "progress" });
-    try backend.notifyTaskMessage(std.testing.io, std.testing.allocator, timer_list.interface(), "c1", .{ .object = event });
-    try backend.notifyTaskMessage(std.testing.io, std.testing.allocator, timer_list.interface(), "c2", .{ .string = "untyped" });
+    try backend.notifyTaskMessage(std.testing.io, std.testing.allocator, timer_list.interface(), console_log, "c1", .{ .object = event });
+    try backend.notifyTaskMessage(std.testing.io, std.testing.allocator, timer_list.interface(), console_log, "c2", .{ .string = "untyped" });
     try std.testing.expectEqual(@as(usize, 3), sent.lines.items.len);
     try std.testing.expectEqualStrings("typed|c1", sent.lines.items[0]);
     try std.testing.expectEqualStrings("any|c1", sent.lines.items[1]);
@@ -174,6 +181,7 @@ test "notifyTaskMessage fires the callbacks for the event's type and those for e
 }
 
 test "waitForMessage has the worker read its next message, and shutdown does nothing" {
+    const console_log = utils.mute_log.MuteLog.init();
     var sent: Sent = .{};
     defer sent.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
@@ -181,8 +189,8 @@ test "waitForMessage has the worker read its next message, and shutdown does not
     defer backend.deinit(std.testing.allocator);
     const interface = backend.queueBackend();
     var timer_list = TimerList.init();
-    interface.waitForMessage(std.testing.io, std.testing.allocator, timer_list.interface());
-    interface.waitForMessage(std.testing.io, std.testing.allocator, timer_list.interface());
+    interface.waitForMessage(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
+    interface.waitForMessage(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
     interface.shutdown(std.testing.io, std.testing.allocator);
     try std.testing.expectEqual(@as(u32, 2), sent.waits);
     try std.testing.expectEqual(@as(usize, 0), sent.messages.items.len);

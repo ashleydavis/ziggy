@@ -70,6 +70,7 @@ test "exec passes process.env to the command" {
 }
 
 test "execLogged returns the output of the command" {
+    const console_log = utils.mute_log.MuteLog.init();
     // iOS does not let an app start a process, so this command has no shell to run in there.
     if (!std.process.can_spawn) {
         return error.SkipZigTest;
@@ -77,19 +78,39 @@ test "execLogged returns the output of the command" {
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    const result = try utils.exec.execLogged(arena.allocator(), std.testing.io, "echo", "echo hello", null);
+    const result = try utils.exec.execLogged(arena.allocator(), std.testing.io, console_log, "echo", "echo hello", null);
     const expected = if (builtin.os.tag == .windows) "hello\r\n" else "hello\n";
     try std.testing.expectEqualStrings(expected, result.stdout);
 }
 
-test "execLogged reports a command that fails as a failure to execute it" {
+
+test "execLogged writes the command, what the tool wrote and a failure to the log it is given" {
+    // iOS does not let an app start a process, so this command has no shell to run in there.
+    if (!std.process.can_spawn) {
+        return error.SkipZigTest;
+    }
+
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    // Captured so that nothing reaches stderr.
-    var output = std.Io.Writer.Allocating.init(arena.allocator());
-    utils.console.setCapture(&output.writer, &output.writer);
-    defer utils.console.setCapture(null, null);
-    try std.testing.expectError(error.Thrown, utils.exec.execLogged(arena.allocator(), std.testing.io, "sh", "exit 3", null));
+    // Verbose and tool lines are on, which the default console log leaves out, so they show that this log was the one written to.
+    const memory = try utils.memory_log.MemoryLog.init(std.testing.allocator, .{
+        .verbose = true,
+        .debug = false,
+        .tools = true,
+    });
+    defer memory.deinit();
+    const given = memory.log;
+    _ = try utils.exec.execLogged(arena.allocator(), std.testing.io, given, "echo", "echo hello", null);
+    try std.testing.expect(std.mem.indexOf(u8, memory.stdout(), "Executing echo with command: \"echo hello\"\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, memory.stdout(), "== echo stdout ==\nhello") != null);
+    try std.testing.expectError(error.Thrown, utils.exec.execLogged(arena.allocator(), std.testing.io, given, "sh", "exit 3", null));
+    try std.testing.expect(std.mem.indexOf(u8, memory.stderr(), "Failed to execute command: exit 3\n") != null);
+}
+test "execLogged reports a command that fails as a failure to execute it" {
+    const console_log = utils.mute_log.MuteLog.init();
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+    try std.testing.expectError(error.Thrown, utils.exec.execLogged(arena.allocator(), std.testing.io, console_log, "sh", "exit 3", null));
     try std.testing.expectEqualStrings("Failed to execute command: exit 3", utils.errors.lastErrorMessage());
 }
 
@@ -104,14 +125,11 @@ fn failValidation(context: *anyopaque, allocator: std.mem.Allocator, io: std.Io)
 }
 
 test "execLogged reports a failed validation as a failure to execute the command" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    // The failure is reported on stdout, which the test runner reads its own messages from.
-    var output = std.Io.Writer.Allocating.init(arena.allocator());
-    utils.console.setCapture(&output.writer, &output.writer);
-    defer utils.console.setCapture(null, null);
     var unused: u8 = 0;
-    try std.testing.expectError(error.Thrown, utils.exec.execLogged(arena.allocator(), std.testing.io, "echo", "echo hello", .{ .context = &unused, .function = failValidation }));
+    try std.testing.expectError(error.Thrown, utils.exec.execLogged(arena.allocator(), std.testing.io, console_log, "echo", "echo hello", .{ .context = &unused, .function = failValidation }));
     try std.testing.expectEqualStrings("Failed to execute command: echo hello", utils.errors.lastErrorMessage());
 }
 

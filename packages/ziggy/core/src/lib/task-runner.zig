@@ -170,6 +170,58 @@ pub const RunningTask = struct {
     pub fn awaitAllTasks(self: *RunningTask, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
         self.worker.waitFor(io, allocator, timers, .all_children);
     }
+
+    //
+    // Whether the task's source has been cancelled. It reads the messages already waiting for the worker, without waiting for more.
+    //
+    pub fn isCancelled(self: *RunningTask, io: std.Io, allocator: std.mem.Allocator) bool {
+        self.worker.look(io, allocator);
+        return self.cancelled;
+    }
+
+    //
+    // Sends any value std.json can serialise to the frontend as the data of a task-event event.
+    //
+    pub fn sendEvent(self: *RunningTask, io: std.Io, allocator: std.mem.Allocator, value: anytype) !void {
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        try self.worker.parentPort().postMessage(io, try json.stringify(arena, .{
+            .type = "task-message",
+            .taskId = self.task_id,
+            .message = json.Raw{
+                .text = try json.stringify(arena, value),
+            },
+        }));
+    }
+
+    //
+    // Has the native app do one thing only the platform can do (see TaskServices.nativeCall).
+    //
+    pub fn nativeCall(self: *RunningTask, io: std.Io, allocator: std.mem.Allocator, timers: ?Timers, method: []const u8, request_json: []const u8) !types.NativeCallResult {
+        if (!self.worker.options.hasNativeCall) {
+            return error.NativeCallMissing;
+        }
+        const response = try self.worker.nativeRequest(io, allocator, timers, worker_messages.NativeAppFunction.native_call, worker_messages.NativeCallInput{
+            .method = method,
+            .request = request_json,
+        });
+        return switch (response) {
+            .result => |text| .{
+                .succeeded = true,
+                .text = text,
+            },
+            .failure => |text| failed: {
+                if (std.mem.eql(u8, text, "NativeCallMissing")) {
+                    return error.NativeCallMissing;
+                }
+                break :failed .{
+                    .succeeded = false,
+                    .text = text,
+                };
+            },
+        };
+    }
 };
 
 //
@@ -181,13 +233,14 @@ pub const RunningTask = struct {
 pub const TaskServices = struct {
     // The task behind the interface.
     task: *RunningTask,
+    // The worker's log, which sends each line to the main thread, where it is written tagged with the worker.
+    log: utils.log.ILog,
 
     //
     // Whether the task's source has been cancelled. It reads the messages already waiting for the worker, without waiting for more.
     //
     pub fn isCancelled(self: TaskServices, io: std.Io, allocator: std.mem.Allocator) bool {
-        self.task.worker.look(io, allocator);
-        return self.task.cancelled;
+        return self.task.isCancelled(io, allocator);
     }
 
     //
@@ -211,16 +264,7 @@ pub const TaskServices = struct {
     // Sends any value std.json can serialise to the frontend as the data of a task-event event.
     //
     pub fn sendEvent(self: TaskServices, io: std.Io, allocator: std.mem.Allocator, value: anytype) !void {
-        var arena_state = std.heap.ArenaAllocator.init(allocator);
-        defer arena_state.deinit();
-        const arena = arena_state.allocator();
-        try self.task.worker.parentPort().postMessage(io, try json.stringify(arena, .{
-            .type = "task-message",
-            .taskId = self.task.task_id,
-            .message = json.Raw{
-                .text = try json.stringify(arena, value),
-            },
-        }));
+        try self.task.sendEvent(io, allocator, value);
     }
 
     //
@@ -261,28 +305,7 @@ pub const TaskServices = struct {
     // method names gives a result that did not succeed, with the reason in its text.
     //
     pub fn nativeCall(self: TaskServices, io: std.Io, allocator: std.mem.Allocator, timers: ?Timers, method: []const u8, request_json: []const u8) !types.NativeCallResult {
-        if (!self.task.worker.options.hasNativeCall) {
-            return error.NativeCallMissing;
-        }
-        const response = try self.task.worker.nativeRequest(io, allocator, timers, worker_messages.NativeAppFunction.native_call, worker_messages.NativeCallInput{
-            .method = method,
-            .request = request_json,
-        });
-        return switch (response) {
-            .result => |text| .{
-                .succeeded = true,
-                .text = text,
-            },
-            .failure => |text| failed: {
-                if (std.mem.eql(u8, text, "NativeCallMissing")) {
-                    return error.NativeCallMissing;
-                }
-                break :failed .{
-                    .succeeded = false,
-                    .text = text,
-                };
-            },
-        };
+        return try self.task.nativeCall(io, allocator, timers, method, request_json);
     }
 
     //
@@ -465,9 +488,6 @@ pub fn fromQueueHandler(comptime handler: task_queue_types.TaskHandler) TaskHand
 // its outputs as JSON text allocated with the allocator.
 //
 pub fn runQueueHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, handler: task_queue_types.TaskHandler, data: std.json.Value) anyerror!?[]const u8 {
-    var bridge: ContextBridge = .{
-        .task = services.task,
-    };
     var native_caller_storage: TaskNativeCaller = undefined;
     const worker = services.task.worker;
     const task_context: task_queue_types.ITaskContext = .{
@@ -477,52 +497,41 @@ pub fn runQueueHandler(services: TaskServices, timers: Timers, io: std.Io, alloc
         .taskId = context.task_id,
         .maxConcurrentChildTasks = context.max_concurrent_child_tasks,
         .nativeCaller = services.nativeCaller(&native_caller_storage),
-        .ptr = &bridge,
-        .vtable = &ContextBridge.vtable,
+        .ptr = services.task,
+        .vtable = &queue_context_vtable,
     };
-    const outputs = try handler(allocator, io, timers, data, task_context);
+    const outputs = try handler(allocator, io, timers, services.log, data, task_context);
     return try std.json.Stringify.valueAlloc(allocator, outputs, .{});
 }
 
 //
-// What the ITaskContext of a handler written against the task queue package reaches: the task it runs in.
+// The functions of the ITaskContext of a handler written against the task queue package, which reach the task it runs in.
 //
-const ContextBridge = struct {
-    // The task.
-    task: *RunningTask,
-
-    const vtable: task_queue_types.ITaskContext.VTable = .{
-        .sendEvent = sendEventErased,
-        .isCancelled = isCancelledErased,
-    };
-
-    //
-    // Sends an event to the frontend and to the observers.
-    //
-    fn sendEventErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
-        const self: *ContextBridge = @ptrCast(@alignCast(ptr));
-        const services: TaskServices = .{
-            .task = self.task,
-        };
-        services.sendEvent(io, allocator, event) catch |err| {
-            utils.log.log.exception("Error sending a task event", err);
-        };
-    }
-
-    //
-    // Whether the task's source has been cancelled.
-    //
-    fn isCancelledErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) bool {
-        const self: *ContextBridge = @ptrCast(@alignCast(ptr));
-        const services: TaskServices = .{
-            .task = self.task,
-        };
-        return services.isCancelled(io, allocator);
-    }
+const queue_context_vtable: task_queue_types.ITaskContext.VTable = .{
+    .sendEvent = queueContextSendEvent,
+    .isCancelled = queueContextIsCancelled,
 };
 
 //
-// What a task's native caller calls: the native app's native call callback, through the task's services. A result that did not
+// Sends an event to the frontend and to the observers, writing to the log when it cannot.
+//
+fn queueContextSendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, event: std.json.Value) void {
+    const task: *RunningTask = @ptrCast(@alignCast(ptr));
+    task.sendEvent(io, allocator, event) catch |err| {
+        log.exception("Error sending a task event", err);
+    };
+}
+
+//
+// Whether the task's source has been cancelled.
+//
+fn queueContextIsCancelled(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) bool {
+    const task: *RunningTask = @ptrCast(@alignCast(ptr));
+    return task.isCancelled(io, allocator);
+}
+
+//
+// What a task's native caller calls: the native app's native call callback, through the task. A result that did not
 // succeed is an error with the native app's reason in it.
 //
 pub const TaskNativeCaller = struct {
@@ -534,10 +543,7 @@ pub const TaskNativeCaller = struct {
     //
     fn request(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, method: []const u8, request_json: []const u8) anyerror![]const u8 {
         const self: *TaskNativeCaller = @ptrCast(@alignCast(ptr));
-        const services: TaskServices = .{
-            .task = self.task,
-        };
-        const reply = try services.nativeCall(io, allocator, null, method, request_json);
+        const reply = try self.task.nativeCall(io, allocator, null, method, request_json);
         if (!reply.succeeded) {
             return utils.errors.throwError("{s} failed: {s}", .{ method, reply.text });
         }

@@ -11,12 +11,8 @@ const HandlerServices = ziggy.core.HandlerServices;
 const TaskServices = ziggy.task_runner.TaskServices;
 const TaskContext = ziggy.task_runner.TaskContext;
 const Timers = ziggy.timers.Timers;
+const ILogOptions = ziggy.task_queue.utils.log.ILogOptions;
 const json = ziggy.json;
-
-//
-// The log, which writes to the test app's log files and the console. Any thread may log through it.
-//
-const log = &ziggy.task_queue.utils.log.log;
 
 //
 // The handlers of the test app's own messages, each registered by its message name in app.zig, with the payload its data is
@@ -43,10 +39,9 @@ pub const PingResponse = struct {
 // logs a line on the main thread, which the smoke tests find in the log files.
 //
 pub fn pingHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: ziggy.core.Message) !ziggy.core.MessageResult {
-    _ = services;
     _ = timers;
     _ = io;
-    log.info("ping received");
+    services.log.info("ping received");
     const response: PingResponse = .{
         .zigVersion = builtin.zig_version_string,
         .os = @tagName(builtin.os.tag),
@@ -297,7 +292,7 @@ fn nowMilliseconds(io: std.Io) i64 {
 pub fn helloShortHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
     _ = timers;
     _ = context;
-    log.info("the short task is running");
+    services.log.info("the short task is running");
     const started_at = nowMilliseconds(io);
     try sendOutput(services, io, allocator, "hello from a short task");
     try sendJobProgress(services, io, allocator, readJobTag(payload), started_at, "short task working");
@@ -399,13 +394,12 @@ pub fn helloChildHandler(services: TaskServices, timers: Timers, io: std.Io, all
 // Always fails, so the failure path is exercised. It logs an error line first, which the smoke tests find in the error log file.
 //
 pub fn helloFailHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
-    _ = services;
     _ = timers;
     _ = io;
     _ = allocator;
     _ = context;
     _ = payload;
-    log.@"error"("the failing task is failing");
+    services.log.@"error"("the failing task is failing");
     return error.HelloFailure;
 }
 
@@ -1188,4 +1182,38 @@ pub fn uiQuery(services: HandlerServices, timers: Timers, io: std.Io, allocator:
         return try allocator.dupe(u8, "testMode=1");
     }
     return try allocator.dupe(u8, "");
+}
+
+//
+// Configures the log once, as early as the app can, from the options on the test app's command line.
+//
+pub fn onCreate(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void {
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    try services.configureLog(logOptions(arguments));
+}
+
+//
+// The log options on the command line: --verbose, --debug and --tools each turn on their lines. Every other argument is left to
+// whatever else reads the command line.
+//
+pub fn logOptions(arguments: []const []const u8) ILogOptions {
+    var options: ILogOptions = .{
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    };
+    for (arguments) |argument| {
+        if (std.mem.eql(u8, argument, "--verbose")) {
+            options.verbose = true;
+        }
+        else if (std.mem.eql(u8, argument, "--debug")) {
+            options.debug = true;
+        }
+        else if (std.mem.eql(u8, argument, "--tools")) {
+            options.tools = true;
+        }
+    }
+    return options;
 }

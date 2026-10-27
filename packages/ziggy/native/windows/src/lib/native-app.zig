@@ -918,6 +918,15 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
             config.test_port_file = port_file.ptr;
         }
     }
+    // The command-line arguments after the program's name, which the core copies, for the app to read its own options from.
+    const app_args = native_app.args[@min(native_app.args.len, 1)..];
+    const argument_pointers = std.heap.c_allocator.alloc([*:0]const u8, app_args.len) catch @panic("out of memory creating the core");
+    defer std.heap.c_allocator.free(argument_pointers);
+    for (app_args, argument_pointers) |argument, *pointer| {
+        pointer.* = argument.ptr;
+    }
+    config.arg_count = @intCast(argument_pointers.len);
+    config.args = @ptrCast(argument_pointers.ptr);
     native_app.core = c.ziggy_create(&config) orelse {
         fatal("the core could not be created", .{});
     };

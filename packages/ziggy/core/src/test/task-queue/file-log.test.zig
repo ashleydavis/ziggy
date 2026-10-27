@@ -1,4 +1,5 @@
 const std = @import("std");
+const ziggy = @import("ziggy");
 const utils = @import("ziggy").task_queue.utils;
 const console = utils.console;
 const errors = utils.errors;
@@ -79,7 +80,7 @@ fn throwRootCause() errors.ThrownError!void {
     return errors.throwError("root cause", .{});
 }
 
-test "start creates the logs directory and both files named with the prefix, and installs the log" {
+test "start creates the logs directory and both files named with the prefix" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var capture = ConsoleCapture.init();
@@ -102,7 +103,6 @@ test "start creates the logs directory and both files named with the prefix, and
     try std.testing.expect(std.mem.endsWith(u8, error_name, "-errors.log"));
     try std.testing.expectEqualStrings(std.fs.path.dirname(logger.getLogFilePath()).?, logs_dir);
     try std.Io.Dir.cwd().access(std.testing.io, logger.getErrorLogFilePath(), .{});
-    try std.testing.expect(FileLog.fromILog(utils.log.currentLog()) == logger);
 }
 
 test "the header holds the title, the version, the program's lines and the command only when given" {
@@ -156,7 +156,7 @@ test "every level reaches the log file, and errors, exceptions and warnings the 
     defer allocator.free(logs_dir);
 
     const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
-    const log = utils.log.log;
+    const log = logger.ilog();
     log.info("info line");
     log.verbose("verbose line");
     log.@"error"("error line");
@@ -226,7 +226,7 @@ test "the console options of a file log decide what the console shows" {
     config.tools = true;
     const logger = try FileLog.start(allocator, std.testing.io, config);
     defer logger.stop(allocator, std.testing.io);
-    const log = utils.log.log;
+    const log = logger.ilog();
     log.verbose("verbose line");
     log.debug("debug line");
     log.tool("magick", .{
@@ -236,42 +236,6 @@ test "the console options of a file log decide what the console shows" {
     try std.testing.expect(log.verboseEnabled());
     try std.testing.expectEqualStrings("verbose line\n== magick stdout ==\ntool out\n", capture.stdout.written());
     try std.testing.expectEqualStrings("debug line\n", capture.stderr.written());
-}
-
-test "logFrom tags a line with its source in the file and on the console" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    var capture = ConsoleCapture.init();
-    defer capture.deinit();
-    capture.begin();
-    const allocator = std.testing.allocator;
-    const logs_dir = try logsDirOf(allocator, &tmp);
-    defer allocator.free(logs_dir);
-
-    const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
-    logger.logFrom("Worker 3", .{
-        .level = .info,
-        .message = "from a worker",
-        .error_text = null,
-        .tool_output = null,
-    });
-    logger.logFrom("Frontend", .{
-        .level = .exception,
-        .message = "from the page",
-        .error_text = "Error: at line 4",
-        .tool_output = null,
-    });
-    const written = try readAll(allocator, logger.getLogFilePath());
-    defer allocator.free(written);
-    const errors_written = try readAll(allocator, logger.getErrorLogFilePath());
-    defer allocator.free(errors_written);
-    logger.stop(allocator, std.testing.io);
-
-    try std.testing.expect(std.mem.indexOf(u8, written, "] [INFO] [Worker 3] from a worker\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, written, "] [EXCEPTION] [Frontend] from the page\nError: at line 4\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [EXCEPTION] [Frontend] from the page\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, capture.stdout.written(), "[Worker 3] from a worker\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, capture.stderr.written(), "[Frontend] from the page\nError: at line 4\n") != null);
 }
 
 test "close writes the footers, prints the error file's path only when it has entries and does nothing a second time" {
@@ -285,10 +249,10 @@ test "close writes the footers, prints the error file's path only when it has en
     defer allocator.free(logs_dir);
 
     const quiet = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
-    utils.log.log.info("all well");
+    quiet.ilog().info("all well");
     try quiet.close(std.testing.io);
     try quiet.close(std.testing.io);
-    utils.log.log.info("after close");
+    quiet.ilog().info("after close");
     const quiet_written = try readAll(allocator, quiet.getLogFilePath());
     defer allocator.free(quiet_written);
     const quiet_errors = try readAll(allocator, quiet.getErrorLogFilePath());
@@ -304,7 +268,7 @@ test "close writes the footers, prints the error file's path only when it has en
     const other_dir = try std.fmt.allocPrint(allocator, "{s}/other", .{logs_dir});
     defer allocator.free(other_dir);
     const noisy = try FileLog.start(allocator, std.testing.io, testConfig(other_dir));
-    utils.log.log.warn("careful");
+    noisy.ilog().warn("careful");
     try noisy.close(std.testing.io);
     const noisy_errors = try readAll(allocator, noisy.getErrorLogFilePath());
     defer allocator.free(noisy_errors);
@@ -313,21 +277,6 @@ test "close writes the footers, prints the error file's path only when it has en
     noisy.stop(allocator, std.testing.io);
     try std.testing.expect(std.mem.indexOf(u8, noisy_errors, "\n--- Error Log End ---\nCompleted: ") != null);
     try std.testing.expect(std.mem.indexOf(u8, capture.stdout.written(), expected_message) != null);
-}
-
-test "stop has the thread use the console log again" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    var capture = ConsoleCapture.init();
-    defer capture.deinit();
-    capture.begin();
-    const allocator = std.testing.allocator;
-    const logs_dir = try logsDirOf(allocator, &tmp);
-    defer allocator.free(logs_dir);
-
-    const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
-    logger.stop(allocator, std.testing.io);
-    try std.testing.expect(FileLog.fromILog(utils.log.currentLog()) == null);
 }
 
 test "close returns a failure to write the footer and a failed line is reported on stderr" {
@@ -345,7 +294,7 @@ test "close returns a failure to write the footer and a failed line is reported 
     // A directory where the log file was, which a file cannot be opened over.
     try std.Io.Dir.cwd().deleteFile(std.testing.io, logger.getLogFilePath());
     try std.Io.Dir.cwd().createDirPath(std.testing.io, logger.getLogFilePath());
-    utils.log.log.info("lost line");
+    logger.ilog().info("lost line");
     const expected_report = try std.fmt.allocPrint(allocator, "Could not write to the log file {s}: ", .{logger.getLogFilePath()});
     defer allocator.free(expected_report);
     try std.testing.expect(std.mem.indexOf(u8, capture.stderr.written(), expected_report) != null);
@@ -353,7 +302,7 @@ test "close returns a failure to write the footer and a failed line is reported 
     try std.testing.expect(std.meta.isError(logger.close(std.testing.io)));
 }
 
-test "fromILog gives the file log behind its own ILog and null for a console log" {
+test "logFilePath gives a file log's log file and null for a console log" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var capture = ConsoleCapture.init();
@@ -365,13 +314,13 @@ test "fromILog gives the file log behind its own ILog and null for a console log
 
     const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
     defer logger.stop(allocator, std.testing.io);
-    try std.testing.expect(FileLog.fromILog(logger.ilog()) == logger);
-    var console_log: utils.log.ConsoleLog = .{
-        .verbose_enabled = false,
-        .debug_enabled = false,
-        .tools_enabled = false,
-    };
-    try std.testing.expect(FileLog.fromILog(console_log.ilog()) == null);
+    try std.testing.expectEqualStrings(logger.getLogFilePath(), logger.ilog().logFilePath().?);
+    const console_log = utils.log.ConsoleLog.initWith(.{
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    });
+    try std.testing.expect(console_log.logFilePath() == null);
 }
 
 test "readLogDetails and getLogDetails give the path and the header up to the start of the log" {
@@ -386,7 +335,7 @@ test "readLogDetails and getLogDetails give the path and the header up to the st
 
     const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
     defer logger.stop(allocator, std.testing.io);
-    utils.log.log.info("a line after the header");
+    logger.ilog().info("a line after the header");
     const details = try file_log.readLogDetails(allocator, std.testing.io, logger.getLogFilePath());
     defer allocator.free(details.logFilePath.?);
     defer allocator.free(details.logHeader);
@@ -394,7 +343,7 @@ test "readLogDetails and getLogDetails give the path and the header up to the st
     try std.testing.expect(std.mem.startsWith(u8, details.logHeader, "=" ** 80 ++ "\nTest App Log\n"));
     try std.testing.expect(std.mem.endsWith(u8, details.logHeader, "--- Log Start ---"));
 
-    const through_log = try utils.log.log.getLogDetails(allocator, std.testing.io);
+    const through_log = try logger.ilog().getLogDetails(allocator, std.testing.io);
     defer allocator.free(through_log.logFilePath.?);
     defer allocator.free(through_log.logHeader);
     try std.testing.expectEqualStrings(details.logHeader, through_log.logHeader);
@@ -441,146 +390,6 @@ test "defaultLogsDir is the program's logs directory under the temporary directo
     try std.testing.expectEqualStrings(expected, logs_dir);
 }
 
-test "writeFrom writes a line through the file log with its source when there is one" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
-    var capture = ConsoleCapture.init();
-    defer capture.deinit();
-    capture.begin();
-    const allocator = std.testing.allocator;
-    const logs_dir = try logsDirOf(allocator, &tmp);
-    defer allocator.free(logs_dir);
-
-    const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
-    var arena_state = std.heap.ArenaAllocator.init(allocator);
-    defer arena_state.deinit();
-    file_log.writeFrom(arena_state.allocator(), "Frontend", .{
-        .level = .warn,
-        .message = "from the page",
-        .error_text = null,
-        .tool_output = null,
-    });
-    const errors_written = try readAll(allocator, logger.getErrorLogFilePath());
-    defer allocator.free(errors_written);
-    logger.stop(allocator, std.testing.io);
-    try std.testing.expect(std.mem.indexOf(u8, errors_written, "] [WARN] [Frontend] from the page\n") != null);
-    try std.testing.expect(std.mem.indexOf(u8, capture.stderr.written(), "[Frontend] from the page\n") != null);
-}
-
-test "writeFrom gives a console log the line with its source in front of everything else" {
-    var capture = ConsoleCapture.init();
-    defer capture.deinit();
-    capture.begin();
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena_state.deinit();
-    file_log.writeFrom(arena_state.allocator(), "Worker 4", .{
-        .level = .info,
-        .message = "on the console",
-        .error_text = null,
-        .tool_output = null,
-    });
-    file_log.writeFrom(arena_state.allocator(), "Worker 4", .{
-        .level = .event,
-        .message = "started",
-        .error_text = null,
-        .tool_output = null,
-    });
-    file_log.writeFrom(arena_state.allocator(), "Worker 4", .{
-        .level = .exception,
-        .message = "failed",
-        .error_text = "Error: Boom",
-        .tool_output = null,
-    });
-    try std.testing.expectEqualStrings("[Worker 4] on the console\n[Worker 4] [EVENT] started\n", capture.stdout.written());
-    try std.testing.expectEqualStrings("[Worker 4] failed\nError: Boom\n", capture.stderr.written());
-}
-
-//
-// A log that keeps the last error line it was given, standing for a log that is neither a file log nor a console log.
-//
-const LastErrorLog = struct {
-    // The last error line, in a buffer of its own.
-    buffer: [256]u8 = undefined,
-    // How much of the buffer the last error line fills.
-    length: usize = 0,
-
-    //
-    // Gets the ILog interface for this log.
-    //
-    fn ilog(self: *LastErrorLog) utils.log.ILog {
-        return .{
-            .ptr = self,
-            .vtable = &vtable,
-        };
-    }
-
-    //
-    // The ILog functions of this log: only an error line is kept.
-    //
-    const vtable: utils.log.ILog.VTable = .{
-        .info = ignore,
-        .verbose = ignore,
-        .@"error" = keepError,
-        .exception = ignoreException,
-        .warn = ignore,
-        .debug = ignore,
-        .tool = ignoreTool,
-        .event = ignore,
-        .verboseEnabled = never,
-        .getLogDetails = noDetails,
-    };
-
-    fn ignore(ptr: *anyopaque, message: []const u8) void {
-        _ = ptr;
-        _ = message;
-    }
-
-    fn keepError(ptr: *anyopaque, message: []const u8) void {
-        const self: *LastErrorLog = @ptrCast(@alignCast(ptr));
-        @memcpy(self.buffer[0..message.len], message);
-        self.length = message.len;
-    }
-
-    fn ignoreException(ptr: *anyopaque, message: []const u8, err: anyerror) void {
-        _ = ptr;
-        _ = message;
-        _ = err catch {};
-    }
-
-    fn ignoreTool(ptr: *anyopaque, tool_name: []const u8, data: utils.log.IToolOutput) void {
-        _ = ptr;
-        _ = tool_name;
-        _ = data;
-    }
-
-    fn never(ptr: *anyopaque) bool {
-        _ = ptr;
-        return false;
-    }
-
-    fn noDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!utils.log.ILogDetails {
-        _ = ptr;
-        _ = allocator;
-        _ = io;
-        return utils.log.noLogDetails;
-    }
-};
-
-test "writeFrom gives any other log the line with its source in front, and an exception as one error line with its cause" {
-    var last_error: LastErrorLog = .{};
-    utils.log.setLog(last_error.ilog());
-    defer utils.log.setLog(null);
-    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena_state.deinit();
-    file_log.writeFrom(arena_state.allocator(), "Worker 4", .{
-        .level = .exception,
-        .message = "failed",
-        .error_text = "Error: Boom",
-        .tool_output = null,
-    });
-    try std.testing.expectEqualStrings("[Worker 4] failed\nError: Boom", last_error.buffer[0..last_error.length]);
-}
-
 test "a file log writes an error chain longer than 16 KB whole" {
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
@@ -596,7 +405,7 @@ test "a file log writes an error chain longer than 16 KB whole" {
     defer allocator.free(longText);
     @memset(longText, 'x');
     errors.recordError("Error", "{s}", .{longText});
-    utils.log.log.exception("Something failed", errors.throwErrorWithCause("{s}", .{longText}));
+    logger.ilog().exception("Something failed", errors.throwErrorWithCause("{s}", .{longText}));
     const written = try readAll(allocator, logger.getLogFilePath());
     defer allocator.free(written);
     logger.stop(allocator, std.testing.io);

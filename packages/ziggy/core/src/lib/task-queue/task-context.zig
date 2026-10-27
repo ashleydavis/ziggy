@@ -135,7 +135,8 @@ pub const TaskContext = struct {
     //
     // ITaskContext.sendEvent for this implementation.
     //
-    fn sendEventErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, event: std.json.Value) void {
+    fn sendEventErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, event: std.json.Value) void {
+        _ = log;
         const self: *TaskContext = @ptrCast(@alignCast(ptr));
         self.sendEvent(io, allocator, event);
     }

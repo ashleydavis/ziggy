@@ -59,6 +59,7 @@ test "cancel causes isCancelled to return true" {
 }
 
 test "sendEvent invokes the injected sendEventFn with the correct argument" {
+    const console_log = utils.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
@@ -74,7 +75,7 @@ test "sendEvent invokes the injected sendEventFn with the correct argument" {
     try std.testing.expectEqual(@as(i64, 42), recorder.lastValue);
 
     // Through the ITaskContext interface too.
-    context.taskContext().sendEvent(std.testing.io, arena.allocator(), msg);
+    context.taskContext().sendEvent(std.testing.io, arena.allocator(), console_log, msg);
     try std.testing.expectEqual(@as(usize, 2), recorder.calls);
 }
 

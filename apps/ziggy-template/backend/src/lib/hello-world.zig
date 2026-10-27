@@ -17,11 +17,6 @@ const TaskContext = ziggy.task_runner.TaskContext;
 const Timers = ziggy.timers.Timers;
 
 //
-// The log, which writes to the template's log files and the console, named from app.zon (see Ziggy's logging guide). Any thread may log through it.
-//
-const log = &ziggy.task_queue.utils.log.log;
-
-//
 // The data of the frontend's hello-world message.
 //
 pub const HelloWorldRequest = struct {
@@ -41,11 +36,10 @@ pub const HelloWorldResponse = struct {
 // Handles the frontend's hello-world message: returns a greeting for the name in the message's data, naming the platform the app runs on.
 //
 pub fn helloWorldHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: HelloWorldRequest) !HelloWorldResponse {
-    _ = services;
     _ = timers;
     _ = io;
-    // A line logged on the thread that handles messages goes straight to the log.
-    log.info(try std.fmt.allocPrint(allocator, "Greeting {s}", .{payload.name}));
+    // A line logged through the services goes to the main thread's log, the app's log files.
+    services.log.info(try std.fmt.allocPrint(allocator, "Greeting {s}", .{payload.name}));
     return .{
         .greeting = try std.fmt.allocPrint(allocator, "Hello {s}, from Zig on {s}", .{
             payload.name,
@@ -61,8 +55,8 @@ pub fn helloWorldTaskHandler(services: TaskServices, timers: Timers, io: std.Io,
     _ = timers;
     _ = context;
     _ = payload;
-    // A line logged in a task is sent to the main thread, which writes it to the log tagged with the task's worker.
-    log.info("The hello world task is running");
+    // A task's log sends its lines to the main thread, which writes them to the log files tagged with the task's worker.
+    services.log.info("The hello world task is running");
     try services.sendEvent(io, allocator, .{
         .type = "output",
         .text = "Hello world from a task",

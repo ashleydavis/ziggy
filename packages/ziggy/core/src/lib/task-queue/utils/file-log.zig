@@ -1,8 +1,8 @@
 //
 // The file log: the main thread's log once a program starts it. It writes every line to a log file and every error, exception and
 // warning to an error log file as well, and passes each line on to a console log with the program's console options. The files belong
-// to the thread that started the log, which alone writes them. A worker's lines reach that thread as messages and are written with
-// logFrom. See docs/user-guide/logging.md.
+// to the thread that started the log, which alone writes them. A worker's lines reach that thread as messages and are written there
+// through this log's ordinary functions. See docs/user-guide/logging.md.
 //
 // The log keeps no Io and no allocator: a log function is given neither, so each write makes its own for the call, as a worker's log
 // does (thread-log.zig).
@@ -77,8 +77,9 @@ pub const FileLog = struct {
     console_log: ConsoleLog,
 
     //
-    // Creates the logs directory when it is not there, writes both files with their headers and installs the log as the calling
-    // thread's log. The log and its paths are allocated with the allocator, which stop frees them with.
+    // Creates the logs directory when it is not there and writes both files with their headers. It does not install the log anywhere:
+    // the caller passes `ilog()` to whatever logs to it. The log and its paths are allocated with the allocator, which stop frees them
+    // with.
     //
     pub fn start(allocator: std.mem.Allocator, io: std.Io, config: IFileLogConfig) !*FileLog {
         const start_ms = std.Io.Clock.real.now(io).toMilliseconds();
@@ -124,21 +125,18 @@ pub const FileLog = struct {
                 "If this file contains nothing below, it means there were no errors.\n\n--- Error Log Start ---\n",
             }),
         });
-        log_lib.setLog(logger.ilog());
         return logger;
     }
 
     //
-    // Closes the log, reporting on stderr a failure to write the footers, has the calling thread use the console log again and frees
-    // the log. Call it on the thread that started the log, with the allocator it was started with.
+    // Closes the log, reporting on stderr a failure to write the footers, and frees the log. Nothing may log to it afterwards, so a
+    // caller that made it a thread's log puts that log back first. Call it on the thread that started the log, with the allocator it was
+    // started with.
     //
     pub fn stop(self: *FileLog, allocator: std.mem.Allocator, io: std.Io) void {
         self.close(io) catch |err| {
             console.errorFormat("Could not write the end of the log file {s}: {s}", .{ self.log_file, @errorName(err) });
         };
-        if (fromILog(log_lib.currentLog()) == self) {
-            log_lib.setLog(null);
-        }
         allocator.free(self.log_file);
         allocator.free(self.error_log_file);
         allocator.destroy(self);
@@ -195,16 +193,6 @@ pub const FileLog = struct {
     }
 
     //
-    // The file log behind an ILog, or null when the ILog is some other log.
-    //
-    pub fn fromILog(log: ILog) ?*FileLog {
-        if (log.vtable != &vtable) {
-            return null;
-        }
-        return @ptrCast(@alignCast(log.ptr));
-    }
-
-    //
     // The path of the log file.
     //
     pub fn getLogFilePath(self: *const FileLog) []const u8 {
@@ -226,17 +214,9 @@ pub const FileLog = struct {
     }
 
     //
-    // Writes a line that came from somewhere else, such as a worker or the frontend, tagged with its source, to the files and the
-    // console.
-    //
-    pub fn logFrom(self: *FileLog, source: []const u8, line: ILogLine) void {
-        self.writeLine(source, line);
-    }
-
-    //
     // Writes a line to the files, then to the console.
     //
-    fn writeLine(self: *FileLog, source: ?[]const u8, line: ILogLine) void {
+    fn writeLine(self: *FileLog, line: ILogLine) void {
         if (!self.is_closed) {
             var thread_allocator: ThreadAllocator = .init;
             defer thread_allocator.deinit();
@@ -250,8 +230,8 @@ pub const FileLog = struct {
             const now_ms = std.Io.Clock.real.now(io).toMilliseconds();
             switch (line.level) {
                 .tool => if (line.tool_output) |output| {
-                    self.writeToolStream(io, arena, now_ms, source, line.message, "stdout", output.stdout);
-                    self.writeToolStream(io, arena, now_ms, source, line.message, "stderr", output.stderr);
+                    self.writeToolStream(io, arena, now_ms, line.message, "stdout", output.stdout);
+                    self.writeToolStream(io, arena, now_ms, line.message, "stderr", output.stderr);
                 },
                 .exception => {
                     var text = line.message;
@@ -260,32 +240,32 @@ pub const FileLog = struct {
                             text = std.fmt.allocPrint(arena, "{s}\n{s}", .{ line.message, error_text }) catch @panic("out of memory writing a log line");
                         }
                     }
-                    self.writeEntry(io, arena, now_ms, line.level, source, text);
+                    self.writeEntry(io, arena, now_ms, line.level, text);
                 },
-                else => self.writeEntry(io, arena, now_ms, line.level, source, line.message),
+                else => self.writeEntry(io, arena, now_ms, line.level, line.message),
             }
         }
-        self.console_log.writeLine(source, line);
+        self.console_log.writeLine(line);
     }
 
     //
     // Writes `== <tool> <stream> ==` and what the tool wrote to it, when it wrote anything, as one entry of the log file.
     //
-    fn writeToolStream(self: *FileLog, io: std.Io, arena: std.mem.Allocator, now_ms: i64, source: ?[]const u8, tool_name: []const u8, stream: []const u8, text: ?[]const u8) void {
+    fn writeToolStream(self: *FileLog, io: std.Io, arena: std.mem.Allocator, now_ms: i64, tool_name: []const u8, stream: []const u8, text: ?[]const u8) void {
         const written = text orelse return;
         if (written.len == 0) {
             return;
         }
         const entry_text = std.fmt.allocPrint(arena, "== {s} {s} ==\n{s}", .{ tool_name, stream, written }) catch @panic("out of memory writing a log line");
-        self.writeEntry(io, arena, now_ms, .tool, source, entry_text);
+        self.writeEntry(io, arena, now_ms, .tool, entry_text);
     }
 
     //
     // Appends one entry to the log file, and to the error log file for an error, an exception or a warning. A failed write is reported
     // on stderr, because logging must never stop what is being logged.
     //
-    fn writeEntry(self: *FileLog, io: std.Io, arena: std.mem.Allocator, now_ms: i64, level: LogLevel, source: ?[]const u8, text: []const u8) void {
-        const entry = formatEntry(arena, now_ms, level, source, text) catch @panic("out of memory writing a log line");
+    fn writeEntry(self: *FileLog, io: std.Io, arena: std.mem.Allocator, now_ms: i64, level: LogLevel, text: []const u8) void {
+        const entry = formatEntry(arena, now_ms, level, text) catch @panic("out of memory writing a log line");
         appendToFile(io, self.log_file, entry) catch |err| {
             console.errorFormat("Could not write to the log file {s}: {s}", .{ self.log_file, @errorName(err) });
         };
@@ -311,14 +291,15 @@ pub const FileLog = struct {
         .event = event,
         .verboseEnabled = verboseEnabled,
         .getLogDetails = getLogDetails,
+        .logFilePath = logFilePath,
     };
 
     //
-    // Writes a line the calling thread logged, which has no source.
+    // Writes a line the calling thread logged.
     //
     fn writeOwn(ptr: *anyopaque, level: LogLevel, message: []const u8) void {
         const self: *FileLog = @ptrCast(@alignCast(ptr));
-        self.writeLine(null, .{
+        self.writeLine(.{
             .level = level,
             .message = message,
             .error_text = null,
@@ -358,7 +339,7 @@ pub const FileLog = struct {
         var arena_state = std.heap.ArenaAllocator.init(thread_allocator.allocator());
         defer arena_state.deinit();
         const chain = wrapped_error.formatErrorChain(arena_state.allocator(), err) catch @panic("out of memory writing an error");
-        self.writeLine(null, .{
+        self.writeLine(.{
             .level = .exception,
             .message = message,
             .error_text = chain,
@@ -385,7 +366,7 @@ pub const FileLog = struct {
     //
     fn tool(ptr: *anyopaque, tool_name: []const u8, data: IToolOutput) void {
         const self: *FileLog = @ptrCast(@alignCast(ptr));
-        self.writeLine(null, .{
+        self.writeLine(.{
             .level = .tool,
             .message = tool_name,
             .error_text = null,
@@ -415,45 +396,15 @@ pub const FileLog = struct {
         const self: *FileLog = @ptrCast(@alignCast(ptr));
         return readLogDetails(allocator, io, self.log_file);
     }
-};
 
-//
-// Writes a line that came from somewhere else (a worker or the frontend) to the calling thread's log, tagged with its source: with
-// `logFrom` when the log is a file log, with the console log's `writeLine` when it is a console log, and otherwise through the log's
-// functions with `[source] ` in front of the line.
-//
-pub fn writeFrom(arena: std.mem.Allocator, source: []const u8, line: ILogLine) void {
-    const log = log_lib.currentLog();
-    if (FileLog.fromILog(log)) |file_log| {
-        file_log.logFrom(source, line);
-        return;
+    //
+    // ILog.logFilePath: the path of the log file.
+    //
+    fn logFilePath(ptr: *anyopaque) ?[]const u8 {
+        const self: *FileLog = @ptrCast(@alignCast(ptr));
+        return self.log_file;
     }
-    if (ConsoleLog.fromILog(log)) |console_log| {
-        console_log.writeLine(source, line);
-        return;
-    }
-    const tagged = std.fmt.allocPrint(arena, "[{s}] {s}", .{ source, line.message }) catch @panic("out of memory writing a log line");
-    switch (line.level) {
-        .info => log.info(tagged),
-        .verbose => log.verbose(tagged),
-        .@"error" => log.@"error"(tagged),
-        // One error line with the cause under it, as the log of the thread the line came from would write it, so the cause is not a
-        // second error.
-        .exception => if (line.error_text) |details| {
-            log.@"error"(std.fmt.allocPrint(arena, "{s}\n{s}", .{ tagged, details }) catch @panic("out of memory writing a log line"));
-        }
-        else {
-            log.@"error"(tagged);
-        },
-        .warn => log.warn(tagged),
-        .debug => log.debug(tagged),
-        .tool => log.tool(tagged, line.tool_output orelse .{
-            .stdout = null,
-            .stderr = null,
-        }),
-        .event => log.event(tagged),
-    }
-}
+};
 
 //
 // The directory a program's logs go in by default: <the operating system's temporary directory>/<program_name>/logs. Allocated with
@@ -505,14 +456,11 @@ pub fn readLogDetails(allocator: std.mem.Allocator, io: std.Io, log_file_path: [
 }
 
 //
-// Formats an entry of a log file: [<time>] [<LEVEL>] [<source>] <text>, with the source left out when there is none, and a newline.
+// Formats an entry of a log file: [<time>] [<LEVEL>] <text> and a newline.
 //
-fn formatEntry(arena: std.mem.Allocator, now_ms: i64, level: LogLevel, source: ?[]const u8, text: []const u8) ![]const u8 {
+fn formatEntry(arena: std.mem.Allocator, now_ms: i64, level: LogLevel, text: []const u8) ![]const u8 {
     const timestamp = try (Date{ .epochMilliseconds = now_ms }).toISOString(arena);
     const upper_level = try std.ascii.allocUpperString(arena, @tagName(level));
-    if (source) |source_text| {
-        return std.fmt.allocPrint(arena, "[{s}] [{s}] [{s}] {s}\n", .{ timestamp, upper_level, source_text, text });
-    }
     return std.fmt.allocPrint(arena, "[{s}] [{s}] {s}\n", .{ timestamp, upper_level, text });
 }
 

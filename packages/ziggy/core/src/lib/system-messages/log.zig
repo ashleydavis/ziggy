@@ -4,6 +4,7 @@
 
 const std = @import("std");
 const utils = @import("../task-queue.zig").utils;
+const worker_pool = @import("../worker-pool.zig");
 
 //
 // The data of log.
@@ -35,10 +36,10 @@ pub const ToolData = struct {
 pub const DoneResponse = struct {};
 
 //
-// Writes a line the frontend logged to the main thread's log, tagged with the source `Frontend`. A level that is not one of the eight
-// fails with UnknownLogLevel, which is reported to the frontend as a core-error system event.
+// Writes a line the frontend logged to the main thread's log, the one given, tagged with the source `Frontend`. A level that is not one
+// of the eight fails with UnknownLogLevel, which is reported to the frontend as a core-error system event.
 //
-pub fn log(arena: std.mem.Allocator, request: LogRequest) !DoneResponse {
+pub fn log(arena: std.mem.Allocator, main_log: utils.log.ILog, request: LogRequest) !DoneResponse {
     const level = std.meta.stringToEnum(utils.log.LogLevel, request.level) orelse {
         return error.UnknownLogLevel;
     };
@@ -49,7 +50,7 @@ pub fn log(arena: std.mem.Allocator, request: LogRequest) !DoneResponse {
             .stderr = data.stderr,
         };
     }
-    utils.file_log.writeFrom(arena, "Frontend", .{
+    worker_pool.writeTaggedLine(arena, main_log, "Frontend", .{
         .level = level,
         .message = request.message,
         .error_text = request.@"error",

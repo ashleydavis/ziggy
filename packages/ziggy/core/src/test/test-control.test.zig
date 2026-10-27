@@ -112,7 +112,8 @@ fn controlPort(tmp: *std.testing.TmpDir) !u16 {
 //
 // The failed create test's on_create: fails, as an app's would when it cannot make what its handlers need.
 //
-fn failCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+fn failCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void {
+    _ = arguments;
     _ = services;
     _ = timers;
     _ = io;

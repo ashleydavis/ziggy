@@ -108,8 +108,8 @@ pub const WorkerSetup = struct {
 pub const OnMessage = struct {
     // The handler's own pointer, passed back on every call.
     context: ?*anyopaque,
-    // Handles one message from the worker, with the main thread's Io, allocator and timers.
-    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, worker: *Worker, text: []const u8) void,
+    // Handles one message from the worker, with the main thread's Io, allocator, timers and log.
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: utils.log.ILog, worker: *Worker, text: []const u8) void,
 };
 
 //
@@ -158,11 +158,11 @@ pub const Worker = struct {
     // Hands a message the worker sent to the main side's handler. The main thread calls it for each message it takes from its queue
     // under this worker's id.
     //
-    pub fn receive(self: *Worker, io: std.Io, allocator: std.mem.Allocator, timers: Timers, text: []const u8) void {
+    pub fn receive(self: *Worker, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: utils.log.ILog, text: []const u8) void {
         const handler = self.onmessage orelse {
             return;
         };
-        handler.function(handler.context, io, allocator, timers, self, text);
+        handler.function(handler.context, io, allocator, timers, log, self, text);
     }
 
     //
@@ -265,6 +265,9 @@ pub const WorkerRuntime = struct {
     timestamp_provider: utils.timestamp_provider.ITimestampProvider,
     // Identifies this run of the app to the handlers: the session id of the options, or one the worker made when they have none.
     session_id: []const u8,
+    // The worker's log, which sends each line to the main thread. It belongs to the worker's thread, as the main thread's log belongs
+    // to the main thread, and every task the worker runs is given it.
+    log: utils.log.ILog,
 
     //
     // How the worker sends the main thread a message.
@@ -308,6 +311,7 @@ pub const WorkerRuntime = struct {
         }
         const services: task_runner.TaskServices = .{
             .task = self.current.?,
+            .log = self.log,
         };
         timers.runDue(io, allocator, &services);
     }
@@ -341,6 +345,7 @@ pub const WorkerRuntime = struct {
             const message = self.takeOrTimeout(io, allocator, timers) orelse {
                 const services: task_runner.TaskServices = .{
                     .task = self.current.?,
+                    .log = self.log,
                 };
                 timers.?.runDue(io, allocator, &services);
                 continue;
@@ -537,7 +542,7 @@ pub const WorkerRuntime = struct {
                     context.cancelled = true;
                 }
             }
-            self.backend.cancelTasks(io, allocator, cancel.source);
+            self.backend.cancelTasks(io, allocator, self.log, cancel.source);
             return null;
         }
         if (std.mem.eql(u8, message_type, "task-completed")) {
@@ -553,8 +558,8 @@ pub const WorkerRuntime = struct {
             const given = timers orelse {
                 std.debug.panic("a worker read a task's end in a wait given no timers: {s}", .{message.text});
             };
-            self.backend.notifyTaskCompleted(io, allocator, given, completed.result) catch |err| {
-                utils.log.log.exception("Error in a task completion callback", err);
+            self.backend.notifyTaskCompleted(io, allocator, given, self.log, completed.result) catch |err| {
+                self.log.exception("Error in a task completion callback", err);
             };
             return null;
         }
@@ -660,6 +665,7 @@ pub const WorkerRuntime = struct {
         };
         const services: task_runner.TaskServices = .{
             .task = task,
+            .log = self.log,
         };
         const result = found(services, timers, io, allocator, context, data) catch |err| {
             if (err == error.Cancelled) {
@@ -748,6 +754,15 @@ fn initWorker(queue: *MessageQueue, main_queue: *MessageQueue, id: u32, tasks: [
         reportCannotStart(options_arena_state.allocator(), io, main_queue, id, err);
         return;
     };
+    // The worker's log and console lines go to the main thread, the only thread that writes stdout, stderr and log files.
+    var worker_log: QueueLog = .{
+        .queue = main_queue,
+        .from = id,
+        .verbose_enabled = options.verbose,
+        .tools_enabled = options.tools,
+    };
+    worker_log.set();
+    defer QueueLog.unset();
     var runtime: WorkerRuntime = .{
         .options = options,
         .queue = queue,
@@ -766,6 +781,7 @@ fn initWorker(queue: *MessageQueue, main_queue: *MessageQueue, id: u32, tasks: [
         .uuid_generator = uuid_generator,
         .timestamp_provider = timestamp_provider,
         .session_id = session_id,
+        .log = worker_log.ilog(),
     };
     runtime.backend = WorkerQueueBackend.init(.{
         .context = &runtime,
@@ -783,15 +799,6 @@ fn initWorker(queue: *MessageQueue, main_queue: *MessageQueue, id: u32, tasks: [
     }
     task_queue.queue_backend.setQueueBackend(runtime.backend.queueBackend());
     defer task_queue.queue_backend.setQueueBackend(null);
-    // The worker's log and console lines go to the main thread, the only thread that writes stdout, stderr and log files.
-    var worker_log: QueueLog = .{
-        .queue = main_queue,
-        .from = id,
-        .verbose_enabled = options.verbose,
-        .tools_enabled = options.tools,
-    };
-    worker_log.set();
-    defer QueueLog.unset();
     runtime.port.postMessage(io, "{\"type\":\"worker-ready\"}") catch @panic("out of memory starting a worker");
     runtime.run(io, allocator, &timer_list);
 }

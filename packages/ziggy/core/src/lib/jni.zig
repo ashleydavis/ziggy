@@ -355,6 +355,9 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
         .data_dir = data_dir.ptr,
         .test_mode = arguments.test_mode != c.JNI_FALSE,
         .test_port_file = if (test_port_file) |port_file| port_file.ptr else null,
+        // A phone app has no command line.
+        .arg_count = 0,
+        .args = null,
     };
     bridge.main_queue = try std.heap.page_allocator.create(MessageQueue);
     errdefer std.heap.page_allocator.destroy(bridge.main_queue);

@@ -122,7 +122,7 @@ The system events, each with its own listener on `window.ziggy`:
 ## Tasks
 
 - Background tasks run on a pool of worker threads in the backend, so slow work never blocks the frontend.
-- A worker's log lines are sent to the main thread as messages and written there, tagged `Worker <id>`, to the main thread's log: its log files (see [Logging](../user-guide/logging.md)).
+- A task writes to its worker's log, `services.log` on its task services, which sends each line to the main thread as a message. The main thread writes it, tagged `Worker <id>`, to its own log, `services.log`, which is the app's file log for the whole run (see [Logging](../user-guide/logging.md)). There is no global log: every function that logs is given the log.
 - Message handlers, menu functions and timers run on the backend's main thread, which Ziggy starts apart from the native app's UI thread. No thread touches another thread's state and they talk only by JSON messages, so the app's own state needs no locks. See [Threads and state](../user-guide/tasks.md#threads-and-state).
 - The frontend queues a task with `window.ziggy.addTask`, can cancel it with `cancelTasks` and hears back through `onTaskEvent` and `onTaskCompleted`.
 - A keep-alive task keeps a mobile app running in the background until it ends.
