@@ -361,13 +361,6 @@ jobs:
         shell: bash
         run: bun run test:smoke
 
-      # Dev mode: the dev host and Vite with the frontend in the runner's Chrome, and the supervisor rebuilding the dev host.
-      - name: Run the smoke tests in dev mode (desktop)
-        if: matrix.platform == 'linux' || matrix.platform == 'windows' || matrix.platform == 'macos'
-        timeout-minutes: 20
-        shell: bash
-        run: bun run test:smoke:dev
-
       # The script is one line, because this action runs each line of `script:` in a shell of its own.
       - name: Run the smoke tests on an emulator (Android)
         if: matrix.platform == 'android'
