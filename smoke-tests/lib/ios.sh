@@ -44,6 +44,10 @@ ziggy_platform_start() {
     # app's data.
     xcrun simctl terminate "$udid" "$IOS_BUNDLE_ID" > /dev/null 2>&1 || true
     if [ "${3:-}" != "keep-data" ]; then
+        # Installing over the app keeps its data container, so without the uninstall every scenario would start on the data the
+        # ones before it left: the iOS smoke job of the Release run of v0.0.17 failed 26-log-files with a log file pair from each
+        # earlier scenario in the logs directory. Uninstalling fails when the app is not installed, which is not an error.
+        xcrun simctl uninstall "$udid" "$IOS_BUNDLE_ID" > /dev/null 2>&1 || true
         xcrun simctl install "$udid" "$app" || return 1
     fi
     local launched
