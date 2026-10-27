@@ -1,6 +1,6 @@
 # Releasing Ziggy
 
-Two workflows build and test this repository: CI tests every push, and the release workflow publishes the Ziggy template when a version of the Ziggy package is released by cutting a version tag.
+Two workflows build and test this repository: CI tests every push, and the release workflow tests the commit again when a version of the Ziggy package is released by cutting a version tag.
 
 ## The CI workflow
 
@@ -14,12 +14,7 @@ It packages nothing and creates no release.
 
 ## The release workflow
 
-`.github/workflows/release.yml` runs when a version tag is pushed, and when started from the Actions tab. It runs the same jobs as CI, then:
-
-- **package**: the template's packages for every platform, uploaded as artifacts of the run.
-- **publish**: only when every job passed, and only for a pushed version tag: the GitHub release named "Ziggy template" is replaced by one holding this run's packages for every platform, with release notes listing the commits since the version tag before it. A GitHub release is always attached to a git tag, so this one sits on the tag `template`, which the workflow deletes and makes again on the commit it built. `template` is not a version tag, and nothing should pin it.
-
-A run started from the Actions tab runs every build and test and publishes nothing. A run that fails anywhere publishes nothing, and the previous release of the template stays.
+`.github/workflows/release.yml` runs when a version tag is pushed, and when started from the Actions tab. It runs the same jobs as CI, and packages and publishes nothing.
 
 ### Reading a failed run
 
