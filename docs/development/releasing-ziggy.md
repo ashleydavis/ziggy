@@ -8,15 +8,15 @@ Two workflows build and test this repository: CI tests every push, and the relea
 
 - **zig-build**: builds the backend of the template and of the test app and cross-builds them for every platform, with and without the test hooks, and compiles the Windows native app, on Linux (`bun run compile:zig`).
 - **unit-tests**: on Linux, MacOS and Windows, the TypeScript unit tests (`bun run test`) and every Zig test (`zig build test`); on Android, the Android native app's JUnit tests (`bun run test:android-shell`) and the Zig tests run on an emulator; on iOS, the Zig tests run on a simulator.
-- **smoke-tests**: Ziggy's smoke tests, which drive the test app, on Linux, Windows, MacOS, an Android emulator and an iOS simulator, and on Linux in dev mode too.
-- **package**: the template's packages for every platform, uploaded as artifacts of the run.
+- **smoke-tests**: Ziggy's smoke tests, which drive the test app, on Linux, Windows, MacOS, an Android emulator and an iOS simulator.
 
-It creates no release.
+It packages nothing and creates no release.
 
 ## The release workflow
 
 `.github/workflows/release.yml` runs when a version tag is pushed, and when started from the Actions tab. It runs the same jobs as CI, then:
 
+- **package**: the template's packages for every platform, uploaded as artifacts of the run.
 - **publish**: only when every job passed, and only for a pushed version tag: the GitHub release named "Ziggy template" is replaced by one holding this run's packages for every platform, with release notes listing the commits since the version tag before it. A GitHub release is always attached to a git tag, so this one sits on the tag `template`, which the workflow deletes and makes again on the commit it built. `template` is not a version tag, and nothing should pin it.
 
 A run started from the Actions tab runs every build and test and publishes nothing. A run that fails anywhere publishes nothing, and the previous release of the template stays.
