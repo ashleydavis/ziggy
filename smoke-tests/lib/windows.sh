@@ -29,12 +29,12 @@ ziggy_platform_prepare() {
         build="$run_dir/build"
         (cd "$ZIGGY_SMOKE_APP_DIR" && bun run build:windows --prefix "$build") || return 1
     fi
-    if [ ! -f "$build/bin/ziggy-test-app.exe" ]; then
-        echo "The Windows build $build has no bin/ziggy-test-app.exe." >&2
+    if [ ! -f "$build/ziggy-test-app/ziggy-test-app.exe" ]; then
+        echo "The Windows build $build has no ziggy-test-app/ziggy-test-app.exe." >&2
         return 1
     fi
     mkdir -p "$run_dir/app"
-    cp -R "$build/bin/." "$run_dir/app/" || return 1
+    cp -R "$build/ziggy-test-app/." "$run_dir/app/" || return 1
 }
 
 ziggy_platform_start() {

@@ -12,15 +12,17 @@ start_remote_control_server
 ZIGGY_REMOTE_CONTROL=""
 ziggy_platform_start "$ZIGGY_TEST_DIR" || fail "the app did not start"
 open_control_connection
-# The server holds a command until an app connects, so a reply would mean the app had connected. read gives a status above 128
-# when its time runs out, and 1 when the connection ended, which would mean the server had gone.
+# The server holds a command until an app connects, so a reply would mean the app had connected. A read that fails before its
+# time is up means the connection ended, which would mean the server had gone. That is told by the time the read took, not by its
+# status: bash 3.2, the bash macOS has, gives the same status for a timeout as for a connection that ended.
 printf '%s\n' '{"command":"ready"}' >&3 || fail "could not write to the control connection"
 status=0
+read_started=$SECONDS
 read -r -t "$NO_CONNECTION_SECONDS" -u 3 answer || status=$?
 if [ "$status" -eq 0 ]; then
     fail "the app started without --remote-control answered a command, so it connected to the remote control server: $answer"
 fi
-if [ "$status" -le 128 ]; then
+if [ $((SECONDS - read_started)) -lt "$NO_CONNECTION_SECONDS" ]; then
     cat "$ZIGGY_TEST_DIR/remote-control-server.log" >&2
     fail "the control connection ended while the scenario waited, so the remote control server is gone"
 fi
