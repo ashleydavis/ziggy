@@ -150,11 +150,15 @@ function startTasks(): void {
             job: jobTag("Long job", "long-source"),
         });
     });
+    // Each of the three runs for twenty seconds, so they are still running when a scenario cancels one. At three seconds, the
+    // Android smoke job of the v0.0.20 Release run failed 5-cancel-one-of-several-sources: on the slow CI emulator the scenario's
+    // three waits for the tasks' first events and its click took longer than that, every task had completed as succeeded, and the
+    // cancel had nothing left to cancel.
     element("start-many").addEventListener("click", () => {
         for (let index = 1; index <= 3; index++) {
             const source = `many-${index}`;
             queueTask("hello-long", source, {
-                durationMs: 3000,
+                durationMs: 20000,
                 stepMs: 100,
                 children: 0,
                 job: jobTag(`Many job ${index}`, source),
