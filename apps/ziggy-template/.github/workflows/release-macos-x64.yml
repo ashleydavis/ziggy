@@ -1,7 +1,7 @@
 name: Release macOS x64
 
 # Builds the Ziggy template for macOS x64 in app-build. Then, side by side on Intel runners, package makes the release
-# packages, the unit tests run and the smoke tests drive the build app-build made. When all of them passed on the default
+# packages, the TypeScript and Zig unit tests run and the smoke tests drive the build app-build made. When all of them passed on the default
 # branch, create-release publishes the packages as the GitHub release named "Ziggy template macOS x64", replacing the one
 # before. It runs on every push. The app is never version tagged, but a GitHub release is always attached to a git tag, so the
 # release sits on the tag `release-macos-x64`, which this workflow moves to the commit it built. A run that fails anywhere
@@ -27,6 +27,77 @@ on:
   workflow_dispatch:
 
 jobs:
+  typescript-compile:
+    # Compiles the TypeScript, which is the only check of its types: the unit tests run it without checking them.
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Compile TypeScript
+        timeout-minutes: 12
+        run: bun run compile
+
+  typescript-unit-tests:
+    # The TypeScript unit tests (the app's frontend).
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Run the TypeScript unit tests
+        timeout-minutes: 12
+        shell: bash
+        run: bun run test
+
   app-build:
     # Builds the app's release build for macOS x64 with its build script into example-build/app, on an Intel runner. The smoke
     # tests drive this build. It saves the build and its Zig build cache under the key example-build-macos-x64-<commit>, which
@@ -169,8 +240,8 @@ jobs:
           path: out/macos-x64
           key: example-package-macos-x64-${{ github.sha }}
 
-  unit-tests:
-    # The TypeScript unit tests (the app's frontend) and the Zig unit tests of the app's backend (`zig build test`), on the
+  zig-unit-tests:
+    # The Zig unit tests of the app's backend (`zig build test`), on the
     # Intel macOS runner. The Zig tests compile on top of the Zig build cache app-build saved. It runs beside package and the
     # smoke tests.
     needs: app-build
@@ -219,11 +290,6 @@ jobs:
             example-build/app
           key: example-build-macos-x64-${{ github.sha }}
           fail-on-cache-miss: true
-
-      - name: Run the TypeScript unit tests
-        timeout-minutes: 12
-        shell: bash
-        run: bun run test
 
       # The same tests `bun run test:zig` runs, which bundles the frontend first because the backend's tests embed it. They are
       # built for any CPU of the architecture: built for the runner's own, which differs from one runner to the next, every
@@ -299,7 +365,7 @@ jobs:
     # so a run on another branch or a pull request tests everything and publishes nothing. This platform's release and its tag
     # are deleted and made again on the commit this run built.
     if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
-    needs: [app-build, package, unit-tests, app-smoke-tests]
+    needs: [app-build, package, zig-unit-tests, app-smoke-tests, typescript-compile, typescript-unit-tests]
     timeout-minutes: 15
     runs-on: ubuntu-latest
     permissions:

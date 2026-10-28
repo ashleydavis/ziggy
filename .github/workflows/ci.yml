@@ -1,8 +1,9 @@
 name: CI
 
 # Builds Ziggy's test app and runs every unit test and smoke test on every platform, on every push to every branch and every pull
-# request to `main`. The app-build job runs first: on each platform's own runner it builds the test app once and saves it. The
-# unit tests and the smoke tests need app-build and restore what it saved, so the smoke tests drive the app app-build built. It runs
+# request to `main`. app-build-<platform> builds the test app once on each platform's own runner and saves it. The
+# platform's unit tests and smoke tests need only that build and restore what it saved, so the smoke tests drive the app it built.
+# typescript-compile and typescript-unit-tests check the TypeScript on Linux and need no other job. It runs
 # the same jobs as the release workflow (release.yml) but does not publish: the release workflow does that when a version tag is
 # pushed.
 
@@ -22,6 +23,77 @@ on:
   workflow_dispatch:
 
 jobs:
+  typescript-compile:
+    # Compiles the TypeScript, which is the only check of its types: the unit tests run it without checking them.
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Compile TypeScript
+        timeout-minutes: 12
+        run: bun run compile
+
+  typescript-unit-tests:
+    # The TypeScript unit tests.
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Run the TypeScript unit tests
+        timeout-minutes: 12
+        shell: bash
+        run: bun run test
+
   app-build-linux:
     # Builds the test app once per platform, on that platform's own runner, the one its smoke tests run on, into ziggy-build/app
     # (for iOS the simulator build). The build and the Zig build caches are saved under ziggy-build-<platform>-<commit>. The unit
@@ -625,10 +697,6 @@ jobs:
           key: ziggy-build-linux-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Run the TypeScript unit tests
-        shell: bash
-        run: bun run test
-
       # `zig build test` builds the template's frontend itself before it runs the template's tests, which embed it.
       - name: Run the Zig unit tests
         shell: bash
@@ -686,10 +754,6 @@ jobs:
           key: ziggy-build-macos-${{ github.sha }}
           fail-on-cache-miss: true
 
-      - name: Run the TypeScript unit tests
-        shell: bash
-        run: bun run test
-
       # `zig build test` builds the template's frontend itself before it runs the template's tests, which embed it.
       - name: Run the Zig unit tests
         shell: bash
@@ -746,10 +810,6 @@ jobs:
             apps/ziggy-test-app/.zig-cache
           key: ziggy-build-windows-${{ github.sha }}
           fail-on-cache-miss: true
-
-      - name: Run the TypeScript unit tests
-        shell: bash
-        run: bun run test
 
       # `zig build test` builds the template's frontend itself before it runs the template's tests, which embed it.
       - name: Run the Zig unit tests

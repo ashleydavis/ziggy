@@ -6,9 +6,10 @@ Two workflows build and test this repository: CI tests every push, and the relea
 
 `.github/workflows/ci.yml` runs on every push to every branch, on every pull request to `main` and when started from the Actions tab. Its jobs:
 
-- **app-build**: on each platform's own runner, builds the test app once with its build script (`build:<platform>`, the simulator build on iOS) into a directory of its own. It saves that build and the Zig build caches, which the later jobs restore.
-- **unit-tests**: on Linux, MacOS and Windows, the TypeScript unit tests (`bun run test`) and every Zig test (`zig build test`); on Android, the Android native app's JUnit tests (`bun run test:android-shell`) and the Zig tests run on an emulator; on iOS, the Zig tests run on a simulator.
-- **smoke-tests**: Ziggy's smoke tests, which drive the app app-build built (`ZIGGY_SMOKE_BUILD`), on Linux, Windows, MacOS, an Android emulator and an iOS simulator.
+- **typescript-compile** and **typescript-unit-tests**: on Linux, compile the TypeScript (`bun run compile`, the only check of its types) and run its unit tests (`bun run test`). They need no other job.
+- **app-build-<platform>**: on each platform's own runner, builds the test app once with its build script (`build:<platform>`, the simulator build on iOS) into a directory of its own. It saves that build and the Zig build caches, which the later jobs restore.
+- **unit-tests-<platform>**: needs that platform's app-build. On Linux, MacOS and Windows, every Zig test (`zig build test`); on Android, the Android native app's JUnit tests (`bun run test:android-shell`) and the Zig tests run on an emulator; on iOS, the Zig tests run on a simulator.
+- **smoke-tests-<platform>**: needs that platform's app-build. Ziggy's smoke tests, which drive the app it built (`ZIGGY_SMOKE_BUILD`), on Linux, Windows, MacOS, an Android emulator and an iOS simulator.
 
 It packages nothing and creates no release.
 
