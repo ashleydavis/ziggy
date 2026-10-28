@@ -715,8 +715,9 @@ pub fn addWindowsNativeApp(
     native_app.linkSystemLibrary("uuid", .{});
     // The WebView2 static loader reads the registry and writes event traces, which live in advapi32.
     native_app.linkSystemLibrary("advapi32", .{});
-    // The remote control's WebSocket client (websocket.zig) can open a TLS connection, and Zig's TLS client reads the Windows
-    // certificate store, which lives in crypt32.
+    // The remote control's WebSocket client (websocket.zig) uses Windows sockets, which live in ws2_32. It can also open a TLS
+    // connection, and Zig's TLS client reads the Windows certificate store, which lives in crypt32.
+    native_app.linkSystemLibrary("ws2_32", .{});
     native_app.linkSystemLibrary("crypt32", .{});
     // Without the library the module still compiles, which is how a machine that cannot link a Windows executable checks the native app, but
     // nothing built from it links.
