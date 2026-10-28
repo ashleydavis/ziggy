@@ -230,12 +230,14 @@ pub fn setsockopt(fd: socket_t, level: i32, optname: u32, opt: []const u8) !void
             const rc = windows.ws2_32.setsockopt(fd, level, @intCast(optname), opt_ptr, opt_len);
             if (rc == windows.ws2_32.SOCKET_ERROR) {
                 switch (windows.ws2_32.WSAGetLastError()) {
-                    .WSANOTINITIALISED => unreachable,
                     .WSAENETDOWN => return error.NetworkSubsystemFailed,
                     .WSAEFAULT => unreachable,
                     // AFD handle that genuinely does not support this option
                     // (e.g. RCVTIMEO — Io manages timeouts internally).
-                    .WSAENOTSOCK => return,
+                    // Ziggy: a process that has only Io.net sockets never starts Winsock, so there the AFD handle's
+                    // fallback ends in WSANOTINITIALISED rather than WSAENOTSOCK. No Winsock socket can exist without
+                    // WSAStartup, so the handle is an AFD one, as with WSAENOTSOCK.
+                    .WSANOTINITIALISED, .WSAENOTSOCK => return,
                     .WSAEINVAL => return error.SocketNotBound,
                     else => |err| return windows.unexpectedWSAError(err),
                 }

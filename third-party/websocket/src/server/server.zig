@@ -1912,7 +1912,7 @@ test "Server: invalid handshake" {
 
     var pos: usize = 0;
     while (pos < buf.len) {
-        const n = try posix.read(stream.socket.handle, buf[pos..]);
+        const n = try testRead(stream, buf[pos..]);
         if (n == 0) {
             break;
         }
@@ -1932,7 +1932,9 @@ test "Server: read and write" {
     try writer.interface.writeAll(&proto.frame(.text, "over"));
 
     var buf: [12]u8 = undefined;
-    _ = try posix.read(stream.socket.handle, &buf);
+    // Ziggy: the frame's header and payload can come in separate reads, so read the whole frame.
+    var reader = stream.reader(t.io, &.{});
+    _ = try reader.interface.readSliceShort(buf[0..6]);
     try t.expectSlice(u8, &.{ 129, 4, '9', '0', '0', '0' }, buf[0..6]);
 }
 
@@ -1944,7 +1946,9 @@ test "Server: clientMessage allocator" {
     try writer.interface.writeAll(&proto.frame(.text, "dyn"));
 
     var buf: [12]u8 = undefined;
-    _ = try posix.read(stream.socket.handle, &buf);
+    // Ziggy: the frame's header and payload can come in separate reads, so read the whole frame.
+    var reader = stream.reader(t.io, &.{});
+    _ = try reader.interface.readSliceShort(&buf);
     try t.expectSlice(u8, &.{ 129, 10, 'o', 'v', 'e', 'r', ' ', '9', '0', '0', '0', '!' }, buf[0..12]);
 }
 
@@ -1956,7 +1960,9 @@ test "Server: clientMessage writer" {
     try writer.interface.writeAll(&proto.frame(.text, "writer"));
 
     var buf: [9]u8 = undefined;
-    _ = try posix.read(stream.socket.handle, &buf);
+    // Ziggy: the frame's header and payload can come in separate reads, so read the whole frame.
+    var reader = stream.reader(t.io, &.{});
+    _ = try reader.interface.readSliceShort(&buf);
     try t.expectSlice(u8, &.{ 129, 7, '9', '0', '0', '0', '!', '!', '!' }, buf[0..9]);
 }
 
@@ -1969,7 +1975,9 @@ test "Server: dirty clientMessage allocator" {
     try writer.interface.writeAll(&proto.frame(.text, "dyn"));
 
     var buf: [12]u8 = undefined;
-    _ = try posix.read(stream.socket.handle, &buf);
+    // Ziggy: the frame's header and payload can come in separate reads, so read the whole frame.
+    var reader = stream.reader(t.io, &.{});
+    _ = try reader.interface.readSliceShort(&buf);
     try t.expectSlice(u8, &.{ 129, 10, 'o', 'v', 'e', 'r', ' ', '9', '0', '0', '0', '!' }, buf[0..12]);
 }
 
@@ -2035,7 +2043,7 @@ fn testStream(handshake: bool) !Io.net.Stream {
 
     var pos: usize = 0;
     while (pos < buf.len) {
-        const n = try posix.read(socket, buf[0..]);
+        const n = try testRead(stream, buf[0..]);
         if (n == 0) break;
 
         pos += n;
@@ -2049,6 +2057,13 @@ fn testStream(handshake: bool) !Io.net.Stream {
     try t.expectString("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: upgrade\r\nSec-Websocket-Accept: L8KGBs4w2MNLLzhfzlVoM0scCIE=\r\n\r\n", buf[0..pos]);
 
     return stream;
+}
+
+// Ziggy: one read from a test stream, made through Io as the stream was. On Windows an Io.net stream is an AFD handle, not a
+// Winsock socket, so posix.read (Winsock's recv) fails on it with WSAENOTSOCK. Returns 0 when the server has closed.
+fn testRead(stream: Io.net.Stream, buf: []u8) !usize {
+    var data = [_][]u8{buf};
+    return t.io.vtable.netRead(t.io.userdata, stream.socket.handle, &data);
 }
 
 const TestHandler = struct {

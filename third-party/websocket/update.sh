@@ -12,6 +12,25 @@ commit="$1"
 
 LIBRARY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Ziggy's changes to the library, each a patch in patches/ named <number>-<name>.patch with a .md beside it describing it, in the
+# order of their numbers. The names are checked before anything is replaced.
+patch_names="$(cd "$LIBRARY_DIR/patches" && find . -maxdepth 1 -type f -name '*.patch' | sed 's|^\./||' | sort -n)"
+numbers=""
+while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    number="${name%%-*}"
+    if ! [[ "$number" =~ ^[0-9]+$ ]] || [ "$number" = "$name" ]; then
+        echo "update.sh: patches/$name does not start with its number. Name it <number>-<name>.patch." >&2
+        exit 1
+    fi
+    numbers+="$((10#$number))"$'\n'
+done <<< "$patch_names"
+duplicate="$(printf '%s' "$numbers" | sort -n | uniq -d | sed -n '1p')"
+if [ -n "$duplicate" ]; then
+    echo "update.sh: more than one patch in patches/ has the number $duplicate. Give each its own number." >&2
+    exit 1
+fi
+
 archive="$(mktemp "$LIBRARY_DIR/.websocket-download.XXXXXX")"
 trap 'rm -f "$archive"' EXIT
 
@@ -43,10 +62,10 @@ find "$LIBRARY_DIR" -mindepth 1 -type d -empty -not -path "*/.zig-cache*" -not -
 
 tar -xzf "$archive" -C "$LIBRARY_DIR" --strip-components=1
 
-# Ziggy's changes to the library, each a patch in patches/ with a .md beside it describing it, applied in name order.
-for patch_file in "$LIBRARY_DIR"/patches/*.patch; do
-    [ -e "$patch_file" ] || continue
-    patch --forward --silent -p1 -d "$LIBRARY_DIR" < "$patch_file" \
-        || { echo "update.sh: $patch_file does not apply to websocket.zig at $commit. Make it again for this version." >&2; exit 1; }
-done
+# Ziggy's patches, in the order of their numbers.
+while IFS= read -r name; do
+    [ -n "$name" ] || continue
+    patch --forward --silent -p1 -d "$LIBRARY_DIR" < "$LIBRARY_DIR/patches/$name" \
+        || { echo "update.sh: patches/$name does not apply to websocket.zig at $commit. Make it again for this version." >&2; exit 1; }
+done <<< "$patch_names"
 echo "websocket.zig in $LIBRARY_DIR is now at $commit, with Ziggy's patches applied."
