@@ -22,27 +22,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  app-build:
+  app-build-linux:
     # Builds the test app once per platform, on that platform's own runner, the one its smoke tests run on, into ziggy-build/app
     # (for iOS the simulator build). The build and the Zig build caches are saved under ziggy-build-<platform>-<commit>. The unit
     # tests and the smoke tests need this job, restore that entry and build no app of their own, so the smoke tests drive the app
     # app-build built.
     timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux
-            os: ubuntu-latest
-          - platform: windows
-            os: windows-latest
-          - platform: macos
-            os: macos-latest
-          - platform: android
-            os: ubuntu-latest
-          - platform: ios
-            os: macos-15
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -73,7 +59,6 @@ jobs:
       # The Linux native app links GTK and WebKitGTK by their runtime library files, and its build stops with "error:
       # RuntimeLibraryMissing" when they are not installed.
       - name: Install the web view's runtime libraries (Linux)
-        if: matrix.platform == 'linux'
         uses: ./.github/actions/install-apt-packages
         with:
           packages: libgtk-3-0 libwebkit2gtk-4.1-0
@@ -83,32 +68,6 @@ jobs:
         with:
           run: bun install
 
-      - name: Fetch the WebView2 SDK and the WiX Toolset (Windows)
-        if: matrix.platform == 'windows'
-        shell: bash
-        run: bun run --filter=ziggy-test-app setup
-
-      # The Android scripts need JDK 17 and the NDK the template pins.
-      - name: Setup JDK 17 (Android)
-        if: matrix.platform == 'android'
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Cache the Android NDK
-        if: matrix.platform == 'android'
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/lib/android/sdk/ndk/25.1.8937393
-          key: ${{ runner.os }}-android-ndk-25.1.8937393
-
-      - name: Install Android NDK (Android)
-        if: matrix.platform == 'android'
-        uses: ./.github/actions/retry-install
-        with:
-          run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" > /dev/null
-
       - name: Restore the Zig build caches
         uses: actions/cache/restore@v4
         with:
@@ -116,9 +75,9 @@ jobs:
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
-          key: ziggy-build-${{ matrix.platform }}-${{ github.sha }}
+          key: ziggy-build-linux-${{ github.sha }}
           restore-keys: |
-            ziggy-build-${{ matrix.platform }}-
+            ziggy-build-linux-
 
       # Every save is the restored cache plus what the job built, so without this the cache only grows.
       - name: Start fresh Zig build caches when the restored ones have grown too big
@@ -141,7 +100,7 @@ jobs:
         working-directory: apps/ziggy-test-app
         run: |
           build="$GITHUB_WORKSPACE/ziggy-build/app"
-          case "${{ matrix.platform }}" in
+          case "linux" in
               linux)
                   bun run build:linux --prefix "$build"
                   ;;
@@ -158,7 +117,7 @@ jobs:
                   bun run build:ios --sdk simulator --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
                   ;;
               *)
-                  echo "app-build has no build command for ${{ matrix.platform }}." >&2
+                  echo "app-build has no build command for linux." >&2
                   exit 1
                   ;;
           esac
@@ -171,31 +130,451 @@ jobs:
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
-          key: ziggy-build-${{ matrix.platform }}-${{ github.sha }}
+          key: ziggy-build-linux-${{ github.sha }}
 
-  unit-tests:
+  app-build-windows:
+    # Builds the test app once per platform, on that platform's own runner, the one its smoke tests run on, into ziggy-build/app
+    # (for iOS the simulator build). The build and the Zig build caches are saved under ziggy-build-<platform>-<commit>. The unit
+    # tests and the smoke tests need this job, restore that entry and build no app of their own, so the smoke tests drive the app
+    # app-build built.
+    timeout-minutes: 40
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Fetch the WebView2 SDK and the WiX Toolset (Windows)
+        shell: bash
+        run: bun run --filter=ziggy-test-app setup
+
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-windows-${{ github.sha }}
+          restore-keys: |
+            ziggy-build-windows-
+
+      # Every save is the restored cache plus what the job built, so without this the cache only grows.
+      - name: Start fresh Zig build caches when the restored ones have grown too big
+        shell: bash
+        run: |
+          for cache_dir in . apps/ziggy-template apps/ziggy-test-app; do
+              if [ -d "$cache_dir/.zig-cache" ]; then
+                  megabytes="$(du -sm "$cache_dir/.zig-cache" | cut -f1)"
+                  echo "Restored Zig build cache of $cache_dir: ${megabytes} MB"
+                  if [ "$megabytes" -ge 5120 ]; then
+                      mv "$cache_dir/.zig-cache" "$RUNNER_TEMP/stale-zig-cache-$(basename "$cache_dir")"
+                      echo "Moved it aside to start a fresh one"
+                  fi
+              fi
+          done
+
+      # The Windows tools take a Windows path, which cygpath gives.
+      - name: Build the test app
+        shell: bash
+        working-directory: apps/ziggy-test-app
+        run: |
+          build="$GITHUB_WORKSPACE/ziggy-build/app"
+          case "windows" in
+              linux)
+                  bun run build:linux --prefix "$build"
+                  ;;
+              windows)
+                  bun run build:windows --prefix "$(cygpath -m "$GITHUB_WORKSPACE")/ziggy-build/app"
+                  ;;
+              macos)
+                  bun run build:macos --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
+                  ;;
+              android)
+                  bun run build:android --arch "x86_64 arm64" --output-dir "$build"
+                  ;;
+              ios)
+                  bun run build:ios --sdk simulator --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
+                  ;;
+              *)
+                  echo "app-build has no build command for windows." >&2
+                  exit 1
+                  ;;
+          esac
+
+      - name: Save the build
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-windows-${{ github.sha }}
+
+  app-build-macos:
+    # Builds the test app once per platform, on that platform's own runner, the one its smoke tests run on, into ziggy-build/app
+    # (for iOS the simulator build). The build and the Zig build caches are saved under ziggy-build-<platform>-<commit>. The unit
+    # tests and the smoke tests need this job, restore that entry and build no app of their own, so the smoke tests drive the app
+    # app-build built.
+    timeout-minutes: 40
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-macos-${{ github.sha }}
+          restore-keys: |
+            ziggy-build-macos-
+
+      # Every save is the restored cache plus what the job built, so without this the cache only grows.
+      - name: Start fresh Zig build caches when the restored ones have grown too big
+        shell: bash
+        run: |
+          for cache_dir in . apps/ziggy-template apps/ziggy-test-app; do
+              if [ -d "$cache_dir/.zig-cache" ]; then
+                  megabytes="$(du -sm "$cache_dir/.zig-cache" | cut -f1)"
+                  echo "Restored Zig build cache of $cache_dir: ${megabytes} MB"
+                  if [ "$megabytes" -ge 5120 ]; then
+                      mv "$cache_dir/.zig-cache" "$RUNNER_TEMP/stale-zig-cache-$(basename "$cache_dir")"
+                      echo "Moved it aside to start a fresh one"
+                  fi
+              fi
+          done
+
+      # The Windows tools take a Windows path, which cygpath gives.
+      - name: Build the test app
+        shell: bash
+        working-directory: apps/ziggy-test-app
+        run: |
+          build="$GITHUB_WORKSPACE/ziggy-build/app"
+          case "macos" in
+              linux)
+                  bun run build:linux --prefix "$build"
+                  ;;
+              windows)
+                  bun run build:windows --prefix "$(cygpath -m "$GITHUB_WORKSPACE")/ziggy-build/app"
+                  ;;
+              macos)
+                  bun run build:macos --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
+                  ;;
+              android)
+                  bun run build:android --arch "x86_64 arm64" --output-dir "$build"
+                  ;;
+              ios)
+                  bun run build:ios --sdk simulator --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
+                  ;;
+              *)
+                  echo "app-build has no build command for macos." >&2
+                  exit 1
+                  ;;
+          esac
+
+      - name: Save the build
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-macos-${{ github.sha }}
+
+  app-build-android:
+    # Builds the test app once per platform, on that platform's own runner, the one its smoke tests run on, into ziggy-build/app
+    # (for iOS the simulator build). The build and the Zig build caches are saved under ziggy-build-<platform>-<commit>. The unit
+    # tests and the smoke tests need this job, restore that entry and build no app of their own, so the smoke tests drive the app
+    # app-build built.
+    timeout-minutes: 40
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      # The Android scripts need JDK 17 and the NDK the template pins.
+      - name: Setup JDK 17 (Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache the Android NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/25.1.8937393
+          key: ${{ runner.os }}-android-ndk-25.1.8937393
+
+      - name: Install Android NDK (Android)
+        uses: ./.github/actions/retry-install
+        with:
+          run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" > /dev/null
+
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-android-${{ github.sha }}
+          restore-keys: |
+            ziggy-build-android-
+
+      # Every save is the restored cache plus what the job built, so without this the cache only grows.
+      - name: Start fresh Zig build caches when the restored ones have grown too big
+        shell: bash
+        run: |
+          for cache_dir in . apps/ziggy-template apps/ziggy-test-app; do
+              if [ -d "$cache_dir/.zig-cache" ]; then
+                  megabytes="$(du -sm "$cache_dir/.zig-cache" | cut -f1)"
+                  echo "Restored Zig build cache of $cache_dir: ${megabytes} MB"
+                  if [ "$megabytes" -ge 5120 ]; then
+                      mv "$cache_dir/.zig-cache" "$RUNNER_TEMP/stale-zig-cache-$(basename "$cache_dir")"
+                      echo "Moved it aside to start a fresh one"
+                  fi
+              fi
+          done
+
+      # The Windows tools take a Windows path, which cygpath gives.
+      - name: Build the test app
+        shell: bash
+        working-directory: apps/ziggy-test-app
+        run: |
+          build="$GITHUB_WORKSPACE/ziggy-build/app"
+          case "android" in
+              linux)
+                  bun run build:linux --prefix "$build"
+                  ;;
+              windows)
+                  bun run build:windows --prefix "$(cygpath -m "$GITHUB_WORKSPACE")/ziggy-build/app"
+                  ;;
+              macos)
+                  bun run build:macos --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
+                  ;;
+              android)
+                  bun run build:android --arch "x86_64 arm64" --output-dir "$build"
+                  ;;
+              ios)
+                  bun run build:ios --sdk simulator --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
+                  ;;
+              *)
+                  echo "app-build has no build command for android." >&2
+                  exit 1
+                  ;;
+          esac
+
+      - name: Save the build
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-android-${{ github.sha }}
+
+  app-build-ios:
+    # Builds the test app once per platform, on that platform's own runner, the one its smoke tests run on, into ziggy-build/app
+    # (for iOS the simulator build). The build and the Zig build caches are saved under ziggy-build-<platform>-<commit>. The unit
+    # tests and the smoke tests need this job, restore that entry and build no app of their own, so the smoke tests drive the app
+    # app-build built.
+    timeout-minutes: 40
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-ios-${{ github.sha }}
+          restore-keys: |
+            ziggy-build-ios-
+
+      # Every save is the restored cache plus what the job built, so without this the cache only grows.
+      - name: Start fresh Zig build caches when the restored ones have grown too big
+        shell: bash
+        run: |
+          for cache_dir in . apps/ziggy-template apps/ziggy-test-app; do
+              if [ -d "$cache_dir/.zig-cache" ]; then
+                  megabytes="$(du -sm "$cache_dir/.zig-cache" | cut -f1)"
+                  echo "Restored Zig build cache of $cache_dir: ${megabytes} MB"
+                  if [ "$megabytes" -ge 5120 ]; then
+                      mv "$cache_dir/.zig-cache" "$RUNNER_TEMP/stale-zig-cache-$(basename "$cache_dir")"
+                      echo "Moved it aside to start a fresh one"
+                  fi
+              fi
+          done
+
+      # The Windows tools take a Windows path, which cygpath gives.
+      - name: Build the test app
+        shell: bash
+        working-directory: apps/ziggy-test-app
+        run: |
+          build="$GITHUB_WORKSPACE/ziggy-build/app"
+          case "ios" in
+              linux)
+                  bun run build:linux --prefix "$build"
+                  ;;
+              windows)
+                  bun run build:windows --prefix "$(cygpath -m "$GITHUB_WORKSPACE")/ziggy-build/app"
+                  ;;
+              macos)
+                  bun run build:macos --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
+                  ;;
+              android)
+                  bun run build:android --arch "x86_64 arm64" --output-dir "$build"
+                  ;;
+              ios)
+                  bun run build:ios --sdk simulator --configuration Release --native-dir "$build/native" --build-dir "$build/xcode"
+                  ;;
+              *)
+                  echo "app-build has no build command for ios." >&2
+                  exit 1
+                  ;;
+          esac
+
+      - name: Save the build
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-ios-${{ github.sha }}
+
+  unit-tests-linux:
     # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
     # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
     # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
     # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
     # compiles only the tests.
-    needs: app-build
+    needs: app-build-linux
     timeout-minutes: 50
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux
-            os: ubuntu-latest
-          - platform: macos
-            os: macos-latest
-          - platform: windows
-            os: windows-latest
-          - platform: android
-            os: ubuntu-latest
-          - platform: ios
-            os: macos-latest
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -226,7 +605,6 @@ jobs:
       # The Linux native app links GTK and WebKitGTK by their runtime library files, and its build stops with "error:
       # RuntimeLibraryMissing" when they are not installed.
       - name: Install the web view's runtime libraries (Linux)
-        if: matrix.platform == 'linux'
         uses: ./.github/actions/install-apt-packages
         with:
           packages: libgtk-3-0 libwebkit2gtk-4.1-0
@@ -244,48 +622,215 @@ jobs:
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
-          key: ziggy-build-${{ matrix.platform }}-${{ github.sha }}
+          key: ziggy-build-linux-${{ github.sha }}
           fail-on-cache-miss: true
 
       - name: Run the TypeScript unit tests
-        if: matrix.platform == 'linux' || matrix.platform == 'macos' || matrix.platform == 'windows'
         shell: bash
         run: bun run test
 
       # `zig build test` builds the template's frontend itself before it runs the template's tests, which embed it.
       - name: Run the Zig unit tests
-        if: matrix.platform == 'linux' || matrix.platform == 'macos' || matrix.platform == 'windows'
         shell: bash
         run: zig build test --summary all --test-timeout 20m
 
+  unit-tests-macos:
+    # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
+    # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
+    # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
+    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # compiles only the tests.
+    needs: app-build-macos
+    timeout-minutes: 50
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-macos-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Run the TypeScript unit tests
+        shell: bash
+        run: bun run test
+
+      # `zig build test` builds the template's frontend itself before it runs the template's tests, which embed it.
+      - name: Run the Zig unit tests
+        shell: bash
+        run: zig build test --summary all --test-timeout 20m
+
+  unit-tests-windows:
+    # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
+    # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
+    # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
+    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # compiles only the tests.
+    needs: app-build-windows
+    timeout-minutes: 50
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-windows-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Run the TypeScript unit tests
+        shell: bash
+        run: bun run test
+
+      # `zig build test` builds the template's frontend itself before it runs the template's tests, which embed it.
+      - name: Run the Zig unit tests
+        shell: bash
+        run: zig build test --summary all --test-timeout 20m
+
+  unit-tests-android:
+    # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
+    # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
+    # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
+    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # compiles only the tests.
+    needs: app-build-android
+    timeout-minutes: 50
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-android-${{ github.sha }}
+          fail-on-cache-miss: true
+
       # The Android scripts need JDK 17 and the NDK the template pins.
       - name: Setup JDK 17 (Android)
-        if: matrix.platform == 'android'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Cache the Android NDK
-        if: matrix.platform == 'android'
         uses: actions/cache@v4
         with:
           path: /usr/local/lib/android/sdk/ndk/25.1.8937393
           key: ${{ runner.os }}-android-ndk-25.1.8937393
 
       - name: Install Android NDK (Android)
-        if: matrix.platform == 'android'
         uses: ./.github/actions/retry-install
         with:
           run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" > /dev/null
 
       - name: Run the Android shell's JUnit tests (Android)
-        if: matrix.platform == 'android'
         shell: bash
         run: bun run test:android-shell
 
       - name: Enable KVM (Android)
-        if: matrix.platform == 'android'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -293,7 +838,6 @@ jobs:
 
       # The script is one line, because this action runs each line of `script:` in a shell of its own.
       - name: Run the Zig unit tests on an emulator (Android)
-        if: matrix.platform == 'android'
         timeout-minutes: 30
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -304,9 +848,60 @@ jobs:
           target: google_apis
           script: bun run test:zig:android
 
+  unit-tests-ios:
+    # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
+    # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
+    # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
+    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # compiles only the tests.
+    needs: app-build-ios
+    timeout-minutes: 50
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-ios-${{ github.sha }}
+          fail-on-cache-miss: true
+
       # The script runs the programs on a booted simulator and fails when none is, so one is booted here.
       - name: Boot an iOS simulator (iOS)
-        if: matrix.platform == 'ios'
         shell: bash
         run: |
           udid="$(xcrun simctl list devices available -j | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))][0].udid')"
@@ -314,29 +909,14 @@ jobs:
           xcrun simctl bootstatus "$udid" -b
 
       - name: Run the Zig unit tests on a simulator (iOS)
-        if: matrix.platform == 'ios'
         run: bun run test:zig:ios
 
-  smoke-tests:
+  smoke-tests-linux:
     # The test app's smoke tests on every platform, driving the build app-build made through the remote control server: Linux on a
     # virtual display, Windows, MacOS on the runner's own display, Android on an emulator and iOS on a simulator.
-    needs: app-build
+    needs: app-build-linux
     timeout-minutes: 75
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: linux
-            os: ubuntu-latest
-          - platform: windows
-            os: windows-latest
-          - platform: macos
-            os: macos-latest
-          - platform: android
-            os: ubuntu-latest
-          - platform: ios
-            os: macos-15
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -365,7 +945,6 @@ jobs:
             ${{ runner.os }}-bun-
 
       - name: Install the web view's runtime libraries and the display tools (Linux)
-        if: matrix.platform == 'linux'
         uses: ./.github/actions/install-apt-packages
         with:
           packages: libgtk-3-0 libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good gstreamer1.0-libav xvfb x11-utils
@@ -376,28 +955,228 @@ jobs:
         with:
           run: bun install
 
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-linux-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      # The smoke tests drive the build ZIGGY_SMOKE_BUILD names, the one app-build made, instead of building one. On Windows
+      # cygpath gives a path both Git Bash and the Windows tools take.
+      - name: Point the smoke tests at the build app-build made
+        shell: bash
+        run: |
+          if [ "linux" = windows ]; then
+              echo "ZIGGY_SMOKE_BUILD=$(cygpath -m "$PWD")/ziggy-build/app" >> "$GITHUB_ENV"
+          else
+              echo "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"
+          fi
+
+      # A step that hits its own timeout fails normally and keeps its log, so a hang shows up in the log.
+      # Each smoke step is capped at 20 minutes, a little above the slowest passing one (iOS, about 18): the dev mode step of the
+      # Windows smoke job of CI run 40484807194 hung for over 30 minutes after it passed in 5 in the Release run of the same commit.
+      - name: Run the smoke tests (desktop)
+        timeout-minutes: 20
+        shell: bash
+        run: bun run test:smoke
+
+  smoke-tests-windows:
+    # The test app's smoke tests on every platform, driving the build app-build made through the remote control server: Linux on a
+    # virtual display, Windows, MacOS on the runner's own display, Android on an emulator and iOS on a simulator.
+    needs: app-build-windows
+    timeout-minutes: 75
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-windows-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      # The smoke tests drive the build ZIGGY_SMOKE_BUILD names, the one app-build made, instead of building one. On Windows
+      # cygpath gives a path both Git Bash and the Windows tools take.
+      - name: Point the smoke tests at the build app-build made
+        shell: bash
+        run: |
+          if [ "windows" = windows ]; then
+              echo "ZIGGY_SMOKE_BUILD=$(cygpath -m "$PWD")/ziggy-build/app" >> "$GITHUB_ENV"
+          else
+              echo "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"
+          fi
+
+      # A step that hits its own timeout fails normally and keeps its log, so a hang shows up in the log.
+      # Each smoke step is capped at 20 minutes, a little above the slowest passing one (iOS, about 18): the dev mode step of the
+      # Windows smoke job of CI run 40484807194 hung for over 30 minutes after it passed in 5 in the Release run of the same commit.
+      - name: Run the smoke tests (desktop)
+        timeout-minutes: 20
+        shell: bash
+        run: bun run test:smoke
+
+  smoke-tests-macos:
+    # The test app's smoke tests on every platform, driving the build app-build made through the remote control server: Linux on a
+    # virtual display, Windows, MacOS on the runner's own display, Android on an emulator and iOS on a simulator.
+    needs: app-build-macos
+    timeout-minutes: 75
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-macos-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      # The smoke tests drive the build ZIGGY_SMOKE_BUILD names, the one app-build made, instead of building one. On Windows
+      # cygpath gives a path both Git Bash and the Windows tools take.
+      - name: Point the smoke tests at the build app-build made
+        shell: bash
+        run: |
+          if [ "macos" = windows ]; then
+              echo "ZIGGY_SMOKE_BUILD=$(cygpath -m "$PWD")/ziggy-build/app" >> "$GITHUB_ENV"
+          else
+              echo "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"
+          fi
+
+      # A step that hits its own timeout fails normally and keeps its log, so a hang shows up in the log.
+      # Each smoke step is capped at 20 minutes, a little above the slowest passing one (iOS, about 18): the dev mode step of the
+      # Windows smoke job of CI run 40484807194 hung for over 30 minutes after it passed in 5 in the Release run of the same commit.
+      - name: Run the smoke tests (desktop)
+        timeout-minutes: 20
+        shell: bash
+        run: bun run test:smoke
+
+  smoke-tests-android:
+    # The test app's smoke tests on every platform, driving the build app-build made through the remote control server: Linux on a
+    # virtual display, Windows, MacOS on the runner's own display, Android on an emulator and iOS on a simulator.
+    needs: app-build-android
+    timeout-minutes: 75
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
       - name: Setup JDK 17 (Android)
-        if: matrix.platform == 'android'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Cache the Android NDK
-        if: matrix.platform == 'android'
         uses: actions/cache@v4
         with:
           path: /usr/local/lib/android/sdk/ndk/25.1.8937393
           key: ${{ runner.os }}-android-ndk-25.1.8937393
 
       - name: Install Android NDK (Android)
-        if: matrix.platform == 'android'
         uses: ./.github/actions/retry-install
         with:
           run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" > /dev/null
 
       - name: Enable KVM (Android)
-        if: matrix.platform == 'android'
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
@@ -411,7 +1190,7 @@ jobs:
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
-          key: ziggy-build-${{ matrix.platform }}-${{ github.sha }}
+          key: ziggy-build-android-${{ github.sha }}
           fail-on-cache-miss: true
 
       # The smoke tests drive the build ZIGGY_SMOKE_BUILD names, the one app-build made, instead of building one. On Windows
@@ -419,24 +1198,14 @@ jobs:
       - name: Point the smoke tests at the build app-build made
         shell: bash
         run: |
-          if [ "${{ matrix.platform }}" = windows ]; then
+          if [ "android" = windows ]; then
               echo "ZIGGY_SMOKE_BUILD=$(cygpath -m "$PWD")/ziggy-build/app" >> "$GITHUB_ENV"
           else
               echo "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"
           fi
 
-      # A step that hits its own timeout fails normally and keeps its log, so a hang shows up in the log.
-      # Each smoke step is capped at 20 minutes, a little above the slowest passing one (iOS, about 18): the dev mode step of the
-      # Windows smoke job of CI run 40484807194 hung for over 30 minutes after it passed in 5 in the Release run of the same commit.
-      - name: Run the smoke tests (desktop)
-        if: matrix.platform == 'linux' || matrix.platform == 'windows' || matrix.platform == 'macos'
-        timeout-minutes: 20
-        shell: bash
-        run: bun run test:smoke
-
       # The script is one line, because this action runs each line of `script:` in a shell of its own.
       - name: Run the smoke tests on an emulator (Android)
-        if: matrix.platform == 'android'
         timeout-minutes: 20
         uses: reactivecircus/android-emulator-runner@v2
         env:
@@ -447,8 +1216,67 @@ jobs:
           target: google_apis
           script: bun run test:smoke:android
 
+  smoke-tests-ios:
+    # The test app's smoke tests on every platform, driving the build app-build made through the remote control server: Linux on a
+    # virtual display, Windows, MacOS on the runner's own display, Android on an emulator and iOS on a simulator.
+    needs: app-build-ios
+    timeout-minutes: 75
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      - name: Restore the build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ziggy-build
+            .zig-cache
+            apps/ziggy-template/.zig-cache
+            apps/ziggy-test-app/.zig-cache
+          key: ziggy-build-ios-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      # The smoke tests drive the build ZIGGY_SMOKE_BUILD names, the one app-build made, instead of building one. On Windows
+      # cygpath gives a path both Git Bash and the Windows tools take.
+      - name: Point the smoke tests at the build app-build made
+        shell: bash
+        run: |
+          if [ "ios" = windows ]; then
+              echo "ZIGGY_SMOKE_BUILD=$(cygpath -m "$PWD")/ziggy-build/app" >> "$GITHUB_ENV"
+          else
+              echo "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"
+          fi
+
       # run.sh picks the first available iPhone simulator and boots it, and installs the simulator build app-build made.
       - name: Run the smoke tests on a simulator (iOS)
-        if: matrix.platform == 'ios'
         timeout-minutes: 20
         run: bun run test:smoke:ios
