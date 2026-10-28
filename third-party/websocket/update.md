@@ -1,6 +1,6 @@
 # update.sh
 
-Replaces the copy of [websocket.zig](https://github.com/karlseguin/websocket.zig) in `third-party/websocket` with the library at a commit of its repository, then applies Ziggy's patches to it. Ziggy's core uses it for the remote control connection, and Ziggy's `build.zig.zon` takes it from this directory by path (see [Packages](../../docs/development/packages.md)).
+Replaces the copy of [websocket.zig](https://github.com/karlseguin/websocket.zig) in `third-party/websocket` with the library at a commit of its repository, then applies Ziggy's patches to it in the order of their numbers. Before it replaces anything, it checks that every patch is named `<number>-<name>.patch` and that no two share a number. Ziggy's core uses it for the remote control connection, and Ziggy's `build.zig.zon` takes it from this directory by path (see [Packages](../../docs/development/packages.md)).
 
 It downloads the commit's archive from GitHub and keeps every file of the library's repository at that commit, so a file the library adds is never left out. A file the old version had and the new one does not is removed. `update.sh`, `update.md`, `patches/` and the output of a build of the library are left as they are.
 
