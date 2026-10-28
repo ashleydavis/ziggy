@@ -13,11 +13,11 @@
 //
 // One thread owns the connection. It is given copies of what it needs when it starts, makes its own Io and allocator, and talks to
 // the main thread only by message. It connects, tells the main thread whether it did, and then blocks reading the connection. The
-// one thing the main thread holds of the connection is a copy of the socket's handle, sent in that first message: on stop it posts
-// "stop" and shuts the socket down, which ends the thread's read. On Linux, macOS and Android the shutdown itself ends the read. On
-// Windows it does not, but the shutdown sends the server the end of the connection, the server closes its side, and that ends the
-// read. The thread closes the socket only after it has taken "stop", so the handle the main thread shuts down is never one the
-// system has given to something else.
+// one thing the main thread holds of the connection is a copy of the socket's handle, sent in that first message: on stop it shuts
+// the socket down, which ends the thread's read, and then posts "stop". On Linux, macOS and Android the shutdown itself ends the
+// read. On Windows it does not, but the shutdown sends the server the end of the connection, the server closes its side, and that
+// ends the read. The thread closes the socket only after it has taken "stop", so the handle the main thread shuts down is never one
+// the system has given to something else.
 //
 
 const std = @import("std");
@@ -151,7 +151,6 @@ pub const RemoteControl = struct {
     // finishStop. `io` is the main thread's.
     //
     pub fn beginStop(self: *RemoteControl, io: std.Io) void {
-        self.queue.post(io, from_main, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the remote control connection");
         const stream: std.Io.net.Stream = .{
             .socket = .{
                 .handle = self.socket,
@@ -165,6 +164,11 @@ pub const RemoteControl = struct {
             error.ConnectionAborted, error.ConnectionResetByPeer, error.SocketUnconnected => {},
             else => std.debug.panic("ziggy remote control: could not shut the connection down to stop it: {s}", .{@errorName(err)}),
         };
+        // Posted only after the shutdown: the thread closes the socket as soon as it takes "stop", so posting it first let the thread
+        // close the socket before the shutdown above, which then failed on the closed handle ("could not shut the connection down to
+        // stop it: Unexpected", which aborted two of the core's remote control tests in CI) and could have shut down a socket the
+        // system had since given to something else.
+        self.queue.post(io, from_main, "{\"type\":\"stop\"}") catch @panic("out of memory stopping the remote control connection");
     }
 
     //
