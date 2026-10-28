@@ -197,10 +197,13 @@ jobs:
         with:
           run: bun install
 
+      # The paths are the ones the save lists, ziggy-build included: the cache version is worked out from the paths, so a restore
+      # listing fewer never matched anything saved and every build started from an empty cache ("Cache not found" every run).
       - name: Restore the Zig build caches
         uses: actions/cache/restore@v4
         with:
           path: |
+            ziggy-build
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
@@ -304,10 +307,13 @@ jobs:
         shell: bash
         run: bun run --filter=ziggy-test-app setup
 
+      # The paths are the ones the save lists, ziggy-build included: the cache version is worked out from the paths, so a restore
+      # listing fewer never matched anything saved and every build started from an empty cache ("Cache not found" every run).
       - name: Restore the Zig build caches
         uses: actions/cache/restore@v4
         with:
           path: |
+            ziggy-build
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
@@ -407,10 +413,13 @@ jobs:
         with:
           run: bun install
 
+      # The paths are the ones the save lists, ziggy-build included: the cache version is worked out from the paths, so a restore
+      # listing fewer never matched anything saved and every build started from an empty cache ("Cache not found" every run).
       - name: Restore the Zig build caches
         uses: actions/cache/restore@v4
         with:
           path: |
+            ziggy-build
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
@@ -528,10 +537,13 @@ jobs:
         with:
           run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" > /dev/null
 
+      # The paths are the ones the save lists, ziggy-build included: the cache version is worked out from the paths, so a restore
+      # listing fewer never matched anything saved and every build started from an empty cache ("Cache not found" every run).
       - name: Restore the Zig build caches
         uses: actions/cache/restore@v4
         with:
           path: |
+            ziggy-build
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
@@ -631,10 +643,13 @@ jobs:
         with:
           run: bun install
 
+      # The paths are the ones the save lists, ziggy-build included: the cache version is worked out from the paths, so a restore
+      # listing fewer never matched anything saved and every build started from an empty cache ("Cache not found" every run).
       - name: Restore the Zig build caches
         uses: actions/cache/restore@v4
         with:
           path: |
+            ziggy-build
             .zig-cache
             apps/ziggy-template/.zig-cache
             apps/ziggy-test-app/.zig-cache
