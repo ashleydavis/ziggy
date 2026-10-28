@@ -56,6 +56,14 @@ const from_main: u32 = 0;
 const connect_timeout_ms: u32 = 10_000;
 
 //
+// How long the app has to stop after the quit command before the connection thread ends the process. The MacOS native app cannot
+// quit while AppKit holds its main thread waiting on the system's open and save panel service, which on a CI runner has not
+// answered at all; the quit, which goes to the main thread, then never runs. Quitting is a test's last word to the app, so it ends the
+// process instead of leaving it running.
+//
+const quit_stop_seconds: i64 = 10;
+
+//
 // The longest remote control address taken, "host:port". A loopback address and a port are far shorter.
 //
 const address_length_max = 255;
@@ -307,7 +315,19 @@ fn serveConnection(given: ConnectionStart) void {
     // The socket is closed only once the main thread has said to stop, because until then it may still shut the socket down by its
     // handle.
     if (!connection.serve(io, allocator, &client)) {
-        const stop = given.queue.take(io, allocator, .none) orelse {
+        // After a quit, stopping the app sends "stop" here. When it does not come in time, the native app could not quit, and the
+        // process is ended, loudly, with a failing exit status.
+        const timeout: std.Io.Timeout = if (connection.quit_sent) .{
+            .duration = .{
+                .raw = .fromSeconds(quit_stop_seconds),
+                .clock = .awake,
+            },
+        } else .none;
+        const stop = given.queue.take(io, allocator, timeout) orelse {
+            if (connection.quit_sent and !given.queue.isClosed(io)) {
+                std.debug.print("ziggy remote control: the app had not stopped {d} seconds after the quit command, so the process is ended\n", .{quit_stop_seconds});
+                std.process.exit(1);
+            }
             @panic("ziggy remote control: the connection thread's queue closed before it was told to stop");
         };
         allocator.free(stop.text);
@@ -346,6 +366,8 @@ const Connection = struct {
     start: ConnectionStart,
     // Where the main thread's replies come.
     replies: MessageQueue,
+    // Whether the quit command was passed to the native app, after which the app has quit_stop_seconds to stop.
+    quit_sent: bool = false,
 
     //
     // Reads commands and sends their replies until the connection ends or the thread is sent "stop". Returns whether it took
@@ -401,6 +423,7 @@ const Connection = struct {
             if (quit_after_reply) {
                 // The app is asked to quit only once the reply has gone, so quitting, which stops the connection, cannot lose it.
                 self.start.native.app.call(io, allocator, .quit, null) catch @panic("out of memory asking the native app to quit");
+                self.quit_sent = true;
                 // Nothing is read after a quit: the app is stopping, and stopping shuts the socket down.
                 return false;
             }

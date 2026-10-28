@@ -27,7 +27,7 @@ Commands Ziggy handles itself:
 
 | Command | What it does |
 |---|---|
-| `{"command": "quit"}` | Quits the app through the native app. |
+| `{"command": "quit"}` | Quits the app through the native app. When the app has not stopped 10 seconds later, as on MacOS while the system's file panel service keeps the main thread waiting, the process is ended with exit status 1. |
 | `{"command": "menu", "action": "..."}` | Chooses a menu item as a user would. The native app's own actions really happen, and any other action reaches the frontend. After `reload`, commands wait until the frontend is listening again. |
 | `{"command": "pick-answer", "paths": [...]}` | Gives the next file or directory dialog these paths, and no dialog is shown. |
 | `{"command": "drop", "paths": [...]}` | Records a drop of these files, as the native app does when the user drops them. The native app's own reading of a real drop is not covered. |
