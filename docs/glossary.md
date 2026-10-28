@@ -25,3 +25,7 @@
 - **Log file**: the file a program's file log writes every log line to, one for each run of the program.
 - **Error log file**: the file beside the log file that gets only the error, exception and warning lines.
 - **OS call**: a call from the native app or the backend straight to the operating system, such as reading a file or opening a window.
+- **Test mode**: how an app runs when it is started with `--remote-control <host:port>` (the string Intent extra `ziggy.remoteControl` on Android). It is on exactly when the app is started that way.
+- **Remote control connection**: the WebSocket connection the core opens to the remote control server when the app is started with `--remote-control`. Each text message is one command and each reply is one text message. See [Testing your app](user-guide/testing.md#the-remote-control-connection).
+- **Remote control server**: the separate program `ziggy-remote-control-server` that a smoke test starts. The app connects out to it on one port and the test script on another. It passes each line the script writes to the app and each reply back to the script. See its [README](../tools/remote-control-server/README.md).
+- **Test hooks**: what an app has only so tests can control it or look inside it: the remote control connection's commands, events and the app's own hooks. They act only when the app is started with `--remote-control`.

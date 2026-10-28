@@ -56,7 +56,7 @@ The smoke test scenario `24-ui-address` checks on every platform that the fronte
 
 - The frontend talks to the backend through `window.ziggy`, which the native app injects into the page.
 - The native app passes messages to the backend through a C interface, declared and documented in `ziggy.h`. Every native app hands every message to the one entry point, `ziggy_send_message` (`sendMessage` in `core.zig`), which posts it to the core's main thread's queue and returns at once. `ziggy_create` returns that queue, and every other function of the C interface is given it.
-- There are two kinds of message, kept apart from end to end. An app message belongs to the app: the backend handles it by calling the Zig handler the app registered for its name. A system message belongs to Ziggy itself (tasks, the platform, menu actions, dropped files and the test hooks): the backend handles it with Ziggy's own handlers and the app's handlers never see it.
+- There are two kinds of message, kept apart from end to end. An app message belongs to the app: the backend handles it by calling the Zig handler the app registered for its name. A system message belongs to Ziggy itself (tasks, the platform, menu actions, dropped files and the remote control connection): the backend handles it with Ziggy's own handlers and the app's handlers never see it.
 - What the app's handler returns is sent back to the frontend as the message response.
 
 ![How a message and its message response travel between the frontend, the native app and the backend](diagrams/message-bridge.svg)
@@ -83,7 +83,7 @@ The `kind` field shows which kind a message or event is:
 ## Handlers
 
 - **App messages and task types.** The app declares them in `ziggy.core.App` (`app.zig`), which checks every handler when the app is built and makes the lists of messages and task types, constants of the app's code that the main thread and every worker read.
-- **System messages.** Each part of Ziggy has a function for each of its system messages, in its file under `system-messages/`: the platform `get-platform`, the menu `menu-action`, the dropped files `get-dropped-paths`, the log `log`, the task runner `add-task` and `cancel-tasks` and the test hooks `test-result` and `test-ui-ready` in a test hooks build only. The main thread finds the function by the message's name and gives it only the piece of its state it uses. No public declaration of the core names them, so an app cannot call one.
+- **System messages.** Each part of Ziggy has a function for each of its system messages, in its file under `system-messages/`: the platform `get-platform`, the menu `menu-action`, the dropped files `get-dropped-paths`, the log `log`, the task runner `add-task` and `cancel-tasks` and the remote control connection `test-result` and `test-ui-ready`, which fail with `RemoteControlNotRunning` when the app was started without `--remote-control`. The main thread finds the function by the message's name and gives it only the piece of its state it uses. No public declaration of the core names them, so an app cannot call one.
 - **The standard arguments.** Every app message handler, menu item function and app function takes the same arguments first: the handler services, the main thread's timers, its Io and an allocator. Every task handler takes the task services, its worker's timers, its worker's Io, an allocator and its context. Ziggy passes them to every handler of a kind alike and never chooses what to pass by reading a handler's parameters. The services are interfaces, as `std.Io` is: the handler services carry out each call on the main thread, and the task services send each call to the main thread as a JSON message (`services.zig`, `task-runner.zig`).
 - **The app's message handlers.** `handlers.zig` wraps every app message handler in the one function the main thread calls. The wrapper parses the message's data into the handler's payload type, refusing data that does not fit with `InvalidMessageData` without running the handler. It turns what the handler returns (a result, `void`, a `ziggy.core.Response` of `.now`, `.task` or `.later`, or a `ziggy.core.MessageResult` from a handler that takes the message unparsed) into the message response. A handler that returns `.later` takes a `ziggy.core.Reply`, which posts the response to the main thread's queue. The main thread records each such message until its response comes. It reports any that never gets one as a `core-error` system event naming `MessageNotAnswered` when it stops. The [Messages](../user-guide/messages.md#what-a-handler-returns) guide lists the forms.
 
@@ -105,8 +105,8 @@ The system messages, each handled by Ziggy's core library and never by the app:
 | `get-dropped-paths` | `window.ziggy.getPathForFile`, when a drop happens | Answers with the paths of the files in the last drop. |
 | `log` | `window.ziggy.log(level, message, errorText, toolOutput)` | Writes a line to the main thread's log tagged `Frontend` (see [Logging](../user-guide/logging.md)). A level it does not know fails with `UnknownLogLevel`. |
 | `menu-action` | The native app | Passes on a menu item the native app does not run itself, by its name: the core calls a `.zig` item's function or sends a `.ui` item to the frontend as the app event `{"type": "menu", "item": "<name>"}`. A name the menu does not have, or a standard action, fails with `UnknownMenuItem`. |
-| `test-result` | `window.ziggy.sendTestResult(requestId, result)` | The frontend's result for a `test-command`. Test hooks builds only. |
-| `test-ui-ready` | `window.ziggy.testUiReady()` | Reports that the frontend is listening for test commands. Test hooks builds only. |
+| `test-result` | `window.ziggy.sendTestResult(requestId, result)` | The frontend's result for a `test-command`. Fails with `RemoteControlNotRunning` when the app was started without `--remote-control`. |
+| `test-ui-ready` | `window.ziggy.testUiReady()` | Reports that the frontend is listening for test commands. Fails with `RemoteControlNotRunning` when the app was started without `--remote-control`. |
 
 A system message with a name no part of Ziggy has registered gets the error `UnknownSystemMessage`.
 
@@ -117,7 +117,7 @@ The system events, each with its own listener on `window.ziggy`:
 | `task-event` | `onTaskEvent` | A task sent an event while it ran: `taskId`, `source` and `data`. |
 | `task-completed` | `onTaskCompleted` | A task ended: `taskId` and `result`. |
 | `core-error` | `onCoreError` | A message failed with no message response to carry the error: `error`. With no listener it is logged to the console. |
-| `test-command` | `onTestCommand` | A command from the test control connection: `requestId` and `command`. Test hooks builds only. |
+| `test-command` | `onTestCommand` | A command from the remote control connection: `requestId` and `command`. Sent only when the app was started with `--remote-control`. |
 
 ## Tasks
 
@@ -143,9 +143,13 @@ The system events, each with its own listener on `window.ziggy`:
 - `menu-action` is only a system message the native apps post. It is not a system event and the frontend has no listener for it.
 - [Menus](../user-guide/menus.md) explains how to write one.
 
-## Test hooks
+## Remote control
 
-- Test hooks let the smoke tests drive the running app from outside, through a control connection on the loopback address.
-- They are compiled in only with the `test-hooks` build option, which release builds never use.
+- The remote control connection lets the smoke tests drive the running app from outside.
+- Its code is in every build. It does nothing unless the app is started with `--remote-control <host:port>` (the string Intent extra `ziggy.remoteControl` on Android). Test mode is on exactly when the app is started that way.
+- The Linux and Windows native apps take `--remote-control` and its address out of the command line with `core/src/lib/remote-control-arguments.zig` before the app sees it. The macOS and iOS native apps do the same in `ZiggyBridge.swift`.
+- The core (`core/src/lib/remote-control.zig`) connects out to the remote control server at that address. It opens one WebSocket connection to `ws://<host:port>/` with websocket.zig's client, on a thread of its own. When the connect fails, the core prints the address and the app fails to start.
+- Each text message from the server is one command. Each reply is one text message. A command the native app does (`quit`, `menu`, `screenshot`) goes to the native app. Every other command goes to the core's main thread.
+- The [remote control server](../../tools/remote-control-server/README.md) (`tools/remote-control-server`) is a separate program. The app connects to it on one port and the test script on another. It passes each line the script writes to the app and each reply back to the script as a line.
 - A command the frontend performs reaches it as a `test-command` event (`window.ziggy.onTestCommand`), and the frontend answers with `window.ziggy.sendTestResult`. The frontend reports it is listening with `window.ziggy.testUiReady()`.
 - [Testing your app](../user-guide/testing.md) lists the commands.

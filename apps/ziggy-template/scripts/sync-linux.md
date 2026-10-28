@@ -4,11 +4,11 @@ Builds the template's frontend (`bun run bundle:ui`) and its Linux native app (t
 
 ## Usage
 
-`bash apps/ziggy-template/scripts/sync-linux.sh [--optimize <mode>] [--test-hooks]`
+`bash apps/ziggy-template/scripts/sync-linux.sh [--optimize <mode>] [--prefix <dir>]`
 
 Run it through the root `package.json` script, not directly.
 
 ## Arguments
 
 - `--optimize <Debug|ReleaseSafe|ReleaseFast|ReleaseSmall>`: the Zig optimize mode. Default `ReleaseSafe`.
-- `--test-hooks`: builds the test hooks into the app (the test control connection). Off by default, and never used for `package-linux.sh`.
+- `--prefix <dir>`: where the app is installed, as `<dir>/bin/ziggy-template`. Default `native/linux/zig-out`. CI's `app-build` job and the smoke tests install into a directory of their own.

@@ -18,7 +18,7 @@ pub const Message = struct {
     from: u32,
     // The JSON text. A message taken from a queue holds a copy allocated with the allocator the taking thread gave, which it frees.
     text: []u8,
-    // Where a reply to this message goes, for a sender that is not a thread the reader knows by number (a test control connection,
+    // Where a reply to this message goes, for a sender that is not a thread the reader knows by number (a remote control connection,
     // for one), or null.
     reply_to: ?*MessageQueue = null,
 };

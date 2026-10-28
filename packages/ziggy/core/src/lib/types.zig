@@ -50,13 +50,13 @@ pub const ZiggyConfig = extern struct {
     // Whether the native app shows native file and folder dialogs.
     has_pick_paths: bool,
     // Whether the native app does menu actions as if their menu items had been chosen: false on a platform with no menu. Used only
-    // by the test control connection.
+    // by the remote control connection.
     has_menu_action: bool,
     // Whether the native app keeps the app running for keep-alive tasks.
     has_keep_alive: bool,
     // Whether the native app does the things only the platform can do (a share sheet, a permission prompt, the keychain), by name.
     has_native_call: bool,
-    // Whether the native app writes a PNG of its window to a file. Used only by the test control connection; without it a screenshot
+    // Whether the native app writes a PNG of its window to a file. Used only by the remote control connection; without it a screenshot
     // is taken from outside the app.
     has_screenshot: bool,
     // The number of worker threads.
@@ -67,10 +67,11 @@ pub const ZiggyConfig = extern struct {
     app_url_prefix: [*:0]const u8,
     // The app's private data directory (NUL terminated).
     data_dir: [*:0]const u8,
-    // Non-zero to start the test control connection. Used only in a test hooks build.
+    // Whether the app was started for a test, with --remote-control. The native app sets it exactly when remote_control is set.
     test_mode: bool,
-    // The file the test control connection writes its port to, or null for none. Used only in a test hooks build.
-    test_port_file: ?[*:0]const u8,
+    // The remote control server's address, "host:port" (NUL terminated), which the core connects to, or null when the app was
+    // started without --remote-control.
+    remote_control: ?[*:0]const u8,
     // The number of the native app's command-line arguments in `args`, after the program's name. 0 for a native app with none (Android,
     // iOS).
     arg_count: u32,

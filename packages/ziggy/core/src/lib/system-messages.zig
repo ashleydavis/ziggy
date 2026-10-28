@@ -31,12 +31,12 @@ pub const dropped_files = @import("system-messages/dropped-files.zig");
 pub const log = @import("system-messages/log.zig");
 
 //
-// The system messages of the test hooks (test-result, test-ui-ready), handled only in a test hooks build.
+// The system messages of the remote control connection (test-result, test-ui-ready).
 //
-pub const test_hooks = @import("system-messages/test-hooks.zig");
+pub const remote_control = @import("system-messages/remote-control.zig");
 
 //
-// The name of every system message the main thread handles in a build without the test hooks.
+// The name of every system message the main thread handles, other than those of the remote control connection.
 //
 pub const names = [_][]const u8{
     "add-task",
@@ -48,9 +48,9 @@ pub const names = [_][]const u8{
 };
 
 //
-// The names of the system messages a test hooks build handles as well.
+// The names of the system messages of the remote control connection, which the main thread handles as well.
 //
-pub const test_hook_names = [_][]const u8{
+pub const remote_control_names = [_][]const u8{
     "test-result",
     "test-ui-ready",
 };

@@ -36,7 +36,7 @@ What each platform needs installed, what each dependency is and why it is needed
 
 ## Test hooks
 
-The frontend and the backend carry the test hooks that Ziggy's own smoke tests (in `smoke-tests` at the root of Ziggy's repository) drive the test app with, listed in "Test hooks" in the architecture guide. They are compiled in only by the `test-hooks` build option, which the `package` commands never set.
+The frontend and the backend carry the test hooks that Ziggy's own smoke tests (in `smoke-tests` at the root of Ziggy's repository) drive the test app with, described in "Remote control" in the architecture guide. They act only when the app is started with `--remote-control <host:port>` (the `ziggy.remoteControl` extra on Android). The packaged app has them too.
 
 ## CI
 
@@ -45,6 +45,6 @@ The repository's CI workflow (`.github/workflows/ci.yml`) runs Ziggy's smoke tes
 ## See also
 
 - [Ziggy's repository](https://github.com/ashleydavis/ziggy): the package the test app is built on.
-- [Ziggy architecture](https://github.com/ashleydavis/ziggy/blob/main/docs/development/architecture.md): how the parts fit, including [the bundled frontend](https://github.com/ashleydavis/ziggy/blob/main/docs/development/architecture.md#the-bundled-frontend) and the test hooks.
+- [Ziggy architecture](https://github.com/ashleydavis/ziggy/blob/main/docs/development/architecture.md): how the parts fit, including [the bundled frontend](https://github.com/ashleydavis/ziggy/blob/main/docs/development/architecture.md#the-bundled-frontend) and the [remote control connection](https://github.com/ashleydavis/ziggy/blob/main/docs/development/architecture.md#remote-control).
 - [Building your app](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/building-your-app.md): starting a new app from the test app.
 - [Releasing Ziggy](https://github.com/ashleydavis/ziggy/blob/main/docs/development/releasing-ziggy.md): the release workflow.

@@ -8,7 +8,6 @@ source "$(dirname "${BASH_SOURCE[0]}")/android-common.sh"
 
 arch_list="x86_64 arm64"
 optimize="ReleaseSafe"
-test_hooks="false"
 skip_ui="false"
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -20,16 +19,12 @@ while [ $# -gt 0 ]; do
             optimize="$2"
             shift 2
             ;;
-        --test-hooks)
-            test_hooks="true"
-            shift
-            ;;
         --skip-ui)
             skip_ui="true"
             shift
             ;;
         *)
-            echo "Usage: sync-android.sh [--arch \"x86_64 arm64\"] [--optimize Debug|ReleaseSafe|ReleaseFast|ReleaseSmall] [--test-hooks] [--skip-ui]" >&2
+            echo "Usage: sync-android.sh [--arch \"x86_64 arm64\"] [--optimize Debug|ReleaseSafe|ReleaseFast|ReleaseSmall] [--skip-ui]" >&2
             exit 2
             ;;
     esac
@@ -78,11 +73,6 @@ for arch in x86_64 arm64; do
     } > "$generated_dir/zig-libc/$arch.txt"
 done
 
-test_hooks_argument="-Dtest-hooks=false"
-if [ "$test_hooks" = "true" ]; then
-    test_hooks_argument="-Dtest-hooks=true"
-fi
-
 # The frontend is embedded in the library, so it is built first.
 if [ "$skip_ui" = "false" ]; then
     echo "Building the UI..."
@@ -108,11 +98,10 @@ for arch in $arch_list; do
             triple="aarch64-linux-android"
             ;;
     esac
-    echo "Building the Zig library for $abi ($optimize, $test_hooks_argument)..."
+    echo "Building the Zig library for $abi ($optimize)..."
     (cd "$ZIGGY_EXAMPLE_DIR" && zig build ziggy-template-backend \
         "-Dtarget=$triple" \
         "-Doptimize=$optimize" \
-        "$test_hooks_argument" \
         --libc "$generated_dir/zig-libc/$arch.txt" \
         -p "$generated_dir/zig-out/$abi")
     mkdir -p "$generated_dir/jniLibs/$abi"

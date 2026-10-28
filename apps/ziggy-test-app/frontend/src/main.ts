@@ -540,8 +540,8 @@ function listenForMenuEvents(): void {
 }
 
 //
-// Handles the commands the test control connection forwards. It does nothing unless the native app started the frontend
-// in test mode, which it does only in a test hooks build, and it tells the backend when it is listening so that no
+// Handles the commands the remote control connection forwards. It does nothing unless the native app started the frontend
+// in test mode, which it does only when the app was started with --remote-control, and it tells the backend when it is listening so that no
 // command is sent before it can be heard.
 //
 function listenForTestCommands(): void {

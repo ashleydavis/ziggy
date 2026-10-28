@@ -22,7 +22,7 @@ Run from the root of Ziggy's repository.
 | `bun run <command>:ziggy-template:<platform>` | Runs the template's `<command>:<platform>`, for `sync`, `build`, `run`, `open`, `package` and `clean`. |
 | `bun run distribute:ziggy-template:android` | Runs the template's `distribute:android`. |
 | `bun run dev:ziggy-template` | Runs the template's `dev`. |
-| `bun run test:smoke` | Ziggy's smoke tests, which drive its test app (`apps/ziggy-test-app`), on this machine's desktop platform. `test:smoke:android` and `test:smoke:ios` run them on an attached Android emulator or device (the ones `ZIGGY_ANDROID_DEVICES` names, when it is set) and on a connected iPhone or iPad or else the iOS simulator. `-- <number\|name>` after any of them runs one scenario. |
+| `bun run test:smoke` | Ziggy's smoke tests, which drive its test app (`apps/ziggy-test-app`), on this machine's desktop platform. `test:smoke:android` and `test:smoke:ios` run them on an attached Android device or emulator (the ones `ZIGGY_ANDROID_DEVICES` names when it is set, else a plugged-in device in preference to an emulator) and on a connected iPhone or iPad or else the iOS simulator. `-- <number\|name>` after any of them runs one scenario. |
 
 Any other command of the template runs from the root with `bun run --filter=ziggy-template <command>`.
 
@@ -34,9 +34,9 @@ An app's `bun run dev` runs the supervisor (`zig build <name>-dev`). Its options
 |---|---|
 | `--no-open` | Leaves the browser closed. The address to open is printed. |
 | `--port <port>` | Serves the app on that port instead of one the operating system chooses. |
-| `--test-hooks` | Builds the dev backend with the test hooks, so a test can drive it as it drives a native app's test build. |
+| `--remote-control <host:port>` | Passes the address on to the dev backend, which connects to the [remote control server](../../tools/remote-control-server/README.md) there and starts in test mode, so a test can drive it as it drives a native app. |
 
-`zig build <name>-dev-host` builds the dev backend alone, to `zig-out/bin/<name>-dev-host`. It takes `--data-dir <dir>` (the app's data directory) and `--ui-port <port>` (the port of the dev server it forwards to), and optionally `--port <port>` and `--port-file <file>` (where it writes the port it listens on). In a build with the test hooks it starts in test mode when `ZIGGY_TEST_MODE` is set, as a native app does.
+`zig build <name>-dev-host` builds the dev backend alone, to `zig-out/bin/<name>-dev-host`. It takes `--data-dir <dir>` (the app's data directory) and `--ui-port <port>` (the port of the dev server it forwards to), and optionally `--port <port>`, `--port-file <file>` (where it writes the port it listens on) and `--remote-control <host:port>` (the remote control server it connects to, which turns test mode on, as in a native app).
 
 ## See also
 

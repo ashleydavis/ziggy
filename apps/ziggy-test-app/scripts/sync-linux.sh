@@ -9,16 +9,16 @@ EXAMPLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SHELL_DIR="$EXAMPLE_DIR/native/linux"
 
 OPTIMIZE="ReleaseSafe"
-HOOKS_ARGUMENT=""
+PREFIX="$SHELL_DIR/zig-out"
 while [ "$#" -gt 0 ]; do
     case "$1" in
+        --prefix)
+            PREFIX="$2"
+            shift 2
+            ;;
         --optimize)
             OPTIMIZE="$2"
             shift 2
-            ;;
-        --test-hooks)
-            HOOKS_ARGUMENT="-Dtest-hooks=true"
-            shift
             ;;
         *)
             echo "Unknown argument $1. See sync-linux.md." >&2
@@ -28,4 +28,5 @@ while [ "$#" -gt 0 ]; do
 done
 
 (cd "$EXAMPLE_DIR" && bun run bundle:ui)
-(cd "$EXAMPLE_DIR" && zig build ziggy-test-app-linux "-Doptimize=$OPTIMIZE" $HOOKS_ARGUMENT --prefix "$SHELL_DIR/zig-out")
+(cd "$EXAMPLE_DIR" && zig build ziggy-test-app-linux "-Doptimize=$OPTIMIZE" --prefix "$PREFIX")
+echo "Built $PREFIX/bin/ziggy-test-app"

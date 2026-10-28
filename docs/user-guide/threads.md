@@ -8,7 +8,7 @@
   - **The JavaScript bridge thread** (Android only, Java plus a Zig JNI function): passes each message from the frontend to the main thread.
   - **The main thread** (Zig): runs handlers, menu functions, timers and the app's callbacks, one at a time. It owns the worker pool.
   - **Background task worker threads** (Zig): each runs one task at a time.
-  - **The test control threads** (Zig): only in a test hooks build.
+  - **The remote control thread** (Zig): only when the app is started with `--remote-control`.
   - **The frontend** (JavaScript): runs in the system web view, on threads the web view manages.
 - **What each thread may touch:** its own `ThreadAllocator` and `std.Io`. The main thread's state stays on the main thread. A task gets JSON in and sends JSON back. Services are passed as arguments, never stored.
 - **The message queue:** many threads post, one thread takes. Text is copied in on post and out on take. A waiting thread sleeps until a message comes or its next timer is due. Each message has a `from` number and can name a queue for its reply.
@@ -38,7 +38,7 @@ The rule underneath everything here: threads share no state. Every thread owns i
 | The JavaScript bridge thread (Android only) | Java, plus the Zig JNI function `ZiggyNative.sendMessage` | The Android WebView | `window.ZiggyAndroid.postMessage`: it passes each message from the frontend to the main thread's queue. |
 | The main thread | Zig | Ziggy's core library, when the native app creates the backend (`ziggy_create`) | Every message handler, menu function and timer, plus `on_create`, `on_destroy`, `on_task_end` and `on_task_event`, one at a time in the order their messages arrived. It owns the worker pool. |
 | Background task worker threads | Zig | The worker pool, when a task needs a worker | One task at a time. |
-| The test control threads | Zig | Ziggy, in a test hooks build in test mode only | The test control connection. |
+| The remote control thread | Zig | Ziggy's core library, only when the app is started with `--remote-control` | The remote control connection to the remote control server. |
 
 The frontend runs in JavaScript inside the system web view, on threads the system web view manages. Ziggy starts no thread there.
 
@@ -59,7 +59,7 @@ All communication between threads goes through `MessageQueue` (`ziggy.message_qu
 - Any number of threads post to a queue. One thread takes from it.
 - A post copies the sender's text into memory only the queue uses. A take copies it out into the taking thread's own allocator. No allocation crosses a thread.
 - A thread waiting on an empty queue sleeps until a post or a timeout. The main thread and each worker wait no longer than until their next timer is due, so timers run on the thread that owns them.
-- Each message carries a `from` number, so the main thread can tell the frontend, Ziggy's core library itself, the test control connection and each worker apart.
+- Each message carries a `from` number, so the main thread can tell the frontend, Ziggy's core library itself, the remote control connection and each worker apart.
 - A message can name a queue its reply goes to, for a sender that is not a thread the reader knows by number.
 
 ## Between the native app and the backend

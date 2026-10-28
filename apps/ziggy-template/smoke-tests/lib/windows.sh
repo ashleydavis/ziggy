@@ -6,8 +6,6 @@
 # needed. Each scenario points LOCALAPPDATA at its own directory, which is where the app keeps its data and WebView2 keeps
 # its profile, so two scenarios never share either.
 
-WINDOWS_SCRIPTS_DIR="$ZIGGY_SMOKE_APP_DIR/scripts"
-
 # The file the app's process group is recorded in, per scenario.
 WINDOWS_PGID_FILE_NAME="app.pgid"
 
@@ -26,46 +24,29 @@ windows_native_path() {
 ziggy_platform_prepare() {
     local run_dir
     run_dir="$(windows_native_path "$1")"
-    bash "$WINDOWS_SCRIPTS_DIR/sync-windows.sh" --test-hooks --prefix "$run_dir/test" || return 1
-    bash "$WINDOWS_SCRIPTS_DIR/sync-windows.sh" --prefix "$run_dir/release" || return 1
+    local build="${ZIGGY_SMOKE_BUILD:-}"
+    if [ -z "$build" ]; then
+        build="$run_dir/build"
+        (cd "$ZIGGY_SMOKE_APP_DIR" && bun run build:windows --prefix "$build") || return 1
+    fi
+    if [ ! -f "$build/bin/ziggy-template.exe" ]; then
+        echo "The Windows build $build has no bin/ziggy-template.exe." >&2
+        return 1
+    fi
+    mkdir -p "$run_dir/app"
+    cp -R "$build/bin/." "$run_dir/app/" || return 1
 }
 
 ziggy_platform_start() {
     local test_dir="$1"
-    local kind="$2"
-    local app="$ZIGGY_SMOKE_RUN_DIR/$kind/ziggy-template/ziggy-template.exe"
+    local app="$ZIGGY_SMOKE_RUN_DIR/app/ziggy-template.exe"
     local log="$test_dir/app.log"
-    local port_file="$test_dir/control-port.txt"
-    rm -f "$port_file"
     mkdir -p "$test_dir/data"
-    local pid pgid
-    read -r pid pgid < <(launch_in_process_group "$log" env \
+    local pgid
+    read -r _ pgid < <(launch_in_process_group "$log" env \
         LOCALAPPDATA="$(windows_native_path "$test_dir/data")" \
-        ZIGGY_TEST_MODE=1 \
-        ZIGGY_TEST_PORT_FILE="$(windows_native_path "$port_file")" \
-        "$app") || return 1
+        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
     echo "$pgid" > "$test_dir/$WINDOWS_PGID_FILE_NAME"
-    if [ "$kind" = "release" ]; then
-        return 0
-    fi
-    local waited=0
-    while [ ! -s "$port_file" ]; do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            echo "The app exited before its control connection came up. Its log:" >&2
-            cat "$log" >&2
-            return 1
-        fi
-        if [ "$waited" -ge 600 ]; then
-            echo "The app never wrote its control port." >&2
-            cat "$log" >&2
-            return 1
-        fi
-        sleep 0.1
-        waited=$((waited + 1))
-    done
-    ZIGGY_CONTROL_HOST=127.0.0.1
-    ZIGGY_CONTROL_PORT="$(tr -d '\n' < "$port_file")"
-    export ZIGGY_CONTROL_HOST ZIGGY_CONTROL_PORT
 }
 
 ziggy_platform_stop() {
@@ -112,15 +93,6 @@ ziggy_platform_wait_exit() {
 ziggy_platform_is_running() {
     local test_dir="$1"
     process_group_alive "$(cat "$test_dir/$WINDOWS_PGID_FILE_NAME")"
-}
-
-ziggy_platform_artifact_files() {
-    local kind="$1"
-    printf '%s\n' "$ZIGGY_SMOKE_RUN_DIR/$kind/ziggy-template/ziggy-template.exe"
-}
-
-ziggy_platform_has_control_port() {
-    [ -s "$1/control-port.txt" ]
 }
 
 #

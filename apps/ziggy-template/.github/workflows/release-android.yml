@@ -1,10 +1,11 @@
 name: Release Android
 
-# Smoke tests the Ziggy template on an Android emulator, packages it for Android and, when both passed on the default branch,
-# publishes the packages as the GitHub release named "Ziggy template Android", replacing the one before. It runs on every push.
-# The app is never version tagged, but a GitHub release is always attached to a git tag, so the release sits on the tag
-# `release-android`, which this workflow moves to the commit it built. A run that fails anywhere publishes nothing. The unit
-# tests and the cross-build are in the CI workflow.
+# Builds the Ziggy template for Android in app-build. Then, side by side, package makes the release packages, the unit tests
+# run and the smoke tests drive the build app-build made on an Android emulator. When all of them passed on the default
+# branch, create-release publishes the packages as the GitHub release named "Ziggy template Android", replacing the one before.
+# It runs on every push. The app is never version tagged, but a GitHub release is always attached to a git tag, so the release
+# sits on the tag `release-android`, which this workflow moves to the commit it built. A run that fails anywhere publishes
+# nothing.
 
 env:
   BUN_VERSION: "1.3.14"
@@ -26,8 +27,262 @@ on:
   workflow_dispatch:
 
 jobs:
+  app-build:
+    # Builds the app for Android with its build script into example-build/app, as one APK for x86_64 and arm64 built with the
+    # SDK and the NDK. The smoke tests drive this build. It saves the build and its Zig build cache under the key
+    # example-build-android-<commit>, which the jobs that need app-build restore.
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      # The Android scripts need JDK 17 and the NDK the app locks.
+      - name: Setup JDK 17 (Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache the Android NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/25.1.8937393
+          key: ${{ runner.os }}-android-ndk-25.1.8937393
+
+      # Retried because the SDK manager downloads from Google and a download can arrive corrupt.
+      - name: Set up the Android SDK and NDK (Android)
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun run setup
+
+      # The newest earlier build is restored when there is none for this commit, so only what a change touches is compiled
+      # again.
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            example-build/app
+          key: example-build-android-${{ github.sha }}
+          restore-keys: |
+            example-build-android-
+
+      # Every save is the restored cache plus what the job built, so without this the cache only grows.
+      - name: Start fresh Zig build caches when the restored ones have grown too big
+        shell: bash
+        run: |
+          for cache_dir in .; do
+              if [ -d "$cache_dir/.zig-cache" ]; then
+                  megabytes="$(du -sm "$cache_dir/.zig-cache" | cut -f1)"
+                  echo "Restored Zig build cache of $cache_dir: ${megabytes} MB"
+                  if [ "$megabytes" -ge 5120 ]; then
+                      mv "$cache_dir/.zig-cache" "$RUNNER_TEMP/stale-zig-cache-$(basename "$cache_dir")"
+                      echo "Moved it aside to start a fresh one"
+                  fi
+              fi
+          done
+
+      # The restored output is an earlier build's, so it is moved aside first and only this build's output is saved.
+      - name: Build
+        shell: bash
+        run: |
+          if [ -d example-build/app ]; then
+              mv example-build/app "$RUNNER_TEMP/stale-example-build-app"
+          fi
+          bun run build:android --arch "x86_64 arm64" --output-dir "$PWD/example-build/app"
+
+      # Saved only when the build passed, so no later job restores a build that stopped part way.
+      - name: Save the build and the Zig build caches
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            .zig-cache
+            example-build/app
+          key: example-build-android-${{ github.sha }}
+
+  package:
+    # Makes the app's release packages for Android with its package script, an APK per architecture, starting from the Zig
+    # build cache app-build saved so only what packaging adds is compiled. It runs beside the unit tests and the smoke tests and
+    # saves the packages under the key example-package-android-<commit>, which create-release restores.
+    needs: app-build
+    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      # The Android scripts need JDK 17 and the NDK the app locks.
+      - name: Setup JDK 17 (Android)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache the Android NDK
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/25.1.8937393
+          key: ${{ runner.os }}-android-ndk-25.1.8937393
+
+      # Retried because the SDK manager downloads from Google and a download can arrive corrupt.
+      - name: Set up the Android SDK and NDK (Android)
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun run setup
+
+      # The path list is the one app-build saved, which the cache needs to find the entry.
+      - name: Restore the Zig build caches from app-build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            example-build/app
+          key: example-build-android-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Package
+        shell: bash
+        run: bun run package:android --output-dir "$PWD/out/android"
+
+      - name: Save the package
+        uses: actions/cache/save@v4
+        with:
+          path: out/android
+          key: example-package-android-${{ github.sha }}
+
+  unit-tests:
+    # The TypeScript unit tests (the app's frontend) and the Zig unit tests of the app's backend (`zig build test`), on the
+    # Linux runner. The Zig tests compile on top of the Zig build cache app-build saved. It runs beside package and the
+    # smoke tests.
+    needs: app-build
+    timeout-minutes: 50
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      # The Linux native app links GTK and WebKitGTK by their runtime library files, and its build stops with "error:
+      # RuntimeLibraryMissing" when they are not installed.
+      - name: Install the web view's runtime libraries (Linux)
+        uses: ./.github/actions/install-apt-packages
+        with:
+          packages: libgtk-3-0 libwebkit2gtk-4.1-0
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      # Zig skips any compile step whose inputs are unchanged and already in .zig-cache. This is the cache app-build saved, so
+      # the tests compile only what that build did not. The path list is the one app-build saved, which the cache needs to find
+      # the entry.
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            example-build/app
+          key: example-build-android-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Run the TypeScript unit tests
+        timeout-minutes: 12
+        shell: bash
+        run: bun run test
+
+      # The same tests `bun run test:zig` runs, which bundles the frontend first because the backend's tests embed it. They are
+      # built for any CPU of the architecture: built for the runner's own, which differs from one runner to the next, every
+      # compile step would miss the build cache restored above.
+      - name: Run the Zig unit tests
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          bun run bundle:ui
+          zig build test -Dcpu=baseline --summary all --test-timeout 20m
+
   app-smoke-tests:
-    # The app's smoke tests on an Android emulator.
+    # The app's smoke tests on an Android emulator. They drive the APK app-build made.
+    needs: app-build
     timeout-minutes: 75
     runs-on: ubuntu-latest
     steps:
@@ -112,14 +367,20 @@ jobs:
             yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
             "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install 'system-images;android-35;google_apis;x86_64'
 
-      - name: Restore the Zig build caches
+      # The path list is the one app-build saved, which the cache needs to find the entry.
+      - name: Restore the build from app-build
         uses: actions/cache/restore@v4
         with:
           path: |
             .zig-cache
-          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-
+            example-build/app
+          key: example-build-android-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      # The smoke tests drive the build ZIGGY_SMOKE_BUILD names instead of building one.
+      - name: Point the smoke tests at the build
+        shell: bash
+        run: echo "ZIGGY_SMOKE_BUILD=$PWD/example-build/app" >> "$GITHUB_ENV"
 
       # The script is one line, because this action runs each line of `script:` in a shell of its own.
       - name: Run the smoke tests on an emulator (Android)
@@ -133,94 +394,12 @@ jobs:
           target: google_apis
           script: bun run test:smoke:android
 
-      # Saved under this platform's own key so package-release, which builds the same release app, finds the Zig part already
-      # built. Always, so a job that fails part way still leaves what it compiled.
-      - name: Save the Zig build caches
-        if: always()
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            .zig-cache
-          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}-smoke-android
-
-  package-release:
-    # The app packaged for Android by its own package script, as an APK per architecture built with the SDK and NDK, uploaded
-    # as an artifact of the run. It runs after the smoke tests and starts from the Zig build cache they saved, so the Zig part
-    # of the release build is not compiled a second time.
-    needs: app-smoke-tests
-    timeout-minutes: 60
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup Zig (version from mise.toml)
-        uses: jdx/mise-action@v2
-        with:
-          install_args: zig jq
-
-      - name: Cache Bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
-
-      - name: Install dependencies
-        uses: ./.github/actions/retry-install
-        with:
-          run: bun install
-
-      - name: Cache the Android NDK
-        uses: actions/cache@v4
-        with:
-          path: /usr/local/lib/android/sdk/ndk/25.1.8937393
-          key: ${{ runner.os }}-android-ndk-25.1.8937393
-
-      # Retried because the SDK manager downloads from Google and a download can arrive corrupt.
-      - name: Set up the Android SDK and NDK (Android)
-        uses: ./.github/actions/retry-install
-        with:
-          run: bun run setup
-
-      - name: Restore the Zig build caches
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            .zig-cache
-          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}-smoke-android
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-
-
-      - name: Package
-        shell: bash
-        run: bun run package:android
-
-      - name: Upload the packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: ziggy-template-android
-          path: out/android/*.apk
-          if-no-files-found: error
-          retention-days: 2
-
   create-release:
-    # Publishes the packages, only when the smoke tests and the packaging passed, and only for a push to the default branch,
-    # so a run on another branch or a pull request tests everything and publishes nothing. This platform's release and its tag
-    # are deleted and made again on the commit this run built.
+    # Publishes the packages the package job made, only when every other job passed and only for a push to the default
+    # branch, so a run on another branch or a pull request tests everything and publishes nothing. This platform's release and
+    # its tag are deleted and made again on the commit this run built.
     if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
-    needs: [app-smoke-tests, package-release]
+    needs: [app-build, package, unit-tests, app-smoke-tests]
     timeout-minutes: 15
     runs-on: ubuntu-latest
     permissions:
@@ -231,11 +410,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download the packages
-        uses: actions/download-artifact@v4
+      # The path list is the one the package job saved, which the cache needs to find the entry.
+      - name: Restore the packages from package
+        uses: actions/cache/restore@v4
         with:
-          name: ziggy-template-android
-          path: artifacts
+          path: out/android
+          key: example-package-android-${{ github.sha }}
+          fail-on-cache-miss: true
 
       # Every platform's release tag moves to the commit its workflow built, so release-notes.sh would count from whichever of
       # them sorts first and report almost nothing. They are deleted from this checkout only, before the notes are made.
@@ -267,7 +448,7 @@ jobs:
           draft: false
           prerelease: true
           files: |
-            ./artifacts/*.apk
+            ./out/android/*.apk
           body: |
             The Ziggy template, smoke tested and packaged for ${{ env.RELEASE_PLATFORM_NAME }} from commit ${{ github.sha }}.
 

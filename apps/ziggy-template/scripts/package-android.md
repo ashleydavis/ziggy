@@ -1,6 +1,6 @@
 # package-android.sh
 
-Builds the release APK per architecture. Each is synced with `ReleaseSmall` and no test hooks, then built with `gradlew assembleRelease`. The release variant is signed with the debug key so that it installs; it is not a store build. It has no INTERNET permission.
+Builds the release APK per architecture. Each is synced with `ReleaseSmall`, then built with `gradlew assembleRelease`. The release variant is signed with the debug key so that it installs; it is not a store build. It has no INTERNET permission.
 
 Invoke: `bash apps/ziggy-template/scripts/package-android.sh [--arch "<list>"] [--output-dir <dir>] [--version-name <name>] [--version-code <number>]`
 

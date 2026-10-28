@@ -112,6 +112,8 @@ FILE_LIST="$OUTPUT_DIR/$NAME.files"
 echo "Pinning package.json"
 replace_lines "$APP_DIR/package.json" '    "ziggy": "workspace:\*"' '    "ziggy": "workspace:\*"' \
     "    \"ziggy\": \"git+https://github.com/ashleydavis/ziggy.git#$TAG\""
+replace_lines "$APP_DIR/package.json" '    "ziggy-remote-control-server": "workspace:\*"' '    "ziggy-remote-control-server": "workspace:\*"' \
+    "    \"ziggy-remote-control-server\": \"git+https://github.com/ashleydavis/ziggy.git#$TAG\""
 
 echo "Pinning native/android/app/build.gradle"
 replace_lines "$APP_DIR/native/android/app/build.gradle" "    implementation 'dev.ziggy:ziggy-native-android:*'" "    implementation 'dev.ziggy:ziggy-native-android:*'" \

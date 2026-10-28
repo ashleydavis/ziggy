@@ -19,6 +19,7 @@ const actions_lib = @import("actions.zig");
 const menu_lib = @import("menu.zig");
 const pickers_lib = @import("pickers.zig");
 const native_message = @import("native-message");
+const remote_control_arguments = @import("remote-control-arguments");
 
 //
 // The URL prefix the bundled frontend is served under, with a trailing slash. The host name is under .invalid, which can
@@ -212,7 +213,7 @@ const QueuedPick = struct {
 const NativeApp = struct {
     // The configuration the app passed in.
     app_config: AppConfig,
-    // The command line, for the geometry option.
+    // The command line without --remote-control and its address, for the geometry option and the app.
     args: []const [:0]const u8,
     // The top level window.
     window: c.HWND,
@@ -234,10 +235,9 @@ const NativeApp = struct {
     inject_script: [:0]u16,
     // The directory of the app's private data. Owned.
     data_directory: [:0]u8,
-    // Whether a test hooks build was started in test mode.
-    test_mode: bool,
-    // The file the test control connection writes its port to, from the environment, in test mode. Owned.
-    test_port_file: ?[:0]u8,
+    // The remote control server's address from --remote-control, or null when the app was started without it. Test mode is on
+    // exactly when it is set.
+    remote_control: ?[:0]const u8,
     // Receives the WebView2 environment.
     environment_handler: EnvironmentHandler,
     // Receives the WebView2 controller.
@@ -289,9 +289,12 @@ const NativeApp = struct {
 //
 pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
     const allocator = std.heap.c_allocator;
+    // The option is taken out first, so nothing that reads the command line after this sees it.
+    const taken = try remote_control_arguments.take(allocator, args);
+    defer allocator.free(taken.arguments);
     var native_app: NativeApp = .{
         .app_config = app_config,
-        .args = args,
+        .args = taken.arguments,
         .window = null,
         .controller = null,
         .web_view = null,
@@ -302,8 +305,7 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .ui_url = undefined,
         .inject_script = undefined,
         .data_directory = undefined,
-        .test_mode = false,
-        .test_port_file = null,
+        .remote_control = taken.remote_control,
         .menu_actions = .empty,
         .menu_bar = null,
         .accelerator_table = null,
@@ -474,13 +476,6 @@ fn readEnvironment(allocator: std.mem.Allocator, comptime name: []const u8) !?[:
 // Creates the window, starts WebView2 and runs the message loop until the window closes.
 //
 fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
-    const test_hooks = c.ziggy_test_hooks_enabled();
-    native_app.test_mode = false;
-    if (test_hooks) {
-        const test_mode = try readEnvironment(allocator, "ZIGGY_TEST_MODE");
-        native_app.test_mode = test_mode != null;
-    }
-
     var inject_script_length: usize = 0;
     const inject_script = c.ziggy_inject_script(&inject_script_length);
     native_app.inject_script = try std.unicode.utf8ToUtf16LeAllocZ(allocator, inject_script[0..inject_script_length]);
@@ -500,10 +495,6 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
     defer allocator.free(user_data_folder);
     const wide_user_data_folder = try std.unicode.utf8ToUtf16LeAllocZ(allocator, user_data_folder);
     defer allocator.free(wide_user_data_folder);
-
-    if (native_app.test_mode) {
-        native_app.test_port_file = try readEnvironment(allocator, "ZIGGY_TEST_PORT_FILE");
-    }
 
     var width = native_app.app_config.default_width;
     var height = native_app.app_config.default_height;
@@ -912,11 +903,9 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     config.max_concurrent_child_tasks = 10;
     config.app_url_prefix = app_url_prefix;
     config.data_dir = native_app.data_directory.ptr;
-    if (native_app.test_mode) {
+    if (native_app.remote_control) |address| {
         config.test_mode = true;
-        if (native_app.test_port_file) |port_file| {
-            config.test_port_file = port_file.ptr;
-        }
+        config.remote_control = address.ptr;
     }
     // The command-line arguments after the program's name, which the core copies, for the app to read its own options from.
     const app_args = native_app.args[@min(native_app.args.len, 1)..];

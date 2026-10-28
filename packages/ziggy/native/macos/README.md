@@ -19,9 +19,9 @@ bridge.shutdown()                       // ziggy_destroy, once
 
 The frontend and the script that exposes `window.ziggy` (`ziggy-inject.js`, from `packages/ziggy/core/src/lib`) are both embedded in the app's backend library, so the app bundle holds neither.
 
-## Test hooks
+## Remote control
 
-When the linked library has the test hooks and `ZIGGY_TEST_MODE` is set, the native app starts the control connection and writes its port to the file named by `ZIGGY_TEST_PORT_FILE`.
+When the app is started with `--remote-control <host:port>`, the native app takes the option and its address out of the command-line arguments, so the app's own argument handling never sees them. It tells the backend it is in test mode and passes the address on. The backend then connects to the remote control server there. A `--remote-control` with no address after it ends the app.
 
 ## Failures
 

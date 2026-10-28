@@ -15,57 +15,39 @@ LINUX_PGID_FILE_NAME="app.pgid"
 
 ziggy_platform_prepare() {
     local run_dir="$1"
-    (cd "$LINUX_EXAMPLE_DIR" && bun run bundle:ui) || return 1
-    (cd "$LINUX_EXAMPLE_DIR" && zig build ziggy-test-app-linux -Dtest-hooks=true -p "$run_dir/test") || return 1
-    (cd "$LINUX_EXAMPLE_DIR" && zig build ziggy-test-app-linux -p "$run_dir/release") || return 1
-    # The frontend is embedded in the executable, so nothing but the executable is installed. A scenario that passes
-    # proves the frontend loads from the executable alone, which is why nothing is copied beside it.
-    local installed
-    installed="$(find "$run_dir/test/bin" "$run_dir/release/bin" -type f | wc -l)"
-    if [ "$installed" -ne 2 ]; then
-        echo "The Linux build installed more than the two executables:" >&2
-        find "$run_dir/test/bin" "$run_dir/release/bin" -type f >&2
+    local build="${ZIGGY_SMOKE_BUILD:-}"
+    if [ -z "$build" ]; then
+        build="$run_dir/build"
+        (cd "$LINUX_EXAMPLE_DIR" && bun run build:linux --prefix "$build") || return 1
+    fi
+    if [ ! -f "$build/bin/ziggy-test-app" ]; then
+        echo "The Linux build $build has no bin/ziggy-test-app." >&2
         return 1
     fi
+    # The frontend is embedded in the executable, so the build installs nothing but the executable. A scenario that passes
+    # proves the frontend loads from the executable alone.
+    local installed
+    installed="$(find "$build/bin" -type f | wc -l)"
+    if [ "$installed" -ne 1 ]; then
+        echo "The Linux build installs more than the executable:" >&2
+        find "$build/bin" -type f >&2
+        return 1
+    fi
+    mkdir -p "$run_dir/app"
+    cp "$build/bin/ziggy-test-app" "$run_dir/app/" || return 1
 }
 
 ziggy_platform_start() {
     local test_dir="$1"
-    local kind="$2"
-    local app="$ZIGGY_SMOKE_RUN_DIR/$kind/bin/ziggy-test-app"
+    local app="$ZIGGY_SMOKE_RUN_DIR/app/ziggy-test-app"
     local log="$test_dir/app.log"
-    local port_file="$test_dir/control-port.txt"
-    rm -f "$port_file"
     mkdir -p "$test_dir/data"
-    local pid pgid
-    read -r pid pgid < <(launch_in_process_group "$log" env \
+    local pgid
+    read -r _ pgid < <(launch_in_process_group "$log" env \
         WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
         XDG_DATA_HOME="$test_dir/data" \
-        ZIGGY_TEST_MODE=1 \
-        ZIGGY_TEST_PORT_FILE="$port_file" \
-        xvfb-run -a -s "-screen 0 1280x1024x24" "$app") || return 1
+        xvfb-run -a -s "-screen 0 1280x1024x24" "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
     echo "$pgid" > "$test_dir/$LINUX_PGID_FILE_NAME"
-    if [ "$kind" = "release" ]; then
-        return 0
-    fi
-    local waited=0
-    while [ ! -s "$port_file" ]; do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            echo "The app exited before its control connection came up. Its log:" >&2
-            cat "$log" >&2
-            return 1
-        fi
-        if [ "$waited" -ge 600 ]; then
-            echo "The app never wrote its control port." >&2
-            cat "$log" >&2
-            return 1
-        fi
-        sleep 0.1
-        waited=$((waited + 1))
-    done
-    ZIGGY_CONTROL_HOST=127.0.0.1
-    ZIGGY_CONTROL_PORT="$(tr -d '\n' < "$port_file")"
-    export ZIGGY_CONTROL_HOST ZIGGY_CONTROL_PORT
 }
 
 ziggy_platform_stop() {
@@ -98,16 +80,6 @@ ziggy_platform_is_running() {
     local test_dir="$1"
     process_group_alive "$(cat "$test_dir/$LINUX_PGID_FILE_NAME")"
 }
-
-ziggy_platform_artifact_files() {
-    local kind="$1"
-    printf '%s\n' "$ZIGGY_SMOKE_RUN_DIR/$kind/bin/ziggy-test-app"
-}
-
-ziggy_platform_has_control_port() {
-    [ -s "$1/control-port.txt" ]
-}
-
 
 #
 # Succeeds when the developer tools are showing. They dock inside the window, so the frontend's area is smaller than

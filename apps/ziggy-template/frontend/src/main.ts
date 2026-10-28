@@ -88,8 +88,8 @@ function listenForTheMenu(): void {
 }
 
 //
-// Handles the commands the test control connection forwards, which the smoke tests send. It does nothing unless the native app
-// started the frontend in test mode, which it does only in a build with the test hooks, and it tells the backend when it is
+// Handles the commands the remote control connection forwards, which the smoke tests send. It does nothing unless the native app
+// started the frontend in test mode, which it does only when the app was started with --remote-control, and it tells the backend when it is
 // listening so that no command is sent before it can be heard.
 //
 function listenForTestCommands(): void {

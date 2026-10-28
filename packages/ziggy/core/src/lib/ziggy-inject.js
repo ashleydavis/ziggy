@@ -5,7 +5,7 @@
 //
 // There are two kinds of message, kept apart from end to end. An app message belongs to the app: the frontend sends it with invoke
 // or send, the core hands it to the app's handler for its name and the app sends app events back. A system message belongs to Ziggy
-// itself (tasks, the platform, menu actions, dropped files, core errors and the test hooks): only this script and the native app
+// itself (tasks, the platform, menu actions, dropped files, core errors and remote control): only this script and the native app
 // send one, the core handles it without the app ever seeing it, and window.ziggy has no call that sends an arbitrary one.
 //
 // Every message posted to the core is the JSON text of an object whose "kind" names which it is:

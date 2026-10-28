@@ -2,7 +2,7 @@
 
 How a Ziggy app is packaged, signed and put in front of testers and users on each platform. The Ziggy template's package scripts are the starting point: an app copied from the template has them, with its own name in place of the template's. Each script has a markdown file beside it with every argument.
 
-Every package is built for release: optimized and without the test hooks. Scenario `8-release-has-no-hooks` of the smoke tests checks that a release build has no test control connection.
+Every package is built for release and optimized. The remote control code is in every build and does nothing unless the app is started with `--remote-control`. Scenario `8-starts-without-remote-control` of the smoke tests checks that the app started without it runs and never connects to the remote control server.
 
 ## Packaging
 
@@ -77,4 +77,4 @@ The desktop packages are files: put them where testers can download them. An app
 ## See also
 
 - [Building your app](building-your-app.md): copying the template and renaming it.
-- [Releasing Ziggy](../development/releasing-ziggy.md): the release workflow that publishes the template's packages.
+- [Releasing Ziggy](../development/releasing-ziggy.md): the release workflow that publishes the template archive a new app starts from.

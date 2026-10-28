@@ -33,7 +33,7 @@ The pick-files, pick-folder and pick-file messages open `NSOpenPanel` (files, or
 
 ## Choosing a menu item from a test
 
-In a test hooks build the backend can choose a menu item by action through the `menu_action` callback (the control connection's `menu` command). The native app copies the action, moves to the main thread and runs `ZiggyMenu.perform(action:)`, the same function a click on the item runs for every action the native app owns, so a test runs what a click runs. An action the native app does not own goes to the backend as a menu-action system message, whatever it is. iOS leaves the callback unset.
+When the app is started with `--remote-control`, the backend can choose a menu item by action through the `menu_action` callback (the remote control connection's `menu` command). The native app copies the action, moves to the main thread and runs `ZiggyMenu.perform(action:)`, the same function a click on the item runs for every action the native app owns, so a test runs what a click runs. An action the native app does not own goes to the backend as a menu-action system message, whatever it is. iOS leaves the callback unset.
 
 - The edit actions (undo, redo, cut, copy, paste, select-all) normally reach the web view because a click leaves it first responder. A test choice first makes the window key and the web view first responder (`makeKeyAndOrderFront`, `makeFirstResponder`), then sends the selector to the responder chain with `sendAction(_:to: nil:from:)`. If nothing handles the selector, the native app prints that to standard error. Whether WKWebView handles `undo:` and `redo:` is untested.
 - The window sets `.fullScreenPrimary` so toggle-fullscreen works. The change animates, so a test should wait for the frontend's size to settle.

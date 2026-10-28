@@ -206,9 +206,6 @@ fn buildHost(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor, 
     var argv: std.ArrayList([]const u8) = .empty;
     defer argv.deinit(allocator);
     try argv.appendSlice(allocator, &.{ supervisor.options.zig, "build", supervisor.options.host_step, "-p", try slotPrefix(allocator, supervisor, slot) });
-    if (supervisor.options.test_hooks) {
-        try argv.append(allocator, "-Dtest-hooks=true");
-    }
     std.debug.print("ziggy dev: building the dev host. The first build compiles the whole core and takes the longest.\n", .{});
     var child = std.process.spawn(io, .{
         .argv = argv.items,
@@ -285,8 +282,14 @@ fn startHost(io: std.Io, allocator: std.mem.Allocator, supervisor: *Supervisor, 
         error.FileNotFound => {},
         else => return err,
     };
+    var argv: std.ArrayList([]const u8) = .empty;
+    defer argv.deinit(allocator);
+    try argv.appendSlice(allocator, &.{ executable, "--port", port_argument, "--port-file", port_file, "--ui-port", ui_port_argument, "--data-dir", data_dir });
+    if (supervisor.options.remote_control) |address| {
+        try argv.appendSlice(allocator, &.{ "--remote-control", address });
+    }
     supervisor.host = try std.process.spawn(io, .{
-        .argv = &.{ executable, "--port", port_argument, "--port-file", port_file, "--ui-port", ui_port_argument, "--data-dir", data_dir },
+        .argv = argv.items,
     });
 
     const deadline = std.Io.Clock.awake.now(io).addDuration(.fromMilliseconds(start_timeout_ms));

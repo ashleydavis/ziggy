@@ -73,21 +73,16 @@ apple_zig_arch() {
 
 # Bundles the test app's frontend and builds the Zig static library, which embeds the frontend, so an Xcode build has
 # everything it links. <native_dir> gets lib/libziggy_test_app.a and include/ziggy.h.
-# Usage: apple_sync_native <zig_target> <native_dir> <yes|no test hooks> <zig optimize mode>
+# Usage: apple_sync_native <zig_target> <native_dir> <zig optimize mode>
 apple_sync_native() {
     local zig_target="$1"
     local native_dir="$2"
-    local test_hooks="$3"
-    local optimize="$4"
+    local optimize="$3"
     apple_require_tool bun zig rsync xcrun
     echo "Bundling the UI..."
     (cd "$APPLE_EXAMPLE_DIR" && bun run bundle:ui) || apple_fail "bundling the UI failed."
-    echo "Building the Zig library for $zig_target (optimize $optimize, test hooks $test_hooks)..."
-    if [ "$test_hooks" = "yes" ]; then
-        (cd "$APPLE_EXAMPLE_DIR" && zig build ziggy-test-app-backend -Dtarget="$zig_target" -Doptimize="$optimize" -Dtest-hooks=true -p "$native_dir") || apple_fail "the Zig build failed."
-    else
-        (cd "$APPLE_EXAMPLE_DIR" && zig build ziggy-test-app-backend -Dtarget="$zig_target" -Doptimize="$optimize" -p "$native_dir") || apple_fail "the Zig build failed."
-    fi
+    echo "Building the Zig library for $zig_target (optimize $optimize)..."
+    (cd "$APPLE_EXAMPLE_DIR" && zig build ziggy-test-app-backend -Dtarget="$zig_target" -Doptimize="$optimize" -p "$native_dir") || apple_fail "the Zig build failed."
     # A workaround for a bug in Zig 0.16.0, which is the pinned version. Its archive writer puts the contents of a long-named
     # member at an offset that is not a multiple of 8, and Xcode 26's linker refuses such an archive: the macOS and iOS jobs of
     # the Ziggy test app workflow failed with "ld: 64-bit mach-o member 'libziggy_test_app_zcu.o' not 8-byte aligned in

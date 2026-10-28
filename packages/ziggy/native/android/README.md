@@ -10,7 +10,8 @@ Ziggy's Android framework code: a Java library (no Kotlin) that is a Gradle buil
 - Passes the frontend's messages to the backend on the main thread, in the order they arrived. Android calls `postMessage` on a web view thread, so each message is copied and posted to the main looper.
 - Delivers the backend's messages with `evaluateJavascript("window.__ziggyReceive(<json>);")` on the main thread, in the order they arrived. The backend delivers from any thread, so each message is copied and posted to the main looper.
 - Decides every navigation with the origin check of Ziggy's core library: `shouldOverrideUrlLoading` opens http, https and mailto links in the system browser and blocks the rest. A request the frontend makes for something (an image, a video, a script request) is not checked, as on every other platform, so the frontend can load media from a server on the loopback address. `shouldInterceptRequest` serves the app's own frontend from the core library.
-- In a test hooks core library, when the launching Intent has the boolean extra `ziggy.testMode`, reads the string extra `ziggy.testPortFile`, tells the backend it is in test mode, and appends `?` and the query the backend supplies (`ziggy_ui_query`) to the frontend's URL.
+- When the launching Intent has the string extra `ziggy.remoteControl` (the remote control server's address, `host:port`), tells the backend it is in test mode and passes the address on. The backend then connects to the remote control server there. An empty value counts as absent.
+- Appends `?` and the query the backend supplies (`ziggy_ui_query`) to the frontend's URL.
 
 The app's activity makes these calls (the template's `MainActivity` makes each one):
 

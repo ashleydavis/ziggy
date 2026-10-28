@@ -1,13 +1,13 @@
 import type { IJsonObject } from "ziggy";
 
 //
-// The commands the test control connection forwards to the frontend, performed on the frontend's DOM by data-id. The frontend
-// replies to each with a result. These exist only so the smoke tests can drive the real app, and the backend sends them only in
-// a test hooks build.
+// The commands the remote control connection forwards to the frontend, performed on the frontend's DOM by data-id. The frontend
+// replies to each with a result. These exist only so the smoke tests can drive the real app, and the backend sends them only when
+// the app was started with --remote-control.
 //
 
 //
-// A command from the test control connection.
+// A command from the remote control connection.
 //
 export interface ITestCommand {
     // What to do: ready, click, type, get-value, get-text, exists, insert, viewport or drop-file.

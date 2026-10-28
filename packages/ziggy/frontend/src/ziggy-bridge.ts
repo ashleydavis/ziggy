@@ -99,7 +99,8 @@ export interface ICoreErrorEvent {
 }
 
 //
-// What a test-command event carries, in a test hooks build only: a command from the test control connection for the frontend
+// What a test-command event carries, only when the app was started with --remote-control: a command from the remote control
+// connection for the frontend
 // to perform.
 //
 export interface ITestCommandEvent<TCommand> {
@@ -250,7 +251,8 @@ export interface IZiggyBridge {
     removeCoreErrorListener(callback: IMessageCallback<ICoreErrorEvent>): void;
 
     //
-    // Registers a callback for the commands of the test control connection. Test hooks builds only.
+    // Registers a callback for the commands of the remote control connection, which come only when the app was started with
+    // --remote-control.
     //
     onTestCommand<TCommand>(callback: IMessageCallback<ITestCommandEvent<TCommand>>): void;
 
@@ -260,13 +262,12 @@ export interface IZiggyBridge {
     removeTestCommandListener<TCommand>(callback: IMessageCallback<ITestCommandEvent<TCommand>>): void;
 
     //
-    // Sends the result of a test command to the connection waiting for it. Test hooks builds only.
+    // Sends the result of a test command to the connection waiting for it.
     //
     sendTestResult(requestId: number, result: IJsonValue): Promise<void>;
 
     //
-    // Tells the test control connection the frontend is listening for test commands, which are held until it does. Test hooks
-    // builds only.
+    // Tells the remote control connection the frontend is listening for test commands, which are held until it does.
     //
     testUiReady(): void;
 

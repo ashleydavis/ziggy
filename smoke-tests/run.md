@@ -4,12 +4,14 @@ Runs the Ziggy test app's smoke test scenarios for one platform. Invoked by the 
 
 ## Arguments
 
-- `<platform>`: `linux`, `windows`, `macos`, `android` or `ios` (a connected iPhone or iPad when there is one, see `lib/ios-device.sh`, otherwise a simulator). Each has a platform library in `lib/<platform>.sh` that builds the app, starts it and stops it.
+- `<platform>`: `linux`, `windows`, `macos`, `android` or `ios` (a connected iPhone or iPad when there is one, see `lib/ios-device.sh`, otherwise a simulator). Each has a platform library in `lib/<platform>.sh` that puts the app in place, starts it and stops it.
 - `[scenario]`: optional scenario number or name, to run one scenario.
 
 ## Behaviour
 
-Builds the test app twice for the platform, once with the test hooks and once without. Then runs each scenario's `test.sh`, one after another, giving each its own temporary directory and a held-to timeout. A scenario drives the running app through the test control connection (see `lib/common.sh` for what a scenario can do and what a platform library implements). Every process started is recorded as it is launched, and any still running at the end fails the run and is stopped. The whole run, builds included, is held to `ZIGGY_SUITE_TIMEOUT` (1500 seconds unless set, see `lib/test-timeout.sh`), which ends a stuck run with a report well inside the CI step caps, so the step keeps its log.
+Puts the built test app in place once for the platform. `ZIGGY_SMOKE_BUILD` names a directory the platform's build script already built it into, as CI's `app-build` job does: `bin/ziggy-test-app` (Linux, `--prefix`), `bin/ziggy-test-app.exe` (Windows, `--prefix`), `xcode/Build/Products/Release/ZiggyTestApp.app` (macOS, `--build-dir <dir>/xcode`), `xcode/Build/Products/Release-iphonesimulator/ZiggyTestApp.app` (iOS simulator) or `ziggy-test-app.apk` (Android, `--output-dir`). When it is not set, the build script builds into the run directory. A connected iPhone or iPad always gets a device build of its own. Then runs each scenario's `test.sh`, one after another, giving each its own temporary directory and a held-to timeout.
+
+A scenario starts the app with `start_test_app`, which starts the [remote control server](../tools/remote-control-server/README.md) on ports the system chooses, reads the ports from the line it prints when it listens and starts the app with `--remote-control` and the server's app port (the `ziggy.remoteControl` extra on Android). The app connects out to the server. The scenario talks to the server's script port. On Android, `adb reverse` carries the app port from the device to the host. See `lib/common.sh` for what a scenario can do and what a platform library implements. Every process started is recorded as it is launched, and any still running at the end fails the run and is stopped. The whole run, builds included, is held to `ZIGGY_SUITE_TIMEOUT` (1500 seconds unless set, see `lib/test-timeout.sh`), which ends a stuck run with a report well inside the CI step caps, so the step keeps its log.
 
 ## Scenarios
 
@@ -19,10 +21,10 @@ Builds the test app twice for the platform, once with the test hooks and once wi
 - `4-cancel-long-task`: cancelling a source stops its task early.
 - `5-cancel-one-of-several-sources`: cancelling one source leaves the other tasks running.
 - `6-edges`: a large payload, text with quotes and non-ASCII characters, an error message response, a failing task, a file in the data directory and the native call.
-- `7-control-reports-bad-commands`: the control connection replies to a line that is not a command with an error and keeps working.
-- `8-release-has-no-hooks`: the release build has no control connection.
+- `7-control-reports-bad-commands`: the remote control connection replies to a line that is not a command with an error and keeps working.
+- `8-starts-without-remote-control`: the app started without `--remote-control` runs and never connects to the remote control server.
 - `9-quit-ends-everything`: quitting with tasks running ends the app and everything it started.
-- `10-pickers`: the file and directory buttons show what the dialogs return, several files, a directory, a save location and a cancel. The scenario supplies each dialog's result through the control connection, so no native dialog is shown.
+- `10-pickers`: the file and directory buttons show what the dialogs return, several files, a directory, a save location and a cancel. The scenario supplies each dialog's result through the remote control connection, so no native dialog is shown.
 - `16-media-server`: the frontend loads an image and a video from the loopback HTTP server in the test app's backend, and fetches a range of bytes with a `Range` header. The video is read to its metadata only, because the Android emulator's software video decoding crashes the emulator.
 - `17-ui-storage`: a value the frontend writes to `localStorage` and to IndexedDB is still there after the app is quit and started again. It waits before the restart because Android's web view writes `localStorage` to disk a few seconds after the frontend sets it.
 - `18-keep-alive-survives-leaving`: on a mobile device, a keep-alive background task goes on counting in a file in the data directory when the app is sent to the background, and on Android the foreground service is running. On a desktop, closing the window quits the app even with a keep-alive task running, and the scenario checks the app ends.
@@ -34,7 +36,7 @@ The scenarios in `native-only` run in a native app on every platform:
 
 - `24-ui-address`: the frontend is served from the platform's address (`ziggy-app://app/` on Linux, macOS and iOS, `https://ziggy-app.invalid/` on Windows and Android), the page is a secure context, and `localStorage`, IndexedDB, and `fetch` and `XMLHttpRequest` of the frontend's own files work there.
 
-The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mobile device, because the menu is a desktop feature. They choose menu items through the control connection's `menu` command, which calls the native app's own function for the item, the one a click runs, so the native app's actions really happen:
+The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mobile device, because the menu is a desktop feature. They choose menu items through the remote control connection's `menu` command, which calls the native app's own function for the item, the one a click runs, so the native app's actions really happen:
 
 - `11-menu-ui-actions`: About, and the items that start and cancel tasks, do what their buttons do.
 - `12-menu-view`: Reload starts the frontend afresh, and the zoom items change the size of the area the frontend is drawn in.
@@ -50,4 +52,4 @@ Toggle Full Screen is not smoke tested. The Linux suite runs on a virtual displa
 
 ## Building on Android
 
-The Android library builds the test APK and the release APK one after the other through the one Gradle project and synced library directory of the checkout. Two runs building at the same time would swap the library under each other, so `ziggy_platform_prepare` in `lib/android.sh` holds a lock file inside that build directory for the whole build. A second run waits for the first to finish building, then builds its own.
+The Android library builds the APKs with the package script through the one Gradle project and synced library directory of the checkout. Two runs building at the same time would swap the library under each other, so `ziggy_platform_prepare` in `lib/android.sh` holds a lock file inside that build directory for the whole build. A second run waits for the first to finish building, then builds its own.

@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 
-# What every scenario uses: start the app, talk to its test control connection, and check what the frontend shows.
+# What every scenario uses: start the app, talk to it through the remote control server, and check what the frontend shows.
 #
 # A scenario sources this file. It defines functions only. The platform library chosen by the runner implements:
 #
 #   ziggy_platform_prepare <run_dir>
-#       Builds the app twice into the run directory: the test build, with the test hooks, and the release build, without.
-#       Returns non-zero when a build fails.
+#       Puts the built app in the run directory: from the build directory ZIGGY_SMOKE_BUILD names when it is set, or else one the
+#       platform's build script builds into the run directory. Returns non-zero when the build or the install fails.
 #
-#   ziggy_platform_start <test_dir> <test|release> [keep-data]
-#       Starts the app for one scenario, recording what it started through launch_in_process_group. For the test build
-#       it starts the app in test mode, and sets ZIGGY_CONTROL_HOST and
-#       ZIGGY_CONTROL_PORT to where the test control connection can be reached from the host. Returns non-zero when the
-#       app did not come up. With keep-data it starts the app again on the data the last run left, instead of fresh data,
-#       and on a phone on the same device and the same install.
+#   ziggy_platform_start <test_dir> [keep-data]
+#       Starts the app for one scenario with --remote-control "$ZIGGY_REMOTE_CONTROL" (the ziggy.remoteControl extra on Android),
+#       or without it when ZIGGY_REMOTE_CONTROL is empty,
+#       recording what it started through launch_in_process_group. The app connects to the remote control server that
+#       start_test_app started. Returns non-zero when the app did not start. With keep-data it starts the app again on the data the
+#       last run left, instead of fresh data, and on a phone on the same device and the same install.
 #
 #   ziggy_platform_stop <test_dir> [keep-device]
 #       Stops the app and everything it started. With keep-device a phone stays claimed, so a restart finds its data.
@@ -49,24 +49,78 @@ fail() {
 }
 
 #
-# Stops the app when the scenario ends, however it ends.
+# Stops the app and the remote control server when the scenario ends, however it ends.
 #
 stop_app_on_exit() {
     ziggy_platform_stop "$ZIGGY_TEST_DIR" || true
+    stop_remote_control_server
 }
 trap stop_app_on_exit EXIT
 
 #
-# Starts the test build of the app and opens the test control connection.
+# Starts the remote control server for this scenario on ports the system chooses, recording it through launch_in_process_group,
+# and waits until it listens. Sets ZIGGY_CONTROL_HOST and ZIGGY_CONTROL_PORT to where the script connects, and ZIGGY_REMOTE_CONTROL
+# to the address the app is started with. The server's stdin is a pipe whose writing end this scenario keeps open on file descriptor
+# 4, so the server ends when the scenario does, however the scenario ends. A pipe works on every platform, where a FIFO does not
+# reach a native Windows program. A job launch_in_process_group starts from inside the process substitution is given /dev/null
+# as its stdin, so the pipe is passed on file descriptor 5 and the server's shell moves it to stdin.
+#
+start_remote_control_server() {
+    local log="$ZIGGY_TEST_DIR/remote-control-server.log"
+    local launched="$ZIGGY_TEST_DIR/remote-control-server.launched"
+    rm -f "$launched"
+    exec 4> >(launch_in_process_group "$log" bash -c 'exec 0<&5 5<&-; cd "$1" && exec bun run ziggy-remote-control-server --app-port 0 --script-port 0' \
+        remote-control-server "$ZIGGY_SMOKE_APP_DIR" 5<&0 > "$launched")
+    local waited=0
+    local pid pgid ports
+    while true; do
+        if [ -s "$launched" ]; then
+            read -r pid pgid < "$launched"
+            echo "$pgid" > "$ZIGGY_TEST_DIR/remote-control-server.pgid"
+            ports="$(sed -n 's/^The remote control server is listening: the app on 127\.0\.0\.1:\([0-9]*\), the script on 127\.0\.0\.1:\([0-9]*\)\.$/\1 \2/p' "$log")"
+            if [ -n "$ports" ]; then
+                break
+            fi
+            if ! kill -0 "$pid" 2>/dev/null; then
+                cat "$log" >&2
+                fail "the remote control server ended before it listened"
+            fi
+        fi
+        if [ "$waited" -ge 600 ]; then
+            cat "$log" >&2
+            fail "the remote control server did not listen within 60 seconds"
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    ZIGGY_CONTROL_HOST=127.0.0.1
+    ZIGGY_CONTROL_PORT="${ports#* }"
+    ZIGGY_REMOTE_CONTROL="127.0.0.1:${ports%% *}"
+    export ZIGGY_CONTROL_HOST ZIGGY_CONTROL_PORT ZIGGY_REMOTE_CONTROL
+}
+
+#
+# Stops the remote control server, when this scenario started one.
+#
+stop_remote_control_server() {
+    exec 4>&-
+    if [ -f "$ZIGGY_TEST_DIR/remote-control-server.pgid" ]; then
+        kill_process_group "$(cat "$ZIGGY_TEST_DIR/remote-control-server.pgid")" || true
+    fi
+}
+
+#
+# Starts the remote control server and the app, and opens the control connection.
 #
 start_test_app() {
-    ziggy_platform_start "$ZIGGY_TEST_DIR" test || fail "the app did not start"
+    start_remote_control_server
+    ziggy_platform_start "$ZIGGY_TEST_DIR" || fail "the app did not start"
     open_control_connection
     wait_for_ready
 }
 
 #
-# Opens the test control connection on file descriptor 3. A signal that reaches this script while bash connects, such as the
+# Opens the control connection to the remote control server on file descriptor 3. A signal that reaches this script while bash connects, such as the
 # exit of a child it started, makes connect fail with "Interrupted system call", which bash reports and does not retry, so that
 # failure is tried again. Any other failure ends the scenario.
 #

@@ -10,7 +10,6 @@ source "$SCRIPT_DIR/lib/apple-common.sh"
 apple_require_macos
 ARCH="$(apple_host_arch)"
 NATIVE_DIR="$APPLE_EXAMPLE_DIR/native/macos/zig-out"
-TEST_HOOKS="no"
 OPTIMIZE="ReleaseSafe"
 
 while [ $# -gt 0 ]; do
@@ -23,19 +22,15 @@ while [ $# -gt 0 ]; do
             NATIVE_DIR="$2"
             shift 2
             ;;
-        --test-hooks)
-            TEST_HOOKS="yes"
-            shift
-            ;;
         --optimize)
             OPTIMIZE="$2"
             shift 2
             ;;
         *)
-            apple_fail "unknown argument '$1'. Options: --arch, --native-dir, --test-hooks, --optimize."
+            apple_fail "unknown argument '$1'. Options: --arch, --native-dir, --optimize."
             ;;
     esac
 done
 
-apple_sync_native "$(apple_zig_arch "$ARCH")-macos.11.0" "$NATIVE_DIR" "$TEST_HOOKS" "$OPTIMIZE"
+apple_sync_native "$(apple_zig_arch "$ARCH")-macos.11.0" "$NATIVE_DIR" "$OPTIMIZE"
 echo "Synced the MacOS native files into $NATIVE_DIR"

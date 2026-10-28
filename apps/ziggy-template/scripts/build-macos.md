@@ -10,5 +10,4 @@ Run it on a Mac with Xcode: `bash apps/ziggy-template/scripts/build-macos.sh`.
 - `--native-dir <dir>`: passed to the sync script and to Xcode as `ZIGGY_NATIVE_DIR`. Default: `native/macos/zig-out`.
 - `--build-dir <dir>`: Xcode's derived data directory. Default: `native/macos/zig-out/xcode`.
 - `--configuration <Debug|Release>`: default: `Debug`.
-- `--test-hooks`: build with the test control connection (the smoke tests use this).
 - `--optimize <mode>`: the Zig optimize mode. Default: `ReleaseSafe`.

@@ -15,7 +15,7 @@ Run from the app's directory. Every app made from the template has them, and so 
 | `bun run build:<platform>` | Builds the frontend and the app. |
 | `bun run <platform>` | Builds the app and runs it (on an attached emulator or device for Android, on a simulator for iOS). |
 | `bun run open:<platform>` | Syncs, then opens the native project in its editor (Xcode, Android Studio). |
-| `bun run package:<platform>` | Packages the release app, without the test hooks, into `out/<platform>`. |
+| `bun run package:<platform>` | Packages the release app into `out/<platform>`. |
 | `bun run distribute:android` | Builds the Android app and uploads it to Firebase App Distribution for the tester group. See `scripts/distribute-android.md`. |
 | `bun run clean:<platform>` | Removes the platform's build output. |
 | `bun run clean` | Runs the clean for every platform this machine can clean. |
@@ -24,7 +24,7 @@ Run from the app's directory. Every app made from the template has them, and so 
 | `bun run test` (alias `bun run t`) | The frontend's unit tests. |
 | `bun run test:zig` | The backend's unit tests (`zig build test`). `zig build test -Dtest-filter=<text>`, run in the app's directory once `bun run bundle:ui` has built the frontend, runs only the backend tests whose names contain the text. The option may be given more than once. |
 | `bun run test:smoke` | The smoke tests on this machine's desktop platform. `bun run test:smoke -- <name>` runs one. |
-| `bun run test:smoke:android` | The smoke tests on an attached Android emulator or device (the ones `ZIGGY_ANDROID_DEVICES` names, when it is set). |
+| `bun run test:smoke:android` | The smoke tests on an attached Android device or emulator (the ones `ZIGGY_ANDROID_DEVICES` names when it is set, else a plugged-in device in preference to an emulator). |
 | `bun run test:smoke:ios` | The smoke tests on a connected iPhone or iPad when there is one, otherwise the iOS simulator. |
 
 ## Packages

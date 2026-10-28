@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Packages the test app's Linux app as a zip and a deb, without the test hooks. See package-linux.md.
+# Packages the test app's Linux app as a zip and a deb. See package-linux.md.
 
 set -eu
 
@@ -8,6 +8,18 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SHELL_DIR="$EXAMPLE_DIR/native/linux"
 OUTPUT_DIR="$EXAMPLE_DIR/out/linux"
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --output-dir)
+            OUTPUT_DIR="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown argument $1. See package-linux.md." >&2
+            exit 2
+            ;;
+    esac
+done
 
 VERSION="$(jq -r '.version' "$EXAMPLE_DIR/package.json")"
 ARCHITECTURE="$(uname -m)"

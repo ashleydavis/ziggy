@@ -6,6 +6,9 @@
   "license": "MIT",
   "main": "packages/ziggy/frontend/src/index.ts",
   "types": "packages/ziggy/frontend/src/index.ts",
+  "bin": {
+    "ziggy-remote-control-server": "tools/remote-control-server/src/index.ts"
+  },
   "scripts": {
     "setup": "bun --filter '*' setup",
     "compile": "bun --filter '*' compile",
@@ -57,8 +60,16 @@
     "install-hooks": "bash ./scripts/install-hooks.sh",
     "test:everything": "bash ./scripts/test-everything.sh"
   },
+  "dependencies": {
+    "express": "5.3.0",
+    "ws": "8.22.0"
+  },
+  "devDependencies": {
+    "ziggy-remote-control-server": "workspace:*"
+  },
   "workspaces": [
     "apps/*",
-    "packages/ziggy/frontend"
+    "packages/ziggy/frontend",
+    "tools/*"
   ]
 }

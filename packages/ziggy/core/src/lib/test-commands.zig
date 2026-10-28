@@ -1,5 +1,5 @@
 //
-// The main thread's side of the test control connection (see test-control.zig): whether the frontend is listening, the commands
+// The main thread's side of the remote control connection (see remote-control.zig): whether the frontend is listening, the commands
 // waiting for it and what a test has set the next native dialog to return. It is a piece of the main thread's state, a variable of the
 // main thread's function, and only the main thread uses it.
 //
@@ -9,7 +9,7 @@ const json = @import("json.zig");
 const types = @import("types.zig");
 const message_queue = @import("message-queue.zig");
 const timers_lib = @import("timers.zig");
-const test_control = @import("test-control.zig");
+const remote_control = @import("remote-control.zig");
 const dropped_files = @import("dropped-files.zig");
 const Frontend = @import("core.zig").Frontend;
 
@@ -19,7 +19,7 @@ const TimerId = timers_lib.TimerId;
 const Timers = timers_lib.Timers;
 
 //
-// A command the test control connection sent for the frontend, waiting to be forwarded.
+// A command the remote control connection sent for the frontend, waiting to be forwarded.
 //
 const UiCommand = struct {
     // The command's JSON text, owned by the test commands.
@@ -53,14 +53,14 @@ const OutstandingCommand = struct {
 };
 
 //
-// The main thread's side of the test control connection. It keeps no Io, allocator or timers: each function is given the main
+// The main thread's side of the remote control connection. It keeps no Io, allocator or timers: each function is given the main
 // thread's, and what it keeps is allocated with the main thread's allocator.
 //
 pub const TestCommands = struct {
     // Sends the commands to the frontend.
     frontend: Frontend,
-    // The test control connection, only in a test hooks build and only when the native app is in test mode.
-    connection: ?test_control.TestControl,
+    // The remote control connection, only when the native app was started with --remote-control.
+    connection: ?remote_control.RemoteControl,
     // Whether the frontend has reported it is listening for test commands.
     ui_ready: bool,
     // The commands waiting to be forwarded to the frontend, in the order they came.
@@ -117,14 +117,14 @@ pub const TestCommands = struct {
     }
 
     //
-    // Handles a message from the test control connection, which always gets a reply. A test's drop is recorded in `dropped`.
+    // Handles a message from the remote control connection, which always gets a reply. A test's drop is recorded in `dropped`.
     //
     pub fn handleMessage(self: *TestCommands, io: std.Io, allocator: std.mem.Allocator, timers: Timers, dropped: *dropped_files.DroppedFiles, message: QueueMessage) void {
         var arena_state = std.heap.ArenaAllocator.init(allocator);
         defer arena_state.deinit();
         const arena = arena_state.allocator();
         const parsed = std.json.parseFromSliceLeaky(std.json.Value, arena, message.text, .{}) catch {
-            std.debug.panic("the test control connection sent a message that is not JSON: {s}", .{message.text});
+            std.debug.panic("the remote control connection sent a message that is not JSON: {s}", .{message.text});
         };
         const message_type = json.getString(parsed, "type") orelse "";
         if (std.mem.eql(u8, message_type, "test-ui-reloading")) {
@@ -132,7 +132,7 @@ pub const TestCommands = struct {
             return;
         }
         const reply_to = message.reply_to orelse {
-            std.debug.panic("the test control connection sent a message with nowhere to reply: {s}", .{message.text});
+            std.debug.panic("the remote control connection sent a message with nowhere to reply: {s}", .{message.text});
         };
         if (std.mem.eql(u8, message_type, "test-wait-ui")) {
             if (self.ui_ready) {
@@ -142,7 +142,7 @@ pub const TestCommands = struct {
             const timer = timers.setTimeout(io, .{
                 .context = self,
                 .function = uiWaitTimedOut,
-            }, test_control.answer_timeout_ms) catch @panic("out of memory waiting for the frontend");
+            }, remote_control.answer_timeout_ms) catch @panic("out of memory waiting for the frontend");
             self.waits.append(allocator, .{
                 .reply_to = reply_to,
                 .timer = timer,
@@ -155,7 +155,7 @@ pub const TestCommands = struct {
             const timer = timers.setTimeout(io, .{
                 .context = self,
                 .function = uiWaitTimedOut,
-            }, test_control.answer_timeout_ms) catch @panic("out of memory forwarding a test command");
+            }, remote_control.answer_timeout_ms) catch @panic("out of memory forwarding a test command");
             self.commands.append(allocator, .{
                 .command_json = command_json,
                 .reply_to = reply_to,
@@ -170,7 +170,7 @@ pub const TestCommands = struct {
             dropped.record(allocator, files_json) catch |err| {
                 reply(io, reply_to, json.stringify(arena, .{
                     .@"error" = @errorName(err),
-                }) catch @panic("out of memory replying to the test control connection"));
+                }) catch @panic("out of memory replying to the remote control connection"));
                 return;
             };
             reply(io, reply_to, "{\"ok\":true}");
@@ -186,16 +186,16 @@ pub const TestCommands = struct {
             reply(io, reply_to, "{\"ok\":true}");
             return;
         }
-        std.debug.panic("the test control connection sent a message of an unknown type: {s}", .{message.text});
+        std.debug.panic("the remote control connection sent a message of an unknown type: {s}", .{message.text});
     }
 
     //
     // The frontend has reported it is listening for test commands (test-ui-ready): replies to the commands waiting for it and forwards
-    // the next command. Fails with TestControlNotRunning when there is no test control connection.
+    // the next command. Fails with RemoteControlNotRunning when there is no remote control connection.
     //
     pub fn uiReady(self: *TestCommands, io: std.Io, allocator: std.mem.Allocator, timers: Timers) !void {
         if (self.connection == null) {
-            return error.TestControlNotRunning;
+            return error.RemoteControlNotRunning;
         }
         self.ui_ready = true;
         for (self.waits.items) |wait| {
@@ -208,12 +208,12 @@ pub const TestCommands = struct {
 
     //
     // The frontend has sent the result of a test command (test-result): sends its result, JSON text, to the connection waiting for it and
-    // forwards the next command. Fails with TestControlNotRunning when there is no test control connection, and with
+    // forwards the next command. Fails with RemoteControlNotRunning when there is no remote control connection, and with
     // UnexpectedTestResult when no command of that number is with the frontend.
     //
     pub fn result(self: *TestCommands, io: std.Io, allocator: std.mem.Allocator, timers: Timers, request_id: u64, result_json: []const u8) !void {
         if (self.connection == null) {
-            return error.TestControlNotRunning;
+            return error.RemoteControlNotRunning;
         }
         const outstanding = self.outstanding orelse {
             return error.UnexpectedTestResult;
@@ -228,7 +228,7 @@ pub const TestCommands = struct {
     }
 
     //
-    // Replies to every command the test control connection is waiting on with ShuttingDown, so its connections stop waiting for the main
+    // Replies to every command the remote control connection is waiting on with ShuttingDown, so its connections stop waiting for the main
     // thread before they are ended.
     //
     pub fn refuseWhileStopping(self: *TestCommands, io: std.Io, allocator: std.mem.Allocator) void {
@@ -249,7 +249,7 @@ pub const TestCommands = struct {
     }
 
     //
-    // Stops the test control connection, when there is one: tells it to stop, reads the main thread's queue, replying to whatever its
+    // Stops the remote control connection, when there is one: tells it to stop, reads the main thread's queue, replying to whatever its
     // connections send meanwhile with ShuttingDown until it reports it has stopped, and waits for its threads to end. Every other message
     // read meanwhile is dropped.
     //
@@ -264,14 +264,14 @@ pub const TestCommands = struct {
                 break;
             };
             defer allocator.free(message.text);
-            if (message.from != test_control.from_test_control) {
+            if (message.from != remote_control.from_remote_control) {
                 continue;
             }
             if (message.reply_to) |reply_to| {
                 reply(io, reply_to, "{\"error\":\"ShuttingDown\"}");
                 continue;
             }
-            if (std.mem.indexOf(u8, message.text, "\"test-control-stopped\"") != null) {
+            if (std.mem.indexOf(u8, message.text, "\"remote-control-stopped\"") != null) {
                 break;
             }
         }
@@ -280,11 +280,11 @@ pub const TestCommands = struct {
     }
 
     //
-    // Refuses a message the test control connection sent while the main thread stops, with ShuttingDown, so the connection stops
+    // Refuses a message the remote control connection sent while the main thread stops, with ShuttingDown, so the connection stops
     // waiting. A message from anyone else, or one that wants no reply, changes nothing.
     //
     pub fn refuse(io: std.Io, message: QueueMessage) void {
-        if (message.from != test_control.from_test_control) {
+        if (message.from != remote_control.from_remote_control) {
             return;
         }
         if (message.reply_to) |reply_to| {
@@ -296,7 +296,7 @@ pub const TestCommands = struct {
     // Posts a reply to a connection.
     //
     fn reply(io: std.Io, reply_to: *MessageQueue, text: []const u8) void {
-        reply_to.post(io, 0, text) catch @panic("out of memory replying to the test control connection");
+        reply_to.post(io, 0, text) catch @panic("out of memory replying to the remote control connection");
     }
 
     //
@@ -314,7 +314,7 @@ pub const TestCommands = struct {
         const timer = timers.setTimeout(io, .{
             .context = self,
             .function = commandTimedOut,
-        }, test_control.answer_timeout_ms) catch @panic("out of memory forwarding a test command");
+        }, remote_control.answer_timeout_ms) catch @panic("out of memory forwarding a test command");
         self.outstanding = .{
             .request_id = request_id,
             .reply_to = command.reply_to,

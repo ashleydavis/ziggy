@@ -6,9 +6,9 @@ Two workflows build and test this repository: CI tests every push, and the relea
 
 `.github/workflows/ci.yml` runs on every push to every branch, on every pull request to `main` and when started from the Actions tab. Its jobs:
 
-- **zig-build**: builds the backend of the template and of the test app and cross-builds them for every platform, with and without the test hooks, and compiles the Windows native app, on Linux (`bun run compile:zig`).
+- **app-build**: on each platform's own runner, builds the test app once with its build script (`build:<platform>`, the simulator build on iOS) into a directory of its own. It saves that build and the Zig build caches, which the later jobs restore.
 - **unit-tests**: on Linux, MacOS and Windows, the TypeScript unit tests (`bun run test`) and every Zig test (`zig build test`); on Android, the Android native app's JUnit tests (`bun run test:android-shell`) and the Zig tests run on an emulator; on iOS, the Zig tests run on a simulator.
-- **smoke-tests**: Ziggy's smoke tests, which drive the test app, on Linux, Windows, MacOS, an Android emulator and an iOS simulator.
+- **smoke-tests**: Ziggy's smoke tests, which drive the app app-build built (`ZIGGY_SMOKE_BUILD`), on Linux, Windows, MacOS, an Android emulator and an iOS simulator.
 
 It packages nothing and creates no release.
 

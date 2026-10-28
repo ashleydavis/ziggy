@@ -6,7 +6,6 @@ Invoke: `bash apps/ziggy-template/scripts/sync-android.sh [options]`
 
 - `--arch "<list>"`: the architectures to build, `x86_64` and `arm64`, space separated, or `all`. The default is both.
 - `--optimize <mode>`: the Zig optimize mode, `Debug`, `ReleaseSafe`, `ReleaseFast` or `ReleaseSmall`. The default is `ReleaseSafe`.
-- `--test-hooks`: compile in the test hooks (the test control connection). Never for a release.
 - `--skip-ui`: do not rebuild the frontend. `dist/index.html` must already exist.
 
 What it does:
