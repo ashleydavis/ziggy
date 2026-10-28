@@ -94,6 +94,63 @@ jobs:
         shell: bash
         run: bun run test
 
+  websocket-unit-tests-linux:
+    # The unit tests of websocket.zig, the WebSocket library the remote control connection uses, which Ziggy keeps with its patches
+    # in third-party/websocket. They need nothing another job makes, so they start when the workflow starts.
+    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig
+
+      - name: Run websocket.zig's unit tests
+        shell: bash
+        working-directory: third-party/websocket
+        run: zig build test --summary all
+
+  websocket-unit-tests-windows:
+    # The unit tests of websocket.zig, the WebSocket library the remote control connection uses, which Ziggy keeps with its patches
+    # in third-party/websocket. They need nothing another job makes, so they start when the workflow starts.
+    timeout-minutes: 20
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig
+
+      - name: Run websocket.zig's unit tests
+        shell: bash
+        working-directory: third-party/websocket
+        run: zig build test --summary all
+
+  websocket-unit-tests-macos:
+    # The unit tests of websocket.zig, the WebSocket library the remote control connection uses, which Ziggy keeps with its patches
+    # in third-party/websocket. They need nothing another job makes, so they start when the workflow starts.
+    timeout-minutes: 20
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig
+
+      - name: Run websocket.zig's unit tests
+        shell: bash
+        working-directory: third-party/websocket
+        run: zig build test --summary all
+
   app-build-linux:
     # Builds the test app once per platform, on that platform's own runner, the one its smoke tests run on, into ziggy-build/app
     # (for iOS the simulator build). The build and the Zig build caches are saved under ziggy-build-<platform>-<commit>. The unit
