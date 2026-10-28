@@ -1,3 +1,4 @@
+import { watch } from 'node:fs';
 import { defineConfig, Plugin } from 'vite';
 
 //
@@ -14,8 +15,35 @@ function classicScript(): Plugin {
     };
 }
 
+//
+// Whether Linux has a file watch to spare. Other programs can use up every watch the user is allowed, and Vite then
+// crashes with ENOSPC instead of watching the frontend.
+//
+function canWatchFiles(): boolean {
+    try {
+        watch('frontend').close();
+        return true;
+    }
+    catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOSPC') {
+            return false;
+        }
+        throw error;
+    }
+}
+
+const useWatchPolling = !canWatchFiles();
+if (useWatchPolling) {
+    console.warn('No file watches left on this machine, so Vite checks the frontend for changes by polling.');
+}
+
 export default defineConfig({
     plugins: [classicScript()],
+    server: {
+        watch: {
+            usePolling: useWatchPolling,
+        },
+    },
     root: 'frontend',
     base: './',
     build: {
