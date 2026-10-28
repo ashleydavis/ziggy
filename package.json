@@ -16,6 +16,7 @@
     "test": "bun --filter '*' test",
     "t": "bun run test",
     "test:zig": "zig build test --summary all",
+    "update:websocket": "bash ./third-party/websocket/update.sh",
     "test:android-shell": "bash ./scripts/test-android-shell.sh",
     "test:zig:android": "bash ./scripts/test-zig-mobile.sh android --ziggy-dir .",
     "test:zig:ios": "bash ./scripts/test-zig-mobile.sh ios --ziggy-dir .",

@@ -17,6 +17,8 @@ Each native app hosts the system web view, draws the menu, handles shortcuts and
 
 The [remote control server](../../tools/remote-control-server/README.md) is in `tools/remote-control-server`, outside `packages/ziggy`, because it is a program the smoke tests run and no app includes it. An app gets it from the Ziggy repository as a dev dependency, as the bin `ziggy-remote-control-server`.
 
+The core's WebSocket library, [websocket.zig](https://github.com/karlseguin/websocket.zig), is kept in `third-party/websocket` at commit `efa879736bd438bea8b86a91f220ba408de57273`, with its licence, and `build.zig.zon` takes it from there by path. `bun run update:websocket <commit>` replaces it with another commit (see [update.md](../../third-party/websocket/update.md)).
+
 The tests of `ziggy-inject.js` and of the dev backend's `dev-client.js` are in `ziggy` (`packages/ziggy/frontend/src/test`), which reads each script from where it is.
 
 Two files at the root of the repository build these:
