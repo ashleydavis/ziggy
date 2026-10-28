@@ -74,4 +74,5 @@ An app's own native calls need none of this: they go through `native_call` (see 
 - [Packages](packages.md): each directory of the package, its language and why it is built separately.
 - [Architecture](architecture.md): how the parts of an app fit together.
 - [Dev mode](dev-mode.md): how the dev backend and the supervisor work.
+- [Third-party libraries](third-party-libraries.md): how a library Ziggy changes is kept in the repository, updated and patched.
 - [Releasing Ziggy](releasing-ziggy.md): what the release workflow does on each push, and how a version of the package is released.

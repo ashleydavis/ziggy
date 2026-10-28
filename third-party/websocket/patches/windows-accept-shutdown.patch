@@ -1,0 +1,12 @@
+--- a/src/posix.zig
++++ b/src/posix.zig
+@@ -759,6 +759,9 @@
+                     .WSAECONNRESET => return error.ConnectionResetByPeer,
+                     .WSAEFAULT => unreachable,
+                     .WSAENOTSOCK => return error.FileDescriptorNotASocket,
++                    // Ziggy: closesocket from another thread ends a blocking accept with WSAEINTR, and the blocking server's stop()
++                    // does exactly that. Reported as SocketNotListening, it is the shutdown the accept loop already expects.
++                    .WSAEINTR => return error.SocketNotListening,
+                     .WSAEINVAL => return error.SocketNotListening,
+                     .WSAEMFILE => return error.ProcessFdQuotaExceeded,
+                     .WSAENETDOWN => return error.NetworkSubsystemFailed,

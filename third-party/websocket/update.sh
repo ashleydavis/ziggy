@@ -26,12 +26,12 @@ top="${top%%/*}"
 # the library adds is never left out.
 wanted="$(tar -tzf "$archive" | sed "s|^$top/||" | grep -v '/$' | grep -v '^$')"
 
-# A file the old version had and the new one does not is removed, one file at a time. This script, its documentation and what a
-# build of the library writes stay.
+# A file the old version had and the new one does not is removed, one file at a time. This script, its documentation, Ziggy's
+# patches and what a build of the library writes stay.
 while IFS= read -r path; do
     relative="${path#"$LIBRARY_DIR"/}"
     case "$relative" in
-        update.sh|update.md|.websocket-download.*|.zig-cache/*|zig-out/*)
+        update.sh|update.md|patches/*|.websocket-download.*|.zig-cache/*|zig-out/*)
             continue
             ;;
     esac
@@ -43,4 +43,10 @@ find "$LIBRARY_DIR" -mindepth 1 -type d -empty -not -path "*/.zig-cache*" -not -
 
 tar -xzf "$archive" -C "$LIBRARY_DIR" --strip-components=1
 
-echo "websocket.zig in $LIBRARY_DIR is now at $commit."
+# Ziggy's changes to the library, each a patch in patches/ with a .md beside it describing it, applied in name order.
+for patch_file in "$LIBRARY_DIR"/patches/*.patch; do
+    [ -e "$patch_file" ] || continue
+    patch --forward --silent -p1 -d "$LIBRARY_DIR" < "$patch_file" \
+        || { echo "update.sh: $patch_file does not apply to websocket.zig at $commit. Make it again for this version." >&2; exit 1; }
+done
+echo "websocket.zig in $LIBRARY_DIR is now at $commit, with Ziggy's patches applied."

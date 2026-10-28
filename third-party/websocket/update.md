@@ -1,10 +1,10 @@
 # update.sh
 
-Replaces the copy of [websocket.zig](https://github.com/karlseguin/websocket.zig) in `third-party/websocket` with the library at a commit of its repository. Ziggy's core uses it for the remote control connection, and Ziggy's `build.zig.zon` takes it from this directory by path (see [Packages](../../docs/development/packages.md)).
+Replaces the copy of [websocket.zig](https://github.com/karlseguin/websocket.zig) in `third-party/websocket` with the library at a commit of its repository, then applies Ziggy's patches to it. Ziggy's core uses it for the remote control connection, and Ziggy's `build.zig.zon` takes it from this directory by path (see [Packages](../../docs/development/packages.md)).
 
-It downloads the commit's archive from GitHub and keeps every file of the library's repository at that commit, so a file the library adds is never left out. A file the old version had and the new one does not is removed. `update.sh`, `update.md` and the output of a build of the library are left as they are.
+It downloads the commit's archive from GitHub and keeps every file of the library's repository at that commit, so a file the library adds is never left out. A file the old version had and the new one does not is removed. `update.sh`, `update.md`, `patches/` and the output of a build of the library are left as they are.
 
-Any change made to the copy in this directory is lost: the files are replaced by the library's own.
+Any change made to the library's files directly is lost. For Ziggy's changes, see the [patches](patches) directory, and [Third-party libraries](../../docs/development/third-party-libraries.md) for how patches are managed.
 
 ## Tests
 
@@ -18,7 +18,7 @@ From the root of Ziggy's repository:
 bun run update:websocket <commit>
 ```
 
-It needs `curl` and `tar`, and network access to GitHub. Afterwards, put the new commit in [Packages](../../docs/development/packages.md) and run Ziggy's tests.
+It needs `curl`, `tar` and `patch`, and network access to GitHub. Afterwards, put the new commit in [Packages](../../docs/development/packages.md) and run Ziggy's tests.
 
 ## Arguments
 
