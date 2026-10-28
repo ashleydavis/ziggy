@@ -17,7 +17,6 @@
 //
 
 const std = @import("std");
-const build_options = @import("build_options");
 const c = @import("jni-c");
 const types = @import("types.zig");
 const core = @import("core.zig");
@@ -198,9 +197,9 @@ fn doNothingSignalHandler(signal_number: c_int) callconv(.c) void {
 //
 // WORKAROUND, with the reason and what it fixed.
 //
-// The problem: every task the core cancels while it is blocked in a system call (the test control connection's reads, the retry timer
+// The problem: every task the core cancels while it is blocked in a system call (the remote control connection's reads, the retry timer
 // that openStorage cancels after a read finishes) is cancelled by sending its thread SIGIO, which returns the call early. That needs
-// a do-nothing SIGIO handler, and Zig 0.16.0's threaded Io installs it when it is created with options (the test control connection's
+// a do-nothing SIGIO handler, and Zig 0.16.0's threaded Io installs it when it is created with options (the remote control connection's
 // is). It builds the sigaction struct in the layout glibc uses, and Android's libc has the flags first, so the install lands as no
 // handler at all, the default action is restored, and the first cancel of a blocked task ends the whole app with "I/O possible"
 // (signal 29). Every Android scenario died this way: the app log stops mid-load and the harness times out waiting for a log line.
@@ -211,7 +210,7 @@ fn doNothingSignalHandler(signal_number: c_int) callconv(.c) void {
 //
 // TODO: investigate and remove. Check whether a later Zig fixes the struct layout for Android, and whether the threaded Io should be
 // given a way to skip installing its own handler. The Zig threaded Io's deinit also restores the handler it replaced, which on Android
-// is the default, so the handler is gone again once the test control connection stops.
+// is the default, so the handler is gone again once the remote control connection stops.
 //
 fn installSignalHandlers() void {
     var action = std.mem.zeroes(c.struct_sigaction);
@@ -262,10 +261,9 @@ const CreateArguments = struct {
     app_url_prefix: c.jstring,
     // The app's private data directory.
     data_dir: c.jstring,
-    // Whether to start the test control connection.
-    test_mode: c.jboolean,
-    // The test control port file, or null.
-    test_port_file: c.jstring,
+    // The remote control server's address, "host:port", from the ziggy.remoteControl extra, or null when the app was started
+    // without it.
+    remote_control: c.jstring,
 };
 
 //
@@ -320,8 +318,8 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
         return error.DataDirMissing;
     };
     defer allocator.free(data_dir);
-    const test_port_file = try dupeJavaString(env, allocator, arguments.test_port_file);
-    defer if (test_port_file) |port_file| allocator.free(port_file);
+    const remote_control = try dupeJavaString(env, allocator, arguments.remote_control);
+    defer if (remote_control) |address| allocator.free(address);
 
     var pipe: [2]std.posix.fd_t = undefined;
     if (std.c.pipe2(&pipe, .{
@@ -353,8 +351,8 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
         .max_concurrent_child_tasks = arguments.max_concurrent_child_tasks,
         .app_url_prefix = app_url_prefix.ptr,
         .data_dir = data_dir.ptr,
-        .test_mode = arguments.test_mode != c.JNI_FALSE,
-        .test_port_file = if (test_port_file) |port_file| port_file.ptr else null,
+        .test_mode = remote_control != null,
+        .remote_control = if (remote_control) |address| address.ptr else null,
         // A phone app has no command line.
         .arg_count = 0,
         .args = null,
@@ -535,15 +533,6 @@ pub fn exportJni(comptime app: core.RegisteredApp) void {
         }
 
         //
-        // Reports whether this library was built with the test hooks.
-        //
-        fn testHooksEnabled(env: *c.JNIEnv, class: c.jclass) callconv(.c) c.jboolean {
-            _ = env;
-            _ = class;
-            return if (build_options.test_hooks) c.JNI_TRUE else c.JNI_FALSE;
-        }
-
-        //
         // Creates the core for the app's ZiggyNativeCalls object, on the main thread, and returns its handle, or zero with a Java exception pending.
         //
         fn create(
@@ -554,8 +543,7 @@ pub fn exportJni(comptime app: core.RegisteredApp) void {
             max_concurrent_child_tasks: c.jint,
             app_url_prefix: c.jstring,
             data_dir: c.jstring,
-            test_mode: c.jboolean,
-            test_port_file: c.jstring,
+            remote_control: c.jstring,
         ) callconv(.c) c.jlong {
             _ = class;
             const bridge = createBridge(env, .{
@@ -564,8 +552,7 @@ pub fn exportJni(comptime app: core.RegisteredApp) void {
                 .max_concurrent_child_tasks = @intCast(max_concurrent_child_tasks),
                 .app_url_prefix = app_url_prefix,
                 .data_dir = data_dir,
-                .test_mode = test_mode,
-                .test_port_file = test_port_file,
+                .remote_control = remote_control,
             }, app) catch |err| {
                 if (err != error.JavaException) {
                     var buffer: [128]u8 = undefined;
@@ -760,9 +747,6 @@ pub fn exportJni(comptime app: core.RegisteredApp) void {
     };
     @export(&Exports.onLoad, .{
         .name = "JNI_OnLoad",
-    });
-    @export(&Exports.testHooksEnabled, .{
-        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_testHooksEnabled",
     });
     @export(&Exports.create, .{
         .name = "Java_dev_ziggy_nativeapp_ZiggyNative_create",

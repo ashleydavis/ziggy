@@ -7,6 +7,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
+const RemoteControlServer = @import("remote-control-server.zig").RemoteControlServer;
 
 const HandlerServices = ziggy.core.HandlerServices;
 const Timers = ziggy.timers.Timers;
@@ -313,21 +314,22 @@ fn threadEnding(id: []const u8) bool {
     @panic("a thread's stat has no flags");
 }
 
-test "destroying a core with tasks still running stops the main thread, every worker and the test control connection" {
+test "destroying a core with tasks still running stops the main thread, every worker and the remote control connection" {
+    // The server's own threads are running before the count is taken, so only the core's threads are counted.
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     const counts_threads = builtin.os.tag == .linux;
     const before = if (counts_threads) try threadCount() else 0;
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     var native_app_released = false;
     defer if (!native_app_released) native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(3, 2);
-    var port_file_buffer: [256]u8 = undefined;
-    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
-    config.test_port_file = port_file.ptr;
+    config.remote_control = server.address();
     try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try server.expectConnected();
     var destroyed = false;
     defer if (!destroyed) native_app.stop(std.testing.io, std.testing.allocator);
     // Three workers: the spin task holds one, the parent another while it waits for its children, and the sleep the third, so the
@@ -337,12 +339,14 @@ test "destroying a core with tasks still running stops the main thread, every wo
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"q1\",\"taskType\":\"sleep\",\"source\":\"s\",\"data\":{\"ms\":100000}}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"s1\",\"source\":\"s\",\"data\":{\"step\":1}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"sleep\"");
-    // Stop returns only once the main thread has stopped, which it does only once every worker and the test control connection have.
+    // Stop returns only once the main thread has stopped, which it does only once every worker and the remote control connection have.
     // The fake native app's own thread ends when the fake native app is released.
     destroyed = true;
     native_app.stop(std.testing.io, std.testing.allocator);
     native_app_released = true;
     native_app.deinit(std.testing.io, std.testing.allocator);
+    // The server's thread that writes to the connection ends when it sees the connection close.
+    try server.expectClosed();
     if (counts_threads) {
         try std.testing.expectEqual(before, try threadCount());
     }

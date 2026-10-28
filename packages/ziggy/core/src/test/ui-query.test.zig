@@ -67,8 +67,7 @@ test "the app is told whether the test mode switch is on" {
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
-    // The switch is read from the configuration. In a test hooks build it also starts the control connection, which this test does
-    // not use.
+    // The switch is read from the configuration. The remote control connection starts only when remote_control is set as well.
     config.test_mode = true;
     try native_app.start(std.testing.io, std.testing.allocator, config, app_with_query);
     defer native_app.stop(std.testing.io, std.testing.allocator);

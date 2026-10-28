@@ -14,6 +14,7 @@ const menu_keys = @import("menu-keys.zig");
 const geometry_lib = @import("geometry.zig");
 const render_device = @import("render-device.zig");
 const native_message = @import("native-message");
+const remote_control_arguments = @import("remote-control-arguments");
 
 // The URL scheme the bundled frontend is served under. WebKitGTK calls the native app's scheme handler for each file instead of reading a directory.
 const app_scheme = "ziggy-app";
@@ -75,7 +76,7 @@ const NativeApp = struct {
     app_config: AppConfig,
     // The GTK application.
     application: *c.GtkApplication,
-    // The command line, for the geometry option.
+    // The command line without --remote-control and its address, for the geometry option and the app.
     args: []const [:0]const u8,
     // The web view, once the window exists.
     web_view: ?*c.WebKitWebView,
@@ -85,8 +86,9 @@ const NativeApp = struct {
     open_pick: ?*PickDialog,
     // The screenshot whose snapshot is being made, or null.
     open_screenshot: ?*Screenshot,
-    // Whether a test hooks build was started in test mode.
-    test_mode: bool,
+    // The remote control server's address from --remote-control, or null when the app was started without it. Test mode is on
+    // exactly when it is set.
+    remote_control: ?[:0]const u8,
     // The window, once it exists.
     window: ?*c.GtkWindow,
     // Whether the developer tools window is showing.
@@ -103,6 +105,10 @@ const NativeApp = struct {
 // Runs the app and returns the process's exit code.
 //
 pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
+    // The option is taken out first, so nothing that reads the command line after this sees it. GApplication is given no
+    // arguments at all, because it refuses options it does not know.
+    const taken = try remote_control_arguments.take(std.heap.c_allocator, args);
+    defer std.heap.c_allocator.free(taken.arguments);
     // Before GTK starts any thread, because choosing the card forks.
     try render_device.chooseRenderDevice();
     const application = c.gtk_application_new(app_config.app_id.ptr, c.G_APPLICATION_NON_UNIQUE) orelse {
@@ -112,12 +118,12 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
     var native_app = NativeApp{
         .app_config = app_config,
         .application = application,
-        .args = args,
+        .args = taken.arguments,
         .web_view = null,
         .core = null,
         .open_pick = null,
         .open_screenshot = null,
-        .test_mode = false,
+        .remote_control = taken.remote_control,
         .window = null,
         .inspector_open = false,
         .fullscreen = false,
@@ -216,9 +222,6 @@ fn onActivate(application: *c.GtkApplication, user_data: ?*anyopaque) callconv(.
 // Creates the window and the web view, creates the core and loads the frontend.
 //
 fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
-    const test_hooks = z.ziggy_test_hooks_enabled();
-    native_app.test_mode = test_hooks and c.g_getenv("ZIGGY_TEST_MODE") != null;
-
     // The frontend's own scripts are classic scripts, but a frontend may also fetch its files, which needs the scheme to
     // be allowed to make cross-origin style requests and to count as a secure context like https does.
     const web_context = c.webkit_web_context_get_default();
@@ -292,9 +295,9 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     config.max_concurrent_child_tasks = 10;
     config.app_url_prefix = app_url_prefix;
     config.data_dir = data_directory;
-    if (native_app.test_mode) {
+    if (native_app.remote_control) |address| {
         config.test_mode = true;
-        config.test_port_file = c.g_getenv("ZIGGY_TEST_PORT_FILE");
+        config.remote_control = address.ptr;
     }
     // The command-line arguments after the program's name, which the core copies, for the app to read its own options from.
     const app_args = native_app.args[@min(native_app.args.len, 1)..];

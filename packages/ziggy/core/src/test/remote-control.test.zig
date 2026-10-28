@@ -1,112 +1,57 @@
+//
+// Checks the core's remote control connection. Each test starts a WebSocket server of its own, which plays the remote control
+// server, gives its address to the core as the configuration's remote_control, and sends the core commands as the server would
+// pass them on from a test script.
+//
+
 const std = @import("std");
 const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
+const RemoteControlServer = @import("remote-control-server.zig").RemoteControlServer;
 
 //
-// One client conversation with the control connection, run on its own thread because the reply waits for the frontend. The test's
-// thread and the client's share nothing: the client's thread is sent the line to send as a message, and sends back the reply, or that
-// there was none, as a message.
+// One command sent to the core, and its reply once finish has read it.
 //
 const Client = struct {
-    // The port to connect to.
-    port: u16,
-    // The line to send, without the newline.
+    // The server the core is connected to.
+    server: *RemoteControlServer,
+    // The line to send.
     line: []const u8,
-    // The client thread's messages: the line to send.
-    messages: ziggy.message_queue.MessageQueue,
-    // Where the client thread sends the reply: the line, from 0, or nothing, from 1, when the connection was closed without a reply.
-    results: ziggy.message_queue.MessageQueue,
-    // The client's thread.
-    thread: std.Thread,
-    // The line the connection replied with, once finish has read it, allocated with the testing allocator.
+    // The reply, once finish has read it, allocated with the testing allocator.
     response: ?[]u8,
-    // Whether the connection was closed without a reply, once finish has read it.
-    closed_without_response: bool,
 
-    fn init(port: u16, line: []const u8) Client {
+    fn init(server: *RemoteControlServer, line: []const u8) Client {
         return .{
-            .port = port,
+            .server = server,
             .line = line,
-            .messages = .init(),
-            .results = .init(),
-            .thread = undefined,
             .response = null,
-            .closed_without_response = false,
         };
     }
 
     //
-    // Starts the client's thread and sends it the line.
+    // Sends the line.
     //
     fn start(self: *Client) !void {
-        try self.messages.post(std.testing.io, 0, self.line);
-        self.thread = try std.Thread.spawn(.{}, run, .{ &self.messages, &self.results, self.port });
+        try self.server.send(self.line);
     }
 
     //
-    // Waits for the client's thread to end and reads what it sent back.
+    // Waits for the reply.
     //
     fn finish(self: *Client) void {
-        self.thread.join();
-        const result = self.results.take(std.testing.io, std.testing.allocator, .none) orelse @panic("the client's result queue closed");
-        if (result.from == 1) {
-            std.testing.allocator.free(result.text);
-            self.closed_without_response = true;
-        }
-        else {
-            self.response = result.text;
-        }
-        self.messages.deinit();
-        self.results.deinit();
-    }
-
-    fn run(messages: *ziggy.message_queue.MessageQueue, results: *ziggy.message_queue.MessageQueue, port: u16) void {
-        var thread_allocator: ziggy.thread_allocator.ThreadAllocator = .init;
-        defer thread_allocator.deinit();
-        const allocator = thread_allocator.allocator();
-        var threaded: std.Io.Threaded = .init_single_threaded;
-        threaded.allocator = allocator;
-        defer threaded.deinit();
-        const io = threaded.io();
-        const line = messages.take(io, allocator, .none) orelse @panic("the client's message queue closed");
-        defer allocator.free(line.text);
-        const address = std.Io.net.IpAddress.parseIp4("127.0.0.1", port) catch @panic("bad address");
-        const stream = address.connect(io, .{ .mode = .stream }) catch @panic("could not connect to the control connection");
-        defer stream.close(io);
-        var read_buffer: [4096]u8 = undefined;
-        var write_buffer: [4096]u8 = undefined;
-        var reader = stream.reader(io, &read_buffer);
-        var writer = stream.writer(io, &write_buffer);
-        writer.interface.writeAll(line.text) catch @panic("write failed");
-        writer.interface.writeAll("\n") catch @panic("write failed");
-        writer.interface.flush() catch @panic("write failed");
-        const response = reader.interface.takeDelimiter('\n') catch {
-            results.post(io, 1, "") catch @panic("out of memory");
-            return;
-        } orelse {
-            results.post(io, 1, "") catch @panic("out of memory");
-            return;
-        };
-        results.post(io, 0, response) catch @panic("out of memory");
+        self.response = self.server.reply() catch |err| std.debug.panic("no reply from the core: {s}", .{@errorName(err)});
     }
 };
 
-fn startControlledCore(native_app: *helpers.FakeNativeApp, tmp: *std.testing.TmpDir) !void {
+//
+// Starts a core in test mode connected to the server, and waits for the server to see the connection.
+//
+fn startControlledCore(native_app: *helpers.FakeNativeApp, server: *RemoteControlServer) !void {
     var config = native_app.config(1, 1);
-    var port_file_buffer: [256]u8 = undefined;
-    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
-    config.test_port_file = port_file.ptr;
+    config.remote_control = server.address();
     try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
-}
-
-//
-// The port of the control connection, which it writes to the port file in the test's directory before the core's start returns.
-//
-fn controlPort(tmp: *std.testing.TmpDir) !u16 {
-    var buffer: [32]u8 = undefined;
-    const text = try tmp.dir.readFile(std.testing.io, "port.txt", &buffer);
-    return try std.fmt.parseInt(u16, std.mem.trim(u8, text, "\n"), 10);
+    try server.expectConnected();
 }
 
 //
@@ -121,32 +66,34 @@ fn failCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers,
     return error.AppCouldNotStart;
 }
 
-test "an app's on_create that fails in test mode stops the control connection the core started" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+test "an app's on_create that fails in test mode stops the remote control connection the core started" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
-    var port_file_buffer: [256]u8 = undefined;
-    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
-    config.test_port_file = port_file.ptr;
+    config.remote_control = server.address();
     var failing_app = helpers.app;
     failing_app.on_create = failCreate;
-    // The testing allocator fails the test if the control connection the core started is left unreleased.
+    // The testing allocator fails the test if the connection the core started is left unreleased, and the server sees it closed.
     try std.testing.expectError(error.AppCouldNotStart, native_app.start(std.testing.io, std.testing.allocator, config, failing_app));
+    try server.expectConnected();
+    try server.expectClosed();
 }
 
 test "a command reaches the UI and its result comes back" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"click\",\"dataId\":\"go\"}");
+    var client = Client.init(&server, "{\"command\":\"click\",\"dataId\":\"go\"}");
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
     try client.start();
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"click\",\"dataId\":\"go\"}}");
@@ -156,29 +103,31 @@ test "a command reaches the UI and its result comes back" {
     try std.testing.expectEqualStrings("{\"clicked\":true}", client.response.?);
 }
 
-test "the port is written to the port file" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+test "the core connects to the remote control address and answers commands" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    // The connection on the port in the file is the control connection: it reads the command and refuses it as invalid.
-    const reply = try responseFor(&tmp, "{\"command\":\"drop\"}");
+    // The connection to the server is the remote control connection: it reads the command and refuses it as invalid.
+    const reply = try responseFor(&server, "{\"command\":\"drop\"}");
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", reply);
 }
 
 test "a line that is not JSON gets an error reply and never reaches the UI" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "this is not json");
+    var client = Client.init(&server, "this is not json");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -187,14 +136,15 @@ test "a line that is not JSON gets an error reply and never reaches the UI" {
 }
 
 test "a JSON object with no command field gets an error reply and never reaches the UI" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"dataId\":\"x\"}");
+    var client = Client.init(&server, "{\"dataId\":\"x\"}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -203,14 +153,15 @@ test "a JSON object with no command field gets an error reply and never reaches 
 }
 
 test "the quit command calls the native app's quit callback" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"quit\"}");
+    var client = Client.init(&server, "{\"command\":\"quit\"}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -218,65 +169,107 @@ test "the quit command calls the native app's quit callback" {
     try native_app.expectQuitCalled(std.testing.io, std.testing.allocator);
 }
 
-test "a core not in test mode has no control connection" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+test "a core started without a remote control address does not connect" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), helpers.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    // A remote control connection is made before the core's start returns, so one that has not come by now never will.
+    try std.testing.expect(!server.hasEventWithin(300));
+}
+
+test "a refused connection fails the core's start" {
+    // A server that is started and stopped again leaves a port that refuses connections.
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    var address_buffer: [32]u8 = undefined;
+    const address = try std.fmt.bufPrintZ(&address_buffer, "{s}", .{std.mem.span(server.address())});
+    server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
-    var port_file_buffer: [256]u8 = undefined;
-    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
-    config.test_port_file = port_file.ptr;
-    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
-    defer native_app.stop(std.testing.io, std.testing.allocator);
-    // A control connection writes its port to the file before the core's start returns, and none was started.
-    try std.testing.expectError(error.FileNotFound, controlPort(&tmp));
+    config.test_mode = true;
+    config.remote_control = address.ptr;
+    // The testing allocator fails the test if the connection thread's queue is left unreleased.
+    try std.testing.expectError(error.RemoteControlConnectFailed, native_app.start(std.testing.io, std.testing.allocator, config, helpers.app));
 }
 
-test "a test-result nobody is waiting for is an error reply" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+test "an address with no port fails the core's start" {
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    var config = native_app.config(1, 1);
+    config.test_mode = true;
+    config.remote_control = "127.0.0.1";
+    try std.testing.expectError(error.RemoteControlConnectFailed, native_app.start(std.testing.io, std.testing.allocator, config, helpers.app));
+}
+
+test "splitAddress takes the port after the last colon and refuses an address without a host or a port" {
+    const split = ziggy.remote_control.splitAddress("127.0.0.1:4001").?;
+    try std.testing.expectEqualStrings("127.0.0.1", split.host);
+    try std.testing.expectEqual(@as(u16, 4001), split.port);
+    try std.testing.expect(ziggy.remote_control.splitAddress("127.0.0.1") == null);
+    try std.testing.expect(ziggy.remote_control.splitAddress(":4001") == null);
+    try std.testing.expect(ziggy.remote_control.splitAddress("127.0.0.1:0") == null);
+    try std.testing.expect(ziggy.remote_control.splitAddress("127.0.0.1:port") == null);
+    try std.testing.expect(ziggy.remote_control.splitAddress("127.0.0.1:70000") == null);
+}
+
+test "a test-result nobody is waiting for is an error reply" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":99,\"result\":1}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"UnexpectedTestResult\"}");
 }
 
-test "a second connection is served while the first stays open, and stopping ends both" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+test "stopping the core ends the connection thread, which closes the connection" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
-    var threaded: std.Io.Threaded = .init_single_threaded;
-    const io = threaded.io();
-    const address = try std.Io.net.IpAddress.parseIp4("127.0.0.1", try controlPort(&tmp));
-    // The first connection is opened and left open, and sends nothing.
-    const first = try address.connect(io, .{ .mode = .stream });
-    defer first.close(io);
-    var client = Client.init(try controlPort(&tmp), "this is not json");
-    try client.start();
-    client.finish();
-    defer if (client.response) |text| std.testing.allocator.free(text);
-    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.response.?);
-    // Stopping the core must not wait for the first connection to close.
+    try startControlledCore(&native_app, &server);
+    // The connection thread is waiting in its read, with no command coming, when the core stops.
+    native_app.stop(std.testing.io, std.testing.allocator);
+    try server.expectClosed();
+}
+
+test "a core still stops after the server closed the connection" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: helpers.FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &server);
+    try server.closeConnection();
+    try server.expectClosed();
+    // The connection thread has ended its read and waits to be told to stop, which the core's stop does.
     native_app.stop(std.testing.io, std.testing.allocator);
 }
 
 test "a command is held until the UI reports it is listening" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"ready\"}");
+    var client = Client.init(&server, "{\"command\":\"ready\"}");
     try client.start();
     // The frontend has not reported it is listening, so the command is not sent to it.
     ziggy.fake_native_app.sleepMs(std.testing.io, 300);
@@ -290,14 +283,15 @@ test "a command is held until the UI reports it is listening" {
 }
 
 test "a test's paths for the next dialog are used once and then the native app's dialog is shown" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"pick-answer\",\"paths\":[\"/picked/one.txt\",\"/picked/two.txt\"]}");
+    var client = Client.init(&server, "{\"command\":\"pick-answer\",\"paths\":[\"/picked/one.txt\",\"/picked/two.txt\"]}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -309,14 +303,15 @@ test "a test's paths for the next dialog are used once and then the native app's
 }
 
 test "paths for a dialog that are not an array of strings are refused" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"pick-answer\",\"paths\":[1,2]}");
+    var client = Client.init(&server, "{\"command\":\"pick-answer\",\"paths\":[1,2]}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -324,14 +319,15 @@ test "paths for a dialog that are not an array of strings are refused" {
 }
 
 test "the menu command chooses the menu item through the native app's callback once the UI is listening" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"menu\",\"action\":\"zoom-in\"}");
+    var client = Client.init(&server, "{\"command\":\"menu\",\"action\":\"zoom-in\"}");
     try client.start();
     // The frontend is not listening yet, so nothing is chosen.
     ziggy.fake_native_app.sleepMs(std.testing.io, 300);
@@ -348,20 +344,21 @@ test "the menu command chooses the menu item through the native app's callback o
 }
 
 test "choosing reload holds commands until the UI reports it is listening again" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    var reload = Client.init(try controlPort(&tmp), "{\"command\":\"menu\",\"action\":\"reload\"}");
+    var reload = Client.init(&server, "{\"command\":\"menu\",\"action\":\"reload\"}");
     try reload.start();
     reload.finish();
     defer if (reload.response) |text| std.testing.allocator.free(text);
     try std.testing.expectEqualStrings("{\"ok\":true}", reload.response.?);
-    var next = Client.init(try controlPort(&tmp), "{\"command\":\"ready\"}");
+    var next = Client.init(&server, "{\"command\":\"ready\"}");
     try next.start();
     // The frontend is reloading, so the next command is held back and not sent to it.
     ziggy.fake_native_app.sleepMs(std.testing.io, 300);
@@ -375,20 +372,20 @@ test "choosing reload holds commands until the UI reports it is listening again"
 }
 
 test "the menu command on a native app with no menu callback reports what is missing" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
-    var port_file_buffer: [256]u8 = undefined;
-    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
-    config.test_port_file = port_file.ptr;
+    config.remote_control = server.address();
     config.has_menu_action = false;
     try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try server.expectConnected();
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"menu\",\"action\":\"zoom-in\"}");
+    var client = Client.init(&server, "{\"command\":\"menu\",\"action\":\"zoom-in\"}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -396,6 +393,9 @@ test "the menu command on a native app with no menu callback reports what is mis
 }
 
 test "the drop command records a drop the way the native app does, so the UI can request the paths of a drop" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(std.testing.io, .{
@@ -409,7 +409,7 @@ test "the drop command records a drop the way the native app does, so the UI can
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     // The path is written as a JSON string, so a Windows path's backslashes are escaped.
     const line = try ziggy.json.stringify(std.testing.allocator, .{
@@ -417,7 +417,7 @@ test "the drop command records a drop the way the native app does, so the UI can
         .paths = &[_][]const u8{path},
     });
     defer std.testing.allocator.free(line);
-    var client = Client.init(try controlPort(&tmp), line);
+    var client = Client.init(&server, line);
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -433,6 +433,9 @@ test "the drop command records a drop the way the native app does, so the UI can
 }
 
 test "a drop that names an element is also sent to the UI, and the UI's result is the reply" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     try tmp.dir.writeFile(std.testing.io, .{
@@ -446,7 +449,7 @@ test "a drop that names an element is also sent to the UI, and the UI's result i
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     const line = try ziggy.json.stringify(std.testing.allocator, .{
         .command = "drop",
@@ -454,7 +457,7 @@ test "a drop that names an element is also sent to the UI, and the UI's result i
         .paths = &[_][]const u8{path},
     });
     defer std.testing.allocator.free(line);
-    var client = Client.init(try controlPort(&tmp), line);
+    var client = Client.init(&server, line);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
     try client.start();
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"kind\":\"system\",\"name\":\"test-command\",\"data\":{\"requestId\":1,\"command\":{\"command\":\"drop\",\"dataId\":\"zone\"");
@@ -473,15 +476,16 @@ test "a drop that names an element is also sent to the UI, and the UI's result i
 }
 
 test "the screenshot command has the native app write a picture of the window to the path" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}");
+    var client = Client.init(&server, "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -492,15 +496,16 @@ test "the screenshot command has the native app write a picture of the window to
 }
 
 test "the screenshot command replies with the reason when the native app cannot capture the window" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"screenshot\",\"outputPath\":\"/shots/refused.png\"}");
+    var client = Client.init(&server, "{\"command\":\"screenshot\",\"outputPath\":\"/shots/refused.png\"}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -508,14 +513,15 @@ test "the screenshot command replies with the reason when the native app cannot 
 }
 
 test "the screenshot command without an output path is an invalid command and captures nothing" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"screenshot\"}");
+    var client = Client.init(&server, "{\"command\":\"screenshot\"}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -526,20 +532,20 @@ test "the screenshot command without an output path is an invalid command and ca
 }
 
 test "the screenshot command on a native app with no screenshot callback reports what is missing" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
-    var port_file_buffer: [256]u8 = undefined;
-    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
-    config.test_port_file = port_file.ptr;
+    config.remote_control = server.address();
     config.has_screenshot = false;
     try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try server.expectConnected();
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    var client = Client.init(try controlPort(&tmp), "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}");
+    var client = Client.init(&server, "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}");
     try client.start();
     client.finish();
     defer if (client.response) |text| std.testing.allocator.free(text);
@@ -547,43 +553,42 @@ test "the screenshot command on a native app with no screenshot callback reports
 }
 
 //
-// Sends one line to the control connection of a core and returns its reply, allocated with the testing allocator.
+// Sends one line to the core's remote control connection and returns its reply, allocated with the testing allocator.
 //
-fn responseFor(tmp: *std.testing.TmpDir, line: []const u8) ![]u8 {
-    var client = Client.init(try controlPort(tmp), line);
-    try client.start();
-    client.finish();
-    return client.response orelse error.ClosedWithoutResponse;
+fn responseFor(server: *RemoteControlServer, line: []const u8) ![]u8 {
+    try server.send(line);
+    return try server.reply();
 }
 
 test "the quit command on a native app with no quit callback reports what is missing" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
-    var port_file_buffer: [256]u8 = undefined;
-    const port_file = try std.fmt.bufPrintZ(&port_file_buffer, ".zig-cache/tmp/{s}/port.txt", .{tmp.sub_path});
     config.test_mode = true;
-    config.test_port_file = port_file.ptr;
+    config.remote_control = server.address();
     config.has_quit = false;
     try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try server.expectConnected();
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    const response = try responseFor(&tmp, "{\"command\":\"quit\"}");
+    const response = try responseFor(&server, "{\"command\":\"quit\"}");
     defer std.testing.allocator.free(response);
     try std.testing.expectEqualStrings("{\"error\":\"NativeCallMissing\"}", response);
 }
 
 test "the menu command without an action is an invalid command and chooses nothing" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    const response = try responseFor(&tmp, "{\"command\":\"menu\"}");
+    const response = try responseFor(&server, "{\"command\":\"menu\"}");
     defer std.testing.allocator.free(response);
     try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", response);
     const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
@@ -592,46 +597,49 @@ test "the menu command without an action is an invalid command and chooses nothi
 }
 
 test "the drop command without paths is an invalid command" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    const response = try responseFor(&tmp, "{\"command\":\"drop\"}");
+    const response = try responseFor(&server, "{\"command\":\"drop\"}");
     defer std.testing.allocator.free(response);
     try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", response);
 }
 
 test "a dialog result with no paths, or with paths that are not an array, is refused" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    const missing = try responseFor(&tmp, "{\"command\":\"pick-answer\"}");
+    const missing = try responseFor(&server, "{\"command\":\"pick-answer\"}");
     defer std.testing.allocator.free(missing);
     try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", missing);
-    const not_array = try responseFor(&tmp, "{\"command\":\"pick-answer\",\"paths\":\"/one.txt\"}");
+    const not_array = try responseFor(&server, "{\"command\":\"pick-answer\",\"paths\":\"/one.txt\"}");
     defer std.testing.allocator.free(not_array);
     try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", not_array);
 }
 
 test "second paths for the next dialog replace the first" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    const first = try responseFor(&tmp, "{\"command\":\"pick-answer\",\"paths\":[\"/first.txt\"]}");
+    const first = try responseFor(&server, "{\"command\":\"pick-answer\",\"paths\":[\"/first.txt\"]}");
     defer std.testing.allocator.free(first);
     try std.testing.expectEqualStrings("{\"ok\":true}", first);
-    const second = try responseFor(&tmp, "{\"command\":\"pick-answer\",\"paths\":[\"/second.txt\"]}");
+    const second = try responseFor(&server, "{\"command\":\"pick-answer\",\"paths\":[\"/second.txt\"]}");
     defer std.testing.allocator.free(second);
     try std.testing.expectEqualStrings("{\"ok\":true}", second);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"app\",\"id\":31,\"name\":\"pick-open-request\",\"data\":\"Title\"}");
@@ -639,12 +647,13 @@ test "second paths for the next dialog replace the first" {
 }
 
 test "a test-result without a request id is an error reply" {
-    var tmp = std.testing.tmpDir(.{});
-    defer tmp.cleanup();
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try startControlledCore(&native_app, &tmp);
+    try startControlledCore(&native_app, &server);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":5,\"name\":\"test-result\",\"data\":{\"result\":null}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":5,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"requestId\\\" is missing\"}");

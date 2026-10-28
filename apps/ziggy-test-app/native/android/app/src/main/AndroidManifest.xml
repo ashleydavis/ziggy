@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- The test app's media server listens on the loopback address, and opening a socket needs this permission. The app reaches no
+    <!-- The test app's media server listens on the loopback address, and the remote control connection, which the app opens to the
+         remote control server only when started with the ziggy.remoteControl extra, is a socket. Both need this permission. The app reaches no
          other host: its frontend is in the APK and external links open in the system browser. -->
     <uses-permission android:name="android.permission.INTERNET" />
 

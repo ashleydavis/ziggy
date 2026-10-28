@@ -1,11 +1,11 @@
 name: Release macOS x64
 
-# Packages the Ziggy template for macOS x64 on an Intel runner and, when that passed on the default branch, publishes the
-# packages as the GitHub release named "Ziggy template macOS x64", replacing the one before. It runs on every push. The app is
-# never version tagged, but a GitHub release is always attached to a git tag, so the release sits on the tag
-# `release-macos-x64`, which this workflow moves to the commit it built. A run that fails anywhere publishes nothing. The
-# macOS smoke tests run on Apple Silicon only, in the macOS arm64 release workflow. The unit tests and the cross-build are in
-# the CI workflow.
+# Builds the Ziggy template for macOS x64 in app-build. Then, side by side on Intel runners, package makes the release
+# packages, the unit tests run and the smoke tests drive the build app-build made. When all of them passed on the default
+# branch, create-release publishes the packages as the GitHub release named "Ziggy template macOS x64", replacing the one
+# before. It runs on every push. The app is never version tagged, but a GitHub release is always attached to a git tag, so the
+# release sits on the tag `release-macos-x64`, which this workflow moves to the commit it built. A run that fails anywhere
+# publishes nothing.
 
 env:
   BUN_VERSION: "1.3.14"
@@ -27,9 +27,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  package-release:
-    # The app packaged for macOS x64 by its own package script, which builds for the runner's architecture, uploaded as an
-    # artifact of the run.
+  app-build:
+    # Builds the app's release build for macOS x64 with its build script into example-build/app, on an Intel runner. The smoke
+    # tests drive this build. It saves the build and its Zig build cache under the key example-build-macos-x64-<commit>, which
+    # the jobs that need app-build restore.
     timeout-minutes: 60
     runs-on: macos-15-intel
     steps:
@@ -64,43 +65,241 @@ jobs:
         with:
           run: bun install
 
+      # The newest earlier build is restored when there is none for this commit, so only what a change touches is compiled
+      # again.
       - name: Restore the Zig build caches
         uses: actions/cache/restore@v4
         with:
           path: |
             .zig-cache
-          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}-package-macos-x64
+            example-build/app
+          key: example-build-macos-x64-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-
+            example-build-macos-x64-
 
-      - name: Package
+      # Every save is the restored cache plus what the job built, so without this the cache only grows.
+      - name: Start fresh Zig build caches when the restored ones have grown too big
         shell: bash
-        run: bun run package:macos
+        run: |
+          for cache_dir in .; do
+              if [ -d "$cache_dir/.zig-cache" ]; then
+                  megabytes="$(du -sm "$cache_dir/.zig-cache" | cut -f1)"
+                  echo "Restored Zig build cache of $cache_dir: ${megabytes} MB"
+                  if [ "$megabytes" -ge 5120 ]; then
+                      mv "$cache_dir/.zig-cache" "$RUNNER_TEMP/stale-zig-cache-$(basename "$cache_dir")"
+                      echo "Moved it aside to start a fresh one"
+                  fi
+              fi
+          done
 
-      - name: Upload the packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: ziggy-template-macos-x64
-          path: out/macos/*
-          if-no-files-found: error
-          retention-days: 2
+      # The restored output is an earlier build's, so it is moved aside first and only this build's output is saved.
+      - name: Build
+        shell: bash
+        run: |
+          if [ -d example-build/app ]; then
+              mv example-build/app "$RUNNER_TEMP/stale-example-build-app"
+          fi
+          bun run build:macos --configuration Release --arch x86_64 --native-dir "$PWD/example-build/app/native" --build-dir "$PWD/example-build/app/xcode"
 
-      # No smoke test job runs on this runner before this one, so this job saves the Zig build cache itself. Always, so a job
-      # that fails part way still leaves what it compiled.
-      - name: Save the Zig build caches
-        if: always()
+      # Saved only when the build passed, so no later job restores a build that stopped part way.
+      - name: Save the build and the Zig build caches
         uses: actions/cache/save@v4
         with:
           path: |
             .zig-cache
-          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}-package-macos-x64
+            example-build/app
+          key: example-build-macos-x64-${{ github.sha }}
+
+  package:
+    # Makes the app's release package for macOS x64 with its package script, on an Intel runner, starting from the Zig build
+    # cache app-build saved so only what packaging adds is compiled. It runs beside the unit tests and the smoke tests and saves
+    # the package under the key example-package-macos-x64-<commit>, which create-release restores.
+    needs: app-build
+    timeout-minutes: 60
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      # The path list is the one app-build saved, which the cache needs to find the entry.
+      - name: Restore the Zig build caches from app-build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            example-build/app
+          key: example-build-macos-x64-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Package
+        shell: bash
+        run: bun run package:macos --arch x64 --output-dir "$PWD/out/macos-x64"
+
+      - name: Save the package
+        uses: actions/cache/save@v4
+        with:
+          path: out/macos-x64
+          key: example-package-macos-x64-${{ github.sha }}
+
+  unit-tests:
+    # The TypeScript unit tests (the app's frontend) and the Zig unit tests of the app's backend (`zig build test`), on the
+    # Intel macOS runner. The Zig tests compile on top of the Zig build cache app-build saved. It runs beside package and the
+    # smoke tests.
+    needs: app-build
+    timeout-minutes: 50
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      # Zig skips any compile step whose inputs are unchanged and already in .zig-cache. This is the cache app-build saved, so
+      # the tests compile only what that build did not. The path list is the one app-build saved, which the cache needs to find
+      # the entry.
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            example-build/app
+          key: example-build-macos-x64-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      - name: Run the TypeScript unit tests
+        timeout-minutes: 12
+        shell: bash
+        run: bun run test
+
+      # The same tests `bun run test:zig` runs, which bundles the frontend first because the backend's tests embed it. They are
+      # built for any CPU of the architecture: built for the runner's own, which differs from one runner to the next, every
+      # compile step would miss the build cache restored above.
+      - name: Run the Zig unit tests
+        timeout-minutes: 40
+        shell: bash
+        run: |
+          bun run bundle:ui
+          zig build test -Dcpu=baseline --summary all --test-timeout 20m
+
+  app-smoke-tests:
+    # The app's smoke tests on macOS on an Intel runner, in a real window on the runner's own display. They drive the build
+    # app-build made.
+    needs: app-build
+    timeout-minutes: 75
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Zig (version from mise.toml)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: zig jq
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Install dependencies
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun install
+
+      # The path list is the one app-build saved, which the cache needs to find the entry.
+      - name: Restore the build from app-build
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .zig-cache
+            example-build/app
+          key: example-build-macos-x64-${{ github.sha }}
+          fail-on-cache-miss: true
+
+      # The smoke tests drive the build ZIGGY_SMOKE_BUILD names instead of building one.
+      - name: Point the smoke tests at the build
+        shell: bash
+        run: echo "ZIGGY_SMOKE_BUILD=$PWD/example-build/app" >> "$GITHUB_ENV"
+
+      # A step that hits its own timeout fails normally and keeps its log, so a hang shows up in the log.
+      - name: Run the smoke tests
+        timeout-minutes: 45
+        shell: bash
+        run: bun run test:smoke
 
   create-release:
-    # Publishes the packages, only when the packaging passed, and only for a push to the default branch, so a run on another
-    # branch or a pull request packages the app and publishes nothing. This platform's release and its tag are deleted and made
-    # again on the commit this run built.
+    # Publishes the packages the package job made, only when every other job passed and only for a push to the default branch,
+    # so a run on another branch or a pull request tests everything and publishes nothing. This platform's release and its tag
+    # are deleted and made again on the commit this run built.
     if: github.event_name == 'push' && github.ref_name == github.event.repository.default_branch
-    needs: [package-release]
+    needs: [app-build, package, unit-tests, app-smoke-tests]
     timeout-minutes: 15
     runs-on: ubuntu-latest
     permissions:
@@ -111,11 +310,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download the packages
-        uses: actions/download-artifact@v4
+      # The path list is the one the package job saved, which the cache needs to find the entry.
+      - name: Restore the packages from package
+        uses: actions/cache/restore@v4
         with:
-          name: ziggy-template-macos-x64
-          path: artifacts
+          path: out/macos-x64
+          key: example-package-macos-x64-${{ github.sha }}
+          fail-on-cache-miss: true
 
       # Every platform's release tag moves to the commit its workflow built, so release-notes.sh would count from whichever of
       # them sorts first and report almost nothing. They are deleted from this checkout only, before the notes are made.
@@ -147,8 +348,8 @@ jobs:
           draft: false
           prerelease: true
           files: |
-            ./artifacts/*.dmg
-            ./artifacts/*.zip
+            ./out/macos-x64/*.dmg
+            ./out/macos-x64/*.zip
           body: |
             The Ziggy template, packaged for ${{ env.RELEASE_PLATFORM_NAME }} from commit ${{ github.sha }}.
 

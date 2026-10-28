@@ -693,7 +693,7 @@ test "the test app's UI query says the test mode switch and nothing else" {
     defer std.testing.allocator.free(without_switch);
     native_app.stop(std.testing.io, std.testing.allocator);
     try std.testing.expectEqualStrings("", without_switch);
-    // The switch is read from the configuration. It also starts the test control connection, which this test does not use.
+    // The switch is read from the configuration. The remote control connection starts only when remote_control is set as well.
     var config = native_app.config(1, 1);
     config.test_mode = true;
     try native_app.start(std.testing.io, std.testing.allocator, config, template.app);

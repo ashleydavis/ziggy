@@ -234,7 +234,7 @@ final class ZiggyMenu: NSObject {
         perform(action: action)
     }
 
-    // Does what choosing the menu item for the action does. A menu click and the test control connection both come here,
+    // Does what choosing the menu item for the action does. A menu click and the remote control connection both come here,
     // so a test runs exactly what a click runs. An action the native app does not own goes to the core, whatever it is.
     func perform(action: String) {
         guard let bridge = bridge else {

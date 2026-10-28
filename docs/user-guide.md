@@ -38,7 +38,7 @@ Read the guides in this order:
 7. [Threads](user-guide/threads.md): the threads an app runs on, what each one may touch and how they talk by messages.
 8. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
 9. [Logging](user-guide/logging.md): how to log, where the lines go and how to configure the log files.
-10. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the test hooks.
+10. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the remote control connection.
 11. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
 
 Also:

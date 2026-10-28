@@ -17,6 +17,8 @@ pub const DevHostOptions = struct {
     ui_port: u16,
     // The app's data directory.
     data_dir: []const u8,
+    // The remote control server's address, "host:port", which the core connects to, or null to run without remote control.
+    remote_control: ?[]const u8,
 };
 
 //
@@ -35,8 +37,8 @@ pub const SupervisorOptions = struct {
     host_name: []const u8,
     // The port the dev host listens on, or 0 for one the operating system chooses.
     port: u16,
-    // Whether the dev host is built with the test hooks.
-    test_hooks: bool,
+    // The remote control server's address, "host:port", passed on to the dev host, or null to run without remote control.
+    remote_control: ?[]const u8,
     // Whether the browser is left closed, for a run that drives a browser of its own.
     no_open: bool,
 };
@@ -49,6 +51,7 @@ pub fn parseDevHostOptions(args: []const []const u8) !DevHostOptions {
     var port_file: ?[]const u8 = null;
     var ui_port: ?u16 = null;
     var data_dir: ?[]const u8 = null;
+    var remote_control: ?[]const u8 = null;
     var index: usize = 0;
     while (index < args.len) : (index += 1) {
         const name = args[index];
@@ -60,6 +63,9 @@ pub fn parseDevHostOptions(args: []const []const u8) !DevHostOptions {
         }
         else if (std.mem.eql(u8, name, "--ui-port")) {
             ui_port = try parsePort(try valueAfter(args, &index));
+        }
+        else if (std.mem.eql(u8, name, "--remote-control")) {
+            remote_control = try valueAfter(args, &index);
         }
         else if (std.mem.eql(u8, name, "--data-dir")) {
             data_dir = try valueAfter(args, &index);
@@ -73,6 +79,7 @@ pub fn parseDevHostOptions(args: []const []const u8) !DevHostOptions {
         .port_file = port_file,
         .ui_port = ui_port orelse return error.MissingUiPort,
         .data_dir = data_dir orelse return error.MissingDataDir,
+        .remote_control = remote_control,
     };
 }
 
@@ -86,8 +93,8 @@ pub fn parseSupervisorOptions(args: []const []const u8) !SupervisorOptions {
     var host_step: ?[]const u8 = null;
     var host_name: ?[]const u8 = null;
     var port: u16 = 0;
-    var test_hooks = false;
     var no_open = false;
+    var remote_control: ?[]const u8 = null;
     var index: usize = 0;
     while (index < args.len) : (index += 1) {
         const name = args[index];
@@ -109,11 +116,11 @@ pub fn parseSupervisorOptions(args: []const []const u8) !SupervisorOptions {
         else if (std.mem.eql(u8, name, "--port")) {
             port = try parsePort(try valueAfter(args, &index));
         }
+        else if (std.mem.eql(u8, name, "--remote-control")) {
+            remote_control = try valueAfter(args, &index);
+        }
         else if (std.mem.eql(u8, name, "--no-open")) {
             no_open = true;
-        }
-        else if (std.mem.eql(u8, name, "--test-hooks")) {
-            test_hooks = true;
         }
         else {
             return error.UnknownOption;
@@ -126,7 +133,7 @@ pub fn parseSupervisorOptions(args: []const []const u8) !SupervisorOptions {
         .host_step = host_step orelse return error.MissingHostStep,
         .host_name = host_name orelse return error.MissingHostName,
         .port = port,
-        .test_hooks = test_hooks,
+        .remote_control = remote_control,
         .no_open = no_open,
     };
 }

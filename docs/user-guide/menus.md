@@ -228,7 +228,7 @@ test "Say Hello From the UI sends the UI the menu event naming it" {
 }
 ```
 
-A smoke test chooses an item as a user would with `choose_menu_item <action>`, which sends the control connection's `menu` command (see [Testing your app](testing.md#the-control-connection)). The native app's own actions happen for real and any other item reaches the backend as it does from a click. From the template's [`smoke-tests/desktop-only/hello-menu/test.sh`](../../apps/ziggy-template/smoke-tests/desktop-only/hello-menu/test.sh), which runs on desktop platforms only, because a phone has no menu:
+A smoke test chooses an item as a user would with `choose_menu_item <action>`, which sends the remote control connection's `menu` command (see [Testing your app](testing.md#the-remote-control-connection)). The native app's own actions happen for real and any other item reaches the backend as it does from a click. From the template's [`smoke-tests/desktop-only/hello-menu/test.sh`](../../apps/ziggy-template/smoke-tests/desktop-only/hello-menu/test.sh), which runs on desktop platforms only, because a phone has no menu:
 
 ```bash
 choose_menu_item hello-from-ui

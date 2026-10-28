@@ -2,21 +2,16 @@
 
 # The Android platform library of the Ziggy test app's smoke tests. See common.sh for what it implements.
 #
-# The app runs on an emulator or device, driven from the host with adb. Both builds are debug-type APKs, so run-as can read
-# what the app writes (the test control port file), and they differ in the Zig library inside: the test build has the test
-# hooks and the release-style build has not. The real release variant is built by package-android.sh and is not installable
-# for run-as, so it cannot prove the absence of a control connection.
+# The app runs on an emulator or device, driven from the host with adb. It is the APK the build script makes, holding the library
+# for both architectures, started with the ziggy.remoteControl extra.
 #
-# The device is the one named in ZIGGY_ANDROID_DEVICES (adb serials, space separated) when that is set, else any attached
-# emulator or device, whichever project started it. It is claimed under Ziggy's per-device lock for the whole scenario, so two
-# Ziggy runs never install over each other. The lock is released by ziggy_platform_stop.
+# The device is the one named in ZIGGY_ANDROID_DEVICES (adb serials, space separated) when that is set, else an attached plugged-in
+# device when there is one, else any attached emulator, whichever project started it. It is claimed under Ziggy's per-device lock
+# for the whole scenario, so two Ziggy runs never install over each other. The lock is released by ziggy_platform_stop.
 
 ANDROID_EXAMPLE_DIR="$ZIGGY_SMOKE_APP_DIR"
 ANDROID_SCRIPTS_DIR="$ANDROID_EXAMPLE_DIR/scripts"
 ANDROID_APP_ID="dev.ziggy.testapp"
-
-# Where the app writes its control port, inside its private files directory (the Intent extra carries the full path).
-ANDROID_PORT_FILE_DEVICE_PATH="/data/data/$ANDROID_APP_ID/files/ziggy-control-port.txt"
 
 # Seconds a scenario waits for a free device before giving up.
 ANDROID_DEVICE_CLAIM_TIMEOUT="${ZIGGY_DEVICE_CLAIM_TIMEOUT:-1800}"
@@ -37,15 +32,8 @@ ziggy_adb() {
 }
 
 #
-# Prints the control port the app wrote, and nothing when it has not written one. adb exec-out puts the device's error
-# text on its output, so only a line that is all digits counts as a port.
-#
-ziggy_android_read_port() {
-    ziggy_adb exec-out run-as "$ANDROID_APP_ID" cat files/ziggy-control-port.txt 2>/dev/null | tr -d '\r' | grep -E '^[0-9]+$' || true
-}
-
-#
-# Prints the devices the run may use, one per line: the named ones, else every attached emulator and device.
+# Prints the devices the run may use, one per line: the named ones, else every attached plugged-in device, else every attached
+# emulator.
 #
 ziggy_android_candidate_devices() {
     local serial
@@ -55,7 +43,15 @@ ziggy_android_candidate_devices() {
         done
         return 0
     fi
-    ziggy_android_attached_devices
+    # A plugged-in device is preferred: when one is attached, only plugged-in devices are used, and otherwise every emulator.
+    local attached hardware
+    attached="$(ziggy_android_attached_devices)"
+    hardware="$(printf '%s\n' "$attached" | grep -v '^emulator-' || true)"
+    if [ -n "$hardware" ]; then
+        printf '%s\n' "$hardware"
+        return 0
+    fi
+    printf '%s\n' "$attached" | grep -v '^$' || true
 }
 
 #
@@ -102,45 +98,45 @@ ziggy_android_release_device() {
 
 ziggy_platform_prepare() {
     local run_dir="$1"
-    ziggy_android_require_commands zig bun jq unzip adb || return 1
-    mkdir -p "$run_dir/test" "$run_dir/release"
-    local version
-    version="$(ziggy_android_version)"
-
-    # Both builds go through the one Gradle project and the one synced library directory of this checkout, so another run
-    # building at the same time would replace the library between this run's sync and its Gradle build, and a test APK could
-    # be packaged with the release library (no control connection). One run builds at a time per checkout, under a lock on
-    # that shared directory. The lock's descriptor is closed for every command, so nothing a build starts (the Gradle daemon)
-    # can keep the lock held after this function returns.
-    local build_lock_fd
-    mkdir -p "$ZIGGY_ANDROID_PROJECT_DIR/app/build"
-    exec {build_lock_fd}<>"$ZIGGY_ANDROID_PROJECT_DIR/app/build/ziggy-smoke-build.lock"
-    flock "$build_lock_fd" || return 1
-    local result=0
-    {
-        bash "$ANDROID_SCRIPTS_DIR/sync-android.sh" --test-hooks --optimize ReleaseSafe &&
-            ziggy_android_gradle assembleDebug "-PziggyVersionName=$version" &&
-            cp "$ZIGGY_ANDROID_PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$run_dir/test/app.apk" &&
-            bash "$ANDROID_SCRIPTS_DIR/sync-android.sh" --skip-ui --optimize ReleaseSmall &&
-            ziggy_android_gradle assembleDebug "-PziggyVersionName=$version" &&
-            cp "$ZIGGY_ANDROID_PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk" "$run_dir/release/app.apk"
-    } {build_lock_fd}>&- || result=1
-    exec {build_lock_fd}>&-
-    return "$result"
+    local build="${ZIGGY_SMOKE_BUILD:-}"
+    if [ -z "$build" ]; then
+        # The build script builds through the one Gradle project and the one synced library directory of this checkout, so
+        # another run building at the same time would replace the library between this run's sync and its Gradle build. One run
+        # builds at a time per checkout, under a lock on that shared directory. The lock's descriptor is closed for every
+        # command, so nothing a build starts (the Gradle daemon) can keep the lock held after this function returns. The APK
+        # holds the library for both architectures, so the scenarios run on an emulator and on a connected phone alike.
+        ziggy_android_require_commands zig bun jq || return 1
+        build="$run_dir/build"
+        local build_lock_fd
+        mkdir -p "$ZIGGY_ANDROID_PROJECT_DIR/app/build"
+        exec {build_lock_fd}<>"$ZIGGY_ANDROID_PROJECT_DIR/app/build/ziggy-smoke-build.lock"
+        flock "$build_lock_fd" || return 1
+        local result=0
+        (cd "$ANDROID_EXAMPLE_DIR" && bun run build:android --arch "x86_64 arm64" --output-dir "$build") {build_lock_fd}>&- || result=1
+        exec {build_lock_fd}>&-
+        if [ "$result" -ne 0 ]; then
+            return 1
+        fi
+    fi
+    if [ ! -f "$build/ziggy-test-app.apk" ]; then
+        echo "The Android build $build has no ziggy-test-app.apk." >&2
+        return 1
+    fi
+    mkdir -p "$run_dir/app"
+    cp "$build/ziggy-test-app.apk" "$run_dir/app/" || return 1
 }
 
 ziggy_platform_start() {
     local test_dir="$1"
-    local kind="$2"
-    local apk="$ZIGGY_SMOKE_RUN_DIR/$kind/app.apk"
     mkdir -p "$test_dir"
-    if [ "${3:-}" = "keep-data" ]; then
-        # A restart: the same device, the same install and the data the last run left, so only the port file is removed.
+    if [ "${2:-}" = "keep-data" ]; then
+        # A restart: the same device, the same install and the data the last run left.
         ziggy_adb shell am force-stop "$ANDROID_APP_ID"
-        ziggy_adb shell run-as "$ANDROID_APP_ID" rm -f files/ziggy-control-port.txt || return 1
     else
         ziggy_android_claim_device || return 1
         echo "$ANDROID_SERIAL_CLAIMED" > "$test_dir/device.txt"
+
+        local apk="$ZIGGY_SMOKE_RUN_DIR/app/ziggy-test-app.apk"
 
         # A fresh install with fresh data, so nothing of an earlier scenario is left in the app's files directory.
         ziggy_adb install -r -t "$apk" > "$test_dir/install.log" 2>&1 || {
@@ -151,45 +147,20 @@ ziggy_platform_start() {
         ziggy_adb shell pm clear "$ANDROID_APP_ID" > /dev/null || return 1
     fi
 
+    # The app connects to the remote control server at 127.0.0.1 on the device, and adb reverse carries that port to the same
+    # port on the host, where the server listens. The device is claimed for the scenario, so no other run uses the port there.
+    if [ -n "$ZIGGY_REMOTE_CONTROL" ]; then
+        local app_port="${ZIGGY_REMOTE_CONTROL##*:}"
+        ziggy_adb reverse "tcp:$app_port" "tcp:$app_port" > /dev/null || return 1
+        echo "$app_port" > "$test_dir/reverse-port.txt"
+    fi
+
     ziggy_adb logcat -c
     ziggy_adb shell am start -W -n "$ANDROID_APP_ID/.MainActivity" \
-        --ez ziggy.testMode true \
-        --es ziggy.testPortFile "$ANDROID_PORT_FILE_DEVICE_PATH" > "$test_dir/am-start.log" 2>&1 || {
+        ${ZIGGY_REMOTE_CONTROL:+--es ziggy.remoteControl "$ZIGGY_REMOTE_CONTROL"} > "$test_dir/am-start.log" 2>&1 || {
         cat "$test_dir/am-start.log" >&2
         return 1
     }
-    if [ "$kind" = "release" ]; then
-        return 0
-    fi
-
-    local waited=0
-    local device_port=""
-    while true; do
-        device_port="$(ziggy_android_read_port)"
-        if [ -n "$device_port" ]; then
-            break
-        fi
-        if [ -z "$(ziggy_adb shell pidof "$ANDROID_APP_ID" | tr -d '\r')" ]; then
-            echo "The app exited before its control connection came up. Its log:" >&2
-            ziggy_adb logcat -d -t 200 >&2
-            return 1
-        fi
-        if [ "$waited" -ge 600 ]; then
-            echo "The app never wrote its control port." >&2
-            ziggy_adb logcat -d -t 200 >&2
-            return 1
-        fi
-        sleep 0.1
-        waited=$((waited + 1))
-    done
-
-    # Port 0 has adb pick any free host port, and it prints the one it chose, so two runs never pick the same one.
-    local host_port
-    host_port="$(ziggy_adb forward tcp:0 "tcp:$device_port" | tr -d '\r\n')" || return 1
-    echo "$host_port" > "$test_dir/forward-port.txt"
-    ZIGGY_CONTROL_HOST=127.0.0.1
-    ZIGGY_CONTROL_PORT="$host_port"
-    export ZIGGY_CONTROL_HOST ZIGGY_CONTROL_PORT
 }
 
 ziggy_platform_stop() {
@@ -197,9 +168,9 @@ ziggy_platform_stop() {
     if [ -z "$ANDROID_SERIAL_CLAIMED" ]; then
         return 0
     fi
-    if [ -s "$test_dir/forward-port.txt" ]; then
-        ziggy_adb forward --remove "tcp:$(cat "$test_dir/forward-port.txt")" || true
-        : > "$test_dir/forward-port.txt"
+    if [ -s "$test_dir/reverse-port.txt" ]; then
+        ziggy_adb reverse --remove "tcp:$(cat "$test_dir/reverse-port.txt")" || true
+        : > "$test_dir/reverse-port.txt"
     fi
     ziggy_adb shell am force-stop "$ANDROID_APP_ID" || true
     if [ "${2:-}" = "keep-device" ]; then
@@ -236,20 +207,6 @@ ziggy_platform_wait_exit() {
         sleep 0.1
         waited=$((waited + 1))
     done
-}
-
-ziggy_platform_artifact_files() {
-    local kind="$1"
-    local contents_dir="$ZIGGY_SMOKE_RUN_DIR/$kind/apk-contents"
-    mkdir -p "$contents_dir"
-    unzip -o -q "$ZIGGY_SMOKE_RUN_DIR/$kind/app.apk" 'lib/*' -d "$contents_dir" || return 1
-    find "$contents_dir/lib" -name '*.so' | sort
-}
-
-ziggy_platform_has_control_port() {
-    local port
-    port="$(ziggy_android_read_port)"
-    [ -n "$port" ]
 }
 
 #

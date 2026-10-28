@@ -8,18 +8,20 @@ An app has unit tests for its frontend (`frontend/src/test`) and its backend (`b
 
 A smoke test cannot click a native file dialog, read what the web view shows or wait for the frontend to finish loading, so the app offers a way in: the test hooks.
 
-- They are compiled in only with the `test-hooks` build option (`-Dtest-hooks=true`), which is off by default. Release builds never use it, so a released app has no test mode and no control connection.
+- The remote control code is in every build. It does nothing unless the app is started with `--remote-control <host:port>`. On Android the address is the string Intent extra `ziggy.remoteControl`.
+- Test mode is on exactly when the app is started that way. The template's backend tells the frontend through the `testMode=1` query parameter.
 - A test sets up its state from outside the app, with config files and data placed on disk, wherever it can.
 - Add a hook of the app's own only where nothing outside the app can do the job.
 
-The native app reads two environment variables, in a test build only. On Android they arrive as Intent extras, and on the iOS simulator as `SIMCTL_CHILD_`-prefixed variables.
+The native apps take `--remote-control` and its address out of the command line, so the app's own argument handling never sees them.
 
-- `ZIGGY_TEST_MODE` switches the hooks on. The frontend is told through the `testMode=1` query parameter.
-- `ZIGGY_TEST_PORT_FILE` names the file the backend writes the control connection's port to.
+## The remote control connection
 
-## The control connection
+The app connects out to the remote control server at the address it was given. It opens one WebSocket connection to `ws://<host:port>/`, on a thread of its own. When the connection cannot be made, the app prints the address and fails to start.
 
-The control connection listens on the loopback address, on a port the operating system chooses. A command is one line holding a JSON object with a `command` field, and the reply is one line. Commands are handled one at a time, and held until the frontend reports it is listening (`window.ziggy.testUiReady()`).
+The [remote control server](../../tools/remote-control-server/README.md) is a separate program, `ziggy-remote-control-server`, which an app gets from the Ziggy repository as a dev dependency. It listens on one port for the app and on another for the test script. It passes each line the script writes to the app as one WebSocket text message. It passes each reply from the app back to the script as one line. The smoke tests start it in `start_test_app`, on ports the system chooses.
+
+A command is one line holding a JSON object with a `command` field, and the reply is one line. Commands are handled one at a time, and held until the frontend reports it is listening (`window.ziggy.testUiReady()`).
 
 Commands Ziggy handles itself:
 
@@ -36,4 +38,4 @@ Every other command goes to the frontend as a `test-command` event, which the fr
 ## See also
 
 - [Scripts](scripts.md): the scripts that run the tests.
-- [Ziggy architecture](../development/architecture.md#test-hooks): where the test hooks fit in an app.
+- [Ziggy architecture](../development/architecture.md#remote-control): where the remote control connection fits in an app.

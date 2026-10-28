@@ -95,8 +95,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The app's private data directory, which the core is given.
     private let dataDirectory: URL
 
-    // Whether a test hooks build was started in test mode.
-    private let testMode: Bool
+    // The remote control server's address from --remote-control, or nil when the app was started without it. Test mode is on
+    // exactly when it is set.
+    private let remoteControl: String?
 
     // The main menu, once the core exists. This holds it because a menu item's target is not retained.
     private var menu: ZiggyMenu?
@@ -140,7 +141,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
         self.dataDirectory = dataDirectory
 
-        self.testMode = ziggy_test_hooks_enabled() && ProcessInfo.processInfo.environment["ZIGGY_TEST_MODE"] != nil
+        self.remoteControl = ZiggyBridge.remoteControlAddress(Array(CommandLine.arguments.dropFirst()))
         self.core = nil
         self.destroyed = false
 
@@ -195,7 +196,6 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         if core != nil || destroyed {
             ZiggyBridge.fail("start was called more than once")
         }
-        let environment = ProcessInfo.processInfo.environment
 
         var config = ziggy_config()
         // The main queue hands the bridge's address back to the main thread, which is the only thread that reads it.
@@ -218,26 +218,33 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
 
         let prefixText = ZiggyBridge.duplicate(ZiggyBridge.appUrlPrefix)
         let dataText = ZiggyBridge.duplicate(dataDirectory.path)
-        var portFileText: UnsafeMutablePointer<CChar>? = nil
+        let remoteControlText = remoteControl.map { ZiggyBridge.duplicate($0) }
         defer {
             free(prefixText)
             free(dataText)
-            free(portFileText)
+            free(remoteControlText)
         }
         config.app_url_prefix = UnsafePointer(prefixText)
         config.data_dir = UnsafePointer(dataText)
-        if testMode {
+        if let remoteControlText = remoteControlText {
             config.test_mode = true
-            if let portFile = environment["ZIGGY_TEST_PORT_FILE"] {
-                portFileText = ZiggyBridge.duplicate(portFile)
-                config.test_port_file = UnsafePointer(portFileText)
+            config.remote_control = UnsafePointer(remoteControlText)
+        }
+        // The command-line arguments after the program's name, for the app to read its own options from, without --remote-control
+        // and its address. The core copies them during ziggy_create.
+        let argumentTexts = ZiggyBridge.argumentsWithoutRemoteControl(Array(CommandLine.arguments.dropFirst())).map { ZiggyBridge.duplicate($0) }
+        defer {
+            for text in argumentTexts {
+                free(text)
             }
         }
-        // The command-line arguments after the program's name, for the app to read its own options from. They live as long as the
-        // process.
-        config.arg_count = UInt32(CommandLine.argc - 1)
-        config.args = UnsafeRawPointer(CommandLine.unsafeArgv + 1).assumingMemoryBound(to: UnsafePointer<CChar>?.self)
-        guard let created = ziggy_create(&config) else {
+        let argumentPointers: [UnsafePointer<CChar>?] = argumentTexts.map { UnsafePointer($0) }
+        config.arg_count = UInt32(argumentPointers.count)
+        let createdCore = argumentPointers.withUnsafeBufferPointer { (buffer: UnsafeBufferPointer<UnsafePointer<CChar>?>) -> UnsafeMutableRawPointer? in
+            config.args = buffer.baseAddress
+            return ziggy_create(&config)
+        }
+        guard let created = createdCore else {
             ZiggyBridge.fail("ziggy_create failed")
         }
         core = created
@@ -281,7 +288,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     }
 
 
-    // Ends the app. Only the core's test control connection requests this.
+    // Ends the app. Only the core's remote control connection requests this.
     private func quit() {
         NSApplication.shared.terminate(nil)
     }
@@ -482,6 +489,35 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         if !NSWorkspace.shared.open(url) {
             ZiggyBridge.report("could not open \(url.absoluteString) in the system browser")
         }
+    }
+
+    // The address after --remote-control in the command-line arguments after the program's name, or nil when there is none. A
+    // --remote-control with no address after it ends the app, because the test that started it waits for a connection that would
+    // never come.
+    static func remoteControlAddress(_ arguments: [String]) -> String? {
+        guard let index = arguments.firstIndex(of: "--remote-control") else {
+            return nil
+        }
+        if index + 1 >= arguments.count {
+            ZiggyBridge.fail("--remote-control needs the remote control server's address after it")
+        }
+        return arguments[index + 1]
+    }
+
+    // The command-line arguments after the program's name without --remote-control and its address, so the app's own argument
+    // handling never sees them.
+    static func argumentsWithoutRemoteControl(_ arguments: [String]) -> [String] {
+        var kept: [String] = []
+        var index = 0
+        while index < arguments.count {
+            if arguments[index] == "--remote-control" {
+                index += 2
+                continue
+            }
+            kept.append(arguments[index])
+            index += 1
+        }
+        return kept
     }
 
     // Copies text into a new NUL terminated C string, which the caller frees.

@@ -196,7 +196,7 @@ Ziggy's own messages and events, the system messages and system events, are sepa
 | `getPlatform()` | Resolves with whether the app is on a desktop or a mobile device (`platformKind`), and the operating system and processor (`os`, `arch`). |
 | `onCoreError(callback)` | Hears of a message that failed with no message response to carry the error, such as one that is not JSON or was sent with `send`, with the `error`. With no listener, the error is logged to the console. |
 | `getPathForFile(file)` | The real path of a file dropped on the window. It asks the backend for the paths of the last drop, so the frontend never does that itself. |
-| `onTestCommand(callback)`, `sendTestResult(requestId, result)`, `testUiReady()` | The test hooks, in a test hooks build only. See [Testing your app](testing.md). |
+| `onTestCommand(callback)`, `sendTestResult(requestId, result)`, `testUiReady()` | The test hooks, which act only when the app is started with `--remote-control`. See [Testing your app](testing.md). |
 
 Each `on...` call has a `remove...Listener` call beside it that takes the same callback, such as `removeTaskEventListener`.
 

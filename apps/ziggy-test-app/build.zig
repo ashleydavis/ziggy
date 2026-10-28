@@ -10,8 +10,6 @@ const ziggy_build = @import("ziggy");
 //
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
-    // Whether the test hooks (the test control connection) are built into the app. Never for a release.
-    const test_hooks = b.option(bool, "test-hooks", "Build the test hooks (the test control connection) into the app (never for a release)") orelse false;
     // Whether the Windows native app is compiled without linking WebView2's loader, to check it on a machine that cannot link.
     const compile_only = b.option(bool, "compile-only", "Compile the Windows native app without linking the WebView2 loader, to check it on a machine that cannot link") orelse false;
     // Whether the desktop executables leave out their debug information. Only the release packages do: a dev or test build keeps it, so
@@ -20,7 +18,7 @@ pub fn build(b: *std.Build) !void {
     // ReleaseSafe by default: the tests keep the safety checks.
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Prioritize performance, safety, or binary size (default: ReleaseSafe)") orelse .ReleaseSafe;
 
-    const ziggy = ziggy_build.dependency(b, target, optimize, test_hooks);
+    const ziggy = ziggy_build.dependency(b, target, optimize);
     const core = try ziggy_build.addAppBackend(b, ziggy, .{
         .name = "ziggy-test-app",
         .title = "the Ziggy test app",
@@ -38,22 +36,21 @@ pub fn build(b: *std.Build) !void {
     try ziggy_build.addLinuxNativeApp(b, app, strip, target, optimize, ziggy, core.static_library);
     try ziggy_build.addWindowsNativeApp(b, app, compile_only, strip, target, optimize, ziggy, core.static_library);
 
-    // The unit tests of the test app's backend, which run it with Ziggy's test hooks compiled in.
-    const test_ziggy = ziggy_build.dependency(b, target, optimize, true);
+    // The unit tests of the test app's backend.
     const template_for_tests = b.createModule(.{
         .root_source_file = b.path("backend/src/app.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    template_for_tests.addImport("ziggy", test_ziggy.module);
-    template_for_tests.addImport("ui-files", try ziggy_build.embedUi(b, test_ziggy.module, "ziggy", "dist"));
+    template_for_tests.addImport("ziggy", ziggy.module);
+    template_for_tests.addImport("ui-files", try ziggy_build.embedUi(b, ziggy.module, "ziggy", "dist"));
     const test_step = b.step("test", "Run the unit tests of the Ziggy test app's core");
     const test_binary_step = b.step("test-binary-ziggy-test-app-backend", "Build the unit test program of the Ziggy test app's core and install it to test-bin without running it");
     try ziggy_build.addDirectoryTests(b, test_step, "backend", &.{
         .{
             .name = "ziggy",
-            .module = test_ziggy.module,
+            .module = ziggy.module,
         },
         .{
             .name = "ziggy-test-app-backend",

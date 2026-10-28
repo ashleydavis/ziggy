@@ -82,7 +82,7 @@ pub const DroppedFiles = struct {
     }
 
     //
-    // Checks and records a drop on the calling thread, which owns the drop, as the test control connection's drop does on the main
+    // Checks and records a drop on the calling thread, which owns the drop, as the remote control connection's drop does on the main
     // thread. The paths are the JSON text of an array of strings.
     //
     pub fn replace(self: *DroppedFiles, io: std.Io, allocator: std.mem.Allocator, paths_json: []const u8) !void {

@@ -1,8 +1,8 @@
 name: CI
 
-# The checks every change gets, all on Linux: the TypeScript compile, the TypeScript unit tests, the cross-build of the Zig code
-# for every platform and the Zig unit tests. The smoke tests, the packages and the GitHub releases are in each platform's own
-# release workflow.
+# The checks every change gets: the TypeScript compile, the TypeScript unit tests, the app's release build for every platform
+# and the Zig unit tests. app-build builds the app natively on each platform's own runner. The Zig unit tests start from the
+# Linux build. The smoke tests and the GitHub releases are in each platform's own release workflow.
 
 env:
   BUN_VERSION: "1.3.14"
@@ -91,11 +91,28 @@ jobs:
         shell: bash
         run: bun run test
 
-  zig-build:
-    # Cross-builds the app's backend for every platform, with and without the test hooks, and compiles the Windows native app. Zig
-    # cross-builds from any machine, so this runs once, on Linux.
-    timeout-minutes: 40
-    runs-on: ubuntu-latest
+  app-build:
+    # Builds the app's release build for each platform with its build script, natively on that platform's own runner, into
+    # example-build/app. For iOS that is the simulator build. Each entry saves its build and its Zig build cache under the key
+    # example-build-<platform>-<commit>, which the jobs that need app-build restore.
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            runner: ubuntu-latest
+          - platform: windows
+            runner: windows-latest
+          - platform: macos-arm64
+            runner: macos-latest
+          - platform: macos-x64
+            runner: macos-15-intel
+          - platform: android
+            runner: ubuntu-latest
+          - platform: ios
+            runner: macos-15
+    runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -123,19 +140,56 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-bun-
 
+      - name: Install the web view's runtime libraries (Linux)
+        if: matrix.platform == 'linux'
+        uses: ./.github/actions/install-apt-packages
+        with:
+          packages: libgtk-3-0 libwebkit2gtk-4.1-0
+
       - name: Install dependencies
         uses: ./.github/actions/retry-install
         with:
           run: bun install
 
+      - name: Fetch the WebView2 SDK and the WiX Toolset (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: bun run setup
+
+      # The Android scripts need JDK 17 and the NDK the app locks.
+      - name: Setup JDK 17 (Android)
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache the Android NDK
+        if: matrix.platform == 'android'
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/lib/android/sdk/ndk/25.1.8937393
+          key: ${{ runner.os }}-android-ndk-25.1.8937393
+
+      # Retried because the SDK manager downloads from Google and a download can arrive corrupt.
+      - name: Set up the Android SDK and NDK (Android)
+        if: matrix.platform == 'android'
+        uses: ./.github/actions/retry-install
+        with:
+          run: bun run setup
+
+      # The newest earlier build of this platform is restored when there is none for this commit, so only what a change touches
+      # is compiled again. enableCrossOsArchive lets create-release, on Linux, restore the Windows entry.
       - name: Restore the Zig build caches
         uses: actions/cache/restore@v4
         with:
           path: |
             .zig-cache
-          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}
+            example-build/app
+          key: example-build-${{ matrix.platform }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-
+            example-build-${{ matrix.platform }}-
+          enableCrossOsArchive: true
 
       # Every save is the restored cache plus what the job built, so without this the cache only grows.
       - name: Start fresh Zig build caches when the restored ones have grown too big
@@ -152,21 +206,53 @@ jobs:
               fi
           done
 
-      - name: Build and cross-build the Zig code
+      # The restored output is an earlier build's, so it is moved aside first and only this build's output is saved. The Windows
+      # tools take a Windows path, which cygpath gives.
+      - name: Build
         shell: bash
-        run: bun run compile:zig
+        run: |
+          if [ -d example-build/app ]; then
+              mv example-build/app "$RUNNER_TEMP/stale-example-build-app"
+          fi
+          case "${{ matrix.platform }}" in
+              linux)
+                  bun run build:linux --prefix "$PWD/example-build/app"
+                  ;;
+              windows)
+                  bun run build:windows --prefix "$(cygpath -m "$PWD")/example-build/app"
+                  ;;
+              macos-arm64)
+                  bun run build:macos --configuration Release --arch arm64 --native-dir "$PWD/example-build/app/native" --build-dir "$PWD/example-build/app/xcode"
+                  ;;
+              macos-x64)
+                  bun run build:macos --configuration Release --arch x86_64 --native-dir "$PWD/example-build/app/native" --build-dir "$PWD/example-build/app/xcode"
+                  ;;
+              android)
+                  bun run build:android --arch "x86_64 arm64" --output-dir "$PWD/example-build/app"
+                  ;;
+              ios)
+                  bun run build:ios --sdk simulator --configuration Release --native-dir "$PWD/example-build/app/native" --build-dir "$PWD/example-build/app/xcode"
+                  ;;
+              *)
+                  echo "app-build has no build command for ${{ matrix.platform }}." >&2
+                  exit 1
+                  ;;
+          esac
 
-      # Always, so a job that fails part way still leaves what it compiled.
-      - name: Save the Zig build caches
-        if: always()
+      # Saved only when the build passed, so no later job restores a build that stopped part way.
+      - name: Save the build and the Zig build caches
         uses: actions/cache/save@v4
         with:
           path: |
             .zig-cache
-          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-build-${{ github.sha }}
+            example-build/app
+          key: example-build-${{ matrix.platform }}-${{ github.sha }}
+          enableCrossOsArchive: true
 
   zig-unit-tests:
-    # The Zig unit tests of the app's backend (`zig build test`), on the runner.
+    # The Zig unit tests of the app's backend (`zig build test`), on the runner. They compile on top of the Zig build cache of
+    # app-build's Linux entry.
+    needs: app-build
     timeout-minutes: 50
     runs-on: ubuntu-latest
     steps:
@@ -208,21 +294,21 @@ jobs:
         with:
           run: bun install
 
-      # Zig skips any compile step whose inputs are unchanged and already in .zig-cache. The key changes with any Zig source, and
-      # the newest earlier cache is restored when there is no exact match, so only the binaries a change touches are compiled
-      # again. The name is its own, so the release workflows' build caches, whose keys have zig-build- in them, are never restored
-      # here.
-      - name: Cache Zig's build cache
-        uses: actions/cache@v4
+      # Zig skips any compile step whose inputs are unchanged and already in .zig-cache. This is the cache app-build saved for
+      # Linux, so the tests compile only what that build did not. The path list is the one app-build saved, which the cache
+      # needs to find the entry.
+      - name: Restore the Zig build caches
+        uses: actions/cache/restore@v4
         with:
-          path: .zig-cache
-          key: ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-test-build-baseline-${{ hashFiles('mise.toml', '**/*.zig', '**/build.zig.zon') }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-ziggy-template-zig-test-build-baseline-
+          path: |
+            .zig-cache
+            example-build/app
+          key: example-build-linux-${{ github.sha }}
+          fail-on-cache-miss: true
 
       # The same tests `bun run test:zig` runs, which bundles the frontend first because the backend's tests embed it. They are
-      # built for any x86-64 CPU: built for the runner's own, which differs from run to run, every compile step would miss the
-      # build cache restored above.
+      # built for any x86-64 CPU: built for the runner's own, which differs from one runner to the next, every compile step
+      # would miss the build cache restored above.
       - name: Run the Zig unit tests
         timeout-minutes: 40
         shell: bash

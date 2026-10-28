@@ -61,11 +61,11 @@ test "test-result and test-ui-ready are error replies when the core is not in te
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":null}}");
     const first = try lastMessage(&native_app);
     defer std.testing.allocator.free(first);
-    try std.testing.expectEqualStrings("{\"id\":1,\"ok\":false,\"error\":\"TestControlNotRunning\"}", first);
+    try std.testing.expectEqualStrings("{\"id\":1,\"ok\":false,\"error\":\"RemoteControlNotRunning\"}", first);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"test-ui-ready\",\"data\":null}");
     const second = try lastMessage(&native_app);
     defer std.testing.allocator.free(second);
-    try std.testing.expectEqualStrings("{\"id\":2,\"ok\":false,\"error\":\"TestControlNotRunning\"}", second);
+    try std.testing.expectEqualStrings("{\"id\":2,\"ok\":false,\"error\":\"RemoteControlNotRunning\"}", second);
 }
 
 test "malformed JSON is reported as a core-error event and the core keeps working" {

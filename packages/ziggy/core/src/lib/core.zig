@@ -1,7 +1,7 @@
 //
 // The core: the main thread, separate from the native app's UI thread, and the calls the native app's thread makes to reach it. The
 // main thread's function keeps each piece of its state (the worker pool and its tasks, the timers, the dropped files, the messages
-// whose handlers send their response later and the test control state) as a variable of its own, and gives a piece only to the
+// whose handlers send their response later and the remote control state) as a variable of its own, and gives a piece only to the
 // functions that use it. Every call from the native app and every response a handler sends later is posted to the main thread's queue
 // as a message, and the main thread routes every message from the frontend: a system message (Ziggy's own) to Ziggy's function for its
 // name and an app message to the app's handler for its name. Threads talk only by JSON messages (see message-queue.zig).
@@ -12,12 +12,11 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
-const build_options = @import("build_options");
 const types = @import("types.zig");
 const json = @import("json.zig");
 const task_runner = @import("task-runner.zig");
 const task_queue = @import("task-queue.zig");
-const test_control = @import("test-control.zig");
+const remote_control = @import("remote-control.zig");
 const test_commands = @import("test-commands.zig");
 const dropped_files = @import("dropped-files.zig");
 const system_messages = @import("system-messages.zig");
@@ -683,7 +682,7 @@ pub fn start(allocator: std.mem.Allocator, queue: *MessageQueue, native_queue: *
     var given = config;
     given.app_url_prefix = "";
     given.data_dir = "";
-    given.test_port_file = null;
+    given.remote_control = null;
     const thread = try std.Thread.spawn(.{}, mainThread, .{MainStart{
         .queue = queue,
         .started = &started,
@@ -712,7 +711,7 @@ pub fn start(allocator: std.mem.Allocator, queue: *MessageQueue, native_queue: *
 
 //
 // Has the main thread stop and waits for it to end: it calls the app's `on_destroy` with `.before_tasks_stop`, clears its timers,
-// cancels every task, sends every worker "shutdown", stops the test control connection, waits for all of them to end,
+// cancels every task, sends every worker "shutdown", stops the remote control connection, waits for all of them to end,
 // calls `on_destroy` with `.after_tasks_stopped`, stops the app's file log, tells the native app it has stopped and releases its state. Meanwhile the native app's side
 // gives every call the result ShuttingDown (see NativeSide.stop), because the native app's UI thread is the one waiting here, and hands the
 // messages for the frontend to `frontend`, or drops them when it is null. The caller frees the queues afterwards.
@@ -806,8 +805,8 @@ const StartMessage = struct {
     appUrlPrefix: []const u8,
     // The app's private data directory.
     dataDir: []const u8,
-    // The file the test control connection writes its port to, or null for none.
-    testPortFile: ?[]const u8 = null,
+    // The remote control server's address, "host:port", or null when the app was started without --remote-control.
+    remoteControl: ?[]const u8 = null,
     // The native app's command-line arguments after the program's name.
     arguments: []const []const u8 = &.{},
     // The environment of the thread that created the core, as a JSON object of names and values, which the main thread sets as its own
@@ -825,7 +824,7 @@ fn startJson(arena: std.mem.Allocator, config: ZiggyConfig) ![]u8 {
         .appUrlPrefix = std.mem.span(config.app_url_prefix),
         .arguments = try types.configArguments(arena, config),
         .dataDir = std.mem.span(config.data_dir),
-        .testPortFile = if (config.test_port_file) |path| std.mem.span(path) else null,
+        .remoteControl = if (config.remote_control) |address| std.mem.span(address) else null,
         .environment = environment,
     });
 }
@@ -919,7 +918,7 @@ fn mainThread(given: MainStart) void {
     var config = main_start.config;
     config.app_url_prefix = (start_arena.dupeZ(u8, start_data.appUrlPrefix) catch @panic("out of memory starting the main thread")).ptr;
     config.data_dir = (start_arena.dupeZ(u8, start_data.dataDir) catch @panic("out of memory starting the main thread")).ptr;
-    config.test_port_file = if (start_data.testPortFile) |path| (start_arena.dupeZ(u8, path) catch @panic("out of memory starting the main thread")).ptr else null;
+    config.remote_control = if (start_data.remoteControl) |address| (start_arena.dupeZ(u8, address) catch @panic("out of memory starting the main thread")).ptr else null;
     // The native app's argument strings were valid only while it created the core, so the main thread keeps the start message's copies
     // (given to the app's on_create) and its configuration points at none.
     config.arg_count = 0;
@@ -1002,8 +1001,8 @@ fn mainThread(given: MainStart) void {
         },
     });
     const start_failure: ?anyerror = failed: {
-        if (build_options.test_hooks and config.test_mode) {
-            tests.connection = test_control.TestControl.start(allocator, io, config, frontend.native, queue) catch |err| {
+        if (config.remote_control != null) {
+            tests.connection = remote_control.RemoteControl.start(allocator, io, config, frontend.native, queue) catch |err| {
                 break :failed err;
             };
         }
@@ -1099,12 +1098,8 @@ fn mainThread(given: MainStart) void {
                         std.debug.panic("the core sent the main thread a message of an unknown type: {s}", .{message.text});
                     }
                 },
-                test_control.from_test_control => {
-                    // Only a build with the test hooks has a test control connection, so only it has the code that handles its
-                    // messages.
-                    if (build_options.test_hooks) {
-                        tests.handleMessage(io, allocator, timers, &dropped, message);
-                    }
+                remote_control.from_remote_control => {
+                    tests.handleMessage(io, allocator, timers, &dropped, message);
                 },
                 else => {
                     if (!pool.receive(io, allocator, timers, services.log, message)) {
@@ -1121,7 +1116,7 @@ fn mainThread(given: MainStart) void {
 }
 
 //
-// Handles a message that reaches the main thread while the worker pool stops, which no worker sent: a command from the test control
+// Handles a message that reaches the main thread while the worker pool stops, which no worker sent: a command from the remote control
 // connection is refused with ShuttingDown, so the connection stops waiting, and anything else is dropped.
 //
 fn refuseWhileStopping(user_data: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, message: QueueMessage) void {
@@ -1386,19 +1381,17 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
         };
         return try respond(arena, try system_messages.log.log(arena, services.log, payload));
     }
-    if (build_options.test_hooks) {
-        if (std.mem.eql(u8, name, "test-result")) {
-            const payload = switch (try handlers_lib.parsePayload(system_messages.test_hooks.TestResultRequest, arena, data)) {
-                .parsed => |value| value,
-                .invalid => |text| return .{
-                    .invalid_data = text,
-                },
-            };
-            return try respond(arena, try system_messages.test_hooks.testResult(tests, io, allocator, timers, payload));
-        }
-        if (std.mem.eql(u8, name, "test-ui-ready")) {
-            return try respond(arena, try system_messages.test_hooks.testUiReady(tests, io, allocator, timers));
-        }
+    if (std.mem.eql(u8, name, "test-result")) {
+        const payload = switch (try handlers_lib.parsePayload(system_messages.remote_control.TestResultRequest, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.remote_control.testResult(tests, io, allocator, timers, payload));
+    }
+    if (std.mem.eql(u8, name, "test-ui-ready")) {
+        return try respond(arena, try system_messages.remote_control.testUiReady(tests, io, allocator, timers));
     }
     return .unknown;
 }

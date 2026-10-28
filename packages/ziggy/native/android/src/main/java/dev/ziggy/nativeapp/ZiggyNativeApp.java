@@ -61,10 +61,6 @@ import org.json.JSONObject;
 public final class ZiggyNativeApp implements ZiggyNativeCalls {
     private static final String TAG = "Ziggy";
 
-    // The Intent extras a test hooks build reads. They are honoured only when the core library has the test hooks.
-    private static final String EXTRA_TEST_MODE = "ziggy.testMode";
-    private static final String EXTRA_TEST_PORT_FILE = "ziggy.testPortFile";
-
     // The prefix every address of the app's own frontend starts with. The frontend is embedded in the app's native library and
     // each file is served from there in shouldInterceptRequest. The host name is under .invalid, which can never be looked up.
     private static final String APP_URL_PREFIX = "https://ziggy-app.invalid/";
@@ -154,11 +150,7 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
     public void start() {
         System.loadLibrary(nativeLibraryName);
         Intent intent = activity.getIntent();
-        boolean testMode = ZiggyNative.testHooksEnabled() && intent.getBooleanExtra(EXTRA_TEST_MODE, false);
-        String testPortFile = null;
-        if (testMode) {
-            testPortFile = intent.getStringExtra(EXTRA_TEST_PORT_FILE);
-        }
+        String remoteControl = RemoteControlExtra.address(intent.getStringExtra(RemoteControlExtra.NAME));
 
         long created = ZiggyNative.create(
             this,
@@ -166,8 +158,7 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
             maxConcurrentChildTasks,
             APP_URL_PREFIX,
             activity.getFilesDir().getAbsolutePath(),
-            testMode,
-            testPortFile);
+            remoteControl);
         coreLock.writeLock().lock();
         try {
             handle = created;

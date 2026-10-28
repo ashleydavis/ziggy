@@ -236,7 +236,7 @@ pub fn run(init: std.process.Init, app: AppInfo) !u8 {
     const allocator = thread_allocator.allocator();
     const all_args = try init.minimal.args.toSlice(init.arena.allocator());
     const options = args_lib.parseDevHostOptions(all_args[1..]) catch |err| {
-        std.debug.print("ziggy dev host: {s}. Usage: --data-dir <dir> [--port <port>] [--port-file <file>]\n", .{@errorName(err)});
+        std.debug.print("ziggy dev host: {s}. Usage: --data-dir <dir> --ui-port <port> [--port <port>] [--port-file <file>] [--remote-control <host:port>]\n", .{@errorName(err)});
         return 2;
     };
     try std.Io.Dir.cwd().createDirPath(io, options.data_dir);
@@ -281,7 +281,7 @@ pub fn run(init: std.process.Init, app: AppInfo) !u8 {
         picking.join();
     }
 
-    try createCore(&dev_host, allocator, init.environ_map);
+    try createCore(&dev_host, allocator);
     defer destroyCore(&dev_host);
 
     if (options.port_file) |port_file| {
@@ -452,16 +452,16 @@ fn sendPending(dev_host: *DevHost, io: std.Io, allocator: std.mem.Allocator, pag
 }
 
 //
-// Creates the core with the dev host's callbacks. Test mode is on when the core was built with the test hooks and
-// ZIGGY_TEST_MODE is set, as in a native app, and the control connection's port goes to ZIGGY_TEST_PORT_FILE.
+// Creates the core with the dev host's callbacks. Test mode is on when the dev host was started with --remote-control, and the
+// core then connects to the remote control server at that address, as in a native app.
 //
-fn createCore(dev_host: *DevHost, allocator: std.mem.Allocator, environ_map: *std.process.Environ.Map) !void {
+fn createCore(dev_host: *DevHost, allocator: std.mem.Allocator) !void {
     const app_url_prefix = try std.fmt.allocPrintSentinel(allocator, "http://127.0.0.1:{d}/", .{dev_host.port}, 0);
     defer allocator.free(app_url_prefix);
     const data_dir = try allocator.dupeZ(u8, dev_host.options.data_dir);
     defer allocator.free(data_dir);
-    var test_port_file: ?[:0]u8 = null;
-    defer if (test_port_file) |path| allocator.free(path);
+    const remote_control: ?[:0]u8 = if (dev_host.options.remote_control) |address| try allocator.dupeZ(u8, address) else null;
+    defer if (remote_control) |address| allocator.free(address);
 
     var config = std.mem.zeroes(z.ziggy_config);
     config.wake_data = dev_host.queue;
@@ -473,12 +473,9 @@ fn createCore(dev_host: *DevHost, allocator: std.mem.Allocator, environ_map: *st
     config.max_concurrent_child_tasks = 10;
     config.app_url_prefix = app_url_prefix.ptr;
     config.data_dir = data_dir.ptr;
-    if (z.ziggy_test_hooks_enabled() and environ_map.get("ZIGGY_TEST_MODE") != null) {
+    if (remote_control) |address| {
         config.test_mode = true;
-        if (environ_map.get("ZIGGY_TEST_PORT_FILE")) |path| {
-            test_port_file = try allocator.dupeZ(u8, path);
-            config.test_port_file = test_port_file.?.ptr;
-        }
+        config.remote_control = address.ptr;
     }
     dev_host.core = z.ziggy_create(&config) orelse {
         return error.CoreCreateFailed;

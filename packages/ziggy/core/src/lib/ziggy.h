@@ -40,13 +40,13 @@ typedef struct ziggy_config {
     bool has_quit;
     // Whether the native app does "pick-paths" calls.
     bool has_pick_paths;
-    // Whether the native app does "menu-action" calls. False on a platform with no menu. Used only by the test control connection.
+    // Whether the native app does "menu-action" calls. False on a platform with no menu. Used only by the remote control connection.
     bool has_menu_action;
     // Whether the native app does "keep-alive" calls.
     bool has_keep_alive;
     // Whether the native app does "native-call" calls, the app's own native calls.
     bool has_native_call;
-    // Whether the native app does "screenshot" calls. Used only by the test control connection.
+    // Whether the native app does "screenshot" calls. Used only by the remote control connection.
     bool has_screenshot;
     // The number of worker threads.
     uint32_t worker_threads;
@@ -56,10 +56,11 @@ typedef struct ziggy_config {
     const char *app_url_prefix;
     // The app's private data directory (NUL terminated).
     const char *data_dir;
-    // Non-zero to start the test control connection. Used only in a test hooks build.
+    // Whether the app was started for a test, with --remote-control. The native app sets it exactly when remote_control is set.
     bool test_mode;
-    // The file the test control connection writes its port to, or NULL for none. Used only in a test hooks build.
-    const char *test_port_file;
+    // The remote control server's address, "host:port" (NUL terminated), which the core connects to, or NULL when the app was
+    // started without --remote-control.
+    const char *remote_control;
     // The number of the native app's command-line arguments in args, after the program's name. 0 for a native app with none (Android,
     // iOS).
     uint32_t arg_count;
@@ -194,9 +195,6 @@ bool ziggy_files_dropped(void *handle, const char *paths_json, size_t paths_len)
 // frontend's address and passes it through unread. The length, not counting the terminator, is written to the pointer given. Returns
 // NULL, after printing why, when the app could not make it, and the native app then does not load the frontend.
 const char *ziggy_ui_query(void *handle, size_t *length);
-
-// Returns true when the library was built with the test hooks.
-bool ziggy_test_hooks_enabled(void);
 
 #ifdef __cplusplus
 }

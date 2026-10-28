@@ -88,8 +88,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The app's private data directory, which the core is given.
     public let dataDirectory: URL
 
-    // Whether a test hooks build was started in test mode.
-    private let testMode: Bool
+    // The remote control server's address from --remote-control, or nil when the app was started without it. Test mode is on
+    // exactly when it is set.
+    private let remoteControl: String?
 
     // Handles the app's native calls. Set by setNativeCallHandler before start and read on the main thread only.
     private var nativeCallHandler: ZiggyNativeCallHandler?
@@ -145,7 +146,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
         self.dataDirectory = dataDirectory
 
-        self.testMode = ziggy_test_hooks_enabled() && ProcessInfo.processInfo.environment["ZIGGY_TEST_MODE"] != nil
+        self.remoteControl = ZiggyBridge.remoteControlAddress(Array(CommandLine.arguments.dropFirst()))
         self.core = nil
         self.destroyed = false
 
@@ -177,7 +178,6 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         if core != nil || destroyed {
             ZiggyBridge.fail("start was called more than once")
         }
-        let environment = ProcessInfo.processInfo.environment
 
         var config = ziggy_config()
         // The main queue hands the bridge's address back to the main thread, which is the only thread that reads it.
@@ -200,20 +200,17 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
 
         let prefixText = ZiggyBridge.duplicate(ZiggyBridge.appUrlPrefix)
         let dataText = ZiggyBridge.duplicate(dataDirectory.path)
-        var portFileText: UnsafeMutablePointer<CChar>? = nil
+        let remoteControlText = remoteControl.map { ZiggyBridge.duplicate($0) }
         defer {
             free(prefixText)
             free(dataText)
-            free(portFileText)
+            free(remoteControlText)
         }
         config.app_url_prefix = UnsafePointer(prefixText)
         config.data_dir = UnsafePointer(dataText)
-        if testMode {
+        if let remoteControlText = remoteControlText {
             config.test_mode = true
-            if let portFile = environment["ZIGGY_TEST_PORT_FILE"] {
-                portFileText = ZiggyBridge.duplicate(portFile)
-                config.test_port_file = UnsafePointer(portFileText)
-            }
+            config.remote_control = UnsafePointer(remoteControlText)
         }
         guard let created = ziggy_create(&config) else {
             ZiggyBridge.fail("ziggy_create failed")
@@ -276,7 +273,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
     }
 
-    // Ends the app. Only the core's test control connection makes this call.
+    // Ends the app. Only the core's remote control connection makes this call.
     private func quit() {
         // iOS has no way to quit an app, so the process ends once the core is destroyed.
         shutdown()
@@ -542,6 +539,19 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
                 ZiggyBridge.report("could not open \(url.absoluteString) in the system browser")
             }
         }
+    }
+
+    // The address after --remote-control in the command-line arguments after the program's name, or nil when there is none. A
+    // --remote-control with no address after it ends the app, because the test that started it waits for a connection that would
+    // never come.
+    static func remoteControlAddress(_ arguments: [String]) -> String? {
+        guard let index = arguments.firstIndex(of: "--remote-control") else {
+            return nil
+        }
+        if index + 1 >= arguments.count {
+            ZiggyBridge.fail("--remote-control needs the remote control server's address after it")
+        }
+        return arguments[index + 1]
     }
 
     // Copies text into a new NUL terminated C string, which the caller frees.

@@ -137,7 +137,7 @@ test "a task type the app declares can be queued, and one it does not declare fa
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"taskId\":\"after\",\"result\":{\"taskId\":\"after\",\"status\":\"succeeded\",\"outputs\":\"late task done\"");
 }
 
-test "every system message of Ziggy's parts is handled, the test hook ones too in a test hooks build" {
+test "every system message of Ziggy's parts is handled, the remote control ones too" {
     var native_app: helpers.FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
@@ -146,7 +146,7 @@ test "every system message of Ziggy's parts is handled, the test hook ones too i
     for ([_][]const u8{ "add-task", "cancel-tasks", "get-platform", "menu-action", "get-dropped-paths" }) |name| {
         try std.testing.expect(try systemHas(&native_app, name));
     }
-    // The unit tests run with the test hooks built in.
+    // The remote control messages are handled in every build.
     try std.testing.expect(try systemHas(&native_app, "test-result"));
     try std.testing.expect(try systemHas(&native_app, "test-ui-ready"));
 }

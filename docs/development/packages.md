@@ -5,7 +5,7 @@ Ziggy is in `packages/ziggy`, in three sides: the frontend, the core library and
 | Side | Name | Subdirectory | Language | What it holds | How an app uses it |
 |---|---|---|---|---|---|
 | Frontend | `ziggy`, the only npm package | [`packages/ziggy/frontend`](../../packages/ziggy/frontend) | TypeScript | The types of `window.ziggy`, the JSON types and the types of the task events the backend sends | `import type { ITaskCompletedEvent } from "ziggy"` |
-| Core | `ziggy` (the Zig module) | [`packages/ziggy/core`](../../packages/ziggy/core) | Zig, with C headers (`ziggy.h`, `jni-c.h`) and JavaScript (`ziggy-inject.js`) | The C interface, the message dispatcher, the task runner, the origin check, the native call plumbing, the test hooks, the task queue and the helpers it is written with, and `ziggy-inject.js`, the script that creates `window.ziggy`, which the core library embeds so an app supplies nothing for it | `@import("ziggy-core")` |
+| Core | `ziggy` (the Zig module) | [`packages/ziggy/core`](../../packages/ziggy/core) | Zig, with C headers (`ziggy.h`, `jni-c.h`) and JavaScript (`ziggy-inject.js`) | The C interface, the message dispatcher, the task runner, the origin check, the native call plumbing, the remote control connection, the task queue and the helpers it is written with, and `ziggy-inject.js`, the script that creates `window.ziggy`, which the core library embeds so an app supplies nothing for it | `@import("ziggy-core")` |
 | Native app, Linux | `ziggy-native-linux` | [`packages/ziggy/native/linux`](../../packages/ziggy/native/linux) | Zig, with a C header (`c.h`) | The host built on GTK 3 and WebKitGTK 4.1 | Built by the app's `build.zig` |
 | Native app, Windows | `ziggy-native-windows` | [`packages/ziggy/native/windows`](../../packages/ziggy/native/windows) | Zig, with a C header (`c.h`) | The WebView2 host | Built by the app's `build.zig` |
 | Native app, MacOS | `ZiggyNativeMacOS` | [`packages/ziggy/native/macos`](../../packages/ziggy/native/macos) | Swift | The WKWebView host, as a Swift package | Linked by the app's Xcode project |
@@ -14,6 +14,8 @@ Ziggy is in `packages/ziggy`, in three sides: the frontend, the core library and
 | Dev mode | `ziggy-dev` | [`packages/ziggy/dev`](../../packages/ziggy/dev) | Zig, with JavaScript (`dev-client.js`) | The dev backend, which runs an app's backend in front of the app's own dev server, and the supervisor that starts them and rebuilds the dev backend as the app's Zig files change. For development only: no native app and no release build includes it. | `addAppBackend` adds it, and the app runs it with `bun run dev` (`zig build <name>-dev`) |
 
 Each native app hosts the system web view, draws the menu, handles shortcuts and developer tools, shows the file and directory dialogs and moves messages between the frontend and the backend.
+
+The [remote control server](../../tools/remote-control-server/README.md) is in `tools/remote-control-server`, outside `packages/ziggy`, because it is a program the smoke tests run and no app includes it. An app gets it from the Ziggy repository as a dev dependency, as the bin `ziggy-remote-control-server`.
 
 The tests of `ziggy-inject.js` and of the dev backend's `dev-client.js` are in `ziggy` (`packages/ziggy/frontend/src/test`), which reads each script from where it is.
 

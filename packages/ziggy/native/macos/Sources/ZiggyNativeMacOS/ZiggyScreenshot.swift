@@ -1,5 +1,5 @@
 //
-// Screenshots for the core's "screenshot" calls, which only the test control connection makes. The call reaches the app's main thread,
+// Screenshots for the core's "screenshot" calls, which only the remote control connection makes. The call reaches the app's main thread,
 // which takes the snapshot with the web view's own takeSnapshot and returns at once: the snapshot's completion writes the file and
 // gives the outcome.
 //

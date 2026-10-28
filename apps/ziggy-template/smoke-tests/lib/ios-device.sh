@@ -5,13 +5,12 @@
 #
 # The app runs on a connected iPhone or iPad: ZIGGY_IOS_DEVICE names one, otherwise the first connected device is used (see
 # apple_pick_device). Xcode 14 has no command for running an app on a device, so scripts/ios-device.ts does it through
-# native-run's device library: it installs the app, launches it under the device's debugserver with the test environment,
-# and forwards the test control port over USB. Xcode's lldb then takes over the launched process, and is how the run
-# resumes it, sees it exit, stops it, and reads the files it writes in its data container, by evaluating Foundation calls
-# inside it while it is paused.
+# native-run's device library: it installs the app and launches it under the device's debugserver. Xcode's lldb then takes
+# over the launched process, and is how the run resumes it, sees it exit, stops it, and reads the files it writes in its data
+# container, by evaluating Foundation calls inside it while it is paused.
 #
 # iOS starts an app in the root directory whatever working directory debugserver is given, so the run moves the app into
-# its data container, by calling chdir in it before the backend is created, and gives the port file as a path relative to it.
+# its data container, by calling chdir in it before the backend is created.
 #
 # A device runs one copy of the app at a time, so a scenario claims the device under a lock for as long as it runs.
 
@@ -20,14 +19,6 @@ source "$IOS_DEVICE_SCRIPTS_DIR/lib/apple-common.sh"
 
 # The app's bundle identifier.
 IOS_DEVICE_BUNDLE_ID="dev.ziggy.template"
-
-#
-# Prints where the app writes its control port, relative to its data container. The container outlives the app, so each
-# scenario gets a name of its own, and a file an earlier scenario left can never be mistaken for this one's.
-#
-ziggy_ios_device_port_file() {
-    printf 'Library/ziggy-control-port-%s.txt\n' "$(basename "$1")"
-}
 
 # Seconds a scenario waits for the device to be free, and for lldb to respond.
 IOS_DEVICE_CLAIM_TIMEOUT_SECONDS=1800
@@ -206,26 +197,22 @@ ziggy_ios_device_container() {
 ziggy_platform_prepare() {
     local run_dir="$1"
     apple_require_tool node jq xcrun
-    bash "$IOS_DEVICE_SCRIPTS_DIR/build-ios.sh" --sdk device --arch arm64 --test-hooks --configuration Release --native-dir "$run_dir/test-native" --build-dir "$run_dir/test-build" || return 1
-    bash "$IOS_DEVICE_SCRIPTS_DIR/build-ios.sh" --sdk device --arch arm64 --configuration Release --native-dir "$run_dir/release-native" --build-dir "$run_dir/release-build" || return 1
+    bash "$IOS_DEVICE_SCRIPTS_DIR/build-ios.sh" --sdk device --arch arm64 --configuration Release --native-dir "$run_dir/app-native" --build-dir "$run_dir/app-build" || return 1
 }
 
 ziggy_platform_start() {
     local test_dir="$1"
-    local kind="$2"
-    local app="$ZIGGY_SMOKE_RUN_DIR/$kind-build/Build/Products/Release-iphoneos/ZiggyTemplate.app"
+    local app="$ZIGGY_SMOKE_RUN_DIR/app-build/Build/Products/Release-iphoneos/ZiggyTemplate.app"
     local udid
     udid="$(apple_pick_device)" || return 1
     ziggy_ios_device_claim "$udid" || return 1
 
-    # Installing replaces the other build, which shares the bundle identifier, and ends a copy that is running.
+    # Installing replaces any installed copy and ends a copy that is running.
     ziggy_ios_device_helper install "$udid" "$IOS_DEVICE_BUNDLE_ID" "$app" || return 1
 
     local pid pgid
     read -r pid pgid < <(launch_in_process_group "$test_dir/launch.log" node "$IOS_DEVICE_SCRIPTS_DIR/ios-device.ts" launch \
-        "$udid" "$IOS_DEVICE_BUNDLE_ID" "$test_dir/launch.json" \
-        ZIGGY_TEST_MODE=1 \
-        "ZIGGY_TEST_PORT_FILE=$(ziggy_ios_device_port_file "$test_dir")") || return 1
+        "$udid" "$IOS_DEVICE_BUNDLE_ID" "$test_dir/launch.json" -- --remote-control "$ZIGGY_REMOTE_CONTROL") || return 1
     echo "$pgid" > "$test_dir/launch.pgid"
     ziggy_ios_device_wait_file "$test_dir/launch.json" "$pid" "The device helper's launch" || {
         cat "$test_dir/launch.log" >&2
@@ -263,53 +250,6 @@ ziggy_platform_start() {
     }
 
     ziggy_ios_device_resume "$test_dir" || return 1
-    if [ "$kind" = "release" ]; then
-        return 0
-    fi
-
-    local waited=0
-    local device_port=""
-    while true; do
-        sleep 1
-        if ziggy_ios_device_exited "$test_dir"; then
-            echo "The app exited before its control connection came up." >&2
-            return 1
-        fi
-        device_port="$(ziggy_ios_device_read_port "$test_dir")" || return 1
-        if [ -n "$device_port" ]; then
-            break
-        fi
-        if [ "$waited" -ge 60 ]; then
-            echo "The app never wrote its control port." >&2
-            return 1
-        fi
-        waited=$((waited + 1))
-    done
-
-    read -r pid pgid < <(launch_in_process_group "$test_dir/forward.log" node "$IOS_DEVICE_SCRIPTS_DIR/ios-device.ts" forward \
-        "$udid" "$device_port" "$test_dir/forward.json") || return 1
-    echo "$pgid" > "$test_dir/forward.pgid"
-    ziggy_ios_device_wait_file "$test_dir/forward.json" "$pid" "The device helper's port forward" || {
-        cat "$test_dir/forward.log" >&2
-        return 1
-    }
-    ZIGGY_CONTROL_HOST=127.0.0.1
-    ZIGGY_CONTROL_PORT="$(jq -r '.port' "$test_dir/forward.json")"
-    export ZIGGY_CONTROL_HOST ZIGGY_CONTROL_PORT
-}
-
-#
-# Prints the control port the app wrote, and nothing when it has not written one.
-#
-ziggy_ios_device_read_port() {
-    local test_dir="$1"
-    local container text
-    container="$(ziggy_ios_device_container "$test_dir")"
-    ziggy_ios_device_pause "$test_dir" || return 1
-    # Encoding 4 is NSUTF8StringEncoding, a name lldb's expression parser does not know.
-    text="$(ziggy_ios_device_evaluate "$test_dir" "[[NSString stringWithContentsOfFile:@\"$container/$(ziggy_ios_device_port_file "$test_dir")\" encoding:4 error:nil] stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]]")" || return 1
-    ziggy_ios_device_resume "$test_dir" || return 1
-    printf '%s' "$text" | tr -d '\n' | grep -E '^[0-9]+$' || true
 }
 
 ziggy_platform_stop() {
@@ -321,7 +261,7 @@ ziggy_platform_stop() {
         ziggy_ios_device_lldb "quit"
     fi
     local name
-    for name in forward lldb launch; do
+    for name in lldb launch; do
         if [ -s "$test_dir/$name.pgid" ]; then
             kill_process_group "$(cat "$test_dir/$name.pgid")" || true
             : > "$test_dir/$name.pgid"
@@ -385,20 +325,6 @@ ziggy_platform_wait_exit() {
 ziggy_platform_is_running() {
     local test_dir="$1"
     [ -s "$test_dir/launch.json" ] && ! ziggy_ios_device_exited "$test_dir"
-}
-
-# The Zig static library carries the backend, so it is what scenario 8 searches.
-ziggy_platform_artifact_files() {
-    local kind="$1"
-    printf '%s\n' "$ZIGGY_SMOKE_RUN_DIR/$kind-native/lib/libziggy_template.a"
-}
-
-ziggy_platform_has_control_port() {
-    local test_dir="$1"
-    if ziggy_ios_device_exited "$test_dir"; then
-        return 1
-    fi
-    [ -n "$(ziggy_ios_device_read_port "$test_dir")" ]
 }
 
 #

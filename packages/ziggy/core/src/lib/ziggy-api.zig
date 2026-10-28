@@ -9,7 +9,6 @@
 //
 
 const std = @import("std");
-const build_options = @import("build_options");
 const types = @import("types.zig");
 const core = @import("core.zig");
 const accelerator = @import("accelerator.zig");
@@ -75,7 +74,7 @@ const UiFileResult = extern struct {
 
 //
 // Exports every function declared in ziggy.h (ziggy_create, ziggy_destroy, ziggy_send_message, ziggy_check_url, ziggy_menu_json,
-// ziggy_ui_file, ziggy_inject_script, ziggy_parse_accelerator, ziggy_test_hooks_enabled, ziggy_files_dropped, ziggy_ui_query,
+// ziggy_ui_file, ziggy_inject_script, ziggy_parse_accelerator, ziggy_files_dropped, ziggy_ui_query,
 // ziggy_take_native_message and ziggy_native_result) from the library
 // that calls this, serving the app registered with App. It is called once, from app-root.zig.
 //
@@ -273,13 +272,6 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
             length.* = text.len;
             return text.ptr;
         }
-
-        //
-        // ziggy_test_hooks_enabled: returns whether this library was built with the test hooks.
-        //
-        fn testHooksEnabled() callconv(.c) bool {
-            return build_options.test_hooks;
-        }
     };
     @export(&Api.create, .{
         .name = "ziggy_create",
@@ -304,9 +296,6 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
     });
     @export(&Api.parseAccelerator, .{
         .name = "ziggy_parse_accelerator",
-    });
-    @export(&Api.testHooksEnabled, .{
-        .name = "ziggy_test_hooks_enabled",
     });
     @export(&Api.filesDropped, .{
         .name = "ziggy_files_dropped",

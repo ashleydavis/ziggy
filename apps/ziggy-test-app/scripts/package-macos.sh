@@ -22,6 +22,8 @@ while [ $# -gt 0 ]; do
             ;;
         --output-dir)
             OUTPUT_DIR="$2"
+            # The build goes with the package, so two runs given different directories share nothing.
+            BUILD_DIR="$2/build"
             shift 2
             ;;
         *)

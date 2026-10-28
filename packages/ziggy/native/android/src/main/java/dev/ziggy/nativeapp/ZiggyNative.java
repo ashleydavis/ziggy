@@ -7,18 +7,15 @@ final class ZiggyNative {
     private ZiggyNative() {
     }
 
-    // Whether the core library was built with the test hooks.
-    static native boolean testHooksEnabled();
-
-    // Creates a core and returns its handle, on the main thread. Throws when the core cannot be created. testPortFile may be null.
+    // Creates a core and returns its handle, on the main thread. Throws when the core cannot be created. remoteControl is the remote
+    // control server's address, or null when the app was started without the ziggy.remoteControl extra.
     static native long create(
         ZiggyNativeCalls nativeCalls,
         int workerThreads,
         int maxConcurrentChildTasks,
         String appUrlPrefix,
         String dataDir,
-        boolean testMode,
-        String testPortFile);
+        String remoteControl);
 
     // The handle of the core's main thread's queue, which sendMessage takes. It is the only part of the core a thread other than the
     // main thread reaches.

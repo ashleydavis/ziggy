@@ -94,7 +94,7 @@ pub const FakeNativeApp = struct {
         var copied = given_config;
         copied.app_url_prefix = "";
         copied.data_dir = "";
-        copied.test_port_file = null;
+        copied.remote_control = null;
         copied.arg_count = 0;
         copied.args = null;
         self.ui_thread = try std.Thread.spawn(.{}, runUiThread, .{ &self.queue, &self.native_queue, copied, app });
@@ -107,7 +107,7 @@ pub const FakeNativeApp = struct {
             .request = "start",
             .appUrlPrefix = std.mem.span(given_config.app_url_prefix),
             .dataDir = std.mem.span(given_config.data_dir),
-            .testPortFile = if (given_config.test_port_file) |path| std.mem.span(path) else null,
+            .remoteControl = if (given_config.remote_control) |address| std.mem.span(address) else null,
             .arguments = try types.configArguments(arena_state.allocator(), given_config),
             .environment = environment,
         });
@@ -170,7 +170,7 @@ pub const FakeNativeApp = struct {
             .app_url_prefix = "file:///app/dist/",
             .data_dir = &self.data_dir_path,
             .test_mode = false,
-            .test_port_file = null,
+            .remote_control = null,
             .arg_count = 0,
             .args = null,
         };
@@ -309,7 +309,7 @@ pub const FakeNativeApp = struct {
     }
 
     //
-    // Waits until the native app has been asked to quit, and fails the test when it takes too long. Test control asks only after it
+    // Waits until the native app has been asked to quit, and fails the test when it takes too long. Remote control asks only after it
     // has written its reply to the quit command, so a test that has read the reply cannot check quitCalled straight away: the
     // Android unit tests (CI run on commit 024a4c8) failed "the quit command calls the native app's quit callback" doing that.
     //
@@ -394,7 +394,7 @@ const Request = struct {
     request: []const u8,
     appUrlPrefix: ?[]const u8 = null,
     dataDir: ?[]const u8 = null,
-    testPortFile: ?[]const u8 = null,
+    remoteControl: ?[]const u8 = null,
     arguments: ?[]const []const u8 = null,
     environment: ?std.json.Value = null,
     type: ?[]const u8 = null,
@@ -551,7 +551,7 @@ fn runUiThread(main_queue: *MessageQueue, native_queue: *MessageQueue, given_con
                     var config = given_config;
                     config.app_url_prefix = (arena.dupeZ(u8, request.appUrlPrefix.?) catch @panic("out of memory starting the core")).ptr;
                     config.data_dir = (arena.dupeZ(u8, request.dataDir.?) catch @panic("out of memory starting the core")).ptr;
-                    config.test_port_file = if (request.testPortFile) |path| (arena.dupeZ(u8, path) catch @panic("out of memory starting the core")).ptr else null;
+                    config.remote_control = if (request.remoteControl) |address| (arena.dupeZ(u8, address) catch @panic("out of memory starting the core")).ptr else null;
                     const arguments = request.arguments orelse &.{};
                     const argument_pointers = arena.alloc([*:0]const u8, arguments.len) catch @panic("out of memory starting the core");
                     for (arguments, argument_pointers) |argument, *pointer| {

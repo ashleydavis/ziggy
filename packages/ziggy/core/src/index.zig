@@ -1,6 +1,6 @@
 //
 // Ziggy core: the C interface, the main thread, the worker pool and its workers, the messages they send each other, the origin check,
-// native calls and test hooks.
+// native calls and the remote control connection.
 //
 
 pub const types = @import("lib/types.zig");
@@ -16,7 +16,8 @@ pub const timers = @import("lib/timers.zig");
 pub const core = @import("lib/core.zig");
 pub const ziggy_api = @import("lib/ziggy-api.zig");
 pub const jni = @import("lib/jni.zig");
-pub const test_control = @import("lib/test-control.zig");
+pub const remote_control = @import("lib/remote-control.zig");
+pub const remote_control_arguments = @import("lib/remote-control-arguments.zig");
 pub const native_call_result = @import("lib/native-call-result.zig");
 pub const fake_native_app = @import("lib/fake-native-app.zig");
 pub const accelerator = @import("lib/accelerator.zig");

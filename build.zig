@@ -3,14 +3,12 @@ const android_libc = @import("build/android-libc.zig");
 
 //
 // Builds Ziggy and registers its tests. As a dependency of an app's build it gives the app the
-// module "ziggy" (the core, with its task queue, which the app's code imports as @import("ziggy")), built for the target,
-// optimize mode and test hooks the app passes in. The functions below that are `pub` are what an app's build.zig calls to build its
+// module "ziggy" (the core, with its task queue, which the app's code imports as @import("ziggy")), built for the target and
+// optimize mode the app passes in. The functions below that are `pub` are what an app's build.zig calls to build its
 // core library and its Linux and Windows native apps; it reaches them with @import("ziggy") in its build.zig.
 //
 pub fn build(b: *std.Build) !void {
     const target = b.standardTargetOptions(.{});
-    // Whether the test hooks (the test control connection) are built into the core. Never for a release.
-    const test_hooks = b.option(bool, "test-hooks", "Build the test hooks (the test control connection) into the core (never for a release)") orelse false;
     // ReleaseSafe by default: the tests keep the safety checks.
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Prioritize performance, safety, or binary size (default: ReleaseSafe)") orelse .ReleaseSafe;
     // The name of the app this core is built for, which names its log files. dependency sets it from the app's app.zon.
@@ -26,9 +24,9 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
-    try configureCore(b, core, target, optimize, test_hooks, app_name, app_title, app_version);
+    try configureCore(b, core, target, optimize, app_name, app_title, app_version);
 
-    // The unit tests of Ziggy's core and its task queue, which run the core with the test hooks compiled in.
+    // The unit tests of Ziggy's core and its task queue. The remote control code is in every build.
     const test_step = b.step("test", "Run the unit tests of Ziggy (the core, the native apps and the dev host), of the Ziggy template and of Ziggy's test app");
     const test_core = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/core/src/index.zig"),
@@ -36,12 +34,20 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
-    try configureCore(b, test_core, target, optimize, true, null, null, null);
+    try configureCore(b, test_core, target, optimize, null, null, null);
     const core_test_binary_step = b.step("test-binary-ziggy-core", "Build the unit test program of Ziggy's core and install it to test-bin without running it");
     try addDirectoryTests(b, test_step, "packages/ziggy/core", &.{
         .{
             .name = "ziggy",
             .module = test_core,
+        },
+        // The core's remote control tests run a WebSocket server of their own for the core to connect to.
+        .{
+            .name = "websocket",
+            .module = b.dependency("websocket", .{
+                .target = target,
+                .optimize = optimize,
+            }).module("websocket"),
         },
         // The Windows native app's list of the actions it does itself, which the menu's tests compare with the core's list.
         .{
@@ -114,25 +120,28 @@ pub fn build(b: *std.Build) !void {
 }
 
 //
-// Gives the core module its build options and imports. The test hooks compile in the test control connection: they are off for a
-// release and on for the tests and for the builds the smoke tests drive. The app's name, title and version, null for Ziggy's own tests, name and head its log files.
+// Gives the core module its build options and imports. The app's name, title and version, null for Ziggy's own tests, name and head
+// its log files.
 //
 fn configureCore(
     b: *std.Build,
     module: *std.Build.Module,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
-    test_hooks: bool,
     app_name: ?[]const u8,
     app_title: ?[]const u8,
     app_version: ?[]const u8,
 ) !void {
     const options = b.addOptions();
-    options.addOption(bool, "test_hooks", test_hooks);
     options.addOption(?[]const u8, "app_name", app_name);
     options.addOption(?[]const u8, "app_title", app_title);
     options.addOption(?[]const u8, "app_version", app_version);
     module.addOptions("build_options", options);
+    // The remote control connection is a WebSocket client, and websocket.zig is the WebSocket library it uses.
+    module.addImport("websocket", b.dependency("websocket", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("websocket"));
 
     // The Android native app reaches the core through JNI, written in Zig against the NDK's own jni.h. Only an Android target has that
     // header, so the import exists only for one.
@@ -161,15 +170,13 @@ pub const IZiggy = struct {
 
 //
 // Gets Ziggy for an app's build, from the dependency named "ziggy" in the app's build.zig.zon, built for the target and optimize mode,
-// with the test hooks or without, and for the app its app.zon describes (see readAppDetails). A build that needs both (an app with test
-// hooks off and its unit tests, which run with them on) calls it twice.
+// and for the app its app.zon describes (see readAppDetails).
 //
-pub fn dependency(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, test_hooks: bool) IZiggy {
+pub fn dependency(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) IZiggy {
     const details = readAppDetails(b);
     const ziggy_dependency = b.dependency("ziggy", .{
         .target = target,
         .optimize = optimize,
-        .@"test-hooks" = test_hooks,
         .@"app-name" = details.name,
         .@"app-title" = details.title,
         .@"app-version" = details.version,
@@ -604,6 +611,11 @@ pub fn addLinuxNativeApp(
         .target = target,
         .optimize = optimize,
     }));
+    native_app.addImport("remote-control-arguments", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/remote-control-arguments.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
     for (runtime_library_paths.items) |path| {
         native_app.addObjectFile(.{
             .cwd_relative = path,
@@ -691,6 +703,11 @@ pub fn addWindowsNativeApp(
         .target = target,
         .optimize = optimize,
     }));
+    native_app.addImport("remote-control-arguments", b.createModule(.{
+        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/remote-control-arguments.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
     native_app.linkSystemLibrary("user32", .{});
     native_app.linkSystemLibrary("kernel32", .{});
     native_app.linkSystemLibrary("ole32", .{});
@@ -764,8 +781,7 @@ pub fn addWindowsNativeApp(
 // installed to bin/<name>-dev-host. Its core embeds no frontend, because the dev server serves the frontend, so dev mode needs
 // no frontend built. The `<name>-dev` step runs the supervisor, which starts the app's dev server (its `dev:ui` package script),
 // builds and starts the dev host, opens the browser and rebuilds and restarts the dev host when a Zig file of the app or of Ziggy
-// changes. Options after `--` go to the supervisor: `--no-open` leaves the browser closed, `--port <port>` serves the app on that
-// port and `--test-hooks` builds the dev host with the test hooks.
+// changes. Options after `--` go to the supervisor: `--no-open` leaves the browser closed, `--port <port>` serves the app on that port.
 // Nothing else links the dev host, so no native app and no release build includes it.
 //
 fn addDevMode(

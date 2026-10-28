@@ -2,7 +2,7 @@
 
 # Hello world example: change it into your own smoke test, or delete it.
 #
-# Starts the real app, built with the test hooks, presses each button and checks what its log shows: the backend's message response to the
+# Starts the built app through the remote control server, presses each button and checks what its log shows: the backend's message response to the
 # hello-world message, and the output of the hello-world task and how it ended.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"

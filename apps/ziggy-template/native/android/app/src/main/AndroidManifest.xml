@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- The remote control connection, which the app opens to the remote control server only when started with the
+         ziggy.remoteControl extra, is a socket, and Android refuses an app a socket without this permission. The app reaches no
+         other host: its frontend is in the APK and external links open in the system browser. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
     <application
         android:label="Ziggy template"
         android:allowBackup="false"

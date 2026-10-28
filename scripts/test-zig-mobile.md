@@ -8,7 +8,7 @@ From the root of the Ziggy repository, `bun run test:zig:android` and `bun run t
 
 ## Arguments
 
-- `android`: claims a device the way Ziggy's Android smoke tests do (the devices named in `ZIGGY_ANDROID_DEVICES`, else any attached emulator or device), builds the programs for that device's architecture against the NDK's libc, pushes each to `/data/local/tmp` and runs it there. The NDK comes from `ANDROID_HOME`, the version `native/android/variables.gradle` pins. A run on a CI emulator names it with `ZIGGY_ANDROID_DEVICES=emulator-5554`.
+- `android`: claims a device the way Ziggy's Android smoke tests do (the devices named in `ZIGGY_ANDROID_DEVICES`, else an attached plugged-in device when there is one, else any attached emulator), builds the programs for that device's architecture against the NDK's libc, pushes each to `/data/local/tmp` and runs it there. The NDK comes from `ANDROID_HOME`, the version `native/android/variables.gradle` pins. A run on a CI emulator names it with `ZIGGY_ANDROID_DEVICES=emulator-5554`.
 - `ios`: builds the programs for the iOS simulator (`aarch64-ios.14.0-simulator`) and runs each with `xcrun simctl spawn` on the booted simulator. A simulator must already be booted, and the script fails when none is. It needs a Mac.
 - `--ziggy-dir <dir>`: a checkout of Ziggy, whose core library's tests run as well.
 
