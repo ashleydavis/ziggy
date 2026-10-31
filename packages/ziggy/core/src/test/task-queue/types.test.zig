@@ -1,5 +1,5 @@
 const std = @import("std");
-const MuteLog = @import("ziggy").task_queue.utils.mute_log.MuteLog;
+const MuteLog = @import("ziggy").log.mute_log.MuteLog;
 const task_queue_zig = @import("ziggy").task_queue;
 const types = task_queue_zig.types;
 
@@ -48,7 +48,7 @@ test "ITaskResult round-trips through JSON" {
 //
 // Counts the calls of a callback closure.
 //
-fn countCall(context: ?*anyopaque, allocator: std.mem.Allocator, log: @import("ziggy").task_queue.utils.log.ILog, taskId: []const u8) void {
+fn countCall(context: ?*anyopaque, allocator: std.mem.Allocator, log: @import("ziggy").log.ILog, taskId: []const u8) void {
     _ = log;
     _ = allocator;
     _ = taskId;

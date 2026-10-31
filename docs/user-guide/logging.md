@@ -6,7 +6,7 @@ Ziggy has one logging system for every program built on it: a Ziggy app's backen
 
 ## Logging a line
 
-There is no global log. Code logs to the `ILog` (`ziggy.task_queue.utils.log.ILog`) it is given:
+There is no global log. Code logs to the `ILog` (`ziggy.log.ILog`) it is given:
 
 - A message handler, a menu item's function or an app function writes to `services.log`, the main thread's log on its handler services.
 - A task's handler writes to `services.log` on its task services, the worker's log. A task queue handler reads the same log from its context, `context.log`.
@@ -20,7 +20,7 @@ fn importPhotos(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timer
     try readThumbnail(io, log, request.path);
 }
 
-fn readThumbnail(io: std.Io, log: ziggy.task_queue.utils.log.ILog, path: []const u8) !void {
+fn readThumbnail(io: std.Io, log: ziggy.log.ILog, path: []const u8) !void {
     readFile(io, path) catch |err| {
         log.exception("Could not read the file", err);
         return err;
@@ -28,7 +28,7 @@ fn readThumbnail(io: std.Io, log: ziggy.task_queue.utils.log.ILog, path: []const
 }
 ```
 
-There is no function that gives a log. Code that has been given no log, such as a test, `main` before it has made its log or a thread of a program's own, makes a `ziggy.task_queue.utils.log.ConsoleLog` where it starts (`var console_log: ConsoleLog = .{};`, every option off unless it sets one) and passes `console_log.ilog()` down.
+There is no function that gives a log. Code that has been given no log, such as a test, `main` before it has made its log or a thread of a program's own, makes a `ziggy.log.ConsoleLog` where it starts (`var console_log: ConsoleLog = .{};`, every option off unless it sets one) and passes `console_log.ilog()` down.
 
 | Function | What it logs |
 |---|---|
@@ -129,7 +129,7 @@ Duration: 307000ms (307.00s)
 A Ziggy app's file log is started and stopped by Ziggy (see [In a Ziggy app](#in-a-ziggy-app)). Any other program starts the file log once, on its main thread, with `FileLog.start`, and stops it once at the end with `stop`. Starting it does not make it anyone's log: the program passes `logger.ilog()` down to the code that logs.
 
 ```zig
-const file_log = ziggy.task_queue.utils.file_log;
+const file_log = ziggy.log.file_log;
 
 const logger = try file_log.FileLog.start(allocator, io, .{
     .file_prefix = "my-app",
@@ -240,9 +240,9 @@ A program with a worker pool of its own, or anything else that receives log line
 
 | File | What it holds |
 |---|---|
-| `packages/ziggy/core/src/lib/task-queue/utils/log.zig` | The `ILog` interface and the console log. |
-| `packages/ziggy/core/src/lib/task-queue/utils/file-log.zig` | The file log, `defaultLogsDir` and `readLogDetails`. |
-| `packages/ziggy/core/src/lib/task-queue/utils/temp-dir.zig` | `osTmpDir`, the operating system's temporary directory. |
+| `packages/ziggy/log/src/lib/log.zig` | The `ILog` interface and the console log. |
+| `packages/ziggy/log/src/lib/file-log.zig` | The file log, `defaultLogsDir` and `readLogDetails`. |
+| `packages/ziggy/utils/src/lib/temp-dir.zig` | `osTmpDir`, the operating system's temporary directory. |
 | `packages/ziggy/core/src/lib/thread-log.zig` | A worker's log, which sends its lines to the main thread. |
 | `packages/ziggy/core/src/lib/worker-pool.zig` | `writeLog`, which writes a worker's line to the main thread's log. |
 | `packages/ziggy/core/src/lib/system-messages/log.zig` | The `log` system message `window.ziggy.log` sends. |

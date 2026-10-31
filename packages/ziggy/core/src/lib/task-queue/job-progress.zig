@@ -4,7 +4,7 @@
 
 const std = @import("std");
 const types = @import("types.zig");
-const utils = @import("utils.zig");
+const ILog = @import("log").ILog;
 const IJobTag = types.IJobTag;
 const ITaskContext = types.ITaskContext;
 
@@ -33,7 +33,7 @@ fn jobTagToJson(allocator: std.mem.Allocator, job: IJobTag) !std.json.Value {
 // (Zig: the IJobProgressEvent is sent as its JSON object; progressMessage is left out when there is
 // none, as JSON.stringify leaves out an undefined property.)
 //
-pub fn sendJobProgress(allocator: std.mem.Allocator, io: std.Io, log: utils.log.ILog, context: ITaskContext, job: ?IJobTag, startedAt: i64, progressMessage: ?[]const u8) !void {
+pub fn sendJobProgress(allocator: std.mem.Allocator, io: std.Io, log: ILog, context: ITaskContext, job: ?IJobTag, startedAt: i64, progressMessage: ?[]const u8) !void {
     const jobTag = job orelse {
         return;
     };

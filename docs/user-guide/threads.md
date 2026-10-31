@@ -46,7 +46,7 @@ The main thread is never the native app's UI thread, on any platform. The native
 
 ## What each thread may touch
 
-- Each thread makes its own allocator when it starts (`ziggy.thread_allocator.ThreadAllocator`). It has no lock, because only that thread uses it. Memory is never freed on a thread other than the one that allocated it.
+- Each thread makes its own allocator when it starts (`ziggy.utils.thread_allocator.ThreadAllocator`). It has no lock, because only that thread uses it. Memory is never freed on a thread other than the one that allocated it.
 - Each thread makes its own `std.Io`. A call into a message queue is given the Io of the calling thread.
 - The main thread's state can be a top-level `var` of the backend, read and changed only by the functions that run on the main thread.
 - A task never sees the main thread's state. It gets what it needs as JSON input when it is queued. The main thread hears what the task sends back in `on_task_event` and `on_task_end`.
@@ -147,7 +147,7 @@ An app can start threads of its own, such as the threads of a server it runs. Ke
 |---|---|
 | `packages/ziggy/core/src/lib/core.zig` | The main thread and its message loop. |
 | `packages/ziggy/core/src/lib/message-queue.zig` | The queue every thread reads its messages from. |
-| `packages/ziggy/core/src/lib/thread-allocator.zig` | The allocator each thread makes for itself. |
+| `packages/ziggy/utils/src/lib/thread-allocator.zig` | The allocator each thread makes for itself. |
 | `packages/ziggy/core/src/lib/native-app.zig` | How a thread of the backend reaches the native app. |
 | `packages/ziggy/core/src/lib/worker-pool.zig` | The main thread's side of the tasks. |
 | `packages/ziggy/core/src/lib/worker.zig` | A worker thread and how it runs a task, waits and is cancelled. |

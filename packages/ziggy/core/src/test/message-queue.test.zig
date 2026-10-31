@@ -2,7 +2,7 @@ const std = @import("std");
 const ziggy = @import("ziggy");
 
 const MessageQueue = ziggy.message_queue.MessageQueue;
-const ThreadAllocator = ziggy.thread_allocator.ThreadAllocator;
+const ThreadAllocator = ziggy.utils.thread_allocator.ThreadAllocator;
 
 const io = std.testing.io;
 

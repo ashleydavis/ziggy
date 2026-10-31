@@ -15,9 +15,9 @@ const json = @import("json.zig");
 const core = @import("core.zig");
 const native_message = @import("native-message.zig");
 const NativeSide = @import("native-side.zig").NativeSide;
-const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
+const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
 const worker_lib = @import("worker.zig");
-const process_env = @import("task-queue.zig").utils.process_env;
+const process_env = @import("utils").process_env;
 
 const MessageQueue = core.MessageQueue;
 

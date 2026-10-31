@@ -11,7 +11,7 @@ const HandlerServices = ziggy.core.HandlerServices;
 const TaskServices = ziggy.task_runner.TaskServices;
 const TaskContext = ziggy.task_runner.TaskContext;
 const Timers = ziggy.timers.Timers;
-const ILogOptions = ziggy.task_queue.utils.log.ILogOptions;
+const ILogOptions = ziggy.log.ILogOptions;
 const json = ziggy.json;
 
 //
@@ -686,7 +686,7 @@ pub fn mediaServerHandler(services: TaskServices, timers: Timers, io: std.Io, al
 //
 fn acceptConnections(given: std.Io.net.Server, queue: *ziggy.message_queue.MessageQueue) void {
     var listener = given;
-    var thread_allocator: ziggy.thread_allocator.ThreadAllocator = .init;
+    var thread_allocator: ziggy.utils.thread_allocator.ThreadAllocator = .init;
     defer thread_allocator.deinit();
     const allocator = thread_allocator.allocator();
     var threaded: std.Io.Threaded = .init_single_threaded;

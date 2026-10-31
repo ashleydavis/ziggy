@@ -26,7 +26,7 @@ const origin_check = @import("origin-check.zig");
 const inject_script = @import("inject-script.zig");
 const native_message = @import("native-message.zig");
 const NativeSide = @import("native-side.zig").NativeSide;
-const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
+const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
 
 const MessageQueue = core.MessageQueue;
 

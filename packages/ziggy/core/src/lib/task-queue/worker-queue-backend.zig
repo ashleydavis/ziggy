@@ -11,7 +11,7 @@
 //
 
 const std = @import("std");
-const utils = @import("utils.zig");
+const utils = @import("utils");
 const types = @import("types.zig");
 const queue_backend = @import("queue-backend.zig");
 const Timers = @import("../timers.zig").Timers;
@@ -26,7 +26,7 @@ const IEventCallbackEntry = types.IEventCallbackEntry;
 const TaskAddedCallback = types.TaskAddedCallback;
 const TasksCancelledCallback = types.TasksCancelledCallback;
 const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
-const ILog = utils.log.ILog;
+const ILog = @import("log").ILog;
 
 //
 // Sends a message to the main thread: the worker's `parentPort.postMessage`.

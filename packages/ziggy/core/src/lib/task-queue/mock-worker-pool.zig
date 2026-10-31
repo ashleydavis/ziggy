@@ -14,11 +14,11 @@ const message_queue = @import("../message-queue.zig");
 const worker_pool = @import("../worker-pool.zig");
 const task_runner = @import("../task-runner.zig");
 const app = @import("../app.zig");
-const utils = @import("utils.zig");
+const utils = @import("utils");
 const IQueueBackend = queue_backend.IQueueBackend;
 const Timers = @import("../timers.zig").Timers;
 const errors = utils.errors;
-const ILog = utils.log.ILog;
+const ILog = @import("log").ILog;
 
 //
 // The parts of the task context shared by every task.

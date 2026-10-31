@@ -1,5 +1,5 @@
 //
-// The task queue the core runs tasks through: the queue, its worker and the helpers it is written with.
+// The task queue the core runs tasks through: the queue and its worker.
 //
 
 pub const task_queue = @import("task-queue/task-queue.zig");
@@ -17,10 +17,3 @@ pub const pending_task_queue = @import("task-queue/pending-task-queue.zig");
 // packages can test code that uses TaskQueue.
 //
 pub const mock_worker_pool = @import("task-queue/mock-worker-pool.zig");
-
-
-//
-// The helpers the task queue is written with (logging, errors, IDs, timestamps, the process environment and running tools),
-// exported so that Ziggy's core and the app's code use the same ones.
-//
-pub const utils = @import("task-queue/utils.zig");

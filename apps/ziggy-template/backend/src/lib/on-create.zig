@@ -5,7 +5,7 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
 
-const ILogOptions = ziggy.task_queue.utils.log.ILogOptions;
+const ILogOptions = ziggy.log.ILogOptions;
 
 //
 // Configures the log once, as early as the app can, from the options on the template's command line.

@@ -61,7 +61,7 @@ const Client = struct {
     }
 
     fn run(messages: *ziggy.message_queue.MessageQueue, results: *ziggy.message_queue.MessageQueue, port: u16) void {
-        var thread_allocator: ziggy.thread_allocator.ThreadAllocator = .init;
+        var thread_allocator: ziggy.utils.thread_allocator.ThreadAllocator = .init;
         defer thread_allocator.deinit();
         const allocator = thread_allocator.allocator();
         var threaded: std.Io.Threaded = .init_single_threaded;

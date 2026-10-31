@@ -350,7 +350,7 @@ test "a handler that sends its response later through its reply, from another th
 // Sends the later message's response, on a thread of its own, with an Io and an allocator of its own.
 //
 fn sendLater(reply: ziggy.core.Reply(helpers.GreetResponse)) void {
-    var thread_allocator: ziggy.thread_allocator.ThreadAllocator = .init;
+    var thread_allocator: ziggy.utils.thread_allocator.ThreadAllocator = .init;
     defer thread_allocator.deinit();
     var threaded: std.Io.Threaded = .init_single_threaded;
     threaded.allocator = thread_allocator.allocator();

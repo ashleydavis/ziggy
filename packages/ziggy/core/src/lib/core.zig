@@ -16,7 +16,7 @@ const build_options = @import("build_options");
 const types = @import("types.zig");
 const json = @import("json.zig");
 const task_runner = @import("task-runner.zig");
-const task_queue = @import("task-queue.zig");
+const utils = @import("utils");
 const test_control = @import("test-control.zig");
 const test_commands = @import("test-commands.zig");
 const dropped_files = @import("dropped-files.zig");
@@ -30,7 +30,7 @@ const worker_lib = @import("worker.zig");
 const worker_messages = @import("worker-messages.zig");
 const timers_lib = @import("timers.zig");
 const services_lib = @import("services.zig");
-const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
+const ThreadAllocator = utils.thread_allocator.ThreadAllocator;
 const native_app = @import("native-app.zig");
 const native_message = @import("native-message.zig");
 const NativeApp = native_app.NativeApp;
@@ -41,10 +41,7 @@ const ZiggyConfig = types.ZiggyConfig;
 const QueueMessage = message_queue.Message;
 const TimerList = timers_lib.TimerList;
 const TestCommands = test_commands.TestCommands;
-const FileLog = task_queue.utils.file_log.FileLog;
-const ILog = task_queue.utils.log.ILog;
-const ILogOptions = task_queue.utils.log.ILogOptions;
-const ConsoleLog = task_queue.utils.log.ConsoleLog;
+const logging = @import("log");
 
 pub const MessageQueue = message_queue.MessageQueue;
 
@@ -313,10 +310,10 @@ const MainServices = struct {
     // The native app's configuration, with the main thread's copies of its strings.
     config: *const ZiggyConfig,
     // The main thread's log for the whole run: the app's file log, or the console log for an app without one.
-    log: ILog,
+    log: logging.ILog,
     // The console log that decides which of the log's lines the console shows: the file log's own, or the log itself for an app
     // without a file log.
-    console_log: *ConsoleLog,
+    console_log: *logging.ConsoleLog,
     // Whether the app has configured the log, which it does once.
     log_configured: bool,
 
@@ -423,7 +420,7 @@ const MainServices = struct {
         self.frontend.native.call(io, allocator, call, null) catch @panic("out of memory calling the native app");
     }
 
-    fn configureLog(ptr: *anyopaque, options: ILogOptions) anyerror!void {
+    fn configureLog(ptr: *anyopaque, options: logging.ILogOptions) anyerror!void {
         const self: *MainServices = @ptrCast(@alignCast(ptr));
         if (self.log_configured) {
             return error.LogAlreadyConfigured;
@@ -494,7 +491,7 @@ const AddTaskMessage = struct {
 // Adds a task a handler posted (see MainServices.addTask), with the main thread's allocator. A task that cannot be added is reported
 // as a core-error event, because the handler that added it has returned.
 //
-fn addTaskLater(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, log: ILog, frontend: Frontend, pool: *worker_pool.WorkerPool, parsed: std.json.Value) void {
+fn addTaskLater(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, log: logging.ILog, frontend: Frontend, pool: *worker_pool.WorkerPool, parsed: std.json.Value) void {
     const added = worker_messages.decodeValue(struct {
         taskId: []const u8,
         taskType: []const u8,
@@ -820,7 +817,7 @@ const StartMessage = struct {
 // arena.
 //
 fn startJson(arena: std.mem.Allocator, config: ZiggyConfig) ![]u8 {
-    const environment: ?std.json.Value = if (task_queue.utils.process_env.getEnvironMap()) |map| try worker_lib.environmentJson(arena, map) else null;
+    const environment: ?std.json.Value = if (utils.process_env.getEnvironMap()) |map| try worker_lib.environmentJson(arena, map) else null;
     return try json.stringify(arena, StartMessage{
         .appUrlPrefix = std.mem.span(config.app_url_prefix),
         .arguments = try types.configArguments(arena, config),
@@ -845,7 +842,7 @@ fn reportStartFailure(main_start: *MainStart, io: std.Io, err: anyerror) void {
 // set, or else in the `logs` directory of the app's data directory. It is allocated with the main thread's allocator and stopped on the
 // main thread.
 //
-fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u8, version: ?[]const u8, data_dir: []const u8, io: std.Io) !*FileLog {
+fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u8, version: ?[]const u8, data_dir: []const u8, io: std.Io) !*logging.file_log.FileLog {
     var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -854,7 +851,7 @@ fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u
         character.* = if (character.* == '-') '_' else std.ascii.toUpper(character.*);
     }
     const logs_parent = try environmentVariable(arena, variable) orelse data_dir;
-    return try FileLog.start(allocator, io, .{
+    return try logging.file_log.FileLog.start(allocator, io, .{
         .file_prefix = name,
         .title = title,
         .logs_dir = try std.fs.path.join(arena, &.{ logs_parent, "logs" }),
@@ -872,8 +869,8 @@ fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u
 // Allocated with the arena when it is read from the process.
 //
 fn environmentVariable(arena: std.mem.Allocator, variable: []const u8) !?[]const u8 {
-    if (task_queue.utils.process_env.getEnvironMap() != null) {
-        return task_queue.utils.process_env.getEnv(variable);
+    if (utils.process_env.getEnvironMap() != null) {
+        return utils.process_env.getEnv(variable);
     }
     const environ: std.process.Environ = switch (builtin.os.tag) {
         .windows => .{
@@ -895,7 +892,7 @@ fn environmentVariable(arena: std.mem.Allocator, variable: []const u8) !?[]const
 // it releases its state.
 //
 fn mainThread(given: MainStart) void {
-    var console_log: ConsoleLog = .{};
+    var console_log: logging.ConsoleLog = .{};
     var main_start = given;
     // The main thread's own allocator, which everything on its thread is allocated with.
     var thread_allocator: ThreadAllocator = .init;
@@ -928,8 +925,8 @@ fn mainThread(given: MainStart) void {
         std.debug.panic("the main thread could not read its environment: {s}", .{@errorName(err)});
     } else null;
     defer if (environment) |*map| map.deinit();
-    task_queue.utils.process_env.setEnvironMap(if (environment) |*map| map else null);
-    defer task_queue.utils.process_env.setEnvironMap(null);
+    utils.process_env.setEnvironMap(if (environment) |*map| map else null);
+    defer utils.process_env.setEnvironMap(null);
     const frontend: Frontend = .{
         .native = main_start.native,
     };
@@ -942,7 +939,7 @@ fn mainThread(given: MainStart) void {
     defer later_replies.deinit(allocator);
     var tests = TestCommands.init(frontend);
     defer tests.deinit(allocator);
-    var uuid_generator: task_queue.utils.random_uuid_generator.RandomUuidGenerator = .{};
+    var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     const session_id = uuid_generator.generate(allocator, io) catch |err| {
         reportStartFailure(&main_start, io, err);
         return;
@@ -951,7 +948,7 @@ fn mainThread(given: MainStart) void {
     var stopping = false;
     var pool: worker_pool.WorkerPool = undefined;
     // The app's file log, the main thread's log for the whole run, or null for an app without one.
-    var file_log: ?*FileLog = null;
+    var file_log: ?*logging.file_log.FileLog = null;
     if (app.name) |name| {
         file_log = startFileLog(allocator, name, app.title orelse name, app.version, std.mem.span(config.data_dir), io) catch |err| {
             reportStartFailure(&main_start, io, err);
@@ -1290,7 +1287,7 @@ fn runAppMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fronten
 // it ends, and a task that fails or is cancelled gives an error response. The number of tasks queued so far names it: a message's own
 // id cannot, because the frontend numbers its messages from 1 again when it reloads, while a task of the last page can still be running.
 //
-fn queueResponseTask(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, log: ILog, pool: *worker_pool.WorkerPool, next_request_task: *u64, id: std.json.Value, task: handlers_lib.ResponseTask) !void {
+fn queueResponseTask(io: std.Io, allocator: std.mem.Allocator, arena: std.mem.Allocator, log: logging.ILog, pool: *worker_pool.WorkerPool, next_request_task: *u64, id: std.json.Value, task: handlers_lib.ResponseTask) !void {
     const id_json = try json.stringify(arena, id);
     const task_id = try std.fmt.allocPrint(arena, "request-{d}", .{next_request_task.*});
     next_request_task.* += 1;

@@ -26,19 +26,21 @@ pub fn build(b: *std.Build) !void {
         .optimize = optimize,
         .link_libc = true,
     });
-    try configureCore(b, core, target, optimize, test_hooks, app_name, app_title, app_version);
+    try configureCore(b, core, createPackages(b, target, optimize), target, optimize, test_hooks, app_name, app_title, app_version);
 
     // The unit tests of Ziggy's core and its task queue, which run the core with the test hooks compiled in.
-    const test_step = b.step("test", "Run the unit tests of Ziggy (the core, the native apps and the dev host), of the Ziggy template and of Ziggy's test app");
+    const test_step = b.step("test", "Run the unit tests of Ziggy (the core, the utils, the log, the native apps and the dev host), of the Ziggy template and of Ziggy's test app");
     const test_core = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/core/src/index.zig"),
         .target = target,
         .optimize = optimize,
         .link_libc = true,
     });
-    try configureCore(b, test_core, target, optimize, true, null, null, null);
+    const test_packages = createPackages(b, target, optimize);
+    try configureCore(b, test_core, test_packages, target, optimize, true, null, null, null);
+    const test_filters = testFilters(b);
     const core_test_binary_step = b.step("test-binary-ziggy-core", "Build the unit test program of Ziggy's core and install it to test-bin without running it");
-    try addDirectoryTests(b, test_step, "packages/ziggy/core", &.{
+    try addFilteredDirectoryTests(b, test_step, "packages/ziggy/core", &.{
         .{
             .name = "ziggy",
             .module = test_core,
@@ -52,16 +54,39 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             }),
         },
-    }, target, optimize, core_test_binary_step);
+    }, target, optimize, core_test_binary_step, test_filters);
+
+    // The unit tests of the utils and of the log. Some of them start threads, which talk through the core's message queue, so they import
+    // the core too.
+    for ([_][]const u8{ "utils", "log" }) |package_name| {
+        const package_test_binary_step = b.step(
+            b.fmt("test-binary-ziggy-{s}", .{package_name}),
+            b.fmt("Build the unit test program of Ziggy's {s} and install it to test-bin without running it", .{package_name}),
+        );
+        try addFilteredDirectoryTests(b, test_step, b.fmt("packages/ziggy/{s}", .{package_name}), &.{
+            .{
+                .name = "ziggy",
+                .module = test_core,
+            },
+            .{
+                .name = "utils",
+                .module = test_packages.utils,
+            },
+            .{
+                .name = "log",
+                .module = test_packages.log,
+            },
+        }, target, optimize, package_test_binary_step, test_filters);
+    }
 
     // The console writing to the real stdout, which a unit test cannot see: a program writes through it and the build checks what it
     // printed.
     const console_stdout = b.createModule(.{
-        .root_source_file = b.path("packages/ziggy/core/src/test/task-queue/fixtures/console-stdout.zig"),
+        .root_source_file = b.path("packages/ziggy/log/src/test/fixtures/console-stdout.zig"),
         .target = target,
         .optimize = optimize,
     });
-    console_stdout.addImport("ziggy", test_core);
+    console_stdout.addImport("log", test_packages.log);
     const run_console_stdout = b.addRunArtifact(b.addExecutable(.{
         .name = "console-stdout",
         .root_module = console_stdout,
@@ -114,12 +139,47 @@ pub fn build(b: *std.Build) !void {
 }
 
 //
+// The packages the core is built on, each a module of its own. The app reaches them through the core, as @import("ziggy").utils and
+// @import("ziggy").log.
+//
+const IPackages = struct {
+    // The utils package, imported as "utils".
+    utils: *std.Build.Module,
+    // The log package, imported as "log". It is built on the utils.
+    log: *std.Build.Module,
+};
+
+//
+// Makes the modules of the packages the core is built on, for the target and optimize mode.
+//
+fn createPackages(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) IPackages {
+    const utils = b.createModule(.{
+        .root_source_file = b.path("packages/ziggy/utils/src/index.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    const log = b.createModule(.{
+        .root_source_file = b.path("packages/ziggy/log/src/index.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    log.addImport("utils", utils);
+    return .{
+        .utils = utils,
+        .log = log,
+    };
+}
+
+//
 // Gives the core module its build options and imports. The test hooks compile in the test control connection: they are off for a
 // release and on for the tests and for the builds the smoke tests drive. The app's name, title and version, null for Ziggy's own tests, name and head its log files.
 //
 fn configureCore(
     b: *std.Build,
     module: *std.Build.Module,
+    packages: IPackages,
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     test_hooks: bool,
@@ -127,6 +187,8 @@ fn configureCore(
     app_title: ?[]const u8,
     app_version: ?[]const u8,
 ) !void {
+    module.addImport("utils", packages.utils);
+    module.addImport("log", packages.log);
     const options = b.addOptions();
     options.addOption(bool, "test_hooks", test_hooks);
     options.addOption(?[]const u8, "app_name", app_name);
@@ -429,7 +491,8 @@ fn findRuntimeLibrary(b: *std.Build, file_name: []const u8) ![]const u8 {
 //
 // Compiles the test files under `<directory>/src/test` into one test program whose modules are given, and returns the run step. The
 // src directory is copied next to the generated root so that the imports of the tests resolve as they do in src/test. The program runs
-// from `directory`.
+// from `directory`. -Dtest-filter=<text> runs only the tests whose names contain the text, and may be given more than once. Every test
+// runs without it.
 //
 pub fn addDirectoryTests(
     b: *std.Build,
@@ -439,6 +502,30 @@ pub fn addDirectoryTests(
     target: std.Build.ResolvedTarget,
     optimize: std.builtin.OptimizeMode,
     test_binary_step: ?*std.Build.Step,
+) !void {
+    try addFilteredDirectoryTests(b, test_step, directory, imports, target, optimize, test_binary_step, testFilters(b));
+}
+
+//
+// The texts -Dtest-filter gives, or none. A build declares the option once, so a build that adds the tests of several directories reads
+// it once and gives it to addFilteredDirectoryTests for each.
+//
+fn testFilters(b: *std.Build) []const []const u8 {
+    return b.option([]const []const u8, "test-filter", "Run only the unit tests whose names contain this text") orelse &.{};
+}
+
+//
+// addDirectoryTests, running only the tests whose names contain one of the filters, or every test when there are none.
+//
+fn addFilteredDirectoryTests(
+    b: *std.Build,
+    test_step: *std.Build.Step,
+    directory: []const u8,
+    imports: []const IImport,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+    test_binary_step: ?*std.Build.Step,
+    filters: []const []const u8,
 ) !void {
     const test_files = b.addWriteFiles();
     _ = test_files.addCopyDirectory(b.path(b.fmt("{s}/src", .{directory})), "src", .{});
@@ -478,9 +565,6 @@ pub fn addDirectoryTests(
             .cwd_relative = "/usr/lib",
         });
     }
-    // -Dtest-filter=<text> runs only the tests whose names contain the text, and may be given more than once. Every test runs
-    // without it.
-    const filters = b.option([]const []const u8, "test-filter", "Run only the unit tests whose names contain this text") orelse &.{};
     const unit_test = b.addTest(.{
         .name = std.fs.path.basename(directory),
         .filters = filters,
