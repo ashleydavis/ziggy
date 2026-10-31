@@ -4,6 +4,8 @@ Terms are defined in the [glossary](../glossary.md).
 
 An app's desktop menu is declared once, in the backend, as a Zig constant. When the app is built, Ziggy checks it and turns it into JSON text that each desktop native app reads at start-up and draws with the platform's own menu API. When the user chooses an item, or presses its shortcut, the item runs one of three things: an action the native app does itself (such as quit, zoom or copy), a Zig function of the app's or the frontend, which receives it as an app event. A mobile device shows no menu.
 
+The `/ziggy:add-menu-item` Claude Code command adds an item to an app's menu by following this guide.
+
 ## How it works
 
 ```mermaid
@@ -123,8 +125,7 @@ The function, in [`backend/src/lib/hello-world.zig`](../../apps/ziggy-template/b
 ```zig
 pub fn helloFromZigMenuItem(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) !void {
     _ = timers;
-    _ = io;
-    try services.sendEvent(allocator, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
+    try services.sendEvent(io, allocator, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
 }
 ```
 
@@ -251,4 +252,5 @@ wait_for_text log "Hello from the UI, run from the menu" 30
 
 - [Messages](messages.md): app events, and `onCoreError`.
 - [Tasks](tasks.md): slow work a menu item's Zig function queues.
+- [Claude Code commands](claude-code-commands.md): `/ziggy:add-menu-item`.
 - [Ziggy architecture](../development/architecture.md#menus): where menus fit in an app.
