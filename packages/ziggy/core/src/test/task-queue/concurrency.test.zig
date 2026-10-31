@@ -10,8 +10,7 @@
 const std = @import("std");
 const task_queue_zig = @import("ziggy").task_queue;
 const utils = ziggy.utils;
-const MuteLog = ziggy.log.mute_log.MuteLog;
-const ILog = ziggy.log.ILog;
+const logging = ziggy.log;
 const TaskQueue = task_queue_zig.task_queue.TaskQueue;
 const types = task_queue_zig.types;
 const ITaskResult = types.ITaskResult;
@@ -93,7 +92,7 @@ fn holdTimedOut(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, 
 // Holds the task's worker, reading the worker's messages, until the test cancels `release_source`.
 //
 fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers) !void {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     const backend = try getQueueBackend();
     var hold: Hold = .{
         .released = false,
@@ -120,7 +119,7 @@ fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers) !voi
 //
 // A handler that sends an event naming the task when it starts, holds its worker when its data requests it, and returns the name.
 //
-fn recordingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn recordingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: logging.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     const name = data.object.get("name").?.string;
     var event: std.json.ObjectMap = .empty;
     try event.put(allocator, "type", .{ .string = "started" });
@@ -135,7 +134,7 @@ fn recordingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers
 //
 // A handler that sends an event and returns the task's name.
 //
-fn eventSendingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn eventSendingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: logging.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = timers;
     const name = data.object.get("name").?.string;
     context.sendEvent(io, allocator, log, try json(allocator, "{\"type\":\"note\"}"));
@@ -145,7 +144,7 @@ fn eventSendingTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Tim
 //
 // A handler that waits to be cancelled, for up to 30 seconds, and returns whether it saw the cancel.
 //
-fn cancellationCheckingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn cancellationCheckingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: logging.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = timers;
     _ = data;
@@ -159,7 +158,7 @@ fn cancellationCheckingHandler(allocator: std.mem.Allocator, io: std.Io, timers:
 //
 // A handler that fails.
 //
-fn failingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn failingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: logging.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = allocator;
     _ = io;
@@ -245,7 +244,7 @@ const EventRecorder = struct {
 // Waits until the pool has sent every task it has to a worker and the first of them has started, reading the pool's messages meanwhile.
 //
 fn waitUntilRunning(io: std.Io, allocator: std.mem.Allocator, timers: Timers, pool: *MockWorkerPool) void {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     while (pool.pool.pending_tasks.items.len > 0) {
         pool.waitForMessage(io, allocator, timers, console_log);
     }
@@ -256,7 +255,7 @@ fn waitUntilRunning(io: std.Io, allocator: std.mem.Allocator, timers: Timers, po
 // which runs while the test thread waits on its own queue.
 //
 fn cancelSourceOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: ITaskResult) anyerror!void {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     _ = log;
     _ = result;
     const target: *SourceCancel = @ptrCast(@alignCast(context.?));
@@ -277,7 +276,7 @@ const SourceCancel = struct {
 // Shuts a queue down when a task of another queue completes, which runs while the test thread waits on the queue.
 //
 fn shutDownOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: ITaskResult) anyerror!void {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     _ = log;
     _ = result;
     const queue: *TaskQueue = @ptrCast(@alignCast(context.?));
@@ -290,7 +289,7 @@ fn shutDownOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Alloc
 // while another is queued. `events` records the queue's events.
 //
 fn withOneWorkerBusy(io: std.Io, allocator: std.mem.Allocator, timers: Timers, uuid_generator: utils.uuid_generator.IUuidGenerator, events: *EventRecorder) !struct { backend: *MockWorkerPool, queue: *TaskQueue } {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     const backend = try MockWorkerPool.init(allocator, 1, base_context, &test_task_types);
     setQueueBackend(backend.queueBackend());
     const queue = try TaskQueue.init(allocator, uuid_generator, "busy-source");
@@ -304,7 +303,7 @@ fn withOneWorkerBusy(io: std.Io, allocator: std.mem.Allocator, timers: Timers, u
 }
 
 test "a worker takes the next task as soon as the one it is running finishes" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -341,7 +340,7 @@ test "a worker takes the next task as soon as the one it is running finishes" {
 }
 
 test "a task that fails still hands the slot to the next task" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -377,7 +376,7 @@ test "a task that fails still hands the slot to the next task" {
 }
 
 test "a running task sees that it has been cancelled" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -410,7 +409,7 @@ test "a running task sees that it has been cancelled" {
 }
 
 test "cancelTasks drops the waiting tasks of the cancelled source and leaves other sources alone" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -457,7 +456,7 @@ test "cancelTasks drops the waiting tasks of the cancelled source and leaves oth
 }
 
 test "a task cancelled while it runs still reports its result, and its waiter was already given none" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -506,7 +505,7 @@ test "a task cancelled while it runs still reports its result, and its waiter wa
 }
 
 test "shutdown drops the tasks still waiting for a slot" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -704,7 +703,7 @@ const CountingBackend = struct {
 };
 
 test "deinit after an explicit shutdown does not cancel the source a second time" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -735,7 +734,7 @@ test "deinit after an explicit shutdown does not cancel the source a second time
 }
 
 test "deinit on a queue that was never shut down cancels the source once" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
@@ -764,7 +763,7 @@ test "deinit on a queue that was never shut down cancels the source once" {
 }
 
 test "an event sent by a task of another source is not delivered" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -806,7 +805,7 @@ test "an event sent by a task of another source is not delivered" {
 }
 
 test "a task with no registered handler fails with the worker's message" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -838,7 +837,7 @@ test "a task with no registered handler fails with the worker's message" {
 }
 
 test "shutdown while a task is running resolves a waiter and the task still finishes" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();

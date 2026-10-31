@@ -1,16 +1,14 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
 const utils = @import("utils");
-const ConsoleLog = @import("log").ConsoleLog;
-const console = @import("log").console;
+const logging = @import("log");
 const errors = utils.errors;
-const file_log = @import("log").file_log;
-const FileLog = file_log.FileLog;
+const FileLog = logging.file_log.FileLog;
 
 //
 // A file log's configuration for a test, writing in the directory given, with every console option off.
 //
-fn testConfig(logs_dir: []const u8) file_log.IFileLogConfig {
+fn testConfig(logs_dir: []const u8) logging.file_log.IFileLogConfig {
     return .{
         .file_prefix = "test-app",
         .title = "Test App Log",
@@ -61,14 +59,14 @@ const ConsoleCapture = struct {
     // Sends the calling thread's console lines to the capture.
     //
     fn begin(self: *ConsoleCapture) void {
-        console.setCapture(&self.stdout.writer, &self.stderr.writer);
+        logging.console.setCapture(&self.stdout.writer, &self.stderr.writer);
     }
 
     //
     // Gives the console back and frees what was captured.
     //
     fn deinit(self: *ConsoleCapture) void {
-        console.setCapture(null, null);
+        logging.console.setCapture(null, null);
         self.stdout.deinit();
         self.stderr.deinit();
     }
@@ -316,7 +314,7 @@ test "logFilePath gives a file log's log file and null for a console log" {
     const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
     defer logger.stop(allocator, std.testing.io);
     try std.testing.expectEqualStrings(logger.getLogFilePath(), logger.ilog().logFilePath().?);
-    const console_log = ConsoleLog.initWith(.{
+    const console_log = logging.ConsoleLog.initWith(.{
         .verbose = false,
         .debug = false,
         .tools = false,
@@ -337,7 +335,7 @@ test "readLogDetails and getLogDetails give the path and the header up to the st
     const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
     defer logger.stop(allocator, std.testing.io);
     logger.ilog().info("a line after the header");
-    const details = try file_log.readLogDetails(allocator, std.testing.io, logger.getLogFilePath());
+    const details = try logging.file_log.readLogDetails(allocator, std.testing.io, logger.getLogFilePath());
     defer allocator.free(details.logFilePath.?);
     defer allocator.free(details.logHeader);
     try std.testing.expectEqualStrings(logger.getLogFilePath(), details.logFilePath.?);
@@ -365,7 +363,7 @@ test "readLogDetails gives the first 50 lines of a file with no start of log" {
     });
     const path = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/plain.log", .{&tmp.sub_path});
     defer allocator.free(path);
-    const details = try file_log.readLogDetails(allocator, std.testing.io, path);
+    const details = try logging.file_log.readLogDetails(allocator, std.testing.io, path);
     defer allocator.free(details.logFilePath.?);
     defer allocator.free(details.logHeader);
     try std.testing.expect(std.mem.startsWith(u8, details.logHeader, "line 0\n"));
@@ -384,7 +382,7 @@ test "defaultLogsDir is the program's logs directory under the temporary directo
     }
     utils.process_env.setEnvironMap(&environ_map);
     defer utils.process_env.setEnvironMap(null);
-    const logs_dir = try file_log.defaultLogsDir(std.testing.allocator, "my-app");
+    const logs_dir = try logging.file_log.defaultLogsDir(std.testing.allocator, "my-app");
     defer std.testing.allocator.free(logs_dir);
     const expected = try std.fs.path.join(std.testing.allocator, &.{ if (builtin.os.tag == .windows) "C:\\Temp" else "/var/tmp", "my-app", "logs" });
     defer std.testing.allocator.free(expected);

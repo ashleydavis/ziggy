@@ -1,13 +1,7 @@
 const std = @import("std");
 const utils = @import("utils");
-const MuteLog = @import("log").mute_log.MuteLog;
-const ILog = @import("log").ILog;
-const ILogDetails = @import("log").ILogDetails;
-const IToolOutput = @import("log").IToolOutput;
-const ConsoleLog = @import("log").ConsoleLog;
-const noLogDetails = @import("log").noLogDetails;
+const logging = @import("log");
 const errors = utils.errors;
-const console = @import("log").console;
 
 //
 // A log that records the last message it received.
@@ -25,14 +19,14 @@ const RecordingLog = struct {
     //
     // Gets the ILog interface for this log.
     //
-    fn ilog(self: *RecordingLog) ILog {
+    fn ilog(self: *RecordingLog) logging.ILog {
         return .{ .ptr = self, .vtable = &vtable };
     }
 
     //
     // The ILog functions of this log.
     //
-    const vtable: ILog.VTable = .{
+    const vtable: logging.ILog.VTable = .{
         .info = info,
         .verbose = verbose,
         .@"error" = logError,
@@ -102,7 +96,7 @@ const RecordingLog = struct {
     //
     // Records tool output.
     //
-    fn tool(ptr: *anyopaque, toolName: []const u8, data: IToolOutput) void {
+    fn tool(ptr: *anyopaque, toolName: []const u8, data: logging.IToolOutput) void {
         _ = data;
         record(ptr, "tool", toolName);
     }
@@ -125,7 +119,7 @@ const RecordingLog = struct {
     //
     // Returns fixed log details.
     //
-    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!ILogDetails {
+    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!logging.ILogDetails {
         _ = ptr;
         _ = allocator;
         _ = io;
@@ -153,10 +147,10 @@ test "a console log with no options writes info and event to stdout, error, warn
     defer stdout_capture.deinit();
     var stderr_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer stderr_capture.deinit();
-    console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
-    defer console.setCapture(null, null);
+    logging.console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
+    defer logging.console.setCapture(null, null);
 
-    const log = ConsoleLog.init();
+    const log = logging.ConsoleLog.init();
     log.info("info message");
     log.verbose("verbose message");
     log.debug("debug message");
@@ -174,11 +168,11 @@ test "a console log with no options writes info and event to stdout, error, warn
 }
 
 test "a console log has no log details" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     const details = try console_log.getLogDetails(std.testing.allocator, std.testing.io);
     try std.testing.expect(details.logFilePath == null);
     try std.testing.expectEqualStrings("No log file available", details.logHeader);
-    try std.testing.expectEqualStrings(noLogDetails.logHeader, details.logHeader);
+    try std.testing.expectEqualStrings(logging.noLogDetails.logHeader, details.logHeader);
 }
 
 test "an ILog passes each call to the log it was made from" {
@@ -210,16 +204,16 @@ test "an ILog passes each call to the log it was made from" {
 }
 
 test "a console log writes no file" {
-    const console_log = MuteLog.init();
+    const console_log = logging.mute_log.MuteLog.init();
     try std.testing.expect(console_log.logFilePath() == null);
 }
 
 test "ilog of a console log gives a log that writes to the console" {
     var stdout_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer stdout_capture.deinit();
-    console.setCapture(&stdout_capture.writer, null);
-    defer console.setCapture(null, null);
-    const log = ConsoleLog.initWith(.{
+    logging.console.setCapture(&stdout_capture.writer, null);
+    defer logging.console.setCapture(null, null);
+    const log = logging.ConsoleLog.initWith(.{
         .verbose = false,
         .debug = false,
         .tools = false,
@@ -234,9 +228,9 @@ test "a console log with its options on writes verbose to stdout, debug to stder
     defer stdout_capture.deinit();
     var stderr_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer stderr_capture.deinit();
-    console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
-    defer console.setCapture(null, null);
-    const log = ConsoleLog.initWith(.{
+    logging.console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
+    defer logging.console.setCapture(null, null);
+    const log = logging.ConsoleLog.initWith(.{
         .verbose = true,
         .debug = true,
         .tools = true,
@@ -261,9 +255,9 @@ test "each option of a console log turns on only its own lines" {
     defer stdout_capture.deinit();
     var stderr_capture = std.Io.Writer.Allocating.init(std.testing.allocator);
     defer stderr_capture.deinit();
-    console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
-    defer console.setCapture(null, null);
-    const debugOnly = ConsoleLog.initWith(.{
+    logging.console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
+    defer logging.console.setCapture(null, null);
+    const debugOnly = logging.ConsoleLog.initWith(.{
         .verbose = false,
         .debug = true,
         .tools = false,
@@ -285,9 +279,9 @@ test "a console log writes a long tool output, event and error chain whole" {
     const allocator = arena.allocator();
     var stdout_capture = std.Io.Writer.Allocating.init(allocator);
     var stderr_capture = std.Io.Writer.Allocating.init(allocator);
-    console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
-    defer console.setCapture(null, null);
-    const log = ConsoleLog.initWith(.{
+    logging.console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
+    defer logging.console.setCapture(null, null);
+    const log = logging.ConsoleLog.initWith(.{
         .verbose = false,
         .debug = false,
         .tools = true,
