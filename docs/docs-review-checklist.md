@@ -62,6 +62,7 @@ Every tracked markdown doc in the repo outside `docs/plans/`. Regenerate the lis
 - [x] [ziggy/check.md](../apps/ziggy-template/.claude/commands/ziggy/check.md)
 - [x] [ziggy/add-message.md](../apps/ziggy-template/.claude/commands/ziggy/add-message.md)
 - [x] [ziggy/add-task.md](../apps/ziggy-template/.claude/commands/ziggy/add-task.md)
+- [ ] [ziggy/add-menu-item.md](../apps/ziggy-template/.claude/commands/ziggy/add-menu-item.md)
 
 ## Ziggy template: READMEs
 
