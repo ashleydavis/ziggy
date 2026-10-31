@@ -25,7 +25,7 @@ const message_queue = @import("message-queue.zig");
 const dropped_files = @import("dropped-files.zig");
 
 const MessageQueue = message_queue.MessageQueue;
-const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
+const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
 const NativeApp = @import("native-app.zig").NativeApp;
 const worker_messages = @import("worker-messages.zig");
 

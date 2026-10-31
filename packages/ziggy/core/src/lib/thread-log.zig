@@ -7,11 +7,11 @@
 const std = @import("std");
 const message_queue = @import("message-queue.zig");
 const worker_messages = @import("worker-messages.zig");
-const task_queue = @import("task-queue.zig");
 
 const MessageQueue = message_queue.MessageQueue;
-const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
-const utils = task_queue.utils;
+const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
+const utils = @import("utils");
+const ziggy_log = @import("log");
 
 //
 // A thread's log that sends its lines to the main thread's queue.
@@ -29,7 +29,7 @@ pub const QueueLog = struct {
     //
     // Gets the ILog interface for this log.
     //
-    pub fn ilog(self: *QueueLog) utils.log.ILog {
+    pub fn ilog(self: *QueueLog) ziggy_log.log.ILog {
         return .{
             .ptr = self,
             .vtable = &vtable,
@@ -41,7 +41,7 @@ pub const QueueLog = struct {
     // where it is until `unset` is called on the same thread.
     //
     pub fn set(self: *QueueLog) void {
-        utils.console.setForward(.{
+        ziggy_log.console.setForward(.{
             .context = self,
             .function = forwardConsole,
         });
@@ -51,13 +51,13 @@ pub const QueueLog = struct {
     // Has the calling thread use its own console again.
     //
     pub fn unset() void {
-        utils.console.setForward(null);
+        ziggy_log.console.setForward(null);
     }
 
     //
     // The ILog functions of this log.
     //
-    const vtable: utils.log.ILog.VTable = .{
+    const vtable: ziggy_log.log.ILog.VTable = .{
         .info = info,
         .verbose = verbose,
         .@"error" = logError,
@@ -149,7 +149,7 @@ pub const QueueLog = struct {
     //
     // Sends what a tool wrote, when the output of tools is on.
     //
-    fn tool(ptr: *anyopaque, tool_name: []const u8, data: utils.log.IToolOutput) void {
+    fn tool(ptr: *anyopaque, tool_name: []const u8, data: ziggy_log.log.IToolOutput) void {
         const self: *QueueLog = @ptrCast(@alignCast(ptr));
         if (self.tools_enabled) {
             self.send(.tool, tool_name, null, .{
@@ -178,11 +178,11 @@ pub const QueueLog = struct {
     //
     // A thread's log has no log file of its own.
     //
-    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!utils.log.ILogDetails {
+    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!ziggy_log.log.ILogDetails {
         _ = ptr;
         _ = allocator;
         _ = io;
-        return utils.log.noLogDetails;
+        return ziggy_log.log.noLogDetails;
     }
 
     //
@@ -197,7 +197,7 @@ pub const QueueLog = struct {
     // Where the thread's console lines go: the main thread, stdout's and stderr's each on its own stream. The post uses an Io of the
     // calling thread's own, made for the call.
     //
-    pub fn forwardConsole(context: ?*anyopaque, stream: utils.console.Stream, line: []const u8) void {
+    pub fn forwardConsole(context: ?*anyopaque, stream: ziggy_log.console.Stream, line: []const u8) void {
         const self: *QueueLog = @ptrCast(@alignCast(context.?));
         // The ILog functions are given no allocator either, so the line is built with an allocator made for the call.
         var thread_allocator: ThreadAllocator = .init;

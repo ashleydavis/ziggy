@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Ziggy is a framework for building cross-platform apps with JavaScript/TypeScript, HTML and CSS for the frontend and Zig for everything else, using each platform's system web view. This repository holds Ziggy itself (`packages/ziggy`) and the Ziggy template (`apps/ziggy-template`), a small complete app built on it that a new app starts as a copy of. Use the terms "the frontend", "the backend", "the native app" and "the system web view" as the [glossary](docs/glossary.md) defines them.
 
 - `packages/ziggy/core`: the core library every app links, imported as `@import("ziggy")`, with the C interface (`core/src/lib/ziggy.h`), the task queue and the script every native app injects to create `window.ziggy`.
+- `packages/ziggy/log` and `packages/ziggy/utils`: the log and the helpers Ziggy is written with, Zig modules of their own that the core imports and gives to the app as `@import("ziggy").log` and `@import("ziggy").utils`.
 - `packages/ziggy/frontend`: the TypeScript types of `window.ziggy` and of the messages the backend sends (the `ziggy` package).
 - `packages/ziggy/native/<platform>`: the part of each native app that Ziggy provides.
 - `packages/ziggy/dev`: dev mode: the dev backend, which runs the app's backend in front of the app's own dev server, and the supervisor that starts them and rebuilds it. Never part of a native app or a release build.

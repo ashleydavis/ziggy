@@ -16,7 +16,7 @@ const build_options = @import("build_options");
 const types = @import("types.zig");
 const json = @import("json.zig");
 const task_runner = @import("task-runner.zig");
-const task_queue = @import("task-queue.zig");
+const utils = @import("utils");
 const test_control = @import("test-control.zig");
 const test_commands = @import("test-commands.zig");
 const dropped_files = @import("dropped-files.zig");
@@ -30,7 +30,7 @@ const worker_lib = @import("worker.zig");
 const worker_messages = @import("worker-messages.zig");
 const timers_lib = @import("timers.zig");
 const services_lib = @import("services.zig");
-const ThreadAllocator = @import("thread-allocator.zig").ThreadAllocator;
+const ThreadAllocator = utils.thread_allocator.ThreadAllocator;
 const native_app = @import("native-app.zig");
 const native_message = @import("native-message.zig");
 const NativeApp = native_app.NativeApp;
@@ -41,10 +41,10 @@ const ZiggyConfig = types.ZiggyConfig;
 const QueueMessage = message_queue.Message;
 const TimerList = timers_lib.TimerList;
 const TestCommands = test_commands.TestCommands;
-const FileLog = task_queue.utils.file_log.FileLog;
-const ILog = task_queue.utils.log.ILog;
-const ILogOptions = task_queue.utils.log.ILogOptions;
-const ConsoleLog = task_queue.utils.log.ConsoleLog;
+const FileLog = @import("log").file_log.FileLog;
+const ILog = @import("log").log.ILog;
+const ILogOptions = @import("log").log.ILogOptions;
+const ConsoleLog = @import("log").log.ConsoleLog;
 
 pub const MessageQueue = message_queue.MessageQueue;
 
@@ -820,7 +820,7 @@ const StartMessage = struct {
 // arena.
 //
 fn startJson(arena: std.mem.Allocator, config: ZiggyConfig) ![]u8 {
-    const environment: ?std.json.Value = if (task_queue.utils.process_env.getEnvironMap()) |map| try worker_lib.environmentJson(arena, map) else null;
+    const environment: ?std.json.Value = if (utils.process_env.getEnvironMap()) |map| try worker_lib.environmentJson(arena, map) else null;
     return try json.stringify(arena, StartMessage{
         .appUrlPrefix = std.mem.span(config.app_url_prefix),
         .arguments = try types.configArguments(arena, config),
@@ -872,8 +872,8 @@ fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u
 // Allocated with the arena when it is read from the process.
 //
 fn environmentVariable(arena: std.mem.Allocator, variable: []const u8) !?[]const u8 {
-    if (task_queue.utils.process_env.getEnvironMap() != null) {
-        return task_queue.utils.process_env.getEnv(variable);
+    if (utils.process_env.getEnvironMap() != null) {
+        return utils.process_env.getEnv(variable);
     }
     const environ: std.process.Environ = switch (builtin.os.tag) {
         .windows => .{
@@ -928,8 +928,8 @@ fn mainThread(given: MainStart) void {
         std.debug.panic("the main thread could not read its environment: {s}", .{@errorName(err)});
     } else null;
     defer if (environment) |*map| map.deinit();
-    task_queue.utils.process_env.setEnvironMap(if (environment) |*map| map else null);
-    defer task_queue.utils.process_env.setEnvironMap(null);
+    utils.process_env.setEnvironMap(if (environment) |*map| map else null);
+    defer utils.process_env.setEnvironMap(null);
     const frontend: Frontend = .{
         .native = main_start.native,
     };
@@ -942,7 +942,7 @@ fn mainThread(given: MainStart) void {
     defer later_replies.deinit(allocator);
     var tests = TestCommands.init(frontend);
     defer tests.deinit(allocator);
-    var uuid_generator: task_queue.utils.random_uuid_generator.RandomUuidGenerator = .{};
+    var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     const session_id = uuid_generator.generate(allocator, io) catch |err| {
         reportStartFailure(&main_start, io, err);
         return;

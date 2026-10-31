@@ -611,7 +611,7 @@ fn nativeCallbacksHandler(services: ziggy.core.HandlerServices, timers: ziggy.ti
 // callbacks it was given, and sends the native call's result, or its absence, as a second event.
 //
 fn callbackThread(callbacks: ziggy.core.NativeCallbacks) void {
-    var thread_allocator: ziggy.thread_allocator.ThreadAllocator = .init;
+    var thread_allocator: ziggy.utils.thread_allocator.ThreadAllocator = .init;
     defer thread_allocator.deinit();
     const allocator = thread_allocator.allocator();
     var threaded: std.Io.Threaded = .init_single_threaded;

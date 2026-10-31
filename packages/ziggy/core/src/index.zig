@@ -1,6 +1,6 @@
 //
 // Ziggy core: the C interface, the main thread, the worker pool and its workers, the messages they send each other, the origin check,
-// native calls and test hooks.
+// native calls, test hooks and running a command.
 //
 
 pub const types = @import("lib/types.zig");
@@ -11,7 +11,6 @@ pub const worker = @import("lib/worker.zig");
 pub const worker_pool = @import("lib/worker-pool.zig");
 pub const worker_messages = @import("lib/worker-messages.zig");
 pub const message_queue = @import("lib/message-queue.zig");
-pub const thread_allocator = @import("lib/thread-allocator.zig");
 pub const timers = @import("lib/timers.zig");
 pub const core = @import("lib/core.zig");
 pub const ziggy_api = @import("lib/ziggy-api.zig");
@@ -25,4 +24,12 @@ pub const inject_script = @import("lib/inject-script.zig");
 pub const ui_files = @import("lib/ui-files.zig");
 pub const dropped_files = @import("lib/dropped-files.zig");
 pub const task_queue = @import("lib/task-queue.zig");
+pub const exec = @import("lib/exec.zig");
+
+//
+// Ziggy's utils and its log, which are packages of their own, given here so the app reaches them through @import("ziggy") as it
+// reaches the rest of Ziggy.
+//
+pub const utils = @import("utils");
+pub const log = @import("log");
 pub const UiFile = ui_files.UiFile;

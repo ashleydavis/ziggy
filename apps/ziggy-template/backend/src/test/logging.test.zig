@@ -10,7 +10,7 @@ const app = @import("ziggy-template-backend");
 const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 test "the template writes its two log files in its data directory, with its header and footer, the lines its hello world code logs and none of another thread's lines" {
-    const console_log = ziggy.task_queue.utils.mute_log.MuteLog.init();
+    const console_log = ziggy.log.mute_log.MuteLog.init();
     var tmp = std.testing.tmpDir(.{});
     defer tmp.cleanup();
     var path_buffer: [256]u8 = undefined;

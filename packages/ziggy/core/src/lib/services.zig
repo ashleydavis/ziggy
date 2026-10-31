@@ -11,13 +11,13 @@ const std = @import("std");
 const task_runner = @import("task-runner.zig");
 const types = @import("types.zig");
 const json = @import("json.zig");
-const native_caller = @import("task-queue.zig").utils.native_caller;
-const errors = @import("task-queue.zig").utils.errors;
+const native_caller = @import("utils").native_caller;
+const errors = @import("utils").errors;
 const native_app = @import("native-app.zig");
 const worker_messages = @import("worker-messages.zig");
 const MessageQueue = @import("message-queue.zig").MessageQueue;
-const ILog = @import("task-queue.zig").utils.log.ILog;
-const ILogOptions = @import("task-queue.zig").utils.log.ILogOptions;
+const ILog = @import("log").log.ILog;
+const ILogOptions = @import("log").log.ILogOptions;
 
 //
 // How a thread of the app's own (a server, for one) reaches the native app itself: by sending the frontend an event and by native

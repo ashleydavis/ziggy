@@ -102,7 +102,7 @@ pub const IWorkerQueueTaskMessage = struct {
 //
 // The level of a worker's log line, the log's own.
 //
-pub const LogLevel = @import("task-queue/utils/log.zig").LogLevel;
+pub const LogLevel = @import("log").log.LogLevel;
 
 //
 // The output of a tool that a worker logs at the "tool" level.

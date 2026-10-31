@@ -1,6 +1,7 @@
 const std = @import("std");
 const task_queue_zig = @import("ziggy").task_queue;
-const utils = @import("ziggy").task_queue.utils;
+const utils = @import("ziggy").utils;
+const ziggy_log = @import("ziggy").log;
 const TaskContext = task_queue_zig.task_context.TaskContext;
 const SendEventFn = task_queue_zig.task_context.SendEventFn;
 
@@ -59,7 +60,7 @@ test "cancel causes isCancelled to return true" {
 }
 
 test "sendEvent invokes the injected sendEventFn with the correct argument" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};

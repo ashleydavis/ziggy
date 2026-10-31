@@ -212,12 +212,12 @@ test "an app's log files go in the logs directory of the directory <NAME>_LOG_DI
     const elsewhere = try std.fs.path.join(std.testing.allocator, &.{ data_dir, "elsewhere" });
     defer std.testing.allocator.free(elsewhere);
     // The core is given the environment of the thread that starts it.
-    const previous = ziggy.task_queue.utils.process_env.getEnvironMap();
-    defer ziggy.task_queue.utils.process_env.setEnvironMap(previous);
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
     var environ_map = std.process.Environ.Map.init(std.testing.allocator);
     defer environ_map.deinit();
     try environ_map.put("LOGGED_APP_LOG_DIR", elsewhere);
-    ziggy.task_queue.utils.process_env.setEnvironMap(&environ_map);
+    ziggy.utils.process_env.setEnvironMap(&environ_map);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), logged_app);
     native_app.stop(std.testing.io, std.testing.allocator);
     const logs_dir = try std.fs.path.join(std.testing.allocator, &.{ elsewhere, "logs" });

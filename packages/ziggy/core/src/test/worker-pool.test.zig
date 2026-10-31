@@ -7,7 +7,8 @@ const TaskContext = ziggy.task_runner.TaskContext;
 const TaskServices = ziggy.task_runner.TaskServices;
 const Timers = ziggy.timers.Timers;
 const TimerList = ziggy.timers.TimerList;
-const utils = ziggy.task_queue.utils;
+const utils = ziggy.utils;
+const ziggy_log = ziggy.log;
 
 //
 // Returns the task's data as its result, after sending the event {"type":"note"}.
@@ -67,7 +68,7 @@ fn logTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.me
     _ = context;
     _ = payload;
     services.log.info("logged on a worker");
-    utils.console.@"error"("written to a worker's console");
+    ziggy_log.console.@"error"("written to a worker's console");
 }
 
 //
@@ -146,9 +147,9 @@ const Fixture = struct {
     // Every message the pool sent the frontend, and every line the observer was given, in order.
     seen: std.ArrayList([]u8),
     // The log the test gives the pool as the main thread's, where the workers' lines are written.
-    log: utils.log.ILog,
+    log: ziggy_log.log.ILog,
 
-    fn init(self: *Fixture, workers: u32, native: bool, log: utils.log.ILog) void {
+    fn init(self: *Fixture, workers: u32, native: bool, log: ziggy_log.log.ILog) void {
         self.log = log;
         self.queue = MessageQueue.init();
         self.seen = .empty;
@@ -275,7 +276,7 @@ const Fixture = struct {
 };
 
 test "a task sent to a worker ends, and the frontend and the observer are told how" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(1, false, console_log);
@@ -286,7 +287,7 @@ test "a task sent to a worker ends, and the frontend and the observer are told h
 }
 
 test "a task's event reaches the frontend, then the observer" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(1, false, console_log);
@@ -299,7 +300,7 @@ test "a task's event reaches the frontend, then the observer" {
 }
 
 test "a task that replies to a message ends as that message's reply" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(1, false, console_log);
@@ -312,7 +313,7 @@ test "a task that replies to a message ends as that message's reply" {
 
 test "a worker's log lines and console lines reach the main thread's output" {
     // The test's thread is the pool's main thread, so the workers' log lines are written to this log.
-    const memory = try utils.memory_log.MemoryLog.init(std.testing.allocator, .{
+    const memory = try ziggy_log.memory_log.MemoryLog.init(std.testing.allocator, .{
         .verbose = false,
         .debug = false,
         .tools = false,
@@ -323,8 +324,8 @@ test "a worker's log lines and console lines reach the main thread's output" {
     var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
     var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
     // The capture of the main thread's console is where the workers' console lines are written.
-    utils.console.setCapture(&stdout_capture, &stderr_capture);
-    defer utils.console.setCapture(null, null);
+    ziggy_log.console.setCapture(&stdout_capture, &stderr_capture);
+    defer ziggy_log.console.setCapture(null, null);
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(1, false, memory.log);
@@ -342,12 +343,12 @@ test "with a file log on the main thread, a worker's lines reach the log file ta
     var stderr_buffer: [4096]u8 = undefined;
     var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
     var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
-    utils.console.setCapture(&stdout_capture, &stderr_capture);
-    defer utils.console.setCapture(null, null);
+    ziggy_log.console.setCapture(&stdout_capture, &stderr_capture);
+    defer ziggy_log.console.setCapture(null, null);
     const allocator = std.testing.allocator;
     const logs_dir = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/logs", .{&tmp.sub_path});
     defer allocator.free(logs_dir);
-    const logger = try utils.file_log.FileLog.start(allocator, std.testing.io, .{
+    const logger = try ziggy_log.file_log.FileLog.start(allocator, std.testing.io, .{
         .file_prefix = "pool-test",
         .title = "Pool Test Log",
         .logs_dir = logs_dir,
@@ -384,12 +385,12 @@ test "a worker started while the main thread's log passes its lines to a file lo
     var stderr_buffer: [4096]u8 = undefined;
     var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
     var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
-    utils.console.setCapture(&stdout_capture, &stderr_capture);
-    defer utils.console.setCapture(null, null);
+    ziggy_log.console.setCapture(&stdout_capture, &stderr_capture);
+    defer ziggy_log.console.setCapture(null, null);
     const allocator = std.testing.allocator;
     const logs_dir = try std.fmt.allocPrint(allocator, ".zig-cache/tmp/{s}/logs", .{&tmp.sub_path});
     defer allocator.free(logs_dir);
-    const logger = try utils.file_log.FileLog.start(allocator, std.testing.io, .{
+    const logger = try ziggy_log.file_log.FileLog.start(allocator, std.testing.io, .{
         .file_prefix = "pool-test",
         .title = "Pool Test Log",
         .logs_dir = logs_dir,
@@ -421,8 +422,8 @@ test "a worker started with no file log on the main thread sends no verbose or t
     var stderr_buffer: [4096]u8 = undefined;
     var stdout_capture = std.Io.Writer.fixed(&stdout_buffer);
     var stderr_capture = std.Io.Writer.fixed(&stderr_buffer);
-    utils.console.setCapture(&stdout_capture, &stderr_capture);
-    defer utils.console.setCapture(null, null);
+    ziggy_log.console.setCapture(&stdout_capture, &stderr_capture);
+    defer ziggy_log.console.setCapture(null, null);
     var recording: ErrorRecordingLog = .{};
     defer recording.deinit();
     var timer_list = TimerList.init();
@@ -443,7 +444,7 @@ const ErrorRecordingLog = struct {
     // How many verbose and tool lines it was given.
     others: usize = 0,
 
-    fn ilog(self: *ErrorRecordingLog) utils.log.ILog {
+    fn ilog(self: *ErrorRecordingLog) ziggy_log.log.ILog {
         return .{ .ptr = self, .vtable = &vtable };
     }
 
@@ -454,7 +455,7 @@ const ErrorRecordingLog = struct {
         self.errors.deinit(std.testing.allocator);
     }
 
-    const vtable: utils.log.ILog.VTable = .{
+    const vtable: ziggy_log.log.ILog.VTable = .{
         .info = ignore,
         .verbose = countVerbose,
         .@"error" = recordError,
@@ -489,7 +490,7 @@ const ErrorRecordingLog = struct {
         self.others += 1;
     }
 
-    fn countTool(ptr: *anyopaque, tool_name: []const u8, data: utils.log.IToolOutput) void {
+    fn countTool(ptr: *anyopaque, tool_name: []const u8, data: ziggy_log.log.IToolOutput) void {
         _ = tool_name;
         _ = data;
         const self: *ErrorRecordingLog = @ptrCast(@alignCast(ptr));
@@ -501,11 +502,11 @@ const ErrorRecordingLog = struct {
         return false;
     }
 
-    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!utils.log.ILogDetails {
+    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!ziggy_log.log.ILogDetails {
         _ = ptr;
         _ = allocator;
         _ = io;
-        return utils.log.noLogDetails;
+        return ziggy_log.log.noLogDetails;
     }
 
     fn logFilePath(ptr: *anyopaque) ?[]const u8 {
@@ -529,7 +530,7 @@ test "an error a worker logs with its cause reaches the main thread's log as one
 }
 
 test "a task's request to the native app reaches the main thread's handler, and the task gets its response" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(1, true, console_log);
@@ -541,7 +542,7 @@ test "a task's request to the native app reaches the main thread's handler, and 
 }
 
 test "with no handler for the native app's requests, a task's request fails as NativeCallMissing" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(1, false, console_log);
@@ -552,7 +553,7 @@ test "with no handler for the native app's requests, a task's request fails as N
 }
 
 test "a child a task queues runs, and its end goes back to the worker of the task that queued it" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(2, false, console_log);
@@ -564,7 +565,7 @@ test "a child a task queues runs, and its end goes back to the worker of the tas
 }
 
 test "cancelling a source ends its waiting tasks as cancelled without starting them, and stops its running ones" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(1, false, console_log);
@@ -584,7 +585,7 @@ test "cancelling a source ends its waiting tasks as cancelled without starting t
 }
 
 test "cancelling a task that waits on a child stops the child, and then the task" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     var timer_list = TimerList.init();
     var fixture: Fixture = undefined;
     fixture.init(2, false, console_log);
@@ -605,7 +606,7 @@ test "cancelling a task that waits on a child stops the child, and then the task
 }
 
 test "shutting the pool down stops the tasks still running and ends every worker" {
-    const console_log = utils.mute_log.MuteLog.init();
+    const console_log = ziggy_log.mute_log.MuteLog.init();
     // The testing allocator fails the test if a worker or a task is left unfreed, and shutdown returns only once every worker's
     // thread has ended.
     var timer_list = TimerList.init();
@@ -623,7 +624,7 @@ test "shutting the pool down stops the tasks still running and ends every worker
 }
 
 test "a worker that cannot start reports why and ends, and the pool logs it and lets it go, leaving its task waiting" {
-    const memory = try utils.memory_log.MemoryLog.init(std.testing.allocator, .{
+    const memory = try ziggy_log.memory_log.MemoryLog.init(std.testing.allocator, .{
         .verbose = false,
         .debug = false,
         .tools = false,
@@ -686,7 +687,7 @@ const LastErrorLog = struct {
     //
     // Gets the ILog interface for this log.
     //
-    fn ilog(self: *LastErrorLog) utils.log.ILog {
+    fn ilog(self: *LastErrorLog) ziggy_log.log.ILog {
         return .{
             .ptr = self,
             .vtable = &vtable,
@@ -696,7 +697,7 @@ const LastErrorLog = struct {
     //
     // The ILog functions of this log: only an error line is kept.
     //
-    const vtable: utils.log.ILog.VTable = .{
+    const vtable: ziggy_log.log.ILog.VTable = .{
         .info = ignore,
         .verbose = ignore,
         .@"error" = keepError,
@@ -727,7 +728,7 @@ const LastErrorLog = struct {
         _ = err catch {};
     }
 
-    fn ignoreTool(ptr: *anyopaque, tool_name: []const u8, data: utils.log.IToolOutput) void {
+    fn ignoreTool(ptr: *anyopaque, tool_name: []const u8, data: ziggy_log.log.IToolOutput) void {
         _ = ptr;
         _ = tool_name;
         _ = data;
@@ -738,11 +739,11 @@ const LastErrorLog = struct {
         return false;
     }
 
-    fn noDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!utils.log.ILogDetails {
+    fn noDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!ziggy_log.log.ILogDetails {
         _ = ptr;
         _ = allocator;
         _ = io;
-        return utils.log.noLogDetails;
+        return ziggy_log.log.noLogDetails;
     }
 
     fn noLogFilePath(ptr: *anyopaque) ?[]const u8 {

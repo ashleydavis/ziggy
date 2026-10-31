@@ -19,8 +19,9 @@ case "$PLATFORM" in
 esac
 shift
 
-# The checkout of Ziggy whose core library's tests run too, when one is named. The test app names the repository it lives in, so the tests
-# of Ziggy's core library run on a phone beside its own; an app built on Ziggy runs its own backend's tests only.
+# The checkout of Ziggy whose core library's, utils' and log's tests run too, when one is named. The test app names the repository it lives
+# in, so the tests of Ziggy's core library, utils and log run on a phone beside its own; an app built on Ziggy runs its own backend's tests
+# only.
 ZIGGY_DIR=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -40,11 +41,11 @@ done
 
 packages="$EXAMPLE_DIR/backend"
 if [ -n "$ZIGGY_DIR" ]; then
-    packages="$ZIGGY_DIR/packages/ziggy/core $packages"
+    packages="$ZIGGY_DIR/packages/ziggy/core $ZIGGY_DIR/packages/ziggy/utils $ZIGGY_DIR/packages/ziggy/log $packages"
 fi
 
-# The directory whose build.zig has the step that builds the unit test program of a package directory: Ziggy's core library's is the
-# build.zig at the root of the Ziggy checkout, the test app backend's is the test app's own build.zig.
+# The directory whose build.zig has the step that builds the unit test program of a package directory: Ziggy's core library's, utils' and
+# log's is the build.zig at the root of the Ziggy checkout, the test app backend's is the test app's own build.zig.
 build_dir_of() {
     case "$1" in
         "$EXAMPLE_DIR/backend")
@@ -63,7 +64,8 @@ step_name_of() {
             echo "ziggy-test-app-backend"
             ;;
         *)
-            echo "ziggy-core"
+            # Ziggy's core, utils and log, whose steps are test-binary-ziggy-core, test-binary-ziggy-utils and test-binary-ziggy-log.
+            echo "ziggy-$(basename "$1")"
             ;;
     esac
 }

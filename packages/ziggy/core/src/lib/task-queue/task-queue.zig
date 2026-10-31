@@ -1,5 +1,6 @@
 const std = @import("std");
-const utils = @import("utils.zig");
+const utils = @import("utils");
+const ziggy_log = @import("log");
 const types = @import("types.zig");
 const queue_backend = @import("queue-backend.zig");
 const Timers = @import("../timers.zig").Timers;
@@ -13,7 +14,7 @@ const TaskPriority = types.TaskPriority;
 const IQueueBackend = queue_backend.IQueueBackend;
 const getQueueBackend = queue_backend.getQueueBackend;
 const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
-const ILog = utils.log.ILog;
+const ILog = ziggy_log.log.ILog;
 
 //
 // A caller waiting in awaitAllTasks.

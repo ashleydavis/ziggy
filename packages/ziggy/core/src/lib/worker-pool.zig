@@ -27,10 +27,11 @@ const Worker = worker_lib.Worker;
 const Completion = types.Completion;
 const TaskPriority = task_runner.TaskPriority;
 const TaskHandlerEntry = task_runner.TaskHandlerEntry;
-const utils = task_queue.utils;
+const utils = @import("utils");
+const ziggy_log = @import("log");
 const qtypes = task_queue.types;
 const IQueueBackend = task_queue.queue_backend.IQueueBackend;
-const ILog = utils.log.ILog;
+const ILog = ziggy_log.log.ILog;
 
 //
 // Where the pool sends the events it produces for the frontend (task-event and task-completed, and the reply to a message a task
@@ -1130,7 +1131,7 @@ pub const OtherMessageHandler = struct {
 // `[source] ` in front of it, such as `[Worker 2] `. An exception becomes one error line with its error text under it, as the log of
 // the thread the line came from would write it, so the cause is not a second error. The arena is for building the line.
 //
-pub fn writeTaggedLine(arena: std.mem.Allocator, log: ILog, source: []const u8, line: utils.log.ILogLine) void {
+pub fn writeTaggedLine(arena: std.mem.Allocator, log: ILog, source: []const u8, line: ziggy_log.log.ILogLine) void {
     const tagged = std.fmt.allocPrint(arena, "[{s}] {s}", .{ source, line.message }) catch @panic("out of memory writing a log line");
     switch (line.level) {
         .info => log.info(tagged),
@@ -1160,7 +1161,7 @@ pub fn writeLog(arena: std.mem.Allocator, log: ILog, source: []const u8, text: [
     const message = worker_messages.decode(worker_messages.IWorkerLogMessage, arena, text) catch |err| {
         std.debug.panic("could not read a worker's log message ({s}): {s}", .{ @errorName(err), text });
     };
-    var tool_output: ?utils.log.IToolOutput = null;
+    var tool_output: ?ziggy_log.log.IToolOutput = null;
     if (message.toolData) |data| {
         tool_output = .{
             .stdout = data.stdout,
@@ -1183,10 +1184,10 @@ pub fn writeConsole(arena: std.mem.Allocator, text: []const u8) void {
         std.debug.panic("could not read a worker's console message ({s}): {s}", .{ @errorName(err), text });
     };
     if (std.mem.eql(u8, message.stream, "stderr")) {
-        utils.console.@"error"(message.line);
+        ziggy_log.console.@"error"(message.line);
     }
     else {
-        utils.console.log(message.line);
+        ziggy_log.console.log(message.line);
     }
 }
 

@@ -1,7 +1,6 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
 const helpers = @import("helpers.zig");
-const utils = @import("ziggy").task_queue.utils;
 
 fn addTask(native_app: *helpers.FakeNativeApp, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{

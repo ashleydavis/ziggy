@@ -7,7 +7,7 @@ const std = @import("std");
 const json = @import("../json.zig");
 const task_runner = @import("../task-runner.zig");
 const worker_pool = @import("../worker-pool.zig");
-const utils = @import("../task-queue.zig").utils;
+const ziggy_log = @import("log");
 
 //
 // The data of add-task: the task the frontend queues.
@@ -33,7 +33,7 @@ pub const DoneResponse = struct {};
 //
 // Handles add-task: queues the task the frontend's add-task message names.
 //
-pub fn addTask(pool: *worker_pool.WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, request: AddTaskRequest) !DoneResponse {
+pub fn addTask(pool: *worker_pool.WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, request: AddTaskRequest) !DoneResponse {
     const data_json = try json.stringify(allocator, request.data);
     defer allocator.free(data_json);
     try pool.addTask(io, allocator, log, request.taskId, request.taskType, request.source, data_json, request.priority orelse .background, null);
@@ -43,7 +43,7 @@ pub fn addTask(pool: *worker_pool.WorkerPool, io: std.Io, allocator: std.mem.All
 //
 // Handles cancel-tasks: cancels the tasks queued under the source, which the frontend sends as a bare string.
 //
-pub fn cancelTasks(pool: *worker_pool.WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: utils.log.ILog, source: []const u8) DoneResponse {
+pub fn cancelTasks(pool: *worker_pool.WorkerPool, io: std.Io, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, source: []const u8) DoneResponse {
     pool.cancelSource(io, allocator, log, source);
     return .{};
 }
