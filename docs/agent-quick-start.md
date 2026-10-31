@@ -98,5 +98,5 @@ git push -u origin HEAD
 
 Then watch the CI and release workflows in the repository's **Actions** tab and find each platform's packages under **Releases**.
 
-Give the backend work to do with the Claude Code commands your app came with: `/ziggy:add-message` and `/ziggy:add-task`.
+Give the backend work to do with the Claude Code commands your app came with: `/ziggy:add-message` and `/ziggy:add-task`, and add to its menu with `/ziggy:add-menu-item`.
 ````
