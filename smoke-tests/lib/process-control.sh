@@ -441,13 +441,18 @@ launch_in_process_group() {
 # -e as "show the environment too", which would put each process's whole environment in the output.
 # -A means all processes on both.
 #
+# A zombie (state Z) is left out: it has exited and runs nothing, and is only waiting for its parent
+# to collect its exit status. The launches are started from a subshell that exits, so their
+# processes are collected by pid 1, which on some hosts (a container whose pid 1 is not an init)
+# does so a while after they exit.
+#
 list_leaked_launches() {
     local record_file="${ZIGGY_LAUNCHED_GROUPS:-}"
     if [ -z "$record_file" ] || [ ! -s "$record_file" ]; then
         return 0
     fi
     local snapshot
-    snapshot="$(ps -A -o pid=,pgid=,args= 2>/dev/null || true)"
+    snapshot="$(ps -A -o pid=,pgid=,stat=,args= 2>/dev/null | grep -v '^ *[0-9]* *[0-9]* *Z' || true)"
     if [ -z "$snapshot" ]; then
         return 0
     fi
@@ -457,7 +462,7 @@ list_leaked_launches() {
         [ -n "$identifier" ] || continue
         case "$kind" in
             pgid)
-                printf '%s\n' "$snapshot" | awk -v want="$identifier" '$2 == want { $2 = ""; print }' || true
+                printf '%s\n' "$snapshot" | awk -v want="$identifier" '$2 == want { $2 = ""; $3 = ""; print }' || true
                 ;;
         esac
     done < "$record_file"
