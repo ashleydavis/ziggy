@@ -1,7 +1,8 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const utils = @import("ziggy").utils;
-const ziggy_log = @import("ziggy").log;
+const MuteLog = @import("ziggy").log.mute_log.MuteLog;
+const MemoryLog = @import("ziggy").log.memory_log.MemoryLog;
 const exec = @import("ziggy").exec.exec;
 
 test "exec runs the command in the shell and returns its output" {
@@ -71,7 +72,7 @@ test "exec passes process.env to the command" {
 }
 
 test "execLogged returns the output of the command" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     // iOS does not let an app start a process, so this command has no shell to run in there.
     if (!std.process.can_spawn) {
         return error.SkipZigTest;
@@ -94,7 +95,7 @@ test "execLogged writes the command, what the tool wrote and a failure to the lo
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     // Verbose and tool lines are on, which the default console log leaves out, so they show that this log was the one written to.
-    const memory = try ziggy_log.memory_log.MemoryLog.init(std.testing.allocator, .{
+    const memory = try MemoryLog.init(std.testing.allocator, .{
         .verbose = true,
         .debug = false,
         .tools = true,
@@ -108,7 +109,7 @@ test "execLogged writes the command, what the tool wrote and a failure to the lo
     try std.testing.expect(std.mem.indexOf(u8, memory.stderr(), "Failed to execute command: exit 3\n") != null);
 }
 test "execLogged reports a command that fails as a failure to execute it" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     try std.testing.expectError(error.Thrown, @import("ziggy").exec.execLogged(arena.allocator(), std.testing.io, console_log, "sh", "exit 3", null));
@@ -126,7 +127,7 @@ fn failValidation(context: *anyopaque, allocator: std.mem.Allocator, io: std.Io)
 }
 
 test "execLogged reports a failed validation as a failure to execute the command" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var unused: u8 = 0;

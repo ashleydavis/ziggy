@@ -1,8 +1,13 @@
 const std = @import("std");
 const utils = @import("utils");
-const ziggy_log = @import("log");
+const MuteLog = @import("log").mute_log.MuteLog;
+const ILog = @import("log").ILog;
+const ILogDetails = @import("log").ILogDetails;
+const IToolOutput = @import("log").IToolOutput;
+const ConsoleLog = @import("log").ConsoleLog;
+const noLogDetails = @import("log").noLogDetails;
 const errors = utils.errors;
-const console = ziggy_log.console;
+const console = @import("log").console;
 
 //
 // A log that records the last message it received.
@@ -20,14 +25,14 @@ const RecordingLog = struct {
     //
     // Gets the ILog interface for this log.
     //
-    fn ilog(self: *RecordingLog) ziggy_log.log.ILog {
+    fn ilog(self: *RecordingLog) ILog {
         return .{ .ptr = self, .vtable = &vtable };
     }
 
     //
     // The ILog functions of this log.
     //
-    const vtable: ziggy_log.log.ILog.VTable = .{
+    const vtable: ILog.VTable = .{
         .info = info,
         .verbose = verbose,
         .@"error" = logError,
@@ -97,7 +102,7 @@ const RecordingLog = struct {
     //
     // Records tool output.
     //
-    fn tool(ptr: *anyopaque, toolName: []const u8, data: ziggy_log.log.IToolOutput) void {
+    fn tool(ptr: *anyopaque, toolName: []const u8, data: IToolOutput) void {
         _ = data;
         record(ptr, "tool", toolName);
     }
@@ -120,7 +125,7 @@ const RecordingLog = struct {
     //
     // Returns fixed log details.
     //
-    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!ziggy_log.log.ILogDetails {
+    fn getLogDetails(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io) anyerror!ILogDetails {
         _ = ptr;
         _ = allocator;
         _ = io;
@@ -151,7 +156,7 @@ test "a console log with no options writes info and event to stdout, error, warn
     console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
     defer console.setCapture(null, null);
 
-    const log = ziggy_log.log.ConsoleLog.init();
+    const log = ConsoleLog.init();
     log.info("info message");
     log.verbose("verbose message");
     log.debug("debug message");
@@ -169,11 +174,11 @@ test "a console log with no options writes info and event to stdout, error, warn
 }
 
 test "a console log has no log details" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     const details = try console_log.getLogDetails(std.testing.allocator, std.testing.io);
     try std.testing.expect(details.logFilePath == null);
     try std.testing.expectEqualStrings("No log file available", details.logHeader);
-    try std.testing.expectEqualStrings(ziggy_log.log.noLogDetails.logHeader, details.logHeader);
+    try std.testing.expectEqualStrings(noLogDetails.logHeader, details.logHeader);
 }
 
 test "an ILog passes each call to the log it was made from" {
@@ -205,7 +210,7 @@ test "an ILog passes each call to the log it was made from" {
 }
 
 test "a console log writes no file" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     try std.testing.expect(console_log.logFilePath() == null);
 }
 
@@ -214,7 +219,7 @@ test "ilog of a console log gives a log that writes to the console" {
     defer stdout_capture.deinit();
     console.setCapture(&stdout_capture.writer, null);
     defer console.setCapture(null, null);
-    const log = ziggy_log.log.ConsoleLog.initWith(.{
+    const log = ConsoleLog.initWith(.{
         .verbose = false,
         .debug = false,
         .tools = false,
@@ -231,7 +236,7 @@ test "a console log with its options on writes verbose to stdout, debug to stder
     defer stderr_capture.deinit();
     console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
     defer console.setCapture(null, null);
-    const log = ziggy_log.log.ConsoleLog.initWith(.{
+    const log = ConsoleLog.initWith(.{
         .verbose = true,
         .debug = true,
         .tools = true,
@@ -258,7 +263,7 @@ test "each option of a console log turns on only its own lines" {
     defer stderr_capture.deinit();
     console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
     defer console.setCapture(null, null);
-    const debugOnly = ziggy_log.log.ConsoleLog.initWith(.{
+    const debugOnly = ConsoleLog.initWith(.{
         .verbose = false,
         .debug = true,
         .tools = false,
@@ -282,7 +287,7 @@ test "a console log writes a long tool output, event and error chain whole" {
     var stderr_capture = std.Io.Writer.Allocating.init(allocator);
     console.setCapture(&stdout_capture.writer, &stderr_capture.writer);
     defer console.setCapture(null, null);
-    const log = ziggy_log.log.ConsoleLog.initWith(.{
+    const log = ConsoleLog.initWith(.{
         .verbose = false,
         .debug = false,
         .tools = true,

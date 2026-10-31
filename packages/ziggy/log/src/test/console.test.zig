@@ -1,7 +1,6 @@
 const std = @import("std");
 const utils = @import("utils");
-const ziggy_log = @import("log");
-const console = ziggy_log.console;
+const console = @import("log").console;
 const MessageQueue = @import("ziggy").core.MessageQueue;
 const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
 

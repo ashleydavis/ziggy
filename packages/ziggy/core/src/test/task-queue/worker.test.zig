@@ -1,7 +1,8 @@
 const std = @import("std");
 const task_queue_zig = @import("ziggy").task_queue;
 const utils = ziggy.utils;
-const ziggy_log = ziggy.log;
+const MuteLog = ziggy.log.mute_log.MuteLog;
+const ILog = ziggy.log.ILog;
 const worker = task_queue_zig.worker;
 const types = task_queue_zig.types;
 const TaskContext = task_queue_zig.task_context.TaskContext;
@@ -12,7 +13,7 @@ const Timers = ziggy.timers.Timers;
 //
 // A handler that returns its data under the key "echo".
 //
-fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
+fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = timers;
     _ = io;
@@ -25,7 +26,7 @@ fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: zi
 //
 // A handler that returns 1.
 //
-fn oneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
+fn oneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = timers;
     _ = allocator;
@@ -38,7 +39,7 @@ fn oneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: zig
 //
 // A handler that throws.
 //
-fn throwingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
+fn throwingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = timers;
     _ = allocator;
@@ -75,7 +76,7 @@ test "getHandler finds the handler a list gives for a task type, and none for a 
 }
 
 test "executeTaskHandler runs the listed handler with the data and context" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     var timer_list = ziggy.timers.TimerList.init();
     defer arena.deinit();
@@ -89,7 +90,7 @@ test "executeTaskHandler runs the listed handler with the data and context" {
 }
 
 test "executeTaskHandler propagates handler errors" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     var timer_list = ziggy.timers.TimerList.init();
     defer arena.deinit();
@@ -102,7 +103,7 @@ test "executeTaskHandler propagates handler errors" {
 }
 
 test "executeTaskHandler throws when the list has no handler for the type, naming the listed types in order" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     var timer_list = ziggy.timers.TimerList.init();
     defer arena.deinit();

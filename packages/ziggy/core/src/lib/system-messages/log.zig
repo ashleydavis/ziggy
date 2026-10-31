@@ -3,7 +3,9 @@
 //
 
 const std = @import("std");
-const ziggy_log = @import("log");
+const ILog = @import("log").ILog;
+const IToolOutput = @import("log").IToolOutput;
+const LogLevel = @import("log").LogLevel;
 const worker_pool = @import("../worker-pool.zig");
 
 //
@@ -39,11 +41,11 @@ pub const DoneResponse = struct {};
 // Writes a line the frontend logged to the main thread's log, the one given, tagged with the source `Frontend`. A level that is not one
 // of the eight fails with UnknownLogLevel, which is reported to the frontend as a core-error system event.
 //
-pub fn log(arena: std.mem.Allocator, main_log: ziggy_log.log.ILog, request: LogRequest) !DoneResponse {
-    const level = std.meta.stringToEnum(ziggy_log.log.LogLevel, request.level) orelse {
+pub fn log(arena: std.mem.Allocator, main_log: ILog, request: LogRequest) !DoneResponse {
+    const level = std.meta.stringToEnum(LogLevel, request.level) orelse {
         return error.UnknownLogLevel;
     };
-    var tool_output: ?ziggy_log.log.IToolOutput = null;
+    var tool_output: ?IToolOutput = null;
     if (request.toolData) |data| {
         tool_output = .{
             .stdout = data.stdout,

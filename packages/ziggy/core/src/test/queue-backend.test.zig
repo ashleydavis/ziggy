@@ -7,7 +7,8 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
 const task_queue = @import("ziggy").task_queue;
-const ziggy_log = ziggy.log;
+const MuteLog = ziggy.log.mute_log.MuteLog;
+const ILog = ziggy.log.ILog;
 const helpers = @import("helpers.zig");
 
 const types = task_queue.types;
@@ -17,7 +18,7 @@ const MockWorkerPool = task_queue.mock_worker_pool.MockWorkerPool;
 const Timers = ziggy.timers.Timers;
 const TimerList = ziggy.timers.TimerList;
 
-fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
+fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = timers;
     var event: std.json.ObjectMap = .empty;
     try event.put(allocator, "type", .{ .string = "registered-hello" });
@@ -28,7 +29,7 @@ fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Ti
     return .{ .object = outputs };
 }
 
-fn waitForCancelHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
+fn waitForCancelHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = timers;
     _ = data;
@@ -38,7 +39,7 @@ fn waitForCancelHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.
     return error.Cancelled;
 }
 
-fn childHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
+fn childHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = timers;
     _ = allocator;
@@ -50,7 +51,7 @@ fn childHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.T
 //
 // Adds up the outputs of the children a parent queued, as its completion callback is given them.
 //
-fn addUpChild(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, result: types.ITaskResult) anyerror!void {
+fn addUpChild(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: types.ITaskResult) anyerror!void {
     _ = log;
     _ = io;
     _ = allocator;
@@ -58,8 +59,8 @@ fn addUpChild(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _:
     sum.* += result.outputs.?.integer;
 }
 
-fn parentHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+fn parentHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
+    const console_log = MuteLog.init();
     _ = log;
     _ = data;
     const queue = try TaskQueue.init(allocator, context.uuidGenerator, "registered-parent");
@@ -82,7 +83,7 @@ fn parentHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.
 // queued.
 //
 fn queueThroughBackendTask(services: ziggy.task_runner.TaskServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, context: ziggy.task_runner.TaskContext, payload: std.json.Value) ![]const u8 {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     _ = services;
     _ = timers;
     _ = context;
@@ -243,13 +244,13 @@ const Recorder = struct {
     // Reads the pool's messages until a line starting with the prefix has been recorded.
     //
     fn waitFor(self: *Recorder, pool: *MockWorkerPool, timers: Timers, prefix: []const u8) void {
-        const console_log = ziggy_log.mute_log.MuteLog.init();
+        const console_log = MuteLog.init();
         while (self.count(prefix) == 0) {
             pool.waitForMessage(std.testing.io, std.testing.allocator, timers, console_log);
         }
     }
 
-    fn onComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, result: types.ITaskResult) anyerror!void {
+    fn onComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: types.ITaskResult) anyerror!void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -261,7 +262,7 @@ const Recorder = struct {
         self.record(try std.fmt.allocPrint(std.testing.allocator, "complete|{s}|{s}|{s}|{s}|{s}|{s}", .{ result.taskId, result.type, result.status.toString(), result.errorMessage orelse "no error", outputs, inputs }));
     }
 
-    fn onEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, data: types.ITaskEventData) anyerror!void {
+    fn onEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -271,7 +272,7 @@ const Recorder = struct {
         self.record(try std.fmt.allocPrint(std.testing.allocator, "event|{s}|{s}", .{ data.taskId, event }));
     }
 
-    fn onTypedEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, data: types.ITaskEventData) anyerror!void {
+    fn onTypedEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -279,7 +280,7 @@ const Recorder = struct {
         self.record(try std.fmt.allocPrint(std.testing.allocator, "typed|{s}", .{data.taskId}));
     }
 
-    fn onAdded(context: ?*anyopaque, allocator: std.mem.Allocator, log: ziggy.log.log.ILog, task_id: []const u8) void {
+    fn onAdded(context: ?*anyopaque, allocator: std.mem.Allocator, log: ziggy.log.ILog, task_id: []const u8) void {
         _ = log;
         _ = allocator;
         const self: *Recorder = @ptrCast(@alignCast(context.?));
@@ -304,7 +305,7 @@ fn createPool(workers: usize) !*MockWorkerPool {
 }
 
 test "the completion callback gets the task's type, input, status and outputs, and stops after it is unsubscribed" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var timer_list = TimerList.init();
     const pool = try createPool(2);
     defer pool.deinit(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
@@ -331,7 +332,7 @@ test "the completion callback gets the task's type, input, status and outputs, a
 }
 
 test "a task that fails or is cancelled while running is reported as failed, and one cancelled while queued is not reported" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var timer_list = TimerList.init();
     const pool = try createPool(1);
     defer pool.deinit(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
@@ -357,7 +358,7 @@ test "a task that fails or is cancelled while running is reported as failed, and
 }
 
 test "event callbacks get the events of a type, and every event" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var timer_list = TimerList.init();
     const pool = try createPool(2);
     defer pool.deinit(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
@@ -390,7 +391,7 @@ test "event callbacks get the events of a type, and every event" {
 }
 
 test "callbacks for a source fire when a task is added under it and when the source is cancelled" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var timer_list = TimerList.init();
     const pool = try createPool(2);
     defer pool.deinit(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);

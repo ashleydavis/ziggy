@@ -13,7 +13,7 @@
 
 const std = @import("std");
 const utils = @import("utils");
-const ziggy_log = @import("log");
+const ILog = @import("log").ILog;
 const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
 const ITimestampProvider = utils.timestamp_provider.ITimestampProvider;
 const Timers = @import("../timers.zig").Timers;
@@ -69,7 +69,7 @@ pub const ITaskContext = struct {
     //
     pub const VTable = struct {
         // Sends an event from the task handler back to the caller, writing to the log when it cannot.
-        sendEvent: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, event: std.json.Value) void,
+        sendEvent: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ILog, event: std.json.Value) void,
 
         // Returns true if this task has been cancelled and should stop as soon as possible.
         isCancelled: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) bool,
@@ -79,7 +79,7 @@ pub const ITaskContext = struct {
     // Sends an event from the task handler back to the caller, writing to the log when it cannot.
     // The event only has to stay valid during the call (it is copied if it has to be kept).
     //
-    pub fn sendEvent(self: ITaskContext, io: std.Io, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, event: std.json.Value) void {
+    pub fn sendEvent(self: ITaskContext, io: std.Io, allocator: std.mem.Allocator, log: ILog, event: std.json.Value) void {
         self.vtable.sendEvent(self.ptr, io, allocator, log, event);
     }
 
@@ -98,7 +98,7 @@ pub const ITaskContext = struct {
 // delivered), so the handler does not free what it allocates. The returned value and everything
 // it points to must be allocated with it (or be static).
 //
-pub const TaskHandler = *const fn (allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value;
+pub const TaskHandler = *const fn (allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value;
 
 //
 // How urgent a task is, which decides the order the queue dispatches pending tasks in.
@@ -335,12 +335,12 @@ pub const WorkerTaskCompletionCallback = struct {
     context: ?*anyopaque,
 
     // The callback function. The result is only valid during the call.
-    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy_log.log.ILog, result: ITaskResult) anyerror!void,
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, result: ITaskResult) anyerror!void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: WorkerTaskCompletionCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy_log.log.ILog, result: ITaskResult) anyerror!void {
+    pub fn call(self: WorkerTaskCompletionCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, result: ITaskResult) anyerror!void {
         return self.function(self.context, io, allocator, timers, log, result);
     }
 };
@@ -370,12 +370,12 @@ pub const TaskEventCallback = struct {
     context: ?*anyopaque,
 
     // The callback function. The data is only valid during the call.
-    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy_log.log.ILog, data: ITaskEventData) anyerror!void,
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, data: ITaskEventData) anyerror!void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: TaskEventCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy_log.log.ILog, data: ITaskEventData) anyerror!void {
+    pub fn call(self: TaskEventCallback, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, data: ITaskEventData) anyerror!void {
         return self.function(self.context, io, allocator, timers, log, data);
     }
 };
@@ -499,12 +499,12 @@ pub const TaskAddedCallback = struct {
     context: ?*anyopaque,
 
     // The callback function. The task ID is only valid during the call.
-    function: *const fn (context: ?*anyopaque, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, taskId: []const u8) void,
+    function: *const fn (context: ?*anyopaque, allocator: std.mem.Allocator, log: ILog, taskId: []const u8) void,
 
     //
     // Invokes the callback.
     //
-    pub fn call(self: TaskAddedCallback, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, taskId: []const u8) void {
+    pub fn call(self: TaskAddedCallback, allocator: std.mem.Allocator, log: ILog, taskId: []const u8) void {
         self.function(self.context, allocator, log, taskId);
     }
 };

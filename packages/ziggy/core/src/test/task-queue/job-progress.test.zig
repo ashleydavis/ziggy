@@ -1,7 +1,8 @@
 const std = @import("std");
 const task_queue_zig = @import("ziggy").task_queue;
 const utils = @import("ziggy").utils;
-const ziggy_log = @import("ziggy").log;
+const MuteLog = @import("ziggy").log.mute_log.MuteLog;
+const ILog = @import("ziggy").log.ILog;
 const types = task_queue_zig.types;
 const ITaskContext = types.ITaskContext;
 const sendJobProgress = task_queue_zig.job_progress.sendJobProgress;
@@ -20,7 +21,7 @@ const EventRecorder = struct {
     //
     // ITaskContext.sendEvent for the recorder.
     //
-    fn sendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, event: std.json.Value) void {
+    fn sendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ILog, event: std.json.Value) void {
         _ = log;
         _ = io;
         const self: *EventRecorder = @ptrCast(@alignCast(ptr));
@@ -75,7 +76,7 @@ fn makeContext(recorder: *EventRecorder, generators: *Generators) ITaskContext {
 }
 
 test "sends the whole job with every report, so a listener that joined late learns all of it" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var recorder: EventRecorder = .{
@@ -99,7 +100,7 @@ test "sends the whole job with every report, so a listener that joined late lear
 }
 
 test "carries a job that has not said what it is doing yet" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var recorder: EventRecorder = .{
@@ -123,7 +124,7 @@ test "carries a job that has not said what it is doing yet" {
 }
 
 test "sends nothing for a task that carries no job tag" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     var recorder: EventRecorder = .{

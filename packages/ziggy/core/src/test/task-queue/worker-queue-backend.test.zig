@@ -1,7 +1,7 @@
 const std = @import("std");
 const task_queue_zig = @import("ziggy").task_queue;
 const utils = @import("ziggy").utils;
-const ziggy_log = @import("ziggy").log;
+const MuteLog = @import("ziggy").log.mute_log.MuteLog;
 
 const types = task_queue_zig.types;
 const WorkerQueueBackend = task_queue_zig.worker_queue_backend.WorkerQueueBackend;
@@ -48,14 +48,14 @@ const Sent = struct {
         self.lines.append(std.testing.allocator, std.fmt.allocPrint(std.testing.allocator, format, arguments) catch @panic("out of memory")) catch @panic("out of memory");
     }
 
-    fn onAdded(context: ?*anyopaque, allocator: std.mem.Allocator, log: @import("ziggy").log.log.ILog, task_id: []const u8) void {
+    fn onAdded(context: ?*anyopaque, allocator: std.mem.Allocator, log: @import("ziggy").log.ILog, task_id: []const u8) void {
         _ = log;
         _ = allocator;
         const self: *Sent = @ptrCast(@alignCast(context.?));
         self.line("added|{s}", .{task_id});
     }
 
-    fn onComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").log.log.ILog, result: types.ITaskResult) anyerror!void {
+    fn onComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").log.ILog, result: types.ITaskResult) anyerror!void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -70,7 +70,7 @@ const Sent = struct {
         self.line("cancelled", .{});
     }
 
-    fn onTyped(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").log.log.ILog, data: types.ITaskEventData) anyerror!void {
+    fn onTyped(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").log.ILog, data: types.ITaskEventData) anyerror!void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -78,7 +78,7 @@ const Sent = struct {
         self.line("typed|{s}", .{data.taskId});
     }
 
-    fn onAny(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").log.log.ILog, data: types.ITaskEventData) anyerror!void {
+    fn onAny(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: @import("ziggy").log.ILog, data: types.ITaskEventData) anyerror!void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -101,7 +101,7 @@ fn makeBackend(sent: *Sent, uuid_generator: *utils.random_uuid_generator.RandomU
 }
 
 test "addTask sends the main thread a queue-task message, with the priority requested, and fires the callbacks of its source" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var sent: Sent = .{};
     defer sent.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
@@ -126,7 +126,7 @@ test "addTask sends the main thread a queue-task message, with the priority requ
 }
 
 test "notifyTaskCompleted fires the completion callbacks, and cancelTasks the callbacks of the source cancelled" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var sent: Sent = .{};
     defer sent.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
@@ -155,7 +155,7 @@ test "notifyTaskCompleted fires the completion callbacks, and cancelTasks the ca
 }
 
 test "notifyTaskMessage fires the callbacks for the event's type and those for every event" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var sent: Sent = .{};
     defer sent.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
@@ -182,7 +182,7 @@ test "notifyTaskMessage fires the callbacks for the event's type and those for e
 }
 
 test "waitForMessage has the worker read its next message, and shutdown does nothing" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var sent: Sent = .{};
     defer sent.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};

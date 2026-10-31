@@ -42,9 +42,9 @@ const QueueMessage = message_queue.Message;
 const TimerList = timers_lib.TimerList;
 const TestCommands = test_commands.TestCommands;
 const FileLog = @import("log").file_log.FileLog;
-const ILog = @import("log").log.ILog;
-const ILogOptions = @import("log").log.ILogOptions;
-const ConsoleLog = @import("log").log.ConsoleLog;
+const ILog = @import("log").ILog;
+const ILogOptions = @import("log").ILogOptions;
+const ConsoleLog = @import("log").ConsoleLog;
 
 pub const MessageQueue = message_queue.MessageQueue;
 

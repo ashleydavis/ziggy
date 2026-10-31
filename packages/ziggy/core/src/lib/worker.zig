@@ -21,7 +21,7 @@ const RunningTask = task_runner.RunningTask;
 const TaskHandlerEntry = task_runner.TaskHandlerEntry;
 const Completion = types.Completion;
 const utils = @import("utils");
-const ziggy_log = @import("log");
+const ILog = @import("log").ILog;
 const WorkerQueueBackend = task_queue.worker_queue_backend.WorkerQueueBackend;
 const QueueLog = @import("thread-log.zig").QueueLog;
 const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
@@ -110,7 +110,7 @@ pub const OnMessage = struct {
     // The handler's own pointer, passed back on every call.
     context: ?*anyopaque,
     // Handles one message from the worker, with the main thread's Io, allocator, timers and log.
-    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy_log.log.ILog, worker: *Worker, text: []const u8) void,
+    function: *const fn (context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, worker: *Worker, text: []const u8) void,
 };
 
 //
@@ -159,7 +159,7 @@ pub const Worker = struct {
     // Hands a message the worker sent to the main side's handler. The main thread calls it for each message it takes from its queue
     // under this worker's id.
     //
-    pub fn receive(self: *Worker, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy_log.log.ILog, text: []const u8) void {
+    pub fn receive(self: *Worker, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ILog, text: []const u8) void {
         const handler = self.onmessage orelse {
             return;
         };
@@ -268,7 +268,7 @@ pub const WorkerRuntime = struct {
     session_id: []const u8,
     // The worker's log, which sends each line to the main thread. It belongs to the worker's thread, as the main thread's log belongs
     // to the main thread, and every task the worker runs is given it.
-    log: ziggy_log.log.ILog,
+    log: ILog,
 
     //
     // How the worker sends the main thread a message.

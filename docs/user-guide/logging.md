@@ -6,7 +6,7 @@ Ziggy has one logging system for every program built on it: a Ziggy app's backen
 
 ## Logging a line
 
-There is no global log. Code logs to the `ILog` (`ziggy.log.log.ILog`) it is given:
+There is no global log. Code logs to the `ILog` (`ziggy.log.ILog`) it is given:
 
 - A message handler, a menu item's function or an app function writes to `services.log`, the main thread's log on its handler services.
 - A task's handler writes to `services.log` on its task services, the worker's log. A task queue handler reads the same log from its context, `context.log`.
@@ -20,7 +20,7 @@ fn importPhotos(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timer
     try readThumbnail(io, log, request.path);
 }
 
-fn readThumbnail(io: std.Io, log: ziggy.log.log.ILog, path: []const u8) !void {
+fn readThumbnail(io: std.Io, log: ziggy.log.ILog, path: []const u8) !void {
     readFile(io, path) catch |err| {
         log.exception("Could not read the file", err);
         return err;
@@ -28,7 +28,7 @@ fn readThumbnail(io: std.Io, log: ziggy.log.log.ILog, path: []const u8) !void {
 }
 ```
 
-There is no function that gives a log. Code that has been given no log, such as a test, `main` before it has made its log or a thread of a program's own, makes a `ziggy.log.log.ConsoleLog` where it starts (`var console_log: ConsoleLog = .{};`, every option off unless it sets one) and passes `console_log.ilog()` down.
+There is no function that gives a log. Code that has been given no log, such as a test, `main` before it has made its log or a thread of a program's own, makes a `ziggy.log.ConsoleLog` where it starts (`var console_log: ConsoleLog = .{};`, every option off unless it sets one) and passes `console_log.ilog()` down.
 
 | Function | What it logs |
 |---|---|

@@ -1,8 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const utils = @import("utils");
-const ziggy_log = @import("log");
-const standard_streams = ziggy_log.standard_streams;
+const standard_streams = @import("log").standard_streams;
 const MessageQueue = @import("ziggy").core.MessageQueue;
 const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
 

@@ -48,7 +48,7 @@ test "ITaskResult round-trips through JSON" {
 //
 // Counts the calls of a callback closure.
 //
-fn countCall(context: ?*anyopaque, allocator: std.mem.Allocator, log: @import("ziggy").log.log.ILog, taskId: []const u8) void {
+fn countCall(context: ?*anyopaque, allocator: std.mem.Allocator, log: @import("ziggy").log.ILog, taskId: []const u8) void {
     _ = log;
     _ = allocator;
     _ = taskId;

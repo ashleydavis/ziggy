@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 const utils = @import("utils");
 const errors = utils.errors;
 const process_env = utils.process_env;
-const ILog = @import("log").log.ILog;
+const ILog = @import("log").ILog;
 
 //
 // The output of a command run with exec.

@@ -6,7 +6,9 @@
 const std = @import("std");
 const task_queue_zig = @import("ziggy").task_queue;
 const utils = ziggy.utils;
-const ziggy_log = ziggy.log;
+const MuteLog = ziggy.log.mute_log.MuteLog;
+const MemoryLog = ziggy.log.memory_log.MemoryLog;
+const ILog = ziggy.log.ILog;
 const TaskQueue = task_queue_zig.task_queue.TaskQueue;
 const types = task_queue_zig.types;
 const TaskStatus = types.TaskStatus;
@@ -85,7 +87,7 @@ const Setup = struct {
     // afterEach: shuts the queue down, waits for the backend's tasks and frees everything.
     //
     fn deinit(self: Setup, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
-        const console_log = ziggy_log.mute_log.MuteLog.init();
+        const console_log = MuteLog.init();
         self.queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
         self.backend.deinit(io, allocator, timers, console_log);
@@ -96,7 +98,7 @@ const Setup = struct {
     // because a worker's messages are read in the order they were sent.
     //
     fn waitUntilDispatched(self: Setup, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
-        const console_log = ziggy_log.mute_log.MuteLog.init();
+        const console_log = MuteLog.init();
         while (self.backend.pool.pending_tasks.items.len > 0) {
             self.backend.waitForMessage(io, allocator, timers, console_log);
         }
@@ -106,7 +108,7 @@ const Setup = struct {
     // Reads the pool's messages until no task is queued or running, so every callback that is going to run has run.
     //
     fn waitUntilIdle(self: Setup, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
-        const console_log = ziggy_log.mute_log.MuteLog.init();
+        const console_log = MuteLog.init();
         while (self.backend.pool.isBusy()) {
             self.backend.waitForMessage(io, allocator, timers, console_log);
         }
@@ -163,7 +165,7 @@ fn holdTimedOut(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, 
 // Holds the task's worker, reading the worker's messages, until the test cancels the source given.
 //
 fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers, source: []const u8) !void {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     const backend = try getQueueBackend();
     var hold: Hold = .{
         .released = false,
@@ -190,7 +192,7 @@ fn waitForRelease(allocator: std.mem.Allocator, io: std.Io, timers: Timers, sour
 //
 // Sends an event of the type "started" naming the task, so the test sees it has started.
 //
-fn sendStarted(allocator: std.mem.Allocator, io: std.Io, log: ziggy_log.log.ILog, context: ITaskContext, name: std.json.Value) !void {
+fn sendStarted(allocator: std.mem.Allocator, io: std.Io, log: ILog, context: ITaskContext, name: std.json.Value) !void {
     var event: std.json.ObjectMap = .empty;
     try event.put(allocator, "type", .{ .string = "started" });
     try event.put(allocator, "name", name);
@@ -200,7 +202,7 @@ fn sendStarted(allocator: std.mem.Allocator, io: std.Io, log: ziggy_log.log.ILog
 //
 // A handler that returns "done".
 //
-fn doneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn doneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = allocator;
     _ = io;
@@ -213,7 +215,7 @@ fn doneHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: zi
 //
 // A handler that holds its worker until the test cancels `release_source`, then returns "done".
 //
-fn slowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn slowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = data;
     _ = context;
@@ -224,7 +226,7 @@ fn slowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, 
 //
 // A handler that holds its worker until the test cancels `second_release_source`, then returns "done".
 //
-fn secondSlowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn secondSlowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = data;
     _ = context;
@@ -235,7 +237,7 @@ fn secondSlowBlockedHandler(allocator: std.mem.Allocator, io: std.Io, timers: Ti
 //
 // A handler that returns "Task <id> completed".
 //
-fn countingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn countingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = io;
     _ = timers;
@@ -246,7 +248,7 @@ fn countingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log
 //
 // A handler that sleeps 100ms, then returns "done".
 //
-fn slowCountingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn slowCountingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = allocator;
     _ = timers;
@@ -259,7 +261,7 @@ fn slowCountingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers,
 //
 // A handler that fails.
 //
-fn failHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn failHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = allocator;
     _ = io;
@@ -273,7 +275,7 @@ fn failHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: zi
 // A handler that sends "started" with its id, holds its worker until the test cancels `release_source` when its data requests it, and
 // returns its id.
 //
-fn recordingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn recordingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     const id = data.object.get("id").?;
     try sendStarted(allocator, io, log, context, id);
     if (data.object.get("hold") != null) {
@@ -285,7 +287,7 @@ fn recordingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, lo
 //
 // A handler that returns its data.
 //
-fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = allocator;
     _ = io;
@@ -297,7 +299,7 @@ fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: zi
 //
 // A handler that sends a "test-event" and returns "done".
 //
-fn eventSendingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn eventSendingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = timers;
     _ = data;
     context.sendEvent(io, allocator, log, try json(allocator, "{\"type\":\"test-event\",\"data\":\"test\"}"));
@@ -307,7 +309,7 @@ fn eventSendingHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers,
 //
 // A handler that returns its name. The task named "running" holds its worker until the test cancels `release_source`.
 //
-fn orderedTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn orderedTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = context;
     const name = data.object.get("name").?;
@@ -320,7 +322,7 @@ fn orderedTaskHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, 
 //
 // Sets a boolean flag (used as a callback that must not be called).
 //
-fn setFlagOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, result: ITaskResult) anyerror!void {
+fn setFlagOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: ITaskResult) anyerror!void {
     _ = log;
     _ = io;
     _ = allocator;
@@ -332,7 +334,7 @@ fn setFlagOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Alloca
 //
 // Sets a boolean flag (used as an event callback that must not be called).
 //
-fn setFlagOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, data: types.ITaskEventData) anyerror!void {
+fn setFlagOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
     _ = log;
     _ = io;
     _ = allocator;
@@ -364,7 +366,7 @@ const ResultsRecorder = struct {
     //
     // The completion callback.
     //
-    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, result: ITaskResult) anyerror!void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: ITaskResult) anyerror!void {
         _ = log;
         _ = io;
         const self: *ResultsRecorder = @ptrCast(@alignCast(context.?));
@@ -396,7 +398,7 @@ const RunningCounter = struct {
     //
     // The event callback: a task has started.
     //
-    fn taskStarted(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, data: types.ITaskEventData) anyerror!void {
+    fn taskStarted(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -412,7 +414,7 @@ const RunningCounter = struct {
     //
     // The completion callback: a task has ended.
     //
-    fn taskEnded(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, result: ITaskResult) anyerror!void {
+    fn taskEnded(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: ITaskResult) anyerror!void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -425,8 +427,8 @@ const RunningCounter = struct {
 //
 // Shuts a queue down from a completion callback, which runs while the queue's owner waits.
 //
-fn shutDownQueue(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, result: ITaskResult) anyerror!void {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+fn shutDownQueue(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: ITaskResult) anyerror!void {
+    const console_log = MuteLog.init();
     _ = log;
     _ = result;
     const queue: *TaskQueue = @ptrCast(@alignCast(context.?));
@@ -436,8 +438,8 @@ fn shutDownQueue(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator,
 //
 // Cancels the "test" source of a pool from a completion callback, which runs while the queue's owner waits.
 //
-fn cancelTestSource(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, result: ITaskResult) anyerror!void {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+fn cancelTestSource(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: ITaskResult) anyerror!void {
+    const console_log = MuteLog.init();
     _ = log;
     _ = result;
     const pool: *MockWorkerPool = @ptrCast(@alignCast(context.?));
@@ -445,7 +447,7 @@ fn cancelTestSource(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocat
 }
 
 test "should add a task and return a UUID" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -461,7 +463,7 @@ test "should add a task and return a UUID" {
 }
 
 test "should add multiple tasks with unique IDs" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -478,7 +480,7 @@ test "should add multiple tasks with unique IDs" {
 }
 
 test "addTask hands the priority it was given to the backend" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -502,7 +504,7 @@ test "addTask hands the priority it was given to the backend" {
 }
 
 test "addTask hands no priority to the backend when the caller named none" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -525,7 +527,7 @@ test "addTask hands no priority to the backend when the caller named none" {
 }
 
 test "an interactive task is dispatched before background tasks already waiting" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -570,7 +572,7 @@ test "an interactive task is dispatched before background tasks already waiting"
 }
 
 test "awaitTask resolves when the specific task completes" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -588,7 +590,7 @@ test "awaitTask resolves when the specific task completes" {
 }
 
 test "awaitTask resolves immediately when the task ID is not tracked" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -602,7 +604,7 @@ test "awaitTask resolves immediately when the task ID is not tracked" {
 }
 
 test "awaitTask resolves for each task awaited in turn, the second after the first has resolved" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -622,7 +624,7 @@ test "awaitTask resolves for each task awaited in turn, the second after the fir
 }
 
 test "awaitTask resolves immediately when shutdown is called while waiting" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -643,7 +645,7 @@ test "awaitTask resolves immediately when shutdown is called while waiting" {
 }
 
 test "should wait for all tasks to complete" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -665,7 +667,7 @@ test "should wait for all tasks to complete" {
 }
 
 test "should resolve immediately if no tasks" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -679,7 +681,7 @@ test "should resolve immediately if no tasks" {
 }
 
 test "should handle mixed success and failure" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -699,7 +701,7 @@ test "should handle mixed success and failure" {
 }
 
 test "should handle empty queue" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -713,7 +715,7 @@ test "should handle empty queue" {
 }
 
 test "awaitAllTasks resolves immediately when shutdown is called while waiting" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -732,7 +734,7 @@ test "awaitAllTasks resolves immediately when shutdown is called while waiting" 
 }
 
 test "onTasksCancelled fires resolveAllWaiters, unblocking awaitAllTasks and awaitTask callers" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -754,7 +756,7 @@ test "onTasksCancelled fires resolveAllWaiters, unblocking awaitAllTasks and awa
 }
 
 test "should wait for all tasks including slow ones" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -781,7 +783,7 @@ test "should wait for all tasks including slow ones" {
 }
 
 test "should execute tasks in parallel up to maxWorkers" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -825,7 +827,7 @@ test "should execute tasks in parallel up to maxWorkers" {
 }
 
 test "should respect maxWorkers limit" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -863,7 +865,7 @@ test "should respect maxWorkers limit" {
 }
 
 test "should process tasks in FIFO order" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -906,7 +908,7 @@ test "should process tasks in FIFO order" {
 // Runs a task of the type "echo-task" with the data and returns its output as JSON text.
 //
 fn echoedJson(io: std.Io, allocator: std.mem.Allocator, timers: Timers, data: std.json.Value) ![]const u8 {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
     const taskId = try setup.queue.addTask(io, allocator, console_log, "echo-task", data, null, null);
@@ -967,7 +969,7 @@ test "should handle array data" {
 }
 
 test "should terminate all workers" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -982,7 +984,7 @@ test "should terminate all workers" {
 }
 
 test "should allow shutdown multiple times" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -998,7 +1000,7 @@ test "should allow shutdown multiple times" {
 }
 
 test "should prevent callbacks from being called after shutdown" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1025,7 +1027,7 @@ test "should prevent callbacks from being called after shutdown" {
 }
 
 test "should prevent task events from being received after shutdown" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1104,7 +1106,7 @@ const RecordingBackend = struct {
     //
     // Records the task ID.
     //
-    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: ziggy.log.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
+    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: ziggy.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?TaskPriority) anyerror![]const u8 {
         _ = log;
         _ = io;
         _ = data;
@@ -1172,7 +1174,7 @@ const RecordingBackend = struct {
     //
     // Does nothing.
     //
-    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ziggy.log.log.ILog, source: []const u8) void {
+    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ziggy.log.ILog, source: []const u8) void {
         _ = log;
         _ = ptr;
         _ = io;
@@ -1202,7 +1204,7 @@ const RecordingBackend = struct {
     //
     // Has no messages, because nothing it is given ever completes.
     //
-    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy.log.log.ILog) void {
+    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy.log.ILog) void {
         _ = log;
         _ = ptr;
         _ = io;
@@ -1213,7 +1215,7 @@ const RecordingBackend = struct {
 };
 
 test "should unsubscribe from all backend events on shutdown" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1236,7 +1238,7 @@ test "should unsubscribe from all backend events on shutdown" {
 }
 
 test "tasks from source A do not trigger completion callbacks of source B" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1262,7 +1264,7 @@ test "tasks from source A do not trigger completion callbacks of source B" {
 }
 
 test "addTask with an explicit taskId passes that ID through to the backend" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1285,7 +1287,7 @@ test "addTask with an explicit taskId passes that ID through to the backend" {
 }
 
 test "should use custom UUID generator" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1319,7 +1321,7 @@ test "should use custom UUID generator" {
 }
 
 test "should use default UUID generator when not provided" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1347,7 +1349,7 @@ test "should use default UUID generator when not provided" {
 // A handler that fails with a plain Zig error that has no recorded message
 // (the closest Zig equivalent of throwing a value that is not an Error).
 //
-fn plainZigErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn plainZigErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = allocator;
     _ = io;
@@ -1360,7 +1362,7 @@ fn plainZigErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers
 //
 // A handler that throws "Custom error message".
 //
-fn customErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn customErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = log;
     _ = allocator;
     _ = io;
@@ -1371,7 +1373,7 @@ fn customErrorHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, 
 }
 
 test "should handle handler throwing non-Error objects" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1394,7 +1396,7 @@ test "should handle handler throwing non-Error objects" {
 }
 
 test "should preserve error messages" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1426,7 +1428,7 @@ const ProgressRecorder = struct {
     //
     // The event callback.
     //
-    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, data: types.ITaskEventData) anyerror!void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
         _ = log;
         _ = io;
         const self: *ProgressRecorder = @ptrCast(@alignCast(context.?));
@@ -1437,7 +1439,7 @@ const ProgressRecorder = struct {
 //
 // A handler that sends two progress events and an event of another type, then returns.
 //
-fn progressHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy_log.log.ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
+fn progressHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ILog, data: std.json.Value, context: ITaskContext) anyerror!std.json.Value {
     _ = timers;
     _ = data;
     context.sendEvent(io, allocator, log, try json(allocator, "{\"type\":\"replicate-progress\",\"databasePath\":\"/db\",\"progress\":\"one\"}"));
@@ -1447,7 +1449,7 @@ fn progressHandler(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log
 }
 
 test "onTaskEvent delivers only events of the registered type, in order, before awaitTask returns" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1477,7 +1479,7 @@ test "onTaskEvent delivers only events of the registered type, in order, before 
 }
 
 test "onTaskComplete unsubscribe removes the callback" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1515,7 +1517,7 @@ const EventTypeRecorder = struct {
     //
     // The event callback.
     //
-    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, data: types.ITaskEventData) anyerror!void {
+    fn record(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
         _ = log;
         _ = io;
         const self: *EventTypeRecorder = @ptrCast(@alignCast(context.?));
@@ -1528,7 +1530,7 @@ const EventTypeRecorder = struct {
 // progress with, so what it does is pinned here.
 //
 test "onAnyTaskEvent delivers every event of a tracked task, whatever its type, in order" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1562,7 +1564,7 @@ test "onAnyTaskEvent delivers every event of a tracked task, whatever its type, 
 }
 
 test "onAnyTaskEvent callbacks receive nothing after shutdown" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1593,7 +1595,7 @@ test "onAnyTaskEvent callbacks receive nothing after shutdown" {
 //
 // A completion callback that fails.
 //
-fn failOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, result: ITaskResult) anyerror!void {
+fn failOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: ITaskResult) anyerror!void {
     _ = log;
     _ = context;
     _ = io;
@@ -1605,7 +1607,7 @@ fn failOnComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator
 //
 // An event callback that fails.
 //
-fn failOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.log.ILog, data: types.ITaskEventData) anyerror!void {
+fn failOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
     _ = log;
     _ = context;
     _ = io;
@@ -1615,7 +1617,7 @@ fn failOnEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _
 }
 
 test "callbacks that fail are logged and the other callbacks still run" {
-    const memory = try ziggy_log.memory_log.MemoryLog.init(std.testing.allocator, .{
+    const memory = try MemoryLog.init(std.testing.allocator, .{
         .verbose = false,
         .debug = false,
         .tools = false,
@@ -1652,7 +1654,7 @@ test "callbacks that fail are logged and the other callbacks still run" {
 }
 
 test "unsubscribing leaves the other callbacks, and unsubscribing twice does nothing" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();
@@ -1689,7 +1691,7 @@ test "unsubscribing leaves the other callbacks, and unsubscribing twice does not
 }
 
 test "callers awaiting different tasks each resolve when their own task completes" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const allocator = arena_state.allocator();

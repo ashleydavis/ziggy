@@ -3,9 +3,8 @@
 //
 
 const std = @import("std");
-const ziggy_log = @import("log");
 
-const MemoryLog = ziggy_log.memory_log.MemoryLog;
+const MemoryLog = @import("log").memory_log.MemoryLog;
 
 test "a memory log with no options records info and event as stdout, error, warn and exception as stderr and leaves out verbose, debug and tool lines" {
     const memory = try MemoryLog.init(std.testing.allocator, .{

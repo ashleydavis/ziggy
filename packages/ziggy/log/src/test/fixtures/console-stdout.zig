@@ -1,5 +1,5 @@
 const std = @import("std");
-const ziggy_log = @import("log");
+const console = @import("log").console;
 
 //
 // Writes through console.log and console.debug with nothing captured, so the lines go to the real stdout, which the
@@ -7,6 +7,6 @@ const ziggy_log = @import("log");
 // test program reports its results on.)
 //
 pub fn main() void {
-    ziggy_log.console.log("logged to stdout");
-    ziggy_log.console.debug("debugged to stdout");
+    console.log("logged to stdout");
+    console.debug("debugged to stdout");
 }

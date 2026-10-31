@@ -13,7 +13,7 @@ const std = @import("std");
 const types = @import("types.zig");
 const json = @import("json.zig");
 const utils = @import("utils");
-const ziggy_log = @import("log");
+const ILog = @import("log").ILog;
 const task_queue_types = @import("task-queue.zig").types;
 const worker_lib = @import("worker.zig");
 const worker_messages = @import("worker-messages.zig");
@@ -235,7 +235,7 @@ pub const TaskServices = struct {
     // The task behind the interface.
     task: *RunningTask,
     // The worker's log, which sends each line to the main thread, where it is written tagged with the worker.
-    log: ziggy_log.log.ILog,
+    log: ILog,
 
     //
     // Whether the task's source has been cancelled. It reads the messages already waiting for the worker, without waiting for more.
@@ -516,7 +516,7 @@ const queue_context_vtable: task_queue_types.ITaskContext.VTable = .{
 //
 // Sends an event to the frontend and to the observers, writing to the log when it cannot.
 //
-fn queueContextSendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, event: std.json.Value) void {
+fn queueContextSendEvent(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ILog, event: std.json.Value) void {
     const task: *RunningTask = @ptrCast(@alignCast(ptr));
     task.sendEvent(io, allocator, event) catch |err| {
         log.exception("Error sending a task event", err);

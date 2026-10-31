@@ -1,10 +1,10 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
 const utils = @import("utils");
-const ziggy_log = @import("log");
-const console = ziggy_log.console;
+const ConsoleLog = @import("log").ConsoleLog;
+const console = @import("log").console;
 const errors = utils.errors;
-const file_log = ziggy_log.file_log;
+const file_log = @import("log").file_log;
 const FileLog = file_log.FileLog;
 
 //
@@ -316,7 +316,7 @@ test "logFilePath gives a file log's log file and null for a console log" {
     const logger = try FileLog.start(allocator, std.testing.io, testConfig(logs_dir));
     defer logger.stop(allocator, std.testing.io);
     try std.testing.expectEqualStrings(logger.getLogFilePath(), logger.ilog().logFilePath().?);
-    const console_log = ziggy_log.log.ConsoleLog.initWith(.{
+    const console_log = ConsoleLog.initWith(.{
         .verbose = false,
         .debug = false,
         .tools = false,

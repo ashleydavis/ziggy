@@ -11,7 +11,7 @@ const HandlerServices = ziggy.core.HandlerServices;
 const TaskServices = ziggy.task_runner.TaskServices;
 const TaskContext = ziggy.task_runner.TaskContext;
 const Timers = ziggy.timers.Timers;
-const ILogOptions = ziggy.log.log.ILogOptions;
+const ILogOptions = ziggy.log.ILogOptions;
 const json = ziggy.json;
 
 //

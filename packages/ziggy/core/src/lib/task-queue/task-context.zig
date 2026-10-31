@@ -3,7 +3,7 @@
 //
 const std = @import("std");
 const utils = @import("utils");
-const ziggy_log = @import("log");
+const ILog = @import("log").ILog;
 const types = @import("types.zig");
 const ITaskContext = types.ITaskContext;
 const IUuidGenerator = utils.uuid_generator.IUuidGenerator;
@@ -136,7 +136,7 @@ pub const TaskContext = struct {
     //
     // ITaskContext.sendEvent for this implementation.
     //
-    fn sendEventErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ziggy_log.log.ILog, event: std.json.Value) void {
+    fn sendEventErased(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ILog, event: std.json.Value) void {
         _ = log;
         const self: *TaskContext = @ptrCast(@alignCast(ptr));
         self.sendEvent(io, allocator, event);

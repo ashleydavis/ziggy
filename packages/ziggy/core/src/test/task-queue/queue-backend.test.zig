@@ -1,7 +1,7 @@
 const std = @import("std");
 const task_queue_zig = @import("ziggy").task_queue;
 const utils = ziggy.utils;
-const ziggy_log = ziggy.log;
+const MuteLog = ziggy.log.mute_log.MuteLog;
 const queue_backend = task_queue_zig.queue_backend;
 const types = task_queue_zig.types;
 const IQueueBackend = queue_backend.IQueueBackend;
@@ -53,7 +53,7 @@ const NoOpBackend = struct {
     //
     // Returns "task-id".
     //
-    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: ziggy.log.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?types.TaskPriority) anyerror![]const u8 {
+    fn addTask(ptr: *anyopaque, allocator: std.mem.Allocator, io: std.Io, log: ziggy.log.ILog, @"type": []const u8, data: std.json.Value, source: []const u8, taskId: ?[]const u8, priority: ?types.TaskPriority) anyerror![]const u8 {
         _ = log;
         countCall(ptr);
         _ = allocator;
@@ -125,7 +125,7 @@ const NoOpBackend = struct {
     //
     // Does nothing.
     //
-    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ziggy.log.log.ILog, source: []const u8) void {
+    fn cancelTasks(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, log: ziggy.log.ILog, source: []const u8) void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -156,7 +156,7 @@ const NoOpBackend = struct {
     //
     // Counts the call.
     //
-    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy.log.log.ILog) void {
+    fn waitForMessage(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, timers: Timers, log: ziggy.log.ILog) void {
         _ = log;
         _ = io;
         _ = allocator;
@@ -190,7 +190,7 @@ test "queue-backend singleton: calling setQueueBackend a second time replaces th
 }
 
 test "IQueueBackend forwards every method to the implementation" {
-    const console_log = ziggy_log.mute_log.MuteLog.init();
+    const console_log = MuteLog.init();
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const allocator = arena.allocator();

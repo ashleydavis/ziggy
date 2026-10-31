@@ -16,8 +16,8 @@ const errors = @import("utils").errors;
 const native_app = @import("native-app.zig");
 const worker_messages = @import("worker-messages.zig");
 const MessageQueue = @import("message-queue.zig").MessageQueue;
-const ILog = @import("log").log.ILog;
-const ILogOptions = @import("log").log.ILogOptions;
+const ILog = @import("log").ILog;
+const ILogOptions = @import("log").ILogOptions;
 
 //
 // How a thread of the app's own (a server, for one) reaches the native app itself: by sending the frontend an event and by native
