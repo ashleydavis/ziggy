@@ -610,7 +610,7 @@ jobs:
     # tests and the smoke tests need this job, restore that entry and build no app of their own, so the smoke tests drive the app
     # app-build built.
     timeout-minutes: 40
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -1353,7 +1353,7 @@ jobs:
     # virtual display, Windows, MacOS on the runner's own display, Android on an emulator and iOS on a simulator.
     needs: app-build-ios
     timeout-minutes: 75
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

@@ -103,7 +103,7 @@ jobs:
     # saves the build and its Zig build cache under the key example-build-ios-<commit>, which the jobs that need app-build
     # restore.
     timeout-minutes: 60
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -187,7 +187,7 @@ jobs:
     # saves the package under the key example-package-ios-<commit>, which create-release restores.
     needs: app-build
     timeout-minutes: 60
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -246,7 +246,7 @@ jobs:
     # smoke tests.
     needs: app-build
     timeout-minutes: 50
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -305,7 +305,7 @@ jobs:
     # The app's smoke tests on an iOS simulator. They drive the simulator build app-build made.
     needs: app-build
     timeout-minutes: 75
-    runs-on: macos-15
+    runs-on: macos-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
