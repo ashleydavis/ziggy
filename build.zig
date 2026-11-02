@@ -917,7 +917,7 @@ fn addDevMode(
     // The allocator each of the dev host's threads makes for itself, and the messages the core sends the native app, which the dev
     // host reads as a native app does.
     dev_host.addImport("thread-allocator", b.createModule(.{
-        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/thread-allocator.zig"),
+        .root_source_file = ziggy.dependency.path("packages/ziggy/utils/src/lib/thread-allocator.zig"),
         .target = target,
         .optimize = optimize,
     }));
@@ -960,7 +960,7 @@ fn addDevMode(
     }));
     // The allocator the supervisor's progress thread makes for itself.
     supervisor.root_module.addImport("thread-allocator", b.createModule(.{
-        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/thread-allocator.zig"),
+        .root_source_file = ziggy.dependency.path("packages/ziggy/utils/src/lib/thread-allocator.zig"),
         .target = b.graph.host,
         .optimize = optimize,
     }));
