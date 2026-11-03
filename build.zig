@@ -8,7 +8,10 @@ const android_libc = @import("build/android-libc.zig");
 // core library and its Linux and Windows native apps; it reaches them with @import("ziggy") in its build.zig.
 //
 pub fn build(b: *std.Build) !void {
-    const target = b.standardTargetOptions(.{});
+    // The baseline CPU of the machine's architecture, never the building machine's own CPU: a build made for that CPU crashes with
+    // "Illegal instruction" on a machine without it, as the Linux smoke tests did on CI when the build job's runner had a newer CPU
+    // than the smoke job's. A build for another target, given with -Dtarget, already gets that target's baseline CPU.
+    const target = b.standardTargetOptions(.{ .default_target = .{ .cpu_model = .baseline } });
     // ReleaseSafe by default: the tests keep the safety checks.
     const optimize = b.option(std.builtin.OptimizeMode, "optimize", "Prioritize performance, safety, or binary size (default: ReleaseSafe)") orelse .ReleaseSafe;
     // The name of the app this core is built for, which names its log files. dependency sets it from the app's app.zon.
@@ -121,7 +124,7 @@ pub fn build(b: *std.Build) !void {
     })).step);
     const windows_tests = b.createModule(.{
         .root_source_file = b.path("packages/ziggy/native/windows/src/tests.zig"),
-        .target = b.graph.host,
+        .target = b.resolveTargetQuery(.{ .cpu_model = .baseline }),
         .optimize = optimize,
     });
     test_step.dependOn(&b.addRunArtifact(b.addTest(.{
@@ -943,25 +946,25 @@ fn addDevMode(
     });
     host_step.dependOn(&b.addInstallArtifact(executable, .{}).step);
 
-    // The supervisor runs on the machine the developer works on, whatever the target.
+    // The supervisor runs on the machine the developer works on, whatever the target, built for that architecture's baseline CPU.
     const supervisor = b.addExecutable(.{
         .name = "ziggy-dev",
         .root_module = b.createModule(.{
             .root_source_file = ziggy.dependency.path("packages/ziggy/dev/src/supervisor-main.zig"),
-            .target = b.graph.host,
+            .target = b.resolveTargetQuery(.{ .cpu_model = .baseline }),
             .optimize = optimize,
         }),
     });
     // The core's queue of messages, which the supervisor's progress thread is told the build has finished through.
     supervisor.root_module.addImport("message-queue", b.createModule(.{
         .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/message-queue.zig"),
-        .target = b.graph.host,
+        .target = b.resolveTargetQuery(.{ .cpu_model = .baseline }),
         .optimize = optimize,
     }));
     // The allocator the supervisor's progress thread makes for itself.
     supervisor.root_module.addImport("thread-allocator", b.createModule(.{
         .root_source_file = ziggy.dependency.path("packages/ziggy/utils/src/lib/thread-allocator.zig"),
-        .target = b.graph.host,
+        .target = b.resolveTargetQuery(.{ .cpu_model = .baseline }),
         .optimize = optimize,
     }));
     const run_supervisor = b.addRunArtifact(supervisor);
