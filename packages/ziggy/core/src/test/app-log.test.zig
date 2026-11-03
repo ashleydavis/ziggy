@@ -6,7 +6,7 @@
 
 const std = @import("std");
 const ziggy = @import("ziggy");
-const helpers = @import("helpers.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 const HandlerServices = ziggy.core.HandlerServices;
 const Timers = ziggy.timers.Timers;
@@ -182,7 +182,7 @@ fn readLogFile(allocator: std.mem.Allocator, directory_path: []const u8, prefix:
 }
 
 test "an app with a name has its two log files in the logs directory of its data directory, named after it and headed with its title and version, open from before on_create until after its last on_destroy call" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), logged_app);
@@ -205,7 +205,7 @@ test "an app with a name has its two log files in the logs directory of its data
 }
 
 test "an app's log files go in the logs directory of the directory <NAME>_LOG_DIR names when it is set" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     const data_dir = std.mem.sliceTo(&native_app.data_dir_path, 0);
@@ -231,7 +231,7 @@ test "an app's log files go in the logs directory of the directory <NAME>_LOG_DI
 }
 
 test "configureLog turns on the verbose lines of an app's file log once, and a second call fails without changing them" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), configured_app);
@@ -240,7 +240,7 @@ test "configureLog turns on the verbose lines of an app's file log once, and a s
 }
 
 test "configureLog turns on the verbose lines of the console log of an app with no name once, and a second call fails without changing them" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), configured_unnamed_app);
@@ -256,7 +256,7 @@ test "an app is given the native app's command-line arguments, and none when the
         .ui_files = &[_]ziggy.ui_files.UiFile{},
         .on_create = sendArgumentsOnCreate,
     });
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     const args = [_][*:0]const u8{ "--verbose", "-geometry=800x600" };
@@ -272,7 +272,7 @@ test "an app is given the native app's command-line arguments, and none when the
 }
 
 test "an app with no name has no log files" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), unnamed_app);
@@ -283,7 +283,7 @@ test "an app with no name has no log files" {
 }
 
 test "the core does not start, and on_create is not called, when the app's log files cannot be made" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.data_tmp.dir.writeFile(std.testing.io, .{
@@ -328,7 +328,7 @@ const console_log_app = ziggy.core.App(.{
 });
 
 test "the services' log of an app with no name writes no file" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), console_log_app);

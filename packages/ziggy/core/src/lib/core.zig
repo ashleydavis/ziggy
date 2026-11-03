@@ -23,6 +23,7 @@ const system_messages = @import("system-messages.zig");
 const app_lib = @import("app.zig");
 const handlers_lib = @import("handlers.zig");
 const menu_lib = @import("menu.zig");
+const action_lib = @import("action.zig");
 const message_queue = @import("message-queue.zig");
 const worker_pool = @import("worker-pool.zig");
 const worker_lib = @import("worker.zig");
@@ -315,6 +316,10 @@ const MainServices = struct {
     console_log: *logging.ConsoleLog,
     // Whether the app has configured the log, which it does once.
     log_configured: bool,
+    // What the core does for each name of the app's menu items and actions, to find an action by its name.
+    menu_targets: menu_lib.MenuTargets,
+    // Every `.standard` item of the app's menu: the standard actions runAction may run by name.
+    standard_menu_items: []const menu_lib.StandardMenuItem,
 
     const vtable: services_lib.HandlerServices.VTable = .{
         .sendEvent = sendEvent,
@@ -323,6 +328,7 @@ const MainServices = struct {
         .holdKeepAlive = holdKeepAlive,
         .quit = quit,
         .menuAction = menuAction,
+        .runAction = runAction,
         .dataDir = dataDir,
         .isPhone = isPhone,
         .nativeCallbacks = nativeCallbacks,
@@ -410,6 +416,41 @@ const MainServices = struct {
         self.callNative(io, allocator, .{
             .menu_action = action,
         });
+    }
+
+    //
+    // Runs one of the app's actions by its name (see HandlerServices.runAction). An app action is sent to the frontend as the action
+    // system event, which calls the handler registered for it. A standard action is run by the native app, but only when it is a
+    // `.standard` item of the app's menu, so an app reaches by name only the standard actions its user can already choose.
+    //
+    fn runAction(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, action: []const u8) anyerror!void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        if (self.menu_targets.get(action)) |target| {
+            if (target == .action) {
+                const event = try json.stringify(allocator, .{
+                    .kind = "system",
+                    .name = "action",
+                    .data = .{
+                        .action = action,
+                    },
+                });
+                defer allocator.free(event);
+                self.frontend.deliver(io, event);
+                return;
+            }
+        }
+        for (self.standard_menu_items) |item| {
+            if (std.mem.eql(u8, @tagName(item.action), action)) {
+                if (!self.config.has_menu_action or self.config.has_native_call) {
+                    return error.StandardActionUnavailable;
+                }
+                self.callNative(io, allocator, .{
+                    .menu_action = action,
+                });
+                return;
+            }
+        }
+        return error.UnknownAction;
     }
 
     //
@@ -962,6 +1003,8 @@ fn mainThread(given: MainStart) void {
         .log = if (file_log) |logger| logger.ilog() else console_log.ilog(),
         .console_log = if (file_log) |logger| &logger.console_log else &console_log,
         .log_configured = false,
+        .menu_targets = app.menu_targets,
+        .standard_menu_items = app.standard_menu_items,
     };
     const services = main_services.interface();
     var native_calls: NativeCalls = .{
@@ -1314,7 +1357,7 @@ fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fron
         return;
     };
     const data = parsed.object.get("data") orelse .null;
-    const outcome = runSystem(allocator, arena, name, data, app.menu_targets, services, timers, io, pool, dropped, tests) catch |err| {
+    const outcome = runSystem(allocator, arena, name, data, app.menu_targets, app.actions, app.standard_menu_items, services, timers, io, pool, dropped, tests) catch |err| {
         frontend.reportHandlerError(io, arena, app.describe_error, request_id, err);
         return;
     };
@@ -1335,7 +1378,7 @@ fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fron
 //
 // Runs the system message of the name with its data, giving its function only the piece of the main thread's state it uses.
 //
-fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []const u8, data: std.json.Value, menu_targets: menu_lib.MenuTargets, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
+fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []const u8, data: std.json.Value, menu_targets: menu_lib.MenuTargets, app_actions: []const action_lib.Action, standard_menu_items: []const menu_lib.StandardMenuItem, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
     if (std.mem.eql(u8, name, "add-task")) {
         const payload = switch (try handlers_lib.parsePayload(system_messages.tasks.AddTaskRequest, arena, data)) {
             .parsed => |value| value,
@@ -1365,6 +1408,18 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
             },
         };
         return try respond(arena, try system_messages.menu.menuAction(menu_targets, services, timers, io, arena, payload));
+    }
+    if (std.mem.eql(u8, name, "run-action")) {
+        const payload = switch (try handlers_lib.parsePayload(system_messages.action.RunActionRequest, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.action.runAction(services, io, arena, payload));
+    }
+    if (std.mem.eql(u8, name, "list-actions")) {
+        return try respond(arena, try system_messages.action.listActions(app_actions, standard_menu_items, services, arena));
     }
     if (std.mem.eql(u8, name, "get-dropped-paths")) {
         return try respond(arena, try system_messages.dropped_files.getDroppedPaths(dropped, arena));

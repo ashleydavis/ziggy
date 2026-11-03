@@ -11,7 +11,9 @@
 const std = @import("std");
 const types = @import("types.zig");
 const core = @import("core.zig");
-const accelerator = @import("accelerator.zig");
+const shortcut_lib = @import("shortcut.zig");
+const menu_lib = @import("menu.zig");
+const action_lib = @import("action.zig");
 const ui_files = @import("ui-files.zig");
 const origin_check = @import("origin-check.zig");
 const inject_script = @import("inject-script.zig");
@@ -73,7 +75,7 @@ const UiFileResult = extern struct {
 };
 
 //
-// Exports every function declared in ziggy.h (ziggy_create, ziggy_destroy, ziggy_send_message, ziggy_check_url, ziggy_menu_json,
+// Exports every function declared in ziggy.h (ziggy_create, ziggy_destroy, ziggy_send_message, ziggy_check_url, ziggy_menu, ziggy_standalone_action_shortcuts, ziggy_dev_shortcuts_json,
 // ziggy_ui_file, ziggy_inject_script, ziggy_parse_accelerator, ziggy_files_dropped, ziggy_ui_query,
 // ziggy_take_native_message and ziggy_native_result) from the library
 // that calls this, serving the app registered with App. It is called once, from app-root.zig.
@@ -191,14 +193,38 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
         }
 
         //
-        // ziggy_menu_json: gives the desktop menu as JSON text and writes its length to the pointer given.
+        // ziggy_menu: gives the desktop menu's entries and writes how many there are to the pointer given.
         //
-        fn menuJson(queue: ?*MessageQueue, length: *usize) callconv(.c) [*]const u8 {
+        fn menu(queue: ?*MessageQueue, count: *usize) callconv(.c) [*]const menu_lib.MenuEntry {
             if (queue == null) {
-                @panic("ziggy_menu_json called with a null pointer");
+                @panic("ziggy_menu called with a null pointer");
             }
-            length.* = app.menu_json.len;
-            return app.menu_json.ptr;
+            count.* = app.menu_entries.len;
+            return app.menu_entries.ptr;
+        }
+
+        //
+        // ziggy_dev_shortcuts_json: gives the shortcuts dev mode's script registers in the browser as JSON text and writes its length
+        // to the pointer given.
+        //
+        fn devShortcutsJson(queue: ?*MessageQueue, length: *usize) callconv(.c) [*]const u8 {
+            if (queue == null) {
+                @panic("ziggy_dev_shortcuts_json called with a null pointer");
+            }
+            length.* = app.dev_shortcuts_json.len;
+            return app.dev_shortcuts_json.ptr;
+        }
+
+        //
+        // ziggy_standalone_action_shortcuts: gives the shortcuts of the actions that have no menu item and writes how many there are to
+        // the pointer given.
+        //
+        fn standaloneActionShortcuts(queue: ?*MessageQueue, count: *usize) callconv(.c) [*]const action_lib.StandaloneActionShortcut {
+            if (queue == null) {
+                @panic("ziggy_standalone_action_shortcuts called with a null pointer");
+            }
+            count.* = app.standalone_action_shortcuts.len;
+            return app.standalone_action_shortcuts.ptr;
         }
 
         //
@@ -231,8 +257,8 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
         //
         // ziggy_parse_accelerator: parses the text of a keyboard shortcut, and returns whether it was one.
         //
-        fn parseAccelerator(text_ptr: [*]const u8, text_len: usize, result: *accelerator.Accelerator) callconv(.c) bool {
-            result.* = accelerator.parse(text_ptr[0..text_len]) catch {
+        fn parseAccelerator(text_ptr: [*]const u8, text_len: usize, result: *shortcut_lib.Shortcut) callconv(.c) bool {
+            result.* = shortcut_lib.parse(text_ptr[0..text_len]) catch {
                 return false;
             };
             return true;
@@ -285,8 +311,14 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
     @export(&Api.checkUrl, .{
         .name = "ziggy_check_url",
     });
-    @export(&Api.menuJson, .{
-        .name = "ziggy_menu_json",
+    @export(&Api.menu, .{
+        .name = "ziggy_menu",
+    });
+    @export(&Api.standaloneActionShortcuts, .{
+        .name = "ziggy_standalone_action_shortcuts",
+    });
+    @export(&Api.devShortcutsJson, .{
+        .name = "ziggy_dev_shortcuts_json",
     });
     @export(&Api.uiFile, .{
         .name = "ziggy_ui_file",

@@ -20,6 +20,10 @@ interface IFakeWindow {
         sendTestResult: (requestId: number, result: object | null) => Promise<object>;
         testUiReady: () => void;
         getPathForFile: (file: object) => string | undefined;
+        registerAction: (name: string, handler: () => void | Promise<void>) => void;
+        removeAction: (name: string) => void;
+        runAction: (name: string) => Promise<object>;
+        listActions: () => Promise<object>;
         [listenerCall: string]: any;
     };
     __ziggyReceive?: (message: object) => void;
@@ -333,6 +337,8 @@ describe("ziggy-inject", () => {
         fakeWindow.ziggy!.log("tool", "magick", undefined, { stdout: "done" });
         const result = fakeWindow.ziggy!.sendTestResult(4, { ok: true });
         fakeWindow.ziggy!.testUiReady();
+        const ran = fakeWindow.ziggy!.runAction("open-database");
+        const listed = fakeWindow.ziggy!.listActions();
         expect(posted.map(text => JSON.parse(text))).toEqual([
             { kind: "system", id: 1, name: "get-platform", data: null },
             { kind: "system", name: "add-task", data: { taskId: "t1", taskType: "quick", source: "s", data: null } },
@@ -342,11 +348,107 @@ describe("ziggy-inject", () => {
             { kind: "system", name: "log", data: { level: "tool", message: "magick", error: null, toolData: { stdout: "done" } } },
             { kind: "system", id: 2, name: "test-result", data: { requestId: 4, result: { ok: true } } },
             { kind: "system", name: "test-ui-ready", data: null },
+            { kind: "system", id: 3, name: "run-action", data: { action: "open-database" } },
+            { kind: "system", id: 4, name: "list-actions", data: null },
         ]);
         fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: { platformKind: "desktop" } });
         fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: {} });
         expect(await platform).toEqual({ platformKind: "desktop" });
         expect(await result).toEqual({});
+        fakeWindow.__ziggyReceive!({ id: 3, ok: true, data: {} });
+        fakeWindow.__ziggyReceive!({ id: 4, ok: true, data: [{ name: "open-database", label: "Open Database...", shortcut: "Ctrl+O" }] });
+        expect(await ran).toEqual({});
+        expect(await listed).toEqual([{ name: "open-database", label: "Open Database...", shortcut: "Ctrl+O" }]);
+    });
+
+    test("an action system event runs the handler registered for the action", () => {
+        const fakeWindow = windowWithWebkit([]);
+        inject(fakeWindow);
+        const ran: string[] = [];
+        fakeWindow.ziggy!.registerAction("open-database", () => {
+            ran.push("open-database");
+        });
+        fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "open-database" } });
+        expect(ran).toEqual(["open-database"]);
+    });
+
+    test("an action system event with no handler logs an error naming the action and throws", () => {
+        const posted: string[] = [];
+        const fakeWindow = windowWithWebkit(posted);
+        inject(fakeWindow);
+        expect(() => fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "missing" } })).toThrow("the action missing ran");
+        expect(posted.map(text => JSON.parse(text))).toEqual([
+            {
+                kind: "system",
+                name: "log",
+                data: {
+                    level: "error",
+                    message: "The action missing ran, and the frontend has no handler registered for it.",
+                    error: null,
+                    toolData: null,
+                },
+            },
+        ]);
+    });
+
+    test("a handler that throws an Error is logged as an exception naming the action, with the error and its stack, and does not throw", () => {
+        const posted: string[] = [];
+        const fakeWindow = windowWithWebkit(posted);
+        inject(fakeWindow);
+        const thrown = new Error("the database is locked");
+        fakeWindow.ziggy!.registerAction("open-database", () => {
+            throw thrown;
+        });
+        fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "open-database" } });
+        expect(posted.map(text => JSON.parse(text))).toEqual([
+            {
+                kind: "system",
+                name: "log",
+                data: {
+                    level: "exception",
+                    message: "The handler of the action open-database failed.",
+                    error: "Error: the database is locked\n" + thrown.stack,
+                    toolData: null,
+                },
+            },
+        ]);
+    });
+
+    test("a handler that throws something that is not an Error logs it as text", () => {
+        const posted: string[] = [];
+        const fakeWindow = windowWithWebkit(posted);
+        inject(fakeWindow);
+        fakeWindow.ziggy!.registerAction("open-database", () => {
+            throw "locked";
+        });
+        fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "open-database" } });
+        expect(JSON.parse(posted[0]).data.error).toBe("locked");
+    });
+
+    test("a handler whose promise rejects is logged as an exception naming the action", async () => {
+        const posted: string[] = [];
+        const fakeWindow = windowWithWebkit(posted);
+        inject(fakeWindow);
+        fakeWindow.ziggy!.registerAction("open-database", () => Promise.reject(new Error("the database is locked")));
+        fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "open-database" } });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const logged = JSON.parse(posted[0]);
+        expect(logged.data.level).toBe("exception");
+        expect(logged.data.message).toBe("The handler of the action open-database failed.");
+        expect(logged.data.error).toContain("Error: the database is locked");
+    });
+
+    test("registering a second handler for an action throws, and removeAction stops the handler running", () => {
+        const fakeWindow = windowWithWebkit([]);
+        inject(fakeWindow);
+        const ran: string[] = [];
+        fakeWindow.ziggy!.registerAction("open-database", () => {
+            ran.push("first");
+        });
+        expect(() => fakeWindow.ziggy!.registerAction("open-database", () => undefined)).toThrow("already has a handler");
+        fakeWindow.ziggy!.removeAction("open-database");
+        expect(() => fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "open-database" } })).toThrow();
+        expect(ran).toEqual([]);
     });
 
     test("each of Ziggy's own listeners gets only its own event, and its remover removes it", () => {
@@ -429,17 +531,21 @@ describe("ziggy-inject", () => {
             "getPathForFile",
             "getPlatform",
             "invoke",
+            "listActions",
             "log",
             "onCoreError",
             "onEvent",
             "onTaskCompleted",
             "onTaskEvent",
             "onTestCommand",
+            "registerAction",
+            "removeAction",
             "removeCoreErrorListener",
             "removeEventListener",
             "removeTaskCompletedListener",
             "removeTaskEventListener",
             "removeTestCommandListener",
+            "runAction",
             "send",
             "sendTestResult",
             "testUiReady",

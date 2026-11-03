@@ -118,6 +118,48 @@
         });
     }
 
+    // The shortcuts the page's keys run, standing in for a desktop native app's: every menu item's shortcut but a standard action's,
+    // and every action's, as the core gives them through ziggy_dev_shortcuts_json (see ziggy.h). Empty until the list arrives.
+    var shortcuts = [];
+    window.fetch("/__ziggy/shortcuts", { cache: "no-store" }).then(function (response) {
+        if (!response.ok) {
+            throw new Error("the dev host answered " + response.status);
+        }
+        return response.text();
+    }).then(function (text) {
+        shortcuts = JSON.parse(text);
+    }).catch(function (error) {
+        console.error("Ziggy dev: the shortcuts could not be read, so no shortcut works in this page: " + error);
+    });
+
+    // The shortcut a key press matches, or null when it matches none.
+    function findPressedShortcut(event) {
+        for (var index = 0; index < shortcuts.length; index += 1) {
+            var shortcut = shortcuts[index];
+            if (shortcut.code === event.code && shortcut.ctrl === event.ctrlKey && shortcut.alt === event.altKey && shortcut.shift === event.shiftKey && shortcut.meta === event.metaKey) {
+                return shortcut;
+            }
+        }
+        return null;
+    }
+
+    // A key press that matches a shortcut posts the menu-action system message naming its action, as a native app posts it, and the
+    // browser does nothing else with it. A browser keeps some shortcuts for itself, such as Ctrl+W, and never passes them to the page.
+    window.addEventListener("keydown", function (event) {
+        var shortcut = findPressedShortcut(event);
+        if (shortcut === null) {
+            return;
+        }
+        event.preventDefault();
+        postMessage(JSON.stringify({
+            kind: "system",
+            name: "menu-action",
+            data: {
+                action: shortcut.action,
+            },
+        }));
+    });
+
     window.chrome = window.chrome || {};
     window.chrome.webview = {
         postMessageWithAdditionalObjects: postMessageWithAdditionalObjects,

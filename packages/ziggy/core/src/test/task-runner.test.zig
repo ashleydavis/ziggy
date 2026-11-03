@@ -1,8 +1,10 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
-const helpers = @import("helpers.zig");
+const test_app = @import("test-app.zig");
+const test_tasks = @import("test-tasks.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
-fn addTask(native_app: *helpers.FakeNativeApp, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
+fn addTask(native_app: *FakeNativeApp, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
         .kind = "system",
         .name = "add-task",
@@ -18,7 +20,7 @@ fn addTask(native_app: *helpers.FakeNativeApp, id: []const u8, task_type: []cons
     native_app.sendMessage(std.testing.allocator, message);
 }
 
-fn cancelSource(native_app: *helpers.FakeNativeApp, source: []const u8) !void {
+fn cancelSource(native_app: *FakeNativeApp, source: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
         .kind = "system",
         .name = "cancel-tasks",
@@ -29,7 +31,7 @@ fn cancelSource(native_app: *helpers.FakeNativeApp, source: []const u8) !void {
 }
 
 
-fn expectCompleted(native_app: *helpers.FakeNativeApp, id: []const u8, status: []const u8) !void {
+fn expectCompleted(native_app: *FakeNativeApp, id: []const u8, status: []const u8) !void {
     var buffer: [256]u8 = undefined;
     const text = try std.fmt.bufPrint(&buffer, "task-completed\",\"data\":{{\"taskId\":\"{s}\",", .{id});
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, text);
@@ -48,10 +50,10 @@ fn expectCompleted(native_app: *helpers.FakeNativeApp, id: []const u8, status: [
 }
 
 test "a short task sends its event and completes as succeeded with its result" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "quick", "s", "null", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"succeeded\",\"outputs\":\"done\"");
@@ -64,30 +66,30 @@ test "a short task sends its event and completes as succeeded with its result" {
 }
 
 test "a failing task completes as failed with its error" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "fail", "s", "null", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"failed\",\"error\":{\"message\":\"TestFailure\"},\"errorMessage\":\"TestFailure\"");
 }
 
 test "an unknown task type completes as failed" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "nothing-like-this", "s", "null", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"status\":\"failed\",\"error\":{\"message\":\"UnknownTaskType\"},\"errorMessage\":\"UnknownTaskType\"");
 }
 
 test "cancelling a running task stops it early and completes it as cancelled" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "spin", "s", "null", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"step\":3");
@@ -96,10 +98,10 @@ test "cancelling a running task stops it early and completes it as cancelled" {
 }
 
 test "cancelling a queued task means it never starts" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "blocker", "sleep", "blocker-source", "{\"ms\":300,\"name\":\"blocker\"}", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"blocker\"");
@@ -111,10 +113,10 @@ test "cancelling a queued task means it never starts" {
 }
 
 test "cancelling one source leaves another source's tasks running" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 3, 2);
+    try test_app.createCore(&native_app, 3, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "a", "spin", "source-a", "null", "background");
     try addTask(&native_app, "b", "spin", "source-b", "null", "background");
@@ -129,10 +131,10 @@ test "cancelling one source leaves another source's tasks running" {
 }
 
 test "a task queued under a source after it was cancelled is not cancelled" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "first", "spin", "s", "null", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"step\":1");
@@ -143,10 +145,10 @@ test "a task queued under a source after it was cancelled is not cancelled" {
 }
 
 test "a cancel for an unknown source is harmless" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try cancelSource(&native_app, "nobody");
     try addTask(&native_app, "t1", "quick", "s", "null", "background");
@@ -154,10 +156,10 @@ test "a cancel for an unknown source is harmless" {
 }
 
 test "a higher priority task starts before a lower priority one queued earlier" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "blocker", "sleep", "s", "{\"ms\":150,\"name\":\"blocker\"}", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"blocker\"");
@@ -171,10 +173,10 @@ test "a higher priority task starts before a lower priority one queued earlier" 
 }
 
 test "tasks of equal priority start in the order they were queued" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "blocker", "sleep", "s", "{\"ms\":100,\"name\":\"blocker\"}", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"blocker\"");
@@ -185,10 +187,10 @@ test "tasks of equal priority start in the order they were queued" {
 }
 
 test "several tasks run at the same time up to the pool size and the rest wait their turn" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 1);
+    try test_app.createCore(&native_app, 2, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "sleep", "s", "{\"ms\":150,\"name\":\"t1\"}", "background");
     try addTask(&native_app, "t2", "sleep", "s", "{\"ms\":150,\"name\":\"t2\"}", "background");
@@ -200,10 +202,10 @@ test "several tasks run at the same time up to the pool size and the rest wait t
 }
 
 test "two live tasks with the same id both run and each reports its completion" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 1);
+    try test_app.createCore(&native_app, 2, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "same", "sleep", "s", "{\"ms\":30,\"name\":\"first\"}", "background");
     try addTask(&native_app, "same", "quick", "s", "null", "background");
@@ -217,40 +219,40 @@ test "two live tasks with the same id both run and each reports its completion" 
 }
 
 test "add-task without a task type is an error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"x\",\"source\":\"s\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"taskType\\\" is missing\"}");
 }
 
 test "add-task without a task id is an error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"source\":\"s\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"taskId\\\" is missing\"}");
 }
 
 test "add-task without a source is an error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskType\":\"quick\",\"taskId\":\"x\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"source\\\" is missing\"}");
 }
 
 test "events sent from several tasks at once all arrive, in order within each task" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 4, 1);
+    try test_app.createCore(&native_app, 4, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     const count = 300;
     try addTask(&native_app, "f1", "flooder", "s", "{\"count\":300}", "background");
@@ -285,10 +287,10 @@ test "events sent from several tasks at once all arrive, in order within each ta
 }
 
 test "destroy with tasks still running cancels them, waits and leaves no leak" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     try addTask(&native_app, "t1", "spin", "s", "null", "background");
     try addTask(&native_app, "t2", "spin", "s", "null", "background");
     try addTask(&native_app, "t3", "sleep", "s", "{\"ms\":100000,\"name\":\"queued\"}", "background");
@@ -297,10 +299,10 @@ test "destroy with tasks still running cancels them, waits and leaves no leak" {
 }
 
 test "a parent that queues children waits for all of them" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 3, 4);
+    try test_app.createCore(&native_app, 3, 4);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "p", "parent", "s", "{\"children\":6,\"childMs\":10,\"name\":\"p\"}", "background");
     try expectCompleted(&native_app, "p", "succeeded");
@@ -311,40 +313,40 @@ test "a parent that queues children waits for all of them" {
 }
 
 test "a parent with no children completes normally" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "p", "parent", "s", "{\"children\":0,\"name\":\"p\"}", "background");
     try expectCompleted(&native_app, "p", "succeeded");
 }
 
 test "awaitTask returns the result of one child and a failed child is returned as a failure" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "p", "await-one", "s", "null", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"first\":\"succeeded\",\"firstResult\":\"child result\",\"second\":\"failed\",\"secondError\":\"TestFailure\"");
 }
 
 test "runChild runs children one after another and returns each one's completion" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "p", "run-children-in-turn", "s", "null", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"first\":\"succeeded\",\"firstResult\":\"child result\",\"second\":\"failed\",\"secondError\":\"TestFailure\",\"third\":\"succeeded\",\"thirdResult\":\"child result\"");
 }
 
 test "no more than the child task limit run at once" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 6, 2);
+    try test_app.createCore(&native_app, 6, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "p", "parent", "s", "{\"children\":8,\"childMs\":20,\"name\":\"p\"}", "background");
     try expectCompleted(&native_app, "p", "succeeded");
@@ -367,10 +369,10 @@ test "no more than the child task limit run at once" {
 }
 
 test "children of two parents do not run more at once than the pool has workers" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 3, 10);
+    try test_app.createCore(&native_app, 3, 10);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "p1", "parent", "s", "{\"children\":6,\"childMs\":20,\"name\":\"p1\"}", "background");
     try addTask(&native_app, "p2", "parent", "s", "{\"children\":6,\"childMs\":20,\"name\":\"p2\"}", "background");
@@ -395,10 +397,10 @@ test "children of two parents do not run more at once than the pool has workers"
 }
 
 test "cancelling the parent's source cancels its children and the parent completes as cancelled" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 3, 2);
+    try test_app.createCore(&native_app, 3, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "p", "blocked-parent", "s", "null", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"childStart\":\"blocked\"");
@@ -411,7 +413,7 @@ test "cancelling the parent's source cancels its children and the parent complet
 //
 // Waits until the fake native app has been told the given number of keep-alive changes, and returns what it was told.
 //
-fn keepAliveCalls(native_app: *helpers.FakeNativeApp, count: usize) ![]bool {
+fn keepAliveCalls(native_app: *FakeNativeApp, count: usize) ![]bool {
     var waited: u32 = 0;
     while (true) : (waited += 1) {
         const text = try native_app.keepAliveCalls(std.testing.io, std.testing.allocator);
@@ -426,10 +428,10 @@ fn keepAliveCalls(native_app: *helpers.FakeNativeApp, count: usize) ![]bool {
 }
 
 test "a keep-alive task has the native app keep the app running while it is queued or running, and to stop when it ends" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "k1", "keep-sleep", "s", "{\"ms\":30}", "background");
     const during = try keepAliveCalls(&native_app, 1);
@@ -442,10 +444,10 @@ test "a keep-alive task has the native app keep the app running while it is queu
 }
 
 test "several keep-alive tasks send one keep-alive call, and the native app is told to stop only when the last one ends" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 3, 2);
+    try test_app.createCore(&native_app, 3, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "k1", "keep-sleep", "s1", "{\"ms\":20}", "background");
     try addTask(&native_app, "k2", "keep-sleep", "s2", "{\"ms\":100000}", "background");
@@ -469,7 +471,7 @@ fn holdHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers
 }
 
 //
-// The app of the hold test: the helpers' app with the message hold.
+// The app of the hold test: the tests' app (test-app.zig) with the message hold.
 //
 const hold_app = registered: {
     var registered = ziggy.core.App(.{
@@ -480,19 +482,19 @@ const hold_app = registered: {
         .menu = &.{},
         .ui_files = &[_]ziggy.ui_files.UiFile{},
     });
-    registered.tasks = &helpers.task_handlers;
+    registered.tasks = &test_tasks.task_handlers;
     break :registered registered;
 };
 
 //
 // Has the main thread of the core hold the app running, or let it go.
 //
-fn hold(native_app: *helpers.FakeNativeApp, keep_running: bool) void {
+fn hold(native_app: *FakeNativeApp, keep_running: bool) void {
     native_app.sendMessage(std.testing.allocator, if (keep_running) "{\"kind\":\"app\",\"name\":\"hold\",\"data\":true}" else "{\"kind\":\"app\",\"name\":\"hold\",\"data\":false}");
 }
 
 test "a hold keeps the app running with no task, and the native app is told to stop only when the hold and the last keep-alive task have both ended" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(3, 2), hold_app);
@@ -518,10 +520,10 @@ test "a hold keeps the app running with no task, and the native app is told to s
 }
 
 test "a normal task never has the native app keep the app running" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "n1", "sleep", "s", "{\"ms\":10}", "background");
     try expectCompleted(&native_app, "n1", "succeeded");
@@ -532,10 +534,10 @@ test "a normal task never has the native app keep the app running" {
 }
 
 test "a keep-alive parent keeps the app running until its children are done and it ends" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 3, 2);
+    try test_app.createCore(&native_app, 3, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "p1", "keep-parent", "s", "{\"children\":2,\"childMs\":20}", "background");
     try expectCompleted(&native_app, "p1", "succeeded");
@@ -561,13 +563,13 @@ fn nativeCallTask(services: ziggy.task_runner.TaskServices, timers: ziggy.timers
 }
 
 test "a task has the native app do something only the platform can do, and gets its result" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+    const native_call_tasks = test_tasks.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
         .{ .name = "native-call", .handler = ziggy.task_runner.wrapTask("native-call", nativeCallTask) },
     };
-    var native_call_app = helpers.app;
+    var native_call_app = test_app.app;
     native_call_app.tasks = &native_call_tasks;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_call_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -576,13 +578,13 @@ test "a task has the native app do something only the platform can do, and gets 
 }
 
 test "a task is told why the native app could not do the native call" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+    const native_call_tasks = test_tasks.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
         .{ .name = "native-call", .handler = ziggy.task_runner.wrapTask("native-call", nativeCallTask) },
     };
-    var native_call_app = helpers.app;
+    var native_call_app = test_app.app;
     native_call_app.tasks = &native_call_tasks;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_call_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -591,13 +593,13 @@ test "a task is told why the native app could not do the native call" {
 }
 
 test "a task on a platform with no native call callback gets NativeCallMissing" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+    const native_call_tasks = test_tasks.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
         .{ .name = "native-call", .handler = ziggy.task_runner.wrapTask("native-call", nativeCallTask) },
     };
-    var native_call_app = helpers.app;
+    var native_call_app = test_app.app;
     native_call_app.tasks = &native_call_tasks;
     var config = native_app.config(1, 1);
     config.has_native_call = false;
@@ -623,13 +625,13 @@ fn nativeCallerTask(services: ziggy.task_runner.TaskServices, timers: ziggy.time
 }
 
 test "a task's native caller reaches the native app through the native call callback" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+    const native_call_tasks = test_tasks.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
         .{ .name = "native-caller", .handler = ziggy.task_runner.wrapTask("native-caller", nativeCallerTask) },
     };
-    var native_call_app = helpers.app;
+    var native_call_app = test_app.app;
     native_call_app.tasks = &native_call_tasks;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_call_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -638,13 +640,13 @@ test "a task's native caller reaches the native app through the native call call
 }
 
 test "a task has no native caller when the native app gave no native call callback" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    const native_call_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+    const native_call_tasks = test_tasks.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
         .{ .name = "native-caller", .handler = ziggy.task_runner.wrapTask("native-caller", nativeCallerTask) },
     };
-    var native_call_app = helpers.app;
+    var native_call_app = test_app.app;
     native_call_app.tasks = &native_call_tasks;
     var config = native_app.config(1, 1);
     config.has_native_call = false;
@@ -655,10 +657,10 @@ test "a task has no native caller when the native app gave no native call callba
 }
 
 test "a dialog the native app could not show fails the task with NativeCallFailed" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.setResult(std.testing.io, std.testing.allocator, "pick-paths", false, "The dialog could not be shown.");
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"p1\",\"taskType\":\"pick-open\",\"source\":\"src\",\"data\":null,\"priority\":\"background\"}}");
@@ -666,20 +668,20 @@ test "a dialog the native app could not show fails the task with NativeCallFaile
 }
 
 test "task-completed carries the full task result: the task's type and its input" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "t1", "quick", "s", "{\"a\":1}", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"task-completed\",\"data\":{\"taskId\":\"t1\",\"result\":{\"taskId\":\"t1\",\"status\":\"succeeded\",\"outputs\":\"done\",\"type\":\"quick\",\"inputs\":{\"a\":1}}}}");
 }
 
 test "add-task with a priority that is not interactive or background is an error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"x\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"urgent\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"priority\\\" does not fit (");
@@ -688,30 +690,30 @@ test "add-task with a priority that is not interactive or background is an error
 }
 
 test "add-task without a priority runs the task as background" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"t1\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null}}");
     try expectCompleted(&native_app, "t1", "succeeded");
 }
 
 test "cancel-tasks with the source as an object instead of a bare string is an error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"cancel-tasks\",\"data\":{\"source\":\"s\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: ");
 }
 
 test "add-task takes the priority interactive or background, or none, and refuses anything else" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"add-task\",\"data\":{\"taskId\":\"a\",\"taskType\":\"quick\",\"source\":\"s\",\"data\":null,\"priority\":\"interactive\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":{}}");
@@ -724,10 +726,10 @@ test "add-task takes the priority interactive or background, or none, and refuse
 }
 
 test "a second interactive task goes in front of the first one still waiting, and background tasks keep their arrival order" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try addTask(&native_app, "blocker", "sleep", "s", "{\"ms\":150,\"name\":\"blocker\"}", "background");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"start\":\"blocker\"");
@@ -776,13 +778,13 @@ fn greetTask(services: ziggy.task_runner.TaskServices, timers: ziggy.timers.Time
 }
 
 test "a task's data is parsed into its payload type and its result turned into JSON, and data that does not fit fails the task" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    const greet_tasks = helpers.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
+    const greet_tasks = test_tasks.task_handlers ++ [_]ziggy.task_runner.TaskHandlerEntry{
         .{ .name = "greet", .handler = ziggy.task_runner.wrapTask("greet", greetTask) },
     };
-    var greet_app = helpers.app;
+    var greet_app = test_app.app;
     greet_app.tasks = &greet_tasks;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), greet_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);

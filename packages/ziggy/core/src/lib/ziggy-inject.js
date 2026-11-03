@@ -5,8 +5,9 @@
 //
 // There are two kinds of message, kept apart from end to end. An app message belongs to the app: the frontend sends it with invoke
 // or send, the core hands it to the app's handler for its name and the app sends app events back. A system message belongs to Ziggy
-// itself (tasks, the platform, menu actions, dropped files, core errors and remote control): only this script and the native app
-// send one, the core handles it without the app ever seeing it, and window.ziggy has no call that sends an arbitrary one.
+// itself (tasks, the platform, menu actions, the app's actions, dropped files, core errors and remote control): only this script and
+// the native app send one, the core handles it without the app ever seeing it, and window.ziggy has no call that sends an arbitrary
+// one.
 //
 // Every message posted to the core is the JSON text of an object whose "kind" names which it is:
 //   { "kind": "app", "id", "name", "data" }      an app message that gets a message response (invoke)
@@ -20,6 +21,8 @@
 //   { "kind": "app", "data" }                                        an app event, for the onEvent listeners (a menu item the
 //                                                                    frontend runs is one: { "type": "menu", "item" })
 //   { "kind": "system", "name", "data" }                             a system event, for Ziggy's listeners for that name
+//                                                                    (the action event, { "action" }, runs the handler registerAction
+//                                                                    registered for the action instead)
 (function () {
     if (window.ziggy) {
         return;
@@ -124,7 +127,59 @@
         }));
     }
 
+    // The frontend's handler of each of the app's actions, by the action's name. The core runs an action by sending the action system
+    // event naming it, whatever ran it: a menu item, a shortcut, runAction or the backend.
+    var actionHandlers = new Map();
+
+    // Writes an error a handler of an action threw or rejected with to the backend's log, as an exception naming the action, with the
+    // error's name, message and stack trace, so it is never lost.
+    function logActionError(name, error) {
+        var errorText = String(error);
+        if (error instanceof Error && error.stack) {
+            errorText = errorText + "\n" + error.stack;
+        }
+        postSystem("log", {
+            level: "exception",
+            message: "The handler of the action " + name + " failed.",
+            error: errorText,
+            toolData: null,
+        });
+    }
+
+    // Runs the handler registered for an action. An error the handler throws, or a promise it returns rejecting, is logged and goes
+    // no further, so one failing handler does not stop the next event being handled. An action with no handler is logged as an
+    // error and throws, because the frontend declared no way to run it.
+    function runActionHandler(name) {
+        var handler = actionHandlers.get(name);
+        if (!handler) {
+            postSystem("log", {
+                level: "error",
+                message: "The action " + name + " ran, and the frontend has no handler registered for it.",
+                error: null,
+                toolData: null,
+            });
+            throw new Error("Ziggy: the action " + name + " ran, and the frontend has no handler registered for it.");
+        }
+        var result;
+        try {
+            result = handler();
+        }
+        catch (error) {
+            logActionError(name, error);
+            return;
+        }
+        if (result && typeof result.then === "function") {
+            result.then(undefined, function (error) {
+                logActionError(name, error);
+            });
+        }
+    }
+
     function receiveSystemEvent(message) {
+        if (message.name === "action") {
+            runActionHandler(message.data.action);
+            return;
+        }
         var callbacks = systemListeners.get(message.name) || [];
         if (callbacks.length === 0 && message.name === "core-error") {
             console.error("Ziggy core error:", message.data && message.data.error);
@@ -283,6 +338,27 @@
                 postSystem("test-ui-ready", null);
             },
             getPathForFile: getPathForFile,
+            // Registers the frontend's handler of one of the app's actions. A name that already has a handler throws.
+            registerAction: function (name, handler) {
+                if (actionHandlers.has(name)) {
+                    throw new Error("Ziggy: the action " + name + " already has a handler registered.");
+                }
+                actionHandlers.set(name, handler);
+            },
+            // Removes the handler of an action, so it can be registered again.
+            removeAction: function (name) {
+                actionHandlers.delete(name);
+            },
+            // Runs one of the app's actions, or a standard action of the app's menu, by its name.
+            runAction: function (name) {
+                return invokeSystem("run-action", {
+                    action: name,
+                });
+            },
+            // Resolves with every action of the app and every standard item of its menu, with its label and its shortcut.
+            listActions: function () {
+                return invokeSystem("list-actions", null);
+            },
         }),
     });
     Object.defineProperty(window, "__ziggyReceive", { value: receive });

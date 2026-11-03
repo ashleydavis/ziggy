@@ -8,7 +8,9 @@ const std = @import("std");
 const ziggy = @import("ziggy");
 const task_queue = @import("ziggy").task_queue;
 const logging = ziggy.log;
-const helpers = @import("helpers.zig");
+const test_app = @import("test-app.zig");
+const test_tasks = @import("test-tasks.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 const types = task_queue.types;
 const getQueueBackend = task_queue.queue_backend.getQueueBackend;
@@ -117,19 +119,19 @@ const queue_tasks = task_queue.mock_worker_pool.handlers(.{
 });
 
 //
-// The app of these tests: the helpers' app with the task types above as well.
+// The app of these tests: the tests' app (test-app.zig) with the task types above as well.
 //
 const backend_app = registered: {
-    var registered = helpers.app;
-    registered.tasks = &(helpers.task_handlers ++ queue_tasks[0..queue_tasks.len].*);
+    var registered = test_app.app;
+    registered.tasks = &(test_tasks.task_handlers ++ queue_tasks[0..queue_tasks.len].*);
     break :registered registered;
 };
 
-fn createCore(native_app: *helpers.FakeNativeApp, worker_threads: u32) !void {
+fn createCore(native_app: *FakeNativeApp, worker_threads: u32) !void {
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(worker_threads, 4), backend_app);
 }
 
-fn addTask(native_app: *helpers.FakeNativeApp, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
+fn addTask(native_app: *FakeNativeApp, id: []const u8, task_type: []const u8, source: []const u8, data: []const u8, priority: []const u8) !void {
     const message = try ziggy.json.stringify(std.testing.allocator, .{
         .kind = "system",
         .name = "add-task",
@@ -146,7 +148,7 @@ fn addTask(native_app: *helpers.FakeNativeApp, id: []const u8, task_type: []cons
 }
 
 test "a handler written against the task queue runs on a worker, sends events and returns its outputs" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app, 2);
@@ -157,7 +159,7 @@ test "a handler written against the task queue runs on a worker, sends events an
 }
 
 test "a handler written against the task queue sees its task cancelled when the source is cancelled" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app, 2);
@@ -169,7 +171,7 @@ test "a handler written against the task queue sees its task cancelled when the 
 }
 
 test "a handler written against the task queue queues child tasks with TaskQueue on its worker and awaits them" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app, 4);
@@ -179,7 +181,7 @@ test "a handler written against the task queue queues child tasks with TaskQueue
 }
 
 test "a task queued through the backend by a running task runs at that task's priority" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     // One worker, so the tasks run one at a time, in the order of the queue. A spin task holds the worker until its source is

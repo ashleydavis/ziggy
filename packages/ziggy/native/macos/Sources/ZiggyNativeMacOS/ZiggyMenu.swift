@@ -1,5 +1,5 @@
 //
-// The desktop menu on MacOS. The core defines the menu as JSON, and this draws it as the application's main menu: the
+// The desktop menu on MacOS. The core gives the menu as a flat list of entries, and this draws it as the application's main menu: the
 // application menu first (About and Quit), then the app's own menus. Each item's shortcut becomes its key equivalent, which
 // AppKit handles even while the web view has the focus.
 //
@@ -9,7 +9,7 @@ import AppKit
 import WebKit
 import CZiggy
 
-// Builds the main menu from the core's menu JSON and carries out the actions the native app owns. Every other action is sent to
+// Builds the main menu from the core's menu entries and carries out the actions the native app owns. Every other action is sent to
 // the core as a menu-action message.
 final class ZiggyMenu: NSObject {
     // The bridge that owns this menu and the web view the actions work on. Weak, because the bridge owns this menu.
@@ -28,21 +28,12 @@ final class ZiggyMenu: NSObject {
         "select-all": "selectAll:",
     ]
 
-    // Creates the menus from the JSON text the core gave and makes them the application's main menu. The core's own Quit and
+    // Creates the menus from the entries the core gave and makes them the application's main menu. The core's own Quit and
     // About items are not drawn in their menus: they are the application menu's Quit and About, so neither appears twice.
-    init(bridge: ZiggyBridge, menuJSON: Data) {
+    init(bridge: ZiggyBridge, entries: UnsafeBufferPointer<ziggy_menu_entry>) {
         self.bridge = bridge
         super.init()
-        let parsed: Any
-        do {
-            parsed = try JSONSerialization.jsonObject(with: menuJSON)
-        }
-        catch {
-            ZiggyBridge.fail("the core's menu is not valid JSON: \(error)")
-        }
-        guard let menus = parsed as? [[String: Any]] else {
-            ZiggyBridge.fail("the core's menu is not an array of menus")
-        }
+        let menus = ZiggyMenu.nestedMenus(entries)
         let mainMenu = NSMenu()
         mainMenu.addItem(makeApplicationMenuItem(quit: findItem(action: "quit", in: menus), about: findItem(action: "about", in: menus)))
         for menu in menus {
@@ -58,6 +49,53 @@ final class ZiggyMenu: NSObject {
             mainMenu.addItem(item)
         }
         NSApplication.shared.mainMenu = mainMenu
+    }
+
+    // Turns the core's flat menu entries, in which each menu and submenu is followed by its own entries one deeper, into nested
+    // menus as the rest of this class draws them: each menu a dictionary with its "label" and "items", and each entry with its
+    // "label", "action" and "accelerator", or "separator", and its own "items" when it opens a submenu.
+    private static func nestedMenus(_ entries: UnsafeBufferPointer<ziggy_menu_entry>) -> [[String: Any]] {
+        // The entries being gathered at each depth, the menu bar's first. Each deeper list belongs to the last entry of the list
+        // above it, which opened it.
+        var levels: [[[String: Any]]] = [[]]
+        for entry in entries {
+            let depth = Int(entry.depth)
+            if depth >= levels.count {
+                ZiggyBridge.fail("a menu entry is deeper than the menu or submenu it is in")
+            }
+            while levels.count > depth + 1 {
+                closeLevel(&levels)
+            }
+            var dictionary: [String: Any] = [:]
+            if let label = entry.label {
+                dictionary["label"] = String(cString: label)
+            }
+            if let action = entry.action {
+                dictionary["action"] = String(cString: action)
+            }
+            if let shortcut = entry.shortcut {
+                dictionary["accelerator"] = String(cString: shortcut)
+            }
+            if entry.kind == UInt32(ZIGGY_MENU_ENTRY_SEPARATOR) {
+                dictionary["separator"] = true
+            }
+            levels[depth].append(dictionary)
+            if entry.kind == UInt32(ZIGGY_MENU_ENTRY_MENU) || entry.kind == UInt32(ZIGGY_MENU_ENTRY_SUBMENU) {
+                levels.append([])
+            }
+        }
+        while levels.count > 1 {
+            closeLevel(&levels)
+        }
+        return levels[0]
+    }
+
+    // Ends the deepest list of entries being gathered, putting it in the "items" of the entry above that opened it.
+    private static func closeLevel(_ levels: inout [[[String: Any]]]) {
+        let items = levels.removeLast()
+        var opener = levels[levels.count - 1].removeLast()
+        opener["items"] = items
+        levels[levels.count - 1].append(opener)
     }
 
     // The application menu: About, then Quit, with the shortcut and action the core's items gave when it has them.
@@ -157,17 +195,24 @@ final class ZiggyMenu: NSObject {
 
     // Reads the shortcut text with the core and sets the item's key equivalent and modifier keys from it.
     private func apply(accelerator text: String, to item: NSMenuItem) {
+        let key = ZiggyMenu.parseShortcut(text, owner: item.title)
+        item.keyEquivalent = key.keyEquivalent
+        item.keyEquivalentModifierMask = key.modifiers
+    }
+
+    // Reads shortcut text with the core into the key equivalent and modifier keys AppKit uses, for a menu item and for a shortcut
+    // of an action that has no menu item alike. Text the core cannot read stops the app, naming what the shortcut belongs to.
+    static func parseShortcut(_ text: String, owner: String) -> ZiggyShortcutKey {
         var accelerator = ziggy_accelerator()
         let parsed = text.withCString { pointer in
             ziggy_parse_accelerator(pointer, text.utf8.count, &accelerator)
         }
         if !parsed {
-            ZiggyBridge.fail("the menu item \(item.title) has a shortcut the core cannot read: \(text)")
+            ZiggyBridge.fail("\(owner) has a shortcut the core cannot read: \(text)")
         }
         let keyName = withUnsafeBytes(of: accelerator.key) { raw -> String in
             return String(decoding: raw.prefix(while: { $0 != 0 }), as: UTF8.self)
         }
-        item.keyEquivalent = ZiggyMenu.keyEquivalent(forKeyName: keyName)
         var mask: NSEvent.ModifierFlags = []
         if accelerator.modifiers & UInt32(ZIGGY_MOD_CTRL) != 0 {
             mask.insert(.control)
@@ -181,7 +226,7 @@ final class ZiggyMenu: NSObject {
         if accelerator.modifiers & UInt32(ZIGGY_MOD_META) != 0 {
             mask.insert(.command)
         }
-        item.keyEquivalentModifierMask = mask
+        return ZiggyShortcutKey(keyEquivalent: ZiggyMenu.keyEquivalent(forKeyName: keyName), modifiers: mask)
     }
 
     // The key equivalent text for the core's key name: the character itself for a letter or digit, and the character AppKit

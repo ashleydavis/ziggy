@@ -10,6 +10,9 @@ const types = @import("types.zig");
 const handlers = @import("handlers.zig");
 const task_runner = @import("task-runner.zig");
 const menu_lib = @import("menu.zig");
+const action_lib = @import("action.zig");
+const dev_shortcuts = @import("dev-shortcuts.zig");
+const json = @import("json.zig");
 const ui_files = @import("ui-files.zig");
 const services_lib = @import("services.zig");
 const timers_lib = @import("timers.zig");
@@ -28,12 +31,23 @@ pub const RegisteredApp = struct {
     messages: []const handlers.MessageEntry,
     // The app's task types.
     tasks: []const task_runner.TaskHandlerEntry,
-    // The desktop menu as JSON, which App makes from the app's `.menu` (see menuJson in menu.zig). "[]" for an app with no menu.
-    // Native apps show it on desktop only. See "Menus" in the architecture document.
-    menu_json: []const u8,
+    // The desktop menu's entries, which App makes from the app's `.menu` (see menuEntries in menu.zig) and a desktop native app reads
+    // through ziggy_menu. None for an app with no menu. See "Menus" in the architecture document.
+    menu_entries: []const menu_lib.MenuEntry,
     // What the core does for each menu item a native app posts as menu-action, by the item's name, which App makes from the app's
     // `.menu` (see menuTargets in menu.zig).
     menu_targets: menu_lib.MenuTargets,
+    // The app's actions, from its `.actions`, or none for an app that leaves the field out. See action.zig.
+    actions: []const action_lib.Action = &.{},
+    // The shortcuts of the app's actions that have no menu item, which a desktop native app reads through
+    // ziggy_standalone_action_shortcuts (see standaloneActionShortcuts in action.zig). None for an app with none.
+    standalone_action_shortcuts: []const action_lib.StandaloneActionShortcut = &.{},
+    // Every `.standard` item of the menu (see standardMenuItems in menu.zig), which list-actions lists and runAction checks a standard
+    // action's name against.
+    standard_menu_items: []const menu_lib.StandardMenuItem = &.{},
+    // The shortcuts dev mode's script registers in the browser, as JSON the dev backend reads through ziggy_dev_shortcuts_json (see
+    // devShortcuts in dev-shortcuts.zig). "[]" for an app with none.
+    dev_shortcuts_json: []const u8 = "[]",
     // The files of the app's bundled frontend, embedded in the app's library, for a native app that serves the frontend by
     // calling the core for each file (the MacOS, iOS and Android native apps). Empty for an app whose native app embeds the
     // frontend itself.
@@ -171,6 +185,10 @@ const app_fields = [_]AppField{
         .name = "ui_query",
         .required = false,
     },
+    .{
+        .name = "actions",
+        .required = false,
+    },
 };
 
 //
@@ -180,6 +198,7 @@ const app_fields = [_]AppField{
 //   .tasks            each field a task type and its task handler (see wrapTask in task-runner.zig), or `.{ .handler = ..., .kind =
 //                     .keep_alive }` for a task type the app is kept running for
 //   .menu             the desktop menu, a []const ziggy.menu.Menu (see menu.zig), checked when the app is built
+//   .actions          optional: the app's actions, a []const ziggy.action.Action (see action.zig), checked when the app is built
 //   .ui_files         the files of the app's bundled frontend
 //   .describe_error, .on_task_end, .on_task_event, .on_create, .on_destroy, .ui_query   optional, as RegisteredApp describes them
 //
@@ -190,13 +209,18 @@ const app_fields = [_]AppField{
 //
 pub fn App(comptime definition: anytype) RegisteredApp {
     const Definition = @TypeOf(definition);
+
+    //
+    // The app's actions: its `.actions`, or none when it leaves the field out.
+    //
+    const actions: []const action_lib.Action = comptime if (@hasField(Definition, "actions")) definition.actions else &.{};
     comptime {
         if (@typeInfo(Definition) != .@"struct") {
             @compileError("ziggy.core.App takes a struct literal such as .{ .messages = .{ ... }, .tasks = .{ ... }, ... }");
         }
         for (@typeInfo(Definition).@"struct".fields) |field| {
             if (!isAppField(field.name)) {
-                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, ui_files, describe_error, on_task_end, on_task_event, on_create, on_destroy and ui_query.");
+                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, actions, ui_files, describe_error, on_task_end, on_task_event, on_create, on_destroy and ui_query.");
             }
         }
         for (app_fields) |field| {
@@ -204,13 +228,18 @@ pub fn App(comptime definition: anytype) RegisteredApp {
                 @compileError("ziggy.core.App: the field \"" ++ field.name ++ "\" is missing.");
             }
         }
-        menu_lib.checkMenu(definition.menu);
+        action_lib.rejectInvalidActions(actions);
+        menu_lib.rejectInvalidMenu(definition.menu, actions);
     }
     return .{
         .messages = comptime messageTable(definition.messages),
         .tasks = comptime taskTable(definition.tasks),
-        .menu_json = comptime menu_lib.menuJson(definition.menu),
-        .menu_targets = comptime menu_lib.menuTargets(definition.menu),
+        .menu_entries = comptime menu_lib.menuEntries(definition.menu, actions),
+        .menu_targets = comptime menu_lib.menuTargets(definition.menu, actions),
+        .actions = actions,
+        .standalone_action_shortcuts = comptime action_lib.standaloneActionShortcuts(definition.menu, actions),
+        .standard_menu_items = comptime menu_lib.standardMenuItems(definition.menu),
+        .dev_shortcuts_json = comptime json.stringifyComptime(dev_shortcuts.devShortcuts(definition.menu, actions)),
         .ui_files = definition.ui_files,
         .describe_error = if (@hasField(Definition, "describe_error")) definition.describe_error else null,
         .on_task_end = if (@hasField(Definition, "on_task_end")) definition.on_task_end else null,

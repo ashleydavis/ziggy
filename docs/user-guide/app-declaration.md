@@ -11,6 +11,7 @@ An app declares itself to Ziggy in one file, `backend/src/app.zig` in the templa
 ```zig
 const ziggy = @import("ziggy");
 const hello_world = @import("lib/hello-world.zig");
+const actions = @import("lib/actions.zig");
 const menu = @import("lib/menu.zig");
 const ui_query = @import("lib/ui-query.zig");
 const ui = @import("ui-files");
@@ -26,6 +27,7 @@ pub const app = ziggy.core.App(.{
         .@"hello-world-task" = hello_world.helloWorldTaskHandler,
     },
     .menu = menu.menu,
+    .actions = actions.actions,
     .ui_files = &ui.files,
     .ui_query = ui_query.uiQuery,
 });
@@ -38,6 +40,7 @@ The fields of `ziggy.core.App`:
 | `messages` | Yes | Each field is a message name and its handler, in any of the forms under [What a handler returns](messages.md#what-a-handler-returns). `.{}` for an app with none. See [Messages](messages.md). |
 | `tasks` | Yes | Each field is a task type and its task handler, or `.{ .handler = ..., .kind = .keep_alive }` for a keep-alive task type. See [Tasks](tasks.md#registering-a-handler). |
 | `menu` | Yes | The desktop menu, a `[]const ziggy.menu.Menu`, `&.{}` for none. It is checked when the app is built. See [Menus](menus.md). |
+| `actions` | No | The app's actions, a `[]const ziggy.action.Action`. An app with none leaves it out. Each is a named piece of the app's functionality with its handler in the frontend. They are checked when the app is built. See [Actions](actions.md). |
 | `ui_files` | Yes | The files of the app's built frontend, `&ui.files` from the `ui-files` module the build makes. |
 | `ui_query` | No | A function that gives the query the native app adds to the frontend's address, so the frontend's first render already holds what the backend tells it at start-up. |
 | `describe_error` | No | A function that turns an error a handler returned into the text of the error response (see [When a handler fails](messages.md#when-a-handler-fails)). |
@@ -72,6 +75,7 @@ The handler services are an interface, as `std.Io` is: the handler does not see 
 | `holdKeepAlive(keep_running)` | Keeps the app running with or without a task, through the native app's `keep_alive` callback, until it is called with `false`. |
 | `quit()` | Has the native app quit. A native app with no `quit` callback ignores it. |
 | `menuAction(action)` | Has the native app run one of its own menu actions, such as `focus-window`. A native app with no `menu_action` callback ignores it. |
+| `runAction(action)` | Runs the app's action with that name, through its frontend handler. A name that is not an action of the app fails with `UnknownAction`. See [Running an action](actions.md#running-an-action). |
 | `dataDir()` | The app's private data directory. |
 | `isPhone()` | Whether the native app is a phone's: the Android and iOS native apps handle the app's own native calls, which no desktop native app does. |
 | `log` | The main thread's log, a field: what a handler, a menu item's function or an app function writes to. It is the app's file log for the whole run, or the console log for an app without a name (see [Logging](logging.md#where-a-line-goes)). |

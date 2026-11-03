@@ -27,7 +27,7 @@ pub const key_capacity: usize = 16;
 //
 // A parsed shortcut.
 //
-pub const Accelerator = extern struct {
+pub const Shortcut = extern struct {
     // Which modifier keys are held, as a mix of the modifier bits.
     modifiers: u32,
     // The key's name, NUL terminated: a lower case letter or digit, a function key name, or one of the names listed above.
@@ -47,11 +47,11 @@ pub const ParseError = error{
 //
 // Parses shortcut text. CmdOrCtrl becomes Command on MacOS and Control elsewhere, decided by what the core was built for.
 //
-pub fn parse(text: []const u8) ParseError!Accelerator {
+pub fn parse(text: []const u8) ParseError!Shortcut {
     if (text.len == 0) {
         return error.EmptyShortcut;
     }
-    var result = Accelerator{
+    var result = Shortcut{
         .modifiers = 0,
         .key = std.mem.zeroes([key_capacity]u8),
     };
@@ -120,4 +120,84 @@ fn writeKey(destination: *[key_capacity]u8, key: []const u8) ParseError!void {
         }
     }
     return error.UnknownKey;
+}
+
+//
+// How each key name parse writes is shown to the user, for the names that are not a letter, a digit or a function key.
+//
+const key_display_names = [_]struct { []const u8, []const u8 }{
+    .{ "plus", "+" },
+    .{ "minus", "-" },
+    .{ "equal", "=" },
+    .{ "space", "Space" },
+    .{ "enter", "Enter" },
+    .{ "tab", "Tab" },
+    .{ "escape", "Escape" },
+    .{ "up", "Up" },
+    .{ "down", "Down" },
+    .{ "left", "Left" },
+    .{ "right", "Right" },
+    .{ "home", "Home" },
+    .{ "end", "End" },
+    .{ "pageup", "PageUp" },
+    .{ "pagedown", "PageDown" },
+    .{ "delete", "Delete" },
+    .{ "backspace", "Backspace" },
+};
+
+//
+// Writes a parsed shortcut into the buffer as the platform shows it to the user, and returns the written text: the symbols ⌃⌥⇧⌘ then the key on
+// macOS, and Ctrl+, Alt+, Shift+ and Super+ (Win+ on Windows) then the key elsewhere. A letter is shown in upper case, a function key
+// as F and its number, and Plus, Minus and Equal as the sign. Fails with error.WriteFailed when the buffer is too small.
+//
+pub fn writeDisplayText(buffer: []u8, parsed: Shortcut, os_tag: std.Target.Os.Tag) ![]const u8 {
+    var writer = std.Io.Writer.fixed(buffer);
+    if (os_tag == .macos) {
+        if (parsed.modifiers & modifier_ctrl != 0) {
+            try writer.writeAll("⌃");
+        }
+        if (parsed.modifiers & modifier_alt != 0) {
+            try writer.writeAll("⌥");
+        }
+        if (parsed.modifiers & modifier_shift != 0) {
+            try writer.writeAll("⇧");
+        }
+        if (parsed.modifiers & modifier_meta != 0) {
+            try writer.writeAll("⌘");
+        }
+    }
+    else {
+        if (parsed.modifiers & modifier_ctrl != 0) {
+            try writer.writeAll("Ctrl+");
+        }
+        if (parsed.modifiers & modifier_alt != 0) {
+            try writer.writeAll("Alt+");
+        }
+        if (parsed.modifiers & modifier_shift != 0) {
+            try writer.writeAll("Shift+");
+        }
+        if (parsed.modifiers & modifier_meta != 0) {
+            try writer.writeAll(if (os_tag == .windows) "Win+" else "Super+");
+        }
+    }
+    const key = std.mem.sliceTo(&parsed.key, 0);
+    if (key.len == 1) {
+        try writer.writeByte(std.ascii.toUpper(key[0]));
+    }
+    else if (key[0] == 'f' and std.ascii.isDigit(key[1])) {
+        try writer.writeByte('F');
+        try writer.writeAll(key[1..]);
+    }
+    else {
+        for (key_display_names) |entry| {
+            if (std.mem.eql(u8, entry[0], key)) {
+                try writer.writeAll(entry[1]);
+                break;
+            }
+        }
+        else {
+            try writer.writeAll(key);
+        }
+    }
+    return writer.buffered();
 }

@@ -288,6 +288,18 @@ export function logLineForEvent(event: IAppEvent): string | null {
 }
 ```
 
+The Hello menu's third menu item, "Say Hello From an Action", runs one of the app's actions. The action is declared in [`backend/src/lib/actions.zig`](../apps/ziggy-template/backend/src/lib/actions.zig), and its handler is in [`frontend/src/main.ts`](../apps/ziggy-template/frontend/src/main.ts). It runs from the menu item, the shortcut Ctrl+Shift+H (Command+Shift+H on macOS) and the "Say hello from an action" button:
+
+```ts
+function helloFromAction(): void {
+    log("Hello from an action");
+}
+
+function registerActions(): void {
+    window.ziggy.registerAction("hello-from-action", helloFromAction);
+}
+```
+
 For the rest of what a menu can do (standard actions, shortcuts and platforms), see [Menus](user-guide/menus.md).
 
 ### Try a change

@@ -21,6 +21,11 @@ pub const platform = @import("system-messages/platform.zig");
 pub const menu = @import("system-messages/menu.zig");
 
 //
+// The system messages of the app's actions (run-action, list-actions).
+//
+pub const action = @import("system-messages/action.zig");
+
+//
 // The system message of the dropped files (get-dropped-paths).
 //
 pub const dropped_files = @import("system-messages/dropped-files.zig");
@@ -43,6 +48,8 @@ pub const names = [_][]const u8{
     "cancel-tasks",
     "get-platform",
     "menu-action",
+    "run-action",
+    "list-actions",
     "get-dropped-paths",
     "log",
 };

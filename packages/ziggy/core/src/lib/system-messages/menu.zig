@@ -12,7 +12,8 @@ const timers_lib = @import("../timers.zig");
 // The data of menu-action.
 //
 pub const MenuActionRequest = struct {
-    // The action of the menu item that was chosen: the name of a `.zig` or `.ui` item of the app's menu.
+    // The action of the menu item that was chosen, or of the shortcut pressed: the name of a `.zig` or `.ui` item of the app's menu, or of
+    // one of the app's actions.
     action: []const u8,
 };
 
@@ -24,7 +25,8 @@ pub const DoneResponse = struct {};
 //
 // A menu item was chosen, by the user or by a keyboard shortcut. The native app passes its action on. The main thread runs the item:
 // it calls a `.zig` item's function with the standard arguments, and its error is this message's error. It sends a `.ui` item to the
-// frontend as the app event {"type": "menu", "item": "<name>"}. A name the app's menu does not have fails with UnknownMenuItem. So does
+// frontend as the app event {"type": "menu", "item": "<name>"}. It runs one of the app's actions, on the menu or not, through
+// services.runAction. A name the app's menu and actions do not have fails with UnknownMenuItem. So does
 // a standard action, which the native apps do themselves and never post.
 //
 pub fn menuAction(menu_targets: menu_lib.MenuTargets, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, allocator: std.mem.Allocator, request: MenuActionRequest) !DoneResponse {
@@ -40,6 +42,9 @@ pub fn menuAction(menu_targets: menu_lib.MenuTargets, services: services_lib.Han
                 .type = "menu",
                 .item = request.action,
             }));
+        },
+        .action => {
+            try services.runAction(io, allocator, request.action);
         },
     }
     return .{};

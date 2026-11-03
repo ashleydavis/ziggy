@@ -118,6 +118,7 @@ pub const HandlerServices = struct {
         holdKeepAlive: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, keep_running: bool) void,
         quit: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) void,
         menuAction: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, action: []const u8) void,
+        runAction: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, action: []const u8) anyerror!void,
         dataDir: *const fn (ptr: *anyopaque) []const u8,
         isPhone: *const fn (ptr: *anyopaque) bool,
         nativeCallbacks: *const fn (ptr: *anyopaque) NativeCallbacks,
@@ -174,6 +175,16 @@ pub const HandlerServices = struct {
     //
     pub fn menuAction(self: HandlerServices, io: std.Io, allocator: std.mem.Allocator, action: []const u8) void {
         self.vtable.menuAction(self.ptr, io, allocator, action);
+    }
+
+    //
+    // Runs one of the app's actions by its name, as window.ziggy.runAction does: the frontend is sent the action, and the handler it
+    // registered for it runs. A standard action that is a `.standard` item of the app's menu is run by the native app instead. Fails
+    // with error.UnknownAction for any other name, and with error.StandardActionUnavailable for a standard action the native app
+    // cannot run: on a phone, or with no menu_action callback, as in dev mode.
+    //
+    pub fn runAction(self: HandlerServices, io: std.Io, allocator: std.mem.Allocator, action: []const u8) !void {
+        try self.vtable.runAction(self.ptr, io, allocator, action);
     }
 
     //

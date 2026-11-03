@@ -1,41 +1,43 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
-const helpers = @import("helpers.zig");
+const test_app = @import("test-app.zig");
+const test_tasks = @import("test-tasks.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 //
 // Fails unless the last message the fake native app recorded is the expected text.
 //
-fn expectLastMessage(native_app: *helpers.FakeNativeApp, expected: []const u8) !void {
+fn expectLastMessage(native_app: *FakeNativeApp, expected: []const u8) !void {
     const last = try native_app.messageAt(std.testing.io, std.testing.allocator, native_app.count(std.testing.io, std.testing.allocator) - 1);
     defer std.testing.allocator.free(last);
     try std.testing.expectEqualStrings(expected, last);
 }
 
 test "a message reaches the handler for its name with its data parsed into the handler's request, and the response is the returned struct" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"greet\",\"data\":{\"name\":\"Ada\",\"times\":2,\"title\":\"Dr \"}}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"text\":\"Hello Dr Ada\",\"times\":2}}");
 }
 
 test "a field the request gives a default, or that is optional, may be left out, and a field the request does not have is ignored" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"greet\",\"data\":{\"name\":\"Ada\",\"colour\":\"blue\"}}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"text\":\"Hello Ada\",\"times\":1}}");
 }
 
 test "data with a required field missing is InvalidMessageData naming the field, and the handler does not run" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"forget\",\"data\":{\"times\":3}}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"name\\\" is missing\"}");
@@ -46,10 +48,10 @@ test "data with a required field missing is InvalidMessageData naming the field,
 }
 
 test "data with a field of the wrong type is InvalidMessageData naming the field, and the handler does not run" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"forget\",\"data\":{\"name\":\"Ada\",\"times\":\"many\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"times\\\" does not fit (");
@@ -59,10 +61,10 @@ test "data with a field of the wrong type is InvalidMessageData naming the field
 }
 
 test "data that is not an object, for a request that is a struct, is InvalidMessageData" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"forget\",\"data\":\"Ada\"}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the data is not an object\"}");
@@ -70,10 +72,10 @@ test "data that is not an object, for a request that is a struct, is InvalidMess
 }
 
 test "a request that is not a struct is parsed too, and data that does not fit it is InvalidMessageData" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"count\",\"data\":[4,5,6]}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":3}");
@@ -82,20 +84,20 @@ test "a request that is not a struct is parsed too, and data that does not fit i
 }
 
 test "data that does not fit a message sent with no id is a core-error event" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"forget\",\"data\":7}");
     try expectLastMessage(&native_app, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"InvalidMessageData: the data is not an object\"}}");
 }
 
 test "a handler that returns nothing answers a message with an id with null" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"forget\",\"data\":{\"name\":\"Ada\",\"times\":4}}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":null}");
@@ -103,10 +105,10 @@ test "a handler that returns nothing answers a message with an id with null" {
 }
 
 test "a name the app has no handler for is UnknownMessageName" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"greet-everyone\",\"data\":null}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMessageName\"}");
@@ -115,10 +117,10 @@ test "a name the app has no handler for is UnknownMessageName" {
 }
 
 test "a handler that takes ziggy.core.Message gets the message unparsed, and can answer with a task" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"echo\",\"data\":{\"anything\":[1,\"two\"]}}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"anything\":[1,\"two\"]}}");
@@ -192,7 +194,7 @@ test "App uses a task handler of the raw TaskHandler form as it is, so its JSON 
 // those messages from 0, so the test holds the same reply as the handler, which a handler would hand to another thread: the main
 // thread's queue and the serial. The app has no describe_error.
 //
-fn firstLaterReply(native_app: *helpers.FakeNativeApp) ziggy.core.Reply(helpers.GreetResponse) {
+fn firstLaterReply(native_app: *FakeNativeApp) ziggy.core.Reply(test_app.GreetResponse) {
     return .{
         .target = .{
             .queue = &native_app.queue,
@@ -205,7 +207,7 @@ fn firstLaterReply(native_app: *helpers.FakeNativeApp) ziggy.core.Reply(helpers.
 //
 // now: gives its response at once through Response.
 //
-fn nowHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: helpers.GreetRequest) !ziggy.core.Response(helpers.GreetResponse) {
+fn nowHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: test_app.GreetRequest) !ziggy.core.Response(test_app.GreetResponse) {
     _ = services;
     _ = timers;
     _ = io;
@@ -220,7 +222,7 @@ fn nowHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers,
 //
 // task: its response is the result of the sleep task, given the payload, which names the sleep after the payload's name.
 //
-fn taskHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: helpers.GreetRequest) !ziggy.core.Response([]const u8) {
+fn taskHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: test_app.GreetRequest) !ziggy.core.Response([]const u8) {
     _ = services;
     _ = timers;
     _ = io;
@@ -235,7 +237,7 @@ fn taskHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers
 //
 // later: sends its response later, leaving the test to send it through the reply (see firstLaterReply).
 //
-fn laterHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: helpers.GreetRequest, reply: ziggy.core.Reply(helpers.GreetResponse)) !ziggy.core.Response(helpers.GreetResponse) {
+fn laterHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: test_app.GreetRequest, reply: ziggy.core.Reply(test_app.GreetResponse)) !ziggy.core.Response(test_app.GreetResponse) {
     _ = services;
     _ = timers;
     _ = io;
@@ -250,7 +252,7 @@ fn laterHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timer
 //
 // sent-and-now: sends its response through its reply and then again by what it returns, which is two responses.
 //
-fn sentAndNowHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: helpers.GreetRequest, reply: ziggy.core.Reply(helpers.GreetResponse)) !ziggy.core.Response(helpers.GreetResponse) {
+fn sentAndNowHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: test_app.GreetRequest, reply: ziggy.core.Reply(test_app.GreetResponse)) !ziggy.core.Response(test_app.GreetResponse) {
     _ = services;
     _ = timers;
     try reply.send(io, allocator, .{
@@ -268,7 +270,7 @@ fn sentAndNowHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.
 //
 // later-without-reply: returns that it sends its response later but has no reply to do it with.
 //
-fn laterWithoutReplyHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: helpers.GreetRequest) !ziggy.core.Response(helpers.GreetResponse) {
+fn laterWithoutReplyHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, payload: test_app.GreetRequest) !ziggy.core.Response(test_app.GreetResponse) {
     _ = services;
     _ = timers;
     _ = io;
@@ -293,12 +295,12 @@ const reply_app = registered: {
         .menu = &.{},
         .ui_files = &[_]ziggy.ui_files.UiFile{},
     });
-    registered.tasks = &helpers.task_handlers;
+    registered.tasks = &test_tasks.task_handlers;
     break :registered registered;
 };
 
 test "a handler that returns Response .now is answered at once with the value" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), reply_app);
@@ -308,7 +310,7 @@ test "a handler that returns Response .now is answered at once with the value" {
 }
 
 test "a handler that returns Response .task is answered with the task's result" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), reply_app);
@@ -319,7 +321,7 @@ test "a handler that returns Response .task is answered with the task's result" 
 }
 
 test "a handler that sends its response later through its reply, from another thread, gets it sent only once" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), reply_app);
@@ -349,7 +351,7 @@ test "a handler that sends its response later through its reply, from another th
 //
 // Sends the later message's response, on a thread of its own, with an Io and an allocator of its own.
 //
-fn sendLater(reply: ziggy.core.Reply(helpers.GreetResponse)) void {
+fn sendLater(reply: ziggy.core.Reply(test_app.GreetResponse)) void {
     var thread_allocator: ziggy.utils.thread_allocator.ThreadAllocator = .init;
     defer thread_allocator.deinit();
     var threaded: std.Io.Threaded = .init_single_threaded;
@@ -364,7 +366,7 @@ fn sendLater(reply: ziggy.core.Reply(helpers.GreetResponse)) void {
 }
 
 test "a reply that fails gives the message an error response" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), reply_app);
@@ -376,7 +378,7 @@ test "a reply that fails gives the message an error response" {
 }
 
 test "a response through the reply and another by what the handler returns is reported as a core-error event, not a second response" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), reply_app);
@@ -391,7 +393,7 @@ test "a response through the reply and another by what the handler returns is re
 }
 
 test "a handler with no reply that returns .later is MessageNotAnswered" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), reply_app);
@@ -401,7 +403,7 @@ test "a handler with no reply that returns .later is MessageNotAnswered" {
 }
 
 test "a reply that never sends a response is reported as a core-error event when the core stops" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), reply_app);
@@ -412,10 +414,10 @@ test "a reply that never sends a response is reported as a core-error event when
 }
 
 test "a handler that takes ziggy.core.Message gets the raw data, the name and the id" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":9,\"name\":\"raw\",\"data\":[1,{\"a\":null}]}");
     try expectLastMessage(&native_app, "{\"id\":9,\"ok\":true,\"data\":{\"name\":\"raw\",\"id\":9,\"data\":[1,{\"a\":null}]}}");

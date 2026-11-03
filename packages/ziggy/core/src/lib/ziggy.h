@@ -155,10 +155,49 @@ typedef struct ziggy_accelerator {
     char key[16];
 } ziggy_accelerator;
 
-// Returns the desktop menu as JSON text, valid until ziggy_destroy: an array of menus, each {"label", "items"}, where an item
-// is {"label", "action", "accelerator"} or {"separator": true} and may hold its own "items" for a submenu. Desktop native apps
-// show it, and a phone's native app never calls this. The length is written to the pointer given.
-const char *ziggy_menu_json(void *handle, size_t *length);
+// What a menu entry is: a menu of the menu bar, an item that runs something, a separator or a submenu.
+#define ZIGGY_MENU_ENTRY_MENU 0
+#define ZIGGY_MENU_ENTRY_ITEM 1
+#define ZIGGY_MENU_ENTRY_SEPARATOR 2
+#define ZIGGY_MENU_ENTRY_SUBMENU 3
+
+// One entry of the desktop menu. The entries are the menu flattened in order: each menu of the menu bar and each submenu is followed
+// by its own entries, one deeper.
+typedef struct ziggy_menu_entry {
+    // What the entry is, one of the ZIGGY_MENU_ENTRY_ values.
+    uint32_t kind;
+    // How deep the entry is: 0 for a menu of the menu bar, 1 for its entries and one more inside each submenu.
+    uint32_t depth;
+    // The text the entry shows, NUL terminated, or NULL for a separator.
+    const char *label;
+    // What an item runs, NUL terminated: a standard action's name, which the native app does itself, or a name it posts to the core in
+    // the menu-action system message. NULL for any other entry.
+    const char *action;
+    // An item's shortcut text, NUL terminated, which ziggy_parse_accelerator reads, or NULL for none.
+    const char *shortcut;
+} ziggy_menu_entry;
+
+// Returns the desktop menu's entries, valid until ziggy_destroy, and writes how many there are to the pointer given. Desktop native
+// apps show the menu, and a phone's native app never calls this.
+const ziggy_menu_entry *ziggy_menu(void *handle, size_t *count);
+
+// The shortcut of an action that has no menu item.
+typedef struct ziggy_standalone_action_shortcut {
+    // The action's name, NUL terminated, which the native app posts in the menu-action system message.
+    const char *action;
+    // The shortcut text, NUL terminated, which ziggy_parse_accelerator reads.
+    const char *shortcut;
+} ziggy_standalone_action_shortcut;
+
+// Returns the shortcut of every action that has a shortcut but no menu item, valid until ziggy_destroy, and writes how many there are
+// to the pointer given. A desktop native app registers each one alongside the menu's shortcuts, and posts the menu-action system
+// message naming the action when it is pressed.
+const ziggy_standalone_action_shortcut *ziggy_standalone_action_shortcuts(void *handle, size_t *count);
+
+// Returns, valid until ziggy_destroy, the JSON text of the shortcuts dev mode's script registers in the browser, standing in for a
+// desktop native app: an array of {"action", "code", "ctrl", "alt", "shift", "meta"}, where "code" is the KeyboardEvent code of the
+// key. Only the dev backend calls this. The length is written to the pointer given.
+const char *ziggy_dev_shortcuts_json(void *handle, size_t *length);
 
 // A file of the app's bundled frontend, as ziggy_ui_file gives it.
 typedef struct ziggy_ui_file_result {

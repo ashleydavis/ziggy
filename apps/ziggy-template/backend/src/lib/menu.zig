@@ -3,8 +3,9 @@
 //
 // Each item names what it runs. A `.standard` item is an action the native app does itself (quit, close-window, reload, the zoom and
 // editing actions, full screen and the developer tools). A `.zig` item calls a Zig function of the app's on the thread that handles
-// messages. A `.ui` item reaches the frontend as the app event {"type": "menu", "item": "<name>"}; each of those has a `.name`. The
-// Hello menu is the hello world example of a `.zig` item and a `.ui` item. See Ziggy's guide "Menus".
+// messages. A `.ui` item reaches the frontend as the app event {"type": "menu", "item": "<name>"}; each of those has a `.name`. An
+// `.action` item runs one of the app's actions (see actions.zig). The Hello menu is the hello world example of a `.zig` item, a
+// `.ui` item and an `.action` item. See Ziggy's guide "Menus".
 //
 
 const ziggy = @import("ziggy");
@@ -19,14 +20,14 @@ pub const menu: []const ziggy.menu.Menu = &.{
         .items = &.{
             .{
                 .label = "Close Window",
-                .accelerator = "CmdOrCtrl+W",
+                .shortcut = "CmdOrCtrl+W",
                 .run = .{
                     .standard = .@"close-window",
                 },
             },
             .{
                 .label = "Quit",
-                .accelerator = "CmdOrCtrl+Q",
+                .shortcut = "CmdOrCtrl+Q",
                 .run = .{
                     .standard = .quit,
                 },
@@ -38,14 +39,14 @@ pub const menu: []const ziggy.menu.Menu = &.{
         .items = &.{
             .{
                 .label = "Undo",
-                .accelerator = "CmdOrCtrl+Z",
+                .shortcut = "CmdOrCtrl+Z",
                 .run = .{
                     .standard = .undo,
                 },
             },
             .{
                 .label = "Redo",
-                .accelerator = "CmdOrCtrl+Shift+Z",
+                .shortcut = "CmdOrCtrl+Shift+Z",
                 .run = .{
                     .standard = .redo,
                 },
@@ -53,28 +54,28 @@ pub const menu: []const ziggy.menu.Menu = &.{
             ziggy.menu.separator,
             .{
                 .label = "Cut",
-                .accelerator = "CmdOrCtrl+X",
+                .shortcut = "CmdOrCtrl+X",
                 .run = .{
                     .standard = .cut,
                 },
             },
             .{
                 .label = "Copy",
-                .accelerator = "CmdOrCtrl+C",
+                .shortcut = "CmdOrCtrl+C",
                 .run = .{
                     .standard = .copy,
                 },
             },
             .{
                 .label = "Paste",
-                .accelerator = "CmdOrCtrl+V",
+                .shortcut = "CmdOrCtrl+V",
                 .run = .{
                     .standard = .paste,
                 },
             },
             .{
                 .label = "Select All",
-                .accelerator = "CmdOrCtrl+A",
+                .shortcut = "CmdOrCtrl+A",
                 .run = .{
                     .standard = .@"select-all",
                 },
@@ -86,7 +87,7 @@ pub const menu: []const ziggy.menu.Menu = &.{
         .items = &.{
             .{
                 .label = "Reload",
-                .accelerator = "CmdOrCtrl+R",
+                .shortcut = "CmdOrCtrl+R",
                 .run = .{
                     .standard = .reload,
                 },
@@ -94,21 +95,21 @@ pub const menu: []const ziggy.menu.Menu = &.{
             ziggy.menu.separator,
             .{
                 .label = "Zoom In",
-                .accelerator = "CmdOrCtrl+Plus",
+                .shortcut = "CmdOrCtrl+Plus",
                 .run = .{
                     .standard = .@"zoom-in",
                 },
             },
             .{
                 .label = "Zoom Out",
-                .accelerator = "CmdOrCtrl+Minus",
+                .shortcut = "CmdOrCtrl+Minus",
                 .run = .{
                     .standard = .@"zoom-out",
                 },
             },
             .{
                 .label = "Actual Size",
-                .accelerator = "CmdOrCtrl+0",
+                .shortcut = "CmdOrCtrl+0",
                 .run = .{
                     .standard = .@"zoom-reset",
                 },
@@ -116,7 +117,7 @@ pub const menu: []const ziggy.menu.Menu = &.{
             ziggy.menu.separator,
             .{
                 .label = "Toggle Full Screen",
-                .accelerator = "F11",
+                .shortcut = "F11",
                 .run = .{
                     .standard = .@"toggle-fullscreen",
                 },
@@ -124,7 +125,7 @@ pub const menu: []const ziggy.menu.Menu = &.{
             ziggy.menu.separator,
             .{
                 .label = "Toggle Developer Tools",
-                .accelerator = "CmdOrCtrl+Shift+I",
+                .shortcut = "CmdOrCtrl+Shift+I",
                 .run = .{
                     .standard = .@"toggle-devtools",
                 },
@@ -146,6 +147,12 @@ pub const menu: []const ziggy.menu.Menu = &.{
                 .label = "Say Hello From the UI",
                 .name = "hello-from-ui",
                 .run = .ui,
+            },
+            // Runs the template's action Say Hello From an Action, whose label and shortcut the item shows.
+            .{
+                .run = .{
+                    .action = "hello-from-action",
+                },
             },
         },
     },

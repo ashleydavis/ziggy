@@ -46,6 +46,7 @@ pub const app = ziggy.core.App(.{
     .on_task_event = handlers.onTaskEvent,
     .describe_error = handlers.describeError,
     .menu = handlers.menu,
+    .actions = handlers.actions,
     .ui_files = &ui.files,
     .ui_query = handlers.uiQuery,
     .on_create = handlers.onCreate,

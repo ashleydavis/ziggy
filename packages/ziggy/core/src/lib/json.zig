@@ -13,6 +13,16 @@ pub fn stringify(allocator: std.mem.Allocator, value: anytype) ![]u8 {
 }
 
 //
+// Converts any value that std.json can serialise to JSON text at compile time, leaving out null fields as stringify does, for JSON the
+// core makes once from the app's declaration.
+//
+pub fn stringifyComptime(comptime value: anytype) []const u8 {
+    return std.fmt.comptimePrint("{f}", .{std.json.fmt(value, .{
+        .emit_null_optional_fields = false,
+    })});
+}
+
+//
 // Returns a string field of a JSON object, or null when the value is not an object or the field is missing or not a string.
 //
 pub fn getString(value: std.json.Value, name: []const u8) ?[]const u8 {

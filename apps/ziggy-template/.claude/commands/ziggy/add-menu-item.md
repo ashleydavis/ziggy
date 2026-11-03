@@ -13,19 +13,24 @@ Read Ziggy's guide [Menus](https://github.com/ashleydavis/ziggy/blob/main/docs/u
 - A `.standard` item when one of the guide's standard actions already does it (quit, close the window, reload, zoom, the editing commands, full screen, the developer tools, focus the window). It has no `name` and needs no code of the app's.
 - A `.zig` item when the backend does the work. The function runs on the thread that handles every frontend message, so it must be quick: slow work queues a task from it (use `/ziggy:add-task` for the task).
 - A `.ui` item when the frontend does the work, such as showing a page or a dialog.
+- An `.action` item when the work is one of the app's actions (see Ziggy's guide [Actions](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/actions.md)): work the frontend does that a shortcut, a button or the backend can also run. A phone's user can run it through `window.ziggy.runAction`.
 - A submenu when the human asks for items grouped under one label.
 
 A phone shows no menu, so a user on Android or iOS can never choose the item. When a mobile user needs what it does, tell the human, and give the frontend its own way to do it too.
 
 ## Add it
 
-1. Add the item to its menu in the app's menu file, in the place the human asked for, or at the end of the menu when they did not say. Make a new `ziggy.menu.Menu` when the menu does not exist yet. Give a `.zig` or `.ui` item a `name`: a lower-case, hyphenated string that no other item has and that is not the name of a standard action. Give a shortcut in `accelerator` only when the human asked for one, written as the guide's "Keyboard shortcuts" says, and choose another when it is already used by an item of the menu.
+1. Add the item to its menu in the app's menu file, in the place the human asked for, or at the end of the menu when they did not say. Make a new `ziggy.menu.Menu` when the menu does not exist yet. Give a `.zig` or `.ui` item a `name`: a lower-case, hyphenated string that no other item has and that is not the name of a standard action. Give a `shortcut` only when the human asked for one, written as the guide's "Keyboard shortcuts" says, and choose another when it is already used by an item of the menu.
 2. For a `.zig` item, write its function in a file in `backend/src/lib`, with the signature the guide gives under "A Zig function" and a `//` comment saying what it does, and point the item's `run` at it. When it tells the frontend something, it sends an app event with its own `type` (never `"menu"`): add that event's TypeScript interface to the frontend's `IAppEvent` union.
 3. For a `.ui` item, or a `.zig` item whose function sends the frontend an event, handle the event in a plain function under `frontend/src/lib` (in the template, extend `logLineForEvent` or add a function beside it) and call it from the `window.ziggy.onEvent` listener in `frontend/src/main.ts`. Keep the logic out of `main.ts`.
-4. Write the backend's unit tests in `backend/src/test` (in the template, beside the others in `menu.test.zig`): one that the item is in `app.app.menu_targets` under its name with the right kind, and one that posts the `menu-action` system message naming it, as the guide's "Testing menu items" does, and checks what the frontend is sent. A `.standard` item never reaches the backend and gets no backend test.
-5. Write the frontend's unit tests for the function from step 3 under `frontend/src/test`.
-6. Watch each new test fail with the item's code broken, then pass with it put back.
-7. Run `/ziggy:check`.
+4. For an `.action` item:
+   1. Declare the action in the app's actions (in the template, `backend/src/lib/actions.zig`, passed to `ziggy.core.App` as `.actions`), with a `name` that no other action or menu item has and that is not a standard action's, a `label` and, when the human asked for one, a `shortcut`.
+   2. Register its handler in the frontend with `window.ziggy.registerAction(name, handler)` (in the template, in `registerActions` in `frontend/src/main.ts`), with any logic in a plain function under `frontend/src/lib`.
+   3. Add the menu item as `.{ .run = .{ .action = "<name>" } }`, with no `name`. Leave out `label` and `shortcut` so the menu item uses the action's, unless the human asked for different ones.
+5. Write the backend's unit tests in `backend/src/test` (in the template, beside the others in `menu.test.zig`): one that the item is in `app.app.menu_targets` under its name with the right kind, and one that posts the `menu-action` system message naming it, as the guide's "Testing menu items" does, and checks what the frontend is sent: the `action` system event for an `.action` item. A `.standard` item never reaches the backend and gets no backend test.
+6. Write the frontend's unit tests for the function from step 3 or step 4 under `frontend/src/test`.
+7. Watch each new test fail with the item's code broken, then pass with it put back.
+8. Run `/ziggy:check`.
 
 The build checks the menu and fails naming the item when it is wrong (a missing or repeated name, a repeated or unreadable shortcut). Fix the item, never the check. A `.zig` function that fails returns a Zig error, which reaches the frontend as a `core-error` event: never swallow an error to make the item look like it worked.
 

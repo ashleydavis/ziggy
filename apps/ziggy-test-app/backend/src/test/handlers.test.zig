@@ -655,21 +655,40 @@ test "the observers the test app gives the core tell the UI of each task that en
 // The desktop menu.
 //
 
-test "the menu has the .ui items the UI handles and the zig-event item; toggle-devtools and quit are standard items" {
+test "the menu has the .ui items the UI handles, the zig-event item and the say-action action; toggle-devtools and quit are standard items" {
     for ([_][]const u8{ "start-short", "start-long", "start-many", "cancel-long", "about" }) |name| {
         const target = template.app.menu_targets.get(name) orelse return error.MenuItemMissing;
         try std.testing.expect(target == .ui);
     }
     const zig_event = template.app.menu_targets.get("zig-event") orelse return error.MenuItemMissing;
     try std.testing.expect(zig_event == .zig);
-    try std.testing.expectEqual(@as(usize, 6), template.app.menu_targets.keys().len);
+    const say_action = template.app.menu_targets.get("say-action") orelse return error.MenuItemMissing;
+    try std.testing.expect(say_action == .action);
+    try std.testing.expectEqual(@as(usize, 7), template.app.menu_targets.keys().len);
     for ([_][]const u8{ "toggle-devtools", "quit" }) |action| {
         try std.testing.expect(template.app.menu_targets.get(action) == null);
-        const wanted = try std.fmt.allocPrint(std.testing.allocator, "\"action\":\"{s}\"", .{action});
-        defer std.testing.allocator.free(wanted);
-        try std.testing.expect(std.mem.indexOf(u8, template.app.menu_json, wanted) != null);
+        var found = false;
+        for (template.app.menu_entries) |entry| {
+            if (entry.action) |entry_action| {
+                if (std.mem.eql(u8, std.mem.span(entry_action), action)) {
+                    found = true;
+                }
+            }
+        }
+        try std.testing.expect(found);
     }
 }
+test "a menu-action naming say-action sends the UI the action system event naming it" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), template.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"say-action\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"action\",\"data\":{\"action\":\"say-action\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":{}}");
+}
+
 test "the zig-event item's function sends the UI the app event menu-zig-event" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();

@@ -33,13 +33,14 @@ Read the guides in this order:
 2. [The app declaration](user-guide/app-declaration.md): how the backend gives Ziggy its messages, tasks, menu and frontend, and what it does when the backend is destroyed.
 3. [Dev mode](user-guide/dev-mode.md): how to run your app's frontend in a browser that reloads as you save.
 4. [Messages](user-guide/messages.md): how to send JSON messages between frontend and backend.
-5. [Menus](user-guide/menus.md): the desktop menu, its keyboard shortcuts and how a chosen item reaches the backend or the frontend.
-6. [Tasks](user-guide/tasks.md): how to run background tasks that don't block the frontend.
-7. [Threads](user-guide/threads.md): the threads an app runs on, what each one may touch and how they talk by messages.
-8. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
-9. [Logging](user-guide/logging.md): how to log, where the lines go and how to configure the log files.
-10. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the remote control connection.
-11. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
+5. [Actions](user-guide/actions.md): named pieces of the app's functionality, run from a menu item, a keyboard shortcut, the frontend or the backend.
+6. [Menus](user-guide/menus.md): the desktop menu, its keyboard shortcuts and how a chosen item reaches the backend or the frontend.
+7. [Tasks](user-guide/tasks.md): how to run background tasks that don't block the frontend.
+8. [Threads](user-guide/threads.md): the threads an app runs on, what each one may touch and how they talk by messages.
+9. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
+10. [Logging](user-guide/logging.md): how to log, where the lines go and how to configure the log files.
+11. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the remote control connection.
+12. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
 
 Also:
 

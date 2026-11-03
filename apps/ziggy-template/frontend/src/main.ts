@@ -88,6 +88,32 @@ function listenForTheMenu(): void {
 }
 
 //
+// The handler of the template's action Say Hello From an Action, which its Hello menu item, its shortcut and the "Say hello from an
+// action" button all run: it logs a line.
+//
+function helloFromAction(): void {
+    log("Hello from an action");
+}
+
+//
+// Registers the handlers of the template's actions.
+//
+function registerActions(): void {
+    window.ziggy.registerAction("hello-from-action", helloFromAction);
+}
+
+//
+// Has the "Say hello from an action" button run the action by its name, and shows why when it does not run.
+//
+function listenForTheActionButton(): void {
+    element("run-hello-action").addEventListener("click", () => {
+        window.ziggy.runAction("hello-from-action").catch((error: Error) => {
+            log(`The action did not run: ${error.message}`);
+        });
+    });
+}
+
+//
 // Handles the commands the remote control connection forwards, which the smoke tests send. It does nothing unless the native app
 // started the frontend in test mode, which it does only when the app was started with --remote-control, and it tells the backend when it is
 // listening so that no command is sent before it can be heard.
@@ -108,4 +134,6 @@ function listenForTestCommands(): void {
 listenForTheMessageButton();
 listenForTheTask();
 listenForTheMenu();
+registerActions();
+listenForTheActionButton();
 listenForTestCommands();

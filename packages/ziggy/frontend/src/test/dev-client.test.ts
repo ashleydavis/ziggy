@@ -31,6 +31,19 @@ interface IFakeRequest {
 }
 
 //
+// A fake key press, with what the script reads of it.
+//
+interface IFakeKeyEvent {
+    code: string;
+    ctrlKey: boolean;
+    altKey: boolean;
+    shiftKey: boolean;
+    metaKey: boolean;
+    defaultPrevented: boolean;
+    preventDefault: () => void;
+}
+
+//
 // A fake of the page's window, with what the script uses.
 //
 interface IFakeWindow {
@@ -38,6 +51,7 @@ interface IFakeWindow {
     WebSocket: new (url: string) => IFakeSocket;
     fetch: (url: string, options?: { method?: string; body?: unknown }) => Promise<IFakeResponse>;
     setTimeout: (callback: () => void, delay: number) => void;
+    addEventListener: (type: string, listener: (event: IFakeKeyEvent) => void) => void;
     __ziggyReceive?: (message: object) => void;
     webkit?: { messageHandlers: { ziggy: { postMessage: (text: string) => void } } };
     chrome?: { webview?: { postMessageWithAdditionalObjects: (message: string, files: { name: string }[]) => void } };
@@ -46,13 +60,16 @@ interface IFakeWindow {
 const script = fs.readFileSync(path.join(__dirname, "../../../dev/src/lib/dev-client.js"), "utf8");
 
 //
-// A window for the script, with every request it makes handled by the function given, and the socket and listeners it creates.
+// A window for the script, with every request it makes handled by the function given, and the socket and listeners it creates. The
+// request for the shortcuts is answered with the text given and kept apart from the others.
 //
-function makeWindow(answer: (request: IFakeRequest) => IFakeResponse) {
+function makeWindow(answer: (request: IFakeRequest) => IFakeResponse, shortcutsText = "[]") {
     const sockets: IFakeSocket[] = [];
     const requests: IFakeRequest[] = [];
     const timers: (() => void)[] = [];
     const received: object[] = [];
+    const shortcutRequests: IFakeRequest[] = [];
+    const keyListeners: ((event: IFakeKeyEvent) => void)[] = [];
     const fakeWindow: IFakeWindow = {
         location: {
             host: "127.0.0.1:4000",
@@ -80,9 +97,21 @@ function makeWindow(answer: (request: IFakeRequest) => IFakeResponse) {
             return socket;
         } as unknown as new (url: string) => IFakeSocket,
         fetch: (url, options) => {
+            if (url === "/__ziggy/shortcuts") {
+                shortcutRequests.push({
+                    url,
+                    options,
+                });
+                return Promise.resolve(respond(true, shortcutsText));
+            }
             const request = { url, options };
             requests.push(request);
             return Promise.resolve(answer(request));
+        },
+        addEventListener: (type, listener) => {
+            if (type === "keydown") {
+                keyListeners.push(listener);
+            }
         },
         setTimeout: callback => {
             timers.push(callback);
@@ -91,7 +120,7 @@ function makeWindow(answer: (request: IFakeRequest) => IFakeResponse) {
             received.push(message);
         },
     };
-    return { fakeWindow, sockets, requests, timers, received };
+    return { fakeWindow, sockets, requests, timers, received, shortcutRequests, keyListeners };
 }
 
 function respond(ok: boolean, text: string): IFakeResponse {
@@ -100,6 +129,24 @@ function respond(ok: boolean, text: string): IFakeResponse {
         status: ok ? 200 : 500,
         text: () => Promise.resolve(text),
     };
+}
+
+//
+// A key press with the code and modifiers given, which records whether the script prevented the browser's own handling.
+//
+function keyPress(code: string, ctrlKey: boolean, altKey: boolean, shiftKey: boolean, metaKey: boolean): IFakeKeyEvent {
+    const event: IFakeKeyEvent = {
+        code,
+        ctrlKey,
+        altKey,
+        shiftKey,
+        metaKey,
+        defaultPrevented: false,
+        preventDefault: () => {
+            event.defaultPrevented = true;
+        },
+    };
+    return event;
 }
 
 function run(fakeWindow: IFakeWindow): void {
@@ -150,6 +197,10 @@ describe("dev-client", () => {
         const { fakeWindow, sockets, requests, timers } = makeWindow(() => respond(true, "ok"));
         // A dev host that is down refuses the connection, which fetch reports by rejecting.
         fakeWindow.fetch = (url, options) => {
+            // The shortcuts are read when the script starts, before the socket closes.
+            if (url === "/__ziggy/shortcuts") {
+                return Promise.resolve(respond(true, "[]"));
+            }
             requests.push({ url, options });
             if (!answering) {
                 return Promise.reject(new Error("connection refused"));
@@ -223,6 +274,65 @@ describe("dev-client", () => {
         run(fakeWindow);
         expect(() => fakeWindow.chrome!.webview!.postMessageWithAdditionalObjects("other", [{ name: "a.txt" }])).toThrow("only a drop's files");
         expect(requests).toEqual([]);
+    });
+
+    test("it reads the shortcuts from the dev host once, when it starts", () => {
+        const { fakeWindow, shortcutRequests } = makeWindow(() => respond(true, ""));
+        run(fakeWindow);
+        expect(shortcutRequests.map(request => request.url)).toEqual(["/__ziggy/shortcuts"]);
+    });
+
+    test("a key press that matches a shortcut posts menu-action naming its action and stops the browser's own handling", async () => {
+        const shortcuts = JSON.stringify([
+            {
+                action: "hello-from-action",
+                code: "KeyH",
+                ctrl: true,
+                alt: false,
+                shift: true,
+                meta: false,
+            },
+        ]);
+        const { fakeWindow, sockets, keyListeners } = makeWindow(() => respond(true, ""), shortcuts);
+        run(fakeWindow);
+        sockets[0].fire("open", {});
+        await settle();
+        const event = keyPress("KeyH", true, false, true, false);
+        keyListeners.forEach(listener => listener(event));
+        expect(event.defaultPrevented).toBe(true);
+        expect(sockets[0].sent.map(text => JSON.parse(text))).toEqual([
+            {
+                kind: "system",
+                name: "menu-action",
+                data: {
+                    action: "hello-from-action",
+                },
+            },
+        ]);
+    });
+
+    test("a key press that differs from a shortcut in a modifier or in the key posts nothing and is left to the browser", async () => {
+        const shortcuts = JSON.stringify([
+            {
+                action: "hello-from-action",
+                code: "KeyH",
+                ctrl: true,
+                alt: false,
+                shift: true,
+                meta: false,
+            },
+        ]);
+        const { fakeWindow, sockets, keyListeners } = makeWindow(() => respond(true, ""), shortcuts);
+        run(fakeWindow);
+        sockets[0].fire("open", {});
+        await settle();
+        const missingShift = keyPress("KeyH", true, false, false, false);
+        const otherKey = keyPress("KeyJ", true, false, true, false);
+        keyListeners.forEach(listener => listener(missingShift));
+        keyListeners.forEach(listener => listener(otherKey));
+        expect(missingShift.defaultPrevented).toBe(false);
+        expect(otherKey.defaultPrevented).toBe(false);
+        expect(sockets[0].sent).toEqual([]);
     });
 
     test("it refuses to run in a page that already has a web view's handler", () => {

@@ -2,6 +2,7 @@
 
 # The menu items that are the frontend's own do what the buttons they stand for do: the task items start and cancel tasks, and
 # About shows its text. The item that runs a Zig function runs it in the core. The event the function sends reaches the frontend.
+# The item that runs the action say-action runs the frontend's handler of it.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 
@@ -27,3 +28,6 @@ wait_for_text event-log "task-completed hello-long-5 succeeded" 60
 
 choose_menu_item zig-event
 wait_for_text event-log "menu-zig-event"
+
+choose_menu_item say-action
+wait_for_text action-result "said by an action"

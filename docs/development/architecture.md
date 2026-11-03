@@ -104,7 +104,9 @@ The system messages, each handled by Ziggy's core library and never by the app:
 | `cancel-tasks` | `window.ziggy.cancelTasks(source)` | Cancels the tasks of a source. |
 | `get-dropped-paths` | `window.ziggy.getPathForFile`, when a drop happens | Answers with the paths of the files in the last drop. |
 | `log` | `window.ziggy.log(level, message, errorText, toolOutput)` | Writes a line to the main thread's log tagged `Frontend` (see [Logging](../user-guide/logging.md)). A level it does not know fails with `UnknownLogLevel`. |
-| `menu-action` | The native app | Passes on a menu item the native app does not run itself, by its name: the core calls a `.zig` item's function or sends a `.ui` item to the frontend as the app event `{"type": "menu", "item": "<name>"}`. A name the menu does not have, or a standard action, fails with `UnknownMenuItem`. |
+| `menu-action` | The native app | Passes on a menu item the native app does not run itself, by its name: the core calls a `.zig` item's function or sends a `.ui` item to the frontend as the app event `{"type": "menu", "item": "<name>"}`. An action's name runs the action, whether or not it is on the menu. Any other name the menu does not have, or a standard action, fails with `UnknownMenuItem`. |
+| `run-action` | `window.ziggy.runAction(name)` | Runs the action named in `action`: one of the app's actions, or a standard action on the app's menu. See [Actions](../user-guide/actions.md#running-an-action) for the errors. |
+| `list-actions` | `window.ziggy.listActions()` | Answers with the `name`, `label` and `shortcut` of every action of the app and every `.standard` item of its menu. `shortcut` is as the platform shows it, or null. |
 | `test-result` | `window.ziggy.sendTestResult(requestId, result)` | The frontend's result for a `test-command`. Fails with `RemoteControlNotRunning` when the app was started without `--remote-control`. |
 | `test-ui-ready` | `window.ziggy.testUiReady()` | Reports that the frontend is listening for test commands. Fails with `RemoteControlNotRunning` when the app was started without `--remote-control`. |
 
@@ -117,6 +119,7 @@ The system events, each with its own listener on `window.ziggy`:
 | `task-event` | `onTaskEvent` | A task sent an event while it ran: `taskId`, `source` and `data`. |
 | `task-completed` | `onTaskCompleted` | A task ended: `taskId` and `result`. |
 | `core-error` | `onCoreError` | A message failed with no message response to carry the error: `error`. With no listener it is logged to the console. |
+| `action` | The handler registered with `registerAction` | Runs the frontend handler of the action named in `action`. With no handler registered, the frontend logs an error naming the action and throws. |
 | `test-command` | `onTestCommand` | A command from the remote control connection: `requestId` and `command`. Sent only when the app was started with `--remote-control`. |
 
 ## Tasks
@@ -136,10 +139,19 @@ The system events, each with its own listener on `window.ziggy`:
 - An app can add native calls of its own, which its own native code handles.
 - The [Native calls](../user-guide/native-calls.md) guide explains how to use them.
 
+## Actions
+
+- An action is a named piece of the app's functionality that takes no arguments. The app declares each as a `ziggy.action.Action`, with a name, a label and an optional shortcut, and passes them to `ziggy.core.App` as `.actions` (`core/src/lib/action.zig`). `App` checks them when the app is built.
+- Every action's handler is in the frontend, registered with `window.ziggy.registerAction(name, handler)`. The backend registers none.
+- A menu item of the `.action` kind, the action's shortcut, `window.ziggy.runAction(name)` and the handler services' `runAction` all reach the core, which sends the frontend the `action` system event naming it. The injected script calls the handler registered for that name.
+- Each desktop native app registers the shortcut of every action, whether or not the action is on the menu.
+- `window.ziggy.listActions()` lists every action and every `.standard` item of the menu with its label and shortcut, so an app can draw its own command palette.
+
 ## Menus
 
-- The app declares the desktop menu once, as a `ziggy.menu.Menu` value passed to `ziggy.core.App` as `.menu` (`core/src/lib/menu.zig`). `App` checks it when the app is built and turns it, at compile time, into the menu JSON the native apps read through `ziggy_menu_json` and the table of named items the core runs. Each desktop native app builds a native menu from that JSON with the platform's own menu API. A mobile device has no menu.
+- The app declares the desktop menu once, as a `ziggy.menu.Menu` value passed to `ziggy.core.App` as `.menu` (`core/src/lib/menu.zig`). `App` checks it when the app is built and turns it, at compile time, into the menu entries the native apps read through `ziggy_menu` and the table of named items the core runs. Each desktop native app builds a native menu from those entries with the platform's own menu API. A mobile device has no menu.
 - Each item names what it runs. The native app does a `.standard` item itself (quit, reload, zoom, full screen, focusing the window, the editing commands and the developer tools). Any other item it posts to the core by name as the `menu-action` system message. The core calls a `.zig` item's function on the thread that handles messages. An error it returns becomes a `core-error` system event, since the message has no id. The core sends a `.ui` item to the frontend as the app event `{"type": "menu", "item": "<name>"}`, which reaches the `onEvent` listeners.
+- Choosing an `.action` item runs its action's handler in the frontend (see [Actions](#actions)).
 - `menu-action` is only a system message the native apps post. It is not a system event and the frontend has no listener for it.
 - [Menus](../user-guide/menus.md) explains how to write one.
 

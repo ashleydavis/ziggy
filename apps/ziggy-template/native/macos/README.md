@@ -17,7 +17,7 @@ The project links `libziggy_template.a` from the directory in the `ZIGGY_NATIVE_
 
 ## Menu, shortcuts and developer tools
 
-The native app draws the backend's menu (`ziggy_menu_json`, made at compile time from the `ziggy.menu.Menu` in `backend/src/lib/menu.zig`) as the application's main menu. The app delegate creates no menu of its own.
+The native app draws the backend's menu (`ziggy_menu`, made at compile time from the `ziggy.menu.Menu` in `backend/src/lib/menu.zig`) as the application's main menu. The app delegate creates no menu of its own.
 
 - The application menu comes first: About and Quit. The backend's own Quit and About items are not drawn again in their menus: they become the application menu's items, with the shortcut the backend gave (Command+Q when there is none). A menu left empty by that is not shown, and `[]` adds nothing extra.
 - Each item's shortcut is parsed by `ziggy_parse_accelerator` and set as the item's key equivalent and modifier mask, so shortcuts work while the web view has the focus. "plus" is `+` (so Command and plus; whether Command and `=` also triggers it is untested).

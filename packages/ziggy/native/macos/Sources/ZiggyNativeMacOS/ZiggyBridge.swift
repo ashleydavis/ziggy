@@ -102,6 +102,10 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The main menu, once the core exists. This holds it because a menu item's target is not retained.
     private var menu: ZiggyMenu?
 
+    // The shortcuts of the app's actions that have no menu item, once the core exists. This holds them because their key monitor
+    // lives as long as they do.
+    private var actionShortcuts: ZiggyActionShortcuts?
+
     // The pickers the core requested, which shutdown closes before it destroys the core.
     private let pickers = ZiggyPickers()
 
@@ -250,11 +254,16 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         core = created
         uiHandler.core = created
 
-        var menuLength = 0
-        guard let menuText = ziggy_menu_json(created, &menuLength) else {
-            ZiggyBridge.fail("the core has no menu text")
+        var entryCount = 0
+        guard let entries = ziggy_menu(created, &entryCount) else {
+            ZiggyBridge.fail("the core has no menu entries")
         }
-        menu = ZiggyMenu(bridge: self, menuJSON: Data(bytes: menuText, count: menuLength))
+        menu = ZiggyMenu(bridge: self, entries: UnsafeBufferPointer(start: entries, count: entryCount))
+        var shortcutCount = 0
+        guard let shortcuts = ziggy_standalone_action_shortcuts(created, &shortcutCount) else {
+            ZiggyBridge.fail("the core has no standalone action shortcuts")
+        }
+        actionShortcuts = ZiggyActionShortcuts(bridge: self, shortcuts: UnsafeBufferPointer(start: shortcuts, count: shortcutCount))
 
         // The app supplies the query, which is passed through unread.
         var queryLength = 0

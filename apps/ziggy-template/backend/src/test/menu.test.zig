@@ -36,3 +36,18 @@ test "Say Hello From the UI sends the UI the menu event naming it" {
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"hello-from-ui\"}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"type\":\"menu\",\"item\":\"hello-from-ui\"}}");
 }
+
+test "the Hello menu's action item is found by its action's name" {
+    const from_action = app.app.menu_targets.get("hello-from-action") orelse return error.MenuItemMissing;
+    try std.testing.expect(from_action == .action);
+}
+
+test "Say Hello From an Action sends the UI the action system event naming it" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"hello-from-action\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"action\",\"data\":{\"action\":\"hello-from-action\"}}");
+}

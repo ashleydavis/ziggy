@@ -2,7 +2,7 @@
 
 Terms are defined in the [glossary](../glossary.md).
 
-An app's desktop menu is declared once, in the backend, as a Zig constant. When the app is built, Ziggy checks it and turns it into JSON text that each desktop native app reads at start-up and draws with the platform's own menu API. When the user chooses an item, or presses its shortcut, the item runs one of three things: an action the native app does itself (such as quit, zoom or copy), a Zig function of the app's or the frontend, which receives it as an app event. A mobile device shows no menu.
+An app's desktop menu is declared once, in the backend, as a Zig constant. When the app is built, Ziggy checks it and turns it into a list of menu entries that each desktop native app reads at start-up and draws with the platform's own menu API. When the user chooses an item, or presses its shortcut, the item runs one of three things: an action the native app does itself (such as quit, zoom or copy), a Zig function of the app's or the frontend, which receives it as an app event. A mobile device shows no menu. A menu item can also run one of the app's [actions](actions.md).
 
 The `/ziggy:add-menu-item` Claude Code command adds an item to an app's menu by following this guide.
 
@@ -13,8 +13,8 @@ sequenceDiagram
     participant NativeApp as Native app
     participant Backend
     participant UI as Frontend
-    NativeApp->>Backend: ziggy_menu_json at start-up
-    Backend-->>NativeApp: the menu as JSON
+    NativeApp->>Backend: ziggy_menu at start-up
+    Backend-->>NativeApp: the menu entries
     Note over NativeApp: draws the menu and registers the shortcuts
     Note over NativeApp: the user chooses an item
     alt a .standard item
@@ -52,14 +52,14 @@ pub const menu: []const ziggy.menu.Menu = &.{
         .items = &.{
             .{
                 .label = "Close Window",
-                .accelerator = "CmdOrCtrl+W",
+                .shortcut = "CmdOrCtrl+W",
                 .run = .{
                     .standard = .@"close-window",
                 },
             },
             .{
                 .label = "Quit",
-                .accelerator = "CmdOrCtrl+Q",
+                .shortcut = "CmdOrCtrl+Q",
                 .run = .{
                     .standard = .quit,
                 },
@@ -74,8 +74,9 @@ The template's menu also has an Edit menu, a View menu and a Hello menu, the hel
 
 Each item of a menu is a `ziggy.menu.Item`, which is one of:
 
-- **An item that runs something**: a `label`, what it runs in `run`, an optional `accelerator` (its keyboard shortcut) and, for a `.zig` or `.ui` item, a `name`.
+- **An item that runs something**: a `label`, what it runs in `run`, an optional `shortcut` and, for a `.zig` or `.ui` item, a `name`.
 - **A submenu**: a `label` and its own `items`, with no `run` and no `name`. Submenus can hold submenus.
+- **An item that runs an action**: `run` set to `.{ .action = "<action name>" }`, with no `name`. Its `label` and `shortcut` are optional: when left out, they come from the action.
 - **A separator**: `ziggy.menu.separator`, a line between two items.
 
 An item's `run` is one of three things.
@@ -87,7 +88,7 @@ A `.standard` item runs an action the native app does itself, named by the `zigg
 ```zig
             .{
                 .label = "Zoom In",
-                .accelerator = "CmdOrCtrl+Plus",
+                .shortcut = "CmdOrCtrl+Plus",
                 .run = .{
                     .standard = .@"zoom-in",
                 },
@@ -178,13 +179,27 @@ function listenForTheMenu(): void {
 
 An app must not send an event of its own with `type` set to `"menu"`: the frontend could not tell it from a menu item.
 
+### An action of the app's
+
+An `.action` item runs one of the app's [actions](actions.md). The template's Hello menu has one:
+
+```zig
+            .{
+                .run = .{
+                    .action = "hello-from-action",
+                },
+            },
+```
+
+The menu item shows the action's label and shortcut, here "Say Hello From an Action" and `CmdOrCtrl+Shift+H`, unless it sets its own `label` or `shortcut`. Choosing the menu item runs the action's frontend handler, as its shortcut and `runAction` do.
+
 ### Names
 
 Every `.zig` and `.ui` item must have a `name`. It is how the core finds the item when the native app passes the choice on, and a `.ui` item's name is the `item` of its event. A name must be unique in the menu and must not be the name of a standard action, such as `quit`.
 
 ## Keyboard shortcuts
 
-An item's `accelerator` is its keyboard shortcut: modifiers and one key joined by plus signs, such as `CmdOrCtrl+Shift+I`, `F11` or `CmdOrCtrl+Plus`. Ziggy's core reads it the same way on every platform ([`accelerator.zig`](../../packages/ziggy/core/src/lib/accelerator.zig)), and each native app turns it into its platform's own form and shows it beside the item.
+An item's `shortcut` is its keyboard shortcut: modifiers and one key joined by plus signs, such as `CmdOrCtrl+Shift+I`, `F11` or `CmdOrCtrl+Plus`. Each native app shows it beside the item in its platform's own form.
 
 - **Modifiers:** `CmdOrCtrl` (Command on macOS and Control everywhere else), `Cmd`, `Ctrl`, `Alt` and `Shift`. `Command`, `CommandOrControl`, `Control`, `Option` and `Super` are other spellings of them. Case does not matter.
 - **The key:** a letter, a digit, a function key from `F1` to `F24`, or one of `Plus`, `Minus`, `Equal`, `Space`, `Enter`, `Tab`, `Escape`, `Up`, `Down`, `Left`, `Right`, `Home`, `End`, `PageUp`, `PageDown`, `Delete` and `Backspace`. A plus key is written `Plus`, because `+` joins the parts.
@@ -197,11 +212,16 @@ A shortcut works wherever the focus is, including inside the system web view, an
 
 - an item is not a separator or a submenu and has no `run`
 - a submenu has a `run` or a `name`
-- a separator has a `run`, `items`, `name` or `accelerator` (use `ziggy.menu.separator`)
+- a separator has a `run`, `items`, `name` or `shortcut` (use `ziggy.menu.separator`)
 - a `.zig` or `.ui` item has no name, an empty name or the name of a standard action, such as `quit`
 - a `.standard` item has a name
 - two items have the same name or the same shortcut
 - a shortcut does not parse
+- an `.action` item names an action the app has not declared, or has a `name`
+- an item that is not a separator or an `.action` item has an empty label
+- two `.action` items run the same action
+- a `.zig` or `.ui` item has the name of one of the app's actions
+- two shortcuts are the same, including the shortcuts of actions that are not on the menu
 
 ## On each platform
 
@@ -209,7 +229,7 @@ A shortcut works wherever the focus is, including inside the system web view, an
 - **Windows:** a Win32 menu bar, with each shortcut shown after the label in the Windows style (`Ctrl+Shift+I`). While the system web view has the keyboard, WebView2's `AcceleratorKeyPressed` event runs the shortcuts, except the editing ones, which the system web view does itself. Full screen hides the menu bar. An app whose menu is `&.{}` shows no menu bar. The template's [Windows native app README](../../apps/ziggy-template/native/windows/README.md) explains how each standard action is done.
 - **macOS:** the application's main menu. An application menu named after the app comes first, with About and Quit. The `quit` item is drawn there, as Quit and the app's name, with the shortcut the menu gave it, and not in its own menu. An app with no `quit` item still gets Quit there, on Command+Q. An item named `about` (a `.zig` or `.ui` item) is drawn there in the same way, as About and the app's name, and an app without one gets the standard About panel. A menu left empty by moving them is not shown. Shortcuts become key equivalents, which work while the system web view has the focus. The template's [macOS native app README](../../apps/ziggy-template/native/macos/README.md) covers the developer tools on macOS.
 - **iOS and Android:** no menu is drawn and no shortcut is registered, so a user on a phone has no way to choose a menu item. Put anything a mobile user needs in the frontend.
-- **Dev mode:** the frontend runs in a browser, so no menu is drawn (see [Dev mode](dev-mode.md)).
+- **Dev mode:** the frontend runs in a browser, so no menu is drawn. The shortcuts of menu items that are not standard actions still work, apart from those the browser keeps for itself (see [Dev mode](dev-mode.md)).
 
 Zoom steps by 0.1 on every desktop platform. It reaches from 0.25 to 5 on Linux and Windows and from 0.3 to 5 on macOS.
 
@@ -240,16 +260,13 @@ wait_for_text log "Hello from the UI, run from the menu" 30
 
 | File | What it holds |
 |---|---|
-| `packages/ziggy/core/src/lib/menu.zig` | `ziggy.menu`: `Menu`, `Item`, `Run`, `StandardAction`, `separator`, the checks the build runs and the menu JSON the native apps read. |
-| `packages/ziggy/core/src/lib/accelerator.zig` | How a shortcut is read. |
-| `packages/ziggy/core/src/lib/system-messages/menu.zig` | Ziggy's own `menu-action` system message, which runs a `.zig` item or sends a `.ui` item to the frontend. |
-| `packages/ziggy/frontend/src/ziggy-bridge.ts` | `IMenuEvent`. |
 | `apps/ziggy-template/backend/src/lib/menu.zig` | The template's menu. |
 | `apps/ziggy-template/backend/src/lib/hello-world.zig` | The template's Zig function for a menu item. |
 | `apps/ziggy-template/frontend/src/lib/hello-world.ts` | How the template's frontend handles its menu event. |
 
 ## See also
 
+- [Actions](actions.md): what an `.action` item runs.
 - [Messages](messages.md): app events, and `onCoreError`.
 - [Tasks](tasks.md): slow work a menu item's Zig function queues.
 - [Claude Code commands](claude-code-commands.md): `/ziggy:add-menu-item`.

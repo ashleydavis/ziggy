@@ -91,6 +91,25 @@ export interface IMenuEvent {
 }
 
 //
+// One action listActions gives: one of the app's actions, or a standard action of a `.standard` item of the app's menu.
+//
+export interface IActionInfo {
+    // The name the action is run by, such as "open-database" or the standard action "zoom-in".
+    name: string;
+
+    // The action's label, or the `.standard` item's.
+    label: string;
+
+    // The action's shortcut as the platform shows it, such as "Ctrl+Shift+H" or "⇧⌘H", or null when it has none or on a phone.
+    shortcut: string | null;
+}
+
+//
+// The frontend's handler of one of the app's actions. It takes no arguments and may return a promise.
+//
+export type IActionHandler = () => void | Promise<void>;
+
+//
 // What a core-error event carries: a message failed and had no message response to carry the error.
 //
 export interface ICoreErrorEvent {
@@ -276,6 +295,28 @@ export interface IZiggyBridge {
     // Electron's webUtils.getPathForFile, and synchronous like it.
     //
     getPathForFile(file: File): string | undefined;
+
+    //
+    // Registers the frontend's handler of one of the app's actions, which runs whatever runs the action: its menu item, its
+    // shortcut, runAction or the backend. A name that already has a handler throws.
+    //
+    registerAction(name: string, handler: IActionHandler): void;
+
+    //
+    // Removes the handler of an action, so it can be registered again.
+    //
+    removeAction(name: string): void;
+
+    //
+    // Runs one of the app's actions, or a standard action of the app's menu, by its name. Rejects with UnknownAction for a name the
+    // app does not have, and StandardActionUnavailable for a standard action on a phone or in dev mode.
+    //
+    runAction(name: string): Promise<void>;
+
+    //
+    // Resolves with every action of the app and every standard item of its menu, with its label and its shortcut.
+    //
+    listActions(): Promise<IActionInfo[]>;
 }
 
 declare global {

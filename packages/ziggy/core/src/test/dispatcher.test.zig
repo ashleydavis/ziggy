@@ -1,26 +1,28 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const ziggy = @import("ziggy");
-const helpers = @import("helpers.zig");
+const test_app = @import("test-app.zig");
+const test_tasks = @import("test-tasks.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
-fn lastMessage(native_app: *helpers.FakeNativeApp) ![]u8 {
+fn lastMessage(native_app: *FakeNativeApp) ![]u8 {
     return try native_app.messageAt(std.testing.io, std.testing.allocator, native_app.count(std.testing.io, std.testing.allocator) - 1);
 }
 
 //
 // Fails unless the last message the fake native app recorded is the expected text.
 //
-fn expectLastMessage(native_app: *helpers.FakeNativeApp, expected: []const u8) !void {
+fn expectLastMessage(native_app: *FakeNativeApp, expected: []const u8) !void {
     const last = try lastMessage(native_app);
     defer std.testing.allocator.free(last);
     try std.testing.expectEqualStrings(expected, last);
 }
 
 test "a message with an id reaches the app's message handler and its response comes back with the same id" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":7,\"name\":\"echo\",\"data\":{\"a\":1}}");
     const reply = try lastMessage(&native_app);
@@ -29,10 +31,10 @@ test "a message with an id reaches the app's message handler and its response co
 }
 
 test "a string id is echoed as a string" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":\"abc\",\"name\":\"echo\",\"data\":null}");
     const reply = try lastMessage(&native_app);
@@ -41,10 +43,10 @@ test "a string id is echoed as a string" {
 }
 
 test "a system message name Ziggy does not know gets UnknownSystemMessage" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"nope\",\"data\":null}");
     const reply = try lastMessage(&native_app);
@@ -53,10 +55,10 @@ test "a system message name Ziggy does not know gets UnknownSystemMessage" {
 }
 
 test "test-result and test-ui-ready are error replies when the core is not in test mode" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"test-result\",\"data\":{\"requestId\":1,\"result\":null}}");
     const first = try lastMessage(&native_app);
@@ -69,10 +71,10 @@ test "test-result and test-ui-ready are error replies when the core is not in te
 }
 
 test "malformed JSON is reported as a core-error event and the core keeps working" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{not json");
     try native_app.send(std.testing.io, std.testing.allocator, "[1,2,3]");
@@ -85,20 +87,20 @@ test "malformed JSON is reported as a core-error event and the core keeps workin
 }
 
 test "the message's name reaches the app's message handler unchanged" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":7,\"name\":\"name\",\"data\":null}");
     try expectLastMessage(&native_app, "{\"id\":7,\"ok\":true,\"data\":\"name\"}");
 }
 
 test "a message with no name, an empty name or a name that is not a string is refused with MissingMessageName before the handler runs" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var recording_app = helpers.app;
+    var recording_app = test_app.app;
     recording_app.messages = recording.messages;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), recording_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -117,10 +119,10 @@ test "a message with no name, an empty name or a name that is not a string is re
 }
 
 test "a handler that fails gets an error response when the message has an id and a core-error event when not" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":3,\"name\":\"nope\",\"data\":1}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":3,\"ok\":false,\"error\":\"UnknownMessageName\"}");
@@ -129,20 +131,20 @@ test "a handler that fails gets an error response when the message has an id and
 }
 
 test "a system message whose name is not a string is an invalid message" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":3,\"name\":7,\"data\":null}");
     try expectLastMessage(&native_app, "{\"id\":3,\"ok\":false,\"error\":\"InvalidMessage\"}");
 }
 
 test "a handler that returns none with an id gets an empty successful response, and without an id gets nothing" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"none\"}");
     try std.testing.expectEqual(@as(usize, 0), native_app.count(std.testing.io, std.testing.allocator));
@@ -151,10 +153,10 @@ test "a handler that returns none with an id gets an empty successful response, 
 }
 
 test "core.sendEvent delivers the data as an app event" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"send-app-event\",\"data\":{\"type\":\"saved\",\"count\":2}}");
     try expectLastMessage(&native_app, "{\"kind\":\"app\",\"data\":{\"type\":\"saved\",\"count\":2}}");
@@ -194,10 +196,10 @@ const recording = ziggy.core.App(.{
 });
 
 test "system messages are handled by Ziggy and never reach the app, even when the app has a message of the same name" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var recording_app = helpers.app;
+    var recording_app = test_app.app;
     recording_app.messages = recording.messages;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), recording_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -218,10 +220,10 @@ test "system messages are handled by Ziggy and never reach the app, even when th
 }
 
 test "an app message reaches the app's handler and never a system handler, even with a system message's name" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var recording_app = helpers.app;
+    var recording_app = test_app.app;
     recording_app.messages = recording.messages;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), recording_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -235,10 +237,10 @@ test "an app message reaches the app's handler and never a system handler, even 
 }
 
 test "a message with no kind, or a kind that is neither app nor system, is refused as InvalidMessage with a core-error event" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var recording_app = helpers.app;
+    var recording_app = test_app.app;
     recording_app.messages = recording.messages;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), recording_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -257,20 +259,20 @@ test "a message with no kind, or a kind that is neither app nor system, is refus
 }
 
 test "a message without an id gets no reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"echo\",\"data\":1}");
     try std.testing.expectEqual(@as(usize, 0), native_app.count(std.testing.io, std.testing.allocator));
 }
 
 test "a handler that fails becomes an error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
     const reply = try lastMessage(&native_app);
@@ -279,10 +281,10 @@ test "a handler that fails becomes an error reply" {
 }
 
 test "get-platform reports the platform kind" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":5,\"name\":\"get-platform\",\"data\":null}");
     // Android and iOS are the mobile platforms, and every other platform is desktop. The test runs on both, so it names the
@@ -295,10 +297,10 @@ test "get-platform reports the platform kind" {
 }
 
 test "text with quotes, newlines and non-ASCII characters round trips unchanged" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":6,\"name\":\"echo\",\"data\":{\"text\":\"quote \\\"hi\\\"\\nline two \\u00e9 \\u4e16\\u754c \\ud83d\\ude00\"}}");
     const reply = try lastMessage(&native_app);
@@ -310,10 +312,10 @@ test "text with quotes, newlines and non-ASCII characters round trips unchanged"
 }
 
 test "a multi-megabyte payload round trips unchanged" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     const payload = try std.testing.allocator.alloc(u8, 6 * 1024 * 1024);
     defer std.testing.allocator.free(payload);
@@ -339,27 +341,27 @@ test "a multi-megabyte payload round trips unchanged" {
 }
 
 test "create then destroy releases everything" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 3, 2);
+    try test_app.createCore(&native_app, 3, 2);
     native_app.stop(std.testing.io, std.testing.allocator);
 }
 
 test "create without a wake callback fails" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
     config.wake = null;
-    try std.testing.expectError(error.WakeCallbackMissing, native_app.start(std.testing.io, std.testing.allocator, config, helpers.app));
+    try std.testing.expectError(error.WakeCallbackMissing, native_app.start(std.testing.io, std.testing.allocator, config, test_app.app));
 }
 
 test "a menu-action message naming a .ui item reaches the UI as the app event menu; no menu-action event is sent" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"about\"}}");
     const event = try native_app.messageAt(std.testing.io, std.testing.allocator, 0);
@@ -374,10 +376,10 @@ test "a menu-action message naming a .ui item reaches the UI as the app event me
 }
 
 test "a menu-action message naming a .zig item calls its function with the core; its error is the error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"zig-item\"}}");
     try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "the menu item's function ran"));
@@ -388,10 +390,10 @@ test "a menu-action message naming a .zig item calls its function with the core;
 }
 
 test "a menu-action message naming an unknown item or a standard action fails with UnknownMenuItem and runs nothing" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"nonsense\"}}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"UnknownMenuItem\"}");
@@ -401,31 +403,165 @@ test "a menu-action message naming an unknown item or a standard action fails wi
 }
 
 test "a menu-action message with no action is an error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{}}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"InvalidMessageData: the field \\\"action\\\" is missing\"}");
 }
 
+test "a menu-action message naming an .action item's action sends the frontend the action system event" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"say-hello\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"action\",\"data\":{\"action\":\"say-hello\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{}}");
+}
+
+test "a menu-action message naming an action that is not on the menu, as its shortcut posts, sends the action system event" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"shortcut-only\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"action\",\"data\":{\"action\":\"shortcut-only\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{}}");
+}
+
+test "a run-action message naming an app action sends the frontend the action system event" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"run-action\",\"data\":{\"action\":\"say-hello\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"action\",\"data\":{\"action\":\"say-hello\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{}}");
+}
+
+test "a run-action message naming a standard action of the menu has a desktop's native app run it" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.has_native_call = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"run-action\",\"data\":{\"action\":\"quit\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(actions);
+    try std.testing.expectEqualStrings("quit\n", actions);
+}
+
+test "a run-action message naming an unknown name, or a standard action the menu does not have, fails with UnknownAction" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.has_native_call = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"run-action\",\"data\":{\"action\":\"nonsense\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"UnknownAction\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"run-action\",\"data\":{\"action\":\"toggle-devtools\"}}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":false,\"error\":\"UnknownAction\"}");
+    const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(actions);
+    try std.testing.expectEqualStrings("", actions);
+}
+
+test "a run-action message naming a standard action fails with StandardActionUnavailable on a phone or with no menu_action callback" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    // The fake native app gives a native call callback, as a phone's native app does.
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"run-action\",\"data\":{\"action\":\"quit\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"StandardActionUnavailable\"}");
+
+    var desktop: FakeNativeApp = undefined;
+    desktop.init();
+    defer desktop.deinit(std.testing.io, std.testing.allocator);
+    var config = desktop.config(1, 1);
+    config.has_native_call = false;
+    config.has_menu_action = false;
+    try desktop.start(std.testing.io, std.testing.allocator, config, test_app.app);
+    defer desktop.stop(std.testing.io, std.testing.allocator);
+    try desktop.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"run-action\",\"data\":{\"action\":\"quit\"}}");
+    try expectLastMessage(&desktop, "{\"id\":1,\"ok\":false,\"error\":\"StandardActionUnavailable\"}");
+}
+
+test "a list-actions message answers every action and standard item with its label and its shortcut as the platform shows it" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.has_native_call = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-actions\"}");
+    const expected = if (builtin.os.tag == .macos)
+        "{\"id\":1,\"ok\":true,\"data\":[{\"name\":\"say-hello\",\"label\":\"Say Hello\",\"shortcut\":\"⇧⌘H\"}," ++
+            "{\"name\":\"shortcut-only\",\"label\":\"Shortcut Only\",\"shortcut\":\"⇧⌘O\"}," ++
+            "{\"name\":\"quit\",\"label\":\"Quit\",\"shortcut\":\"⌘Q\"}]}"
+    else
+        "{\"id\":1,\"ok\":true,\"data\":[{\"name\":\"say-hello\",\"label\":\"Say Hello\",\"shortcut\":\"Ctrl+Shift+H\"}," ++
+            "{\"name\":\"shortcut-only\",\"label\":\"Shortcut Only\",\"shortcut\":\"Ctrl+Shift+O\"}," ++
+            "{\"name\":\"quit\",\"label\":\"Quit\",\"shortcut\":\"Ctrl+Q\"}]}";
+    try expectLastMessage(&native_app, expected);
+}
+
+test "a list-actions message on a phone answers no shortcuts" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-actions\"}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":[{\"name\":\"say-hello\",\"label\":\"Say Hello\",\"shortcut\":null}," ++
+        "{\"name\":\"shortcut-only\",\"label\":\"Shortcut Only\",\"shortcut\":null},{\"name\":\"quit\",\"label\":\"Quit\",\"shortcut\":null}]}");
+}
+
+test "a handler's services.runAction sends the frontend the action system event" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"run-an-action\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"action\",\"data\":{\"action\":\"say-hello\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":null}");
+}
+
 test "the app holds its menu for native apps to read" {
-    try std.testing.expectEqualStrings(ziggy.menu.menuJson(helpers.menu), helpers.app.menu_json);
-    try std.testing.expect(helpers.app.menu_targets.get("zig-item") != null);
+    const entries = comptime ziggy.menu.menuEntries(test_app.menu, test_app.actions);
+    try std.testing.expectEqual(entries.len, test_app.app.menu_entries.len);
+    for (entries, test_app.app.menu_entries) |wanted, entry| {
+        try std.testing.expectEqual(wanted.kind, entry.kind);
+        try std.testing.expectEqual(wanted.depth, entry.depth);
+    }
+    try std.testing.expect(test_app.app.menu_targets.get("zig-item") != null);
 }
 
 test "a file of the app's bundled UI is found by the path of a request" {
-    try std.testing.expectEqualStrings("<html></html>", ziggy.ui_files.findFile(helpers.app.ui_files, "/index.html").?.content);
-    try std.testing.expectEqualStrings("index.html", ziggy.ui_files.findFile(helpers.app.ui_files, "/").?.path);
-    try std.testing.expect(ziggy.ui_files.findFile(helpers.app.ui_files, "/missing.js") == null);
+    try std.testing.expectEqualStrings("<html></html>", ziggy.ui_files.findFile(test_app.app.ui_files, "/index.html").?.content);
+    try std.testing.expectEqualStrings("index.html", ziggy.ui_files.findFile(test_app.app.ui_files, "/").?.path);
+    try std.testing.expect(ziggy.ui_files.findFile(test_app.app.ui_files, "/missing.js") == null);
 }
 
 test "respondWithTask answers the message with the task's result, without blocking the dispatcher" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 1);
+    try test_app.createCore(&native_app, 2, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":11,\"name\":\"quick-request\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":11,\"ok\":true,\"data\":\"done\"}");
@@ -434,20 +570,20 @@ test "respondWithTask answers the message with the task's result, without blocki
 }
 
 test "a message answered by a task that fails gets an error response" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 1);
+    try test_app.createCore(&native_app, 2, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":12,\"name\":\"fail-request\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":12,\"ok\":false,\"error\":\"TestFailure\"}");
 }
 
 test "a message with no id whose response is to be a task's result is refused and queues nothing" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"name\":\"quick-request\"}");
     // The refusal reaches the frontend as a core-error event, because there is no id to respond to.
@@ -460,10 +596,10 @@ test "a message with no id whose response is to be a task's result is refused an
 }
 
 test "a native dialog is shown through the native app's callback with the title and kind" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 1);
+    try test_app.createCore(&native_app, 2, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":13,\"name\":\"pick-open-request\",\"data\":\"Choose files\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":13,\"ok\":true,\"data\":[\"kind0\",\"Choose files\",\"-\"]}");
@@ -472,12 +608,12 @@ test "a native dialog is shown through the native app's callback with the title 
 }
 
 test "a dialog with no callback from the native app is an error reply naming what is missing" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(2, 1);
     config.has_pick_paths = false;
-    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":15,\"name\":\"pick-open-request\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":15,\"ok\":false,\"error\":\"NativeCallMissing\"}");
@@ -494,10 +630,10 @@ test "get-dropped-paths replies with the paths of the last drop, and an empty ar
     defer std.testing.allocator.free(directory_path);
     const path = try std.fs.path.join(std.testing.allocator, &.{ directory_path, "dropped one.txt" });
     defer std.testing.allocator.free(path);
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 2, 2);
+    try test_app.createCore(&native_app, 2, 2);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"get-dropped-paths\",\"data\":null}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":[]}");
@@ -540,7 +676,7 @@ fn nativeServicesHandler(services: ziggy.core.HandlerServices, timers: ziggy.tim
 }
 
 //
-// The app of the handler services tests: the helpers' app with native-services.
+// The app of the handler services tests: the tests' app (test-app.zig) with native-services.
 //
 const native_services_app = registered: {
     var registered = ziggy.core.App(.{
@@ -551,12 +687,12 @@ const native_services_app = registered: {
         .menu = &.{},
         .ui_files = &[_]ziggy.ui_files.UiFile{},
     });
-    registered.tasks = &helpers.task_handlers;
+    registered.tasks = &test_tasks.task_handlers;
     break :registered registered;
 };
 
 test "the handler services reach the native app's quit and menu action callbacks and report its data directory and kind" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     // The data directory is only reported, never written to, by this app.
@@ -574,7 +710,7 @@ test "the handler services reach the native app's quit and menu action callbacks
 }
 
 test "the handler services report a desktop's native app, which has no native call callback, and quit and menu actions it lacks change nothing" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
@@ -642,12 +778,12 @@ const callbacks_app = registered: {
         .menu = &.{},
         .ui_files = &[_]ziggy.ui_files.UiFile{},
     });
-    registered.tasks = &helpers.task_handlers;
+    registered.tasks = &test_tasks.task_handlers;
     break :registered registered;
 };
 
 test "a thread of the app's own sends the frontend events and makes native calls through the native callbacks it was given" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), callbacks_app);
@@ -658,7 +794,7 @@ test "a thread of the app's own sends the frontend events and makes native calls
 }
 
 test "the native callbacks of a native app with no native call callback have no native caller" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
@@ -677,10 +813,10 @@ fn describeTestError(err: anyerror) ?[]const u8 {
 }
 
 test "an app's error describer gives the text of an error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var described_app = helpers.app;
+    var described_app = test_app.app;
     described_app.describe_error = describeTestError;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -691,10 +827,10 @@ test "an app's error describer gives the text of an error reply" {
 }
 
 test "an error the describer has no description for is replied to by name" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var described_app = helpers.app;
+    var described_app = test_app.app;
     described_app.describe_error = describeTaskError;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -710,10 +846,10 @@ fn describeTaskError(err: anyerror) ?[]const u8 {
 }
 
 test "an app's error describer gives the text of a failed request task's error reply" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var described_app = helpers.app;
+    var described_app = test_app.app;
     described_app.describe_error = describeTaskError;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -747,10 +883,10 @@ fn recordTaskEvent(services: ziggy.core.HandlerServices, timers: ziggy.timers.Ti
 }
 
 test "an app observes the end of a task and the events it sent" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var observed_app = helpers.app;
+    var observed_app = test_app.app;
     observed_app.on_task_end = recordTaskEnd;
     observed_app.on_task_event = recordTaskEvent;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), observed_app);
@@ -782,10 +918,10 @@ fn recordDestroyPhase(services: ziggy.core.HandlerServices, timers: ziggy.timers
 }
 
 test "an app's on_destroy is called before tasks stop, while a task can still be queued, and again after the workers have stopped" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var destroyed_app = helpers.app;
+    var destroyed_app = test_app.app;
     destroyed_app.on_destroy = recordDestroyPhase;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), destroyed_app);
     native_app.stop(std.testing.io, std.testing.allocator);
@@ -807,10 +943,10 @@ fn recordCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timer
 }
 
 test "an app's on_create is called once while the core is created, when a task can already be queued" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var created_app = helpers.app;
+    var created_app = test_app.app;
     created_app.on_create = recordCreate;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), created_app);
     try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "{\"created\":true}"));
@@ -829,10 +965,10 @@ fn recordCreateThread(services: ziggy.core.HandlerServices, timers: ziggy.timers
 }
 
 test "an app's on_create runs on the core's main thread, not on the thread that creates the core" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var thread_app = helpers.app;
+    var thread_app = test_app.app;
     thread_app.on_create = recordCreateThread;
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), thread_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -855,10 +991,10 @@ fn failCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers,
 }
 
 test "an app's on_create that fails makes the core's create fail with its error, and releases what the core made" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var failing_app = helpers.app;
+    var failing_app = test_app.app;
     failing_app.on_create = failCreate;
     // The testing allocator fails the test if anything the core made is left unreleased.
     try std.testing.expectError(error.AppCouldNotStart, native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), failing_app));

@@ -1,11 +1,11 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
-const helpers = @import("helpers.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 //
 // Fails unless the last message the fake native app recorded is the expected text.
 //
-fn expectLastMessage(native_app: *helpers.FakeNativeApp, expected: []const u8) !void {
+fn expectLastMessage(native_app: *FakeNativeApp, expected: []const u8) !void {
     const last = try native_app.messageAt(std.testing.io, std.testing.allocator, native_app.count(std.testing.io, std.testing.allocator) - 1);
     defer std.testing.allocator.free(last);
     try std.testing.expectEqualStrings(expected, last);
@@ -47,7 +47,7 @@ fn lateHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers
 // Sends a system message of the name, with no data, and gives whether the main thread has a system message of that name: any response
 // but UnknownSystemMessage.
 //
-fn systemHas(native_app: *helpers.FakeNativeApp, name: []const u8) !bool {
+fn systemHas(native_app: *FakeNativeApp, name: []const u8) !bool {
     var buffer: [256]u8 = undefined;
     try native_app.send(std.testing.io, std.testing.allocator, try std.fmt.bufPrint(&buffer, "{{\"kind\":\"system\",\"id\":\"system-has\",\"name\":\"{s}\",\"data\":null}}", .{name}));
     const index = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"id\":\"system-has\"") orelse {
@@ -89,7 +89,7 @@ const declared_app = ziggy.core.App(.{
 });
 
 test "an app message the app declares is handled, and a name it does not declare is UnknownMessageName" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
@@ -101,7 +101,7 @@ test "an app message the app declares is handled, and a name it does not declare
 }
 
 test "an app message declared under a system message's name is an app message, and the system message is still Ziggy's" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
@@ -114,7 +114,7 @@ test "an app message declared under a system message's name is an app message, a
 }
 
 test "a system message is never handled as an app message, and an app message never as a system message" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
@@ -126,7 +126,7 @@ test "a system message is never handled as an app message, and an app message ne
 }
 
 test "a task type the app declares can be queued, and one it does not declare fails as UnknownTaskType" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
@@ -138,12 +138,12 @@ test "a task type the app declares can be queued, and one it does not declare fa
 }
 
 test "every system message of Ziggy's parts is handled, the remote control ones too" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    for ([_][]const u8{ "add-task", "cancel-tasks", "get-platform", "menu-action", "get-dropped-paths" }) |name| {
+    for ([_][]const u8{ "add-task", "cancel-tasks", "get-platform", "menu-action", "run-action", "list-actions", "get-dropped-paths" }) |name| {
         try std.testing.expect(try systemHas(&native_app, name));
     }
     // The remote control messages are handled in every build.

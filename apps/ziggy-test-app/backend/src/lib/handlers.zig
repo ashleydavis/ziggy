@@ -983,6 +983,18 @@ pub fn onTaskEvent(services: HandlerServices, timers: Timers, io: std.Io, alloca
 //
 
 //
+// The test app's actions, which it passes to ziggy.core.App as `.actions`: Say From an Action, on the Example menu, whose handler the
+// frontend registers and whose shortcut, CmdOrCtrl+5, is free of the Example menu's.
+//
+pub const actions: []const ziggy.action.Action = &.{
+    .{
+        .name = "say-action",
+        .label = "Say From an Action",
+        .shortcut = "CmdOrCtrl+5",
+    },
+};
+
+//
 // The menu the test app passes to ziggy.core.App as `.menu`.
 //
 pub const menu: []const ziggy.menu.Menu = &.{
@@ -991,14 +1003,14 @@ pub const menu: []const ziggy.menu.Menu = &.{
         .items = &.{
             .{
                 .label = "Close Window",
-                .accelerator = "CmdOrCtrl+W",
+                .shortcut = "CmdOrCtrl+W",
                 .run = .{
                     .standard = .@"close-window",
                 },
             },
             .{
                 .label = "Quit",
-                .accelerator = "CmdOrCtrl+Q",
+                .shortcut = "CmdOrCtrl+Q",
                 .run = .{
                     .standard = .quit,
                 },
@@ -1010,14 +1022,14 @@ pub const menu: []const ziggy.menu.Menu = &.{
         .items = &.{
             .{
                 .label = "Undo",
-                .accelerator = "CmdOrCtrl+Z",
+                .shortcut = "CmdOrCtrl+Z",
                 .run = .{
                     .standard = .undo,
                 },
             },
             .{
                 .label = "Redo",
-                .accelerator = "CmdOrCtrl+Shift+Z",
+                .shortcut = "CmdOrCtrl+Shift+Z",
                 .run = .{
                     .standard = .redo,
                 },
@@ -1025,28 +1037,28 @@ pub const menu: []const ziggy.menu.Menu = &.{
             ziggy.menu.separator,
             .{
                 .label = "Cut",
-                .accelerator = "CmdOrCtrl+X",
+                .shortcut = "CmdOrCtrl+X",
                 .run = .{
                     .standard = .cut,
                 },
             },
             .{
                 .label = "Copy",
-                .accelerator = "CmdOrCtrl+C",
+                .shortcut = "CmdOrCtrl+C",
                 .run = .{
                     .standard = .copy,
                 },
             },
             .{
                 .label = "Paste",
-                .accelerator = "CmdOrCtrl+V",
+                .shortcut = "CmdOrCtrl+V",
                 .run = .{
                     .standard = .paste,
                 },
             },
             .{
                 .label = "Select All",
-                .accelerator = "CmdOrCtrl+A",
+                .shortcut = "CmdOrCtrl+A",
                 .run = .{
                     .standard = .@"select-all",
                 },
@@ -1058,7 +1070,7 @@ pub const menu: []const ziggy.menu.Menu = &.{
         .items = &.{
             .{
                 .label = "Reload",
-                .accelerator = "CmdOrCtrl+R",
+                .shortcut = "CmdOrCtrl+R",
                 .run = .{
                     .standard = .reload,
                 },
@@ -1066,21 +1078,21 @@ pub const menu: []const ziggy.menu.Menu = &.{
             ziggy.menu.separator,
             .{
                 .label = "Zoom In",
-                .accelerator = "CmdOrCtrl+Plus",
+                .shortcut = "CmdOrCtrl+Plus",
                 .run = .{
                     .standard = .@"zoom-in",
                 },
             },
             .{
                 .label = "Zoom Out",
-                .accelerator = "CmdOrCtrl+Minus",
+                .shortcut = "CmdOrCtrl+Minus",
                 .run = .{
                     .standard = .@"zoom-out",
                 },
             },
             .{
                 .label = "Actual Size",
-                .accelerator = "CmdOrCtrl+0",
+                .shortcut = "CmdOrCtrl+0",
                 .run = .{
                     .standard = .@"zoom-reset",
                 },
@@ -1088,7 +1100,7 @@ pub const menu: []const ziggy.menu.Menu = &.{
             ziggy.menu.separator,
             .{
                 .label = "Toggle Full Screen",
-                .accelerator = "F11",
+                .shortcut = "F11",
                 .run = .{
                     .standard = .@"toggle-fullscreen",
                 },
@@ -1096,7 +1108,7 @@ pub const menu: []const ziggy.menu.Menu = &.{
             ziggy.menu.separator,
             .{
                 .label = "Toggle Developer Tools",
-                .accelerator = "CmdOrCtrl+Shift+I",
+                .shortcut = "CmdOrCtrl+Shift+I",
                 .run = .{
                     .standard = .@"toggle-devtools",
                 },
@@ -1109,27 +1121,32 @@ pub const menu: []const ziggy.menu.Menu = &.{
             .{
                 .label = "Start Short Task",
                 .name = "start-short",
-                .accelerator = "CmdOrCtrl+9",
+                .shortcut = "CmdOrCtrl+9",
                 .run = .ui,
             },
             .{
                 .label = "Start Long Task",
                 .name = "start-long",
-                .accelerator = "CmdOrCtrl+2",
+                .shortcut = "CmdOrCtrl+2",
                 .run = .ui,
             },
             .{
                 .label = "Start Three Long Tasks",
                 .name = "start-many",
-                .accelerator = "CmdOrCtrl+3",
+                .shortcut = "CmdOrCtrl+3",
                 .run = .ui,
             },
             ziggy.menu.separator,
             .{
                 .label = "Cancel Long Task",
                 .name = "cancel-long",
-                .accelerator = "CmdOrCtrl+4",
+                .shortcut = "CmdOrCtrl+4",
                 .run = .ui,
+            },
+            .{
+                .run = .{
+                    .action = "say-action",
+                },
             },
             ziggy.menu.separator,
             .{

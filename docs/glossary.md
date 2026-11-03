@@ -20,6 +20,7 @@
 - **Event**: a JSON object the backend sends to the frontend when something happens. An app event holds data the app lays out and goes to the frontend's event listeners. A system event is one of Ziggy's own, such as a task finishing. The frontend listens for each kind of system event with a call of its own.
 - **Task**: work that runs on a worker thread and reports back to the frontend by events.
 - **Task handler**: the app specific Zig function that does background work of a particular type.
+- **Action**: a named piece of an app's functionality that takes no arguments, such as "Open Database". The app declares it in the backend and registers its handler in the frontend. A menu item, a keyboard shortcut, the frontend or the backend runs it by its name.
 - **Task queue**: where queued tasks wait until a worker thread is free to run them.
 - **Native call**: a call from the backend to the native app, for something only the native app can do, such as showing a file dialog. The backend waits for it to return.
 - **Log file**: the file a program's file log writes every log line to, one for each run of the program.

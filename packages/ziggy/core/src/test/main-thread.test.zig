@@ -6,7 +6,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const ziggy = @import("ziggy");
-const helpers = @import("helpers.zig");
+const test_app = @import("test-app.zig");
+const test_tasks = @import("test-tasks.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 const RemoteControlServer = @import("remote-control-server.zig").RemoteControlServer;
 
 const HandlerServices = ziggy.core.HandlerServices;
@@ -124,7 +126,7 @@ const main_thread_app = registered: {
         .menu = &.{},
         .ui_files = &[_]ziggy.ui_files.UiFile{},
     });
-    registered.tasks = &helpers.task_handlers;
+    registered.tasks = &test_tasks.task_handlers;
     break :registered registered;
 };
 
@@ -132,7 +134,7 @@ const main_thread_app = registered: {
 // The number in the first delivered message that holds the key, as {"<key>": <number>} or {"id":...,"data":<number>}, or null when
 // there is none.
 //
-fn numberAfter(native_app: *helpers.FakeNativeApp, key: []const u8) !?u64 {
+fn numberAfter(native_app: *FakeNativeApp, key: []const u8) !?u64 {
     const index = native_app.indexOfContaining(std.testing.io, std.testing.allocator, key) orelse {
         return null;
     };
@@ -151,7 +153,7 @@ test "sendMessage passes the message on and returns before its handler has run" 
     defer tmp.cleanup();
     var path_buffer: [256]u8 = undefined;
     const release_path = try std.fmt.bufPrint(&path_buffer, ".zig-cache/tmp/{s}/released", .{tmp.sub_path});
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), main_thread_app);
@@ -168,7 +170,7 @@ test "sendMessage passes the message on and returns before its handler has run" 
 }
 
 test "a message's handler and a timer run on the core's main thread, which is not the thread that sent the message" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), main_thread_app);
@@ -182,7 +184,7 @@ test "a message's handler and a timer run on the core's main thread, which is no
 }
 
 test "a timeout runs once after its time, and one cleared before then never runs" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), main_thread_app);
@@ -198,7 +200,7 @@ test "a timeout runs once after its time, and one cleared before then never runs
 }
 
 test "an interval runs every time its time passes until it is cleared" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), main_thread_app);
@@ -229,10 +231,10 @@ test "a drop reaches the main thread before a message the frontend sends after i
     defer std.testing.allocator.free(directory_path);
     const path = try std.fs.path.join(std.testing.allocator, &.{ directory_path, "dropped.txt" });
     defer std.testing.allocator.free(path);
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     const paths_json = try ziggy.json.stringify(std.testing.allocator, &[_][]const u8{path});
     defer std.testing.allocator.free(paths_json);
@@ -249,10 +251,10 @@ test "a drop reaches the main thread before a message the frontend sends after i
 }
 
 test "a drop of a path that is not a readable file is refused on the calling thread, and the last drop stays" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try std.testing.expectError(error.FileNotFound, native_app.filesDropped(std.testing.allocator, "[\"/no/such/file/anywhere\"]"));
     try std.testing.expectError(error.NotAnArrayOfPaths, native_app.filesDropped(std.testing.allocator, "{\"not\":\"an array\"}"));
@@ -321,14 +323,14 @@ test "destroying a core with tasks still running stops the main thread, every wo
     defer server.stop();
     const counts_threads = builtin.os.tag == .linux;
     const before = if (counts_threads) try threadCount() else 0;
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     var native_app_released = false;
     defer if (!native_app_released) native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(3, 2);
     config.test_mode = true;
     config.remote_control = server.address();
-    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     try server.expectConnected();
     var destroyed = false;
     defer if (!destroyed) native_app.stop(std.testing.io, std.testing.allocator);

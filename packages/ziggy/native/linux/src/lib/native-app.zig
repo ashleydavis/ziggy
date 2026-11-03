@@ -603,8 +603,8 @@ fn quitApplication(native_app: *NativeApp) void {
 
 
 //
-// One menu item's action, kept for as long as the menu item lives: it and its action are allocated with the C allocator and freed
-// when GTK destroys the item (see freeMenuItemContext).
+// One menu item's action, or one shortcut-only action's, kept for as long as the menu item or the shortcut lives: it and its action are
+// allocated with the C allocator and freed when GTK destroys the item or the shortcut's closure (see freeMenuItemContext).
 //
 const MenuItemContext = struct {
     // The native app the item belongs to.
@@ -624,81 +624,106 @@ fn freeMenuItemContext(data: ?*anyopaque, closure: ?*anyopaque) callconv(.c) voi
 }
 
 //
-// Builds the menu bar from the app's menu, which the core holds as JSON, and puts it above the web view. An app with no menu
-// gets no menu bar. Every item's shortcut is registered with the window, so it works wherever the focus is.
+//
+// The deepest a menu entry may be: menus of the menu bar are at 0, and each submenu is one deeper. Ziggy's own menus go two deep, so
+// eight leaves room for any menu a user can still find their way around.
+//
+const menu_depth_max = 8;
+
+//
+// Builds the menu bar from the app's menu entries, which the core holds, and puts it above the web view. An app with no menu gets no
+// menu bar. Every item's shortcut, and every shortcut of an action that has no menu item, is registered with the window, so it works
+// wherever the focus is, with or without a menu bar.
 //
 fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget, window: *c.GtkWindow) !void {
-    var length: usize = 0;
-    const text_pointer = z.ziggy_menu_json(native_app.core, &length);
-    // The menu's parsed text and labels are needed only while the menu is built: GTK copies a label.
-    var arena_state = std.heap.ArenaAllocator.init(std.heap.c_allocator);
-    defer arena_state.deinit();
-    const arena = arena_state.allocator();
-    const menus = try std.json.parseFromSliceLeaky(std.json.Value, arena, text_pointer[0..length], .{});
-    if (menus != .array) {
-        return error.MenuIsNotAnArray;
-    }
-    if (menus.array.items.len == 0) {
-        return;
-    }
     const accel_group = c.gtk_accel_group_new();
     c.gtk_window_add_accel_group(window, accel_group);
+    try addStandaloneActionShortcuts(native_app, accel_group);
+    var count: usize = 0;
+    const entries = z.ziggy_menu(native_app.core, &count);
+    if (count == 0) {
+        return;
+    }
     const menu_bar = c.gtk_menu_bar_new();
-    for (menus.array.items) |menu| {
-        const menu_item = c.gtk_menu_item_new_with_label(try requireString(arena, menu, "label"));
-        const submenu = c.gtk_menu_new();
-        try appendItems(native_app, arena, submenu, accel_group, menu);
-        c.gtk_menu_item_set_submenu(menu_item, submenu);
-        c.gtk_menu_shell_append(menu_bar, menu_item);
+    // The GTK menu each depth's entries go into: the menu bar at depth 0, and below it the menu or submenu opened last at the depth
+    // above.
+    var containers: [menu_depth_max + 1]*c.GtkWidget = undefined;
+    containers[0] = menu_bar;
+    for (entries[0..count]) |entry| {
+        if (entry.depth > menu_depth_max) {
+            std.debug.print("ziggy native app: the menu goes deeper than {d}\n", .{menu_depth_max});
+            return error.MenuTooDeep;
+        }
+        const container = containers[entry.depth];
+        if (entry.kind == z.ZIGGY_MENU_ENTRY_SEPARATOR) {
+            c.gtk_menu_shell_append(container, c.gtk_separator_menu_item_new());
+            continue;
+        }
+        if (entry.label == null) {
+            return error.MenuEntryHasNoLabel;
+        }
+        const menu_item = c.gtk_menu_item_new_with_label(std.mem.span(entry.label).ptr);
+        if (entry.kind == z.ZIGGY_MENU_ENTRY_MENU or entry.kind == z.ZIGGY_MENU_ENTRY_SUBMENU) {
+            const submenu = c.gtk_menu_new();
+            c.gtk_menu_item_set_submenu(menu_item, submenu);
+            containers[entry.depth + 1] = submenu;
+        }
+        else {
+            if (entry.action == null) {
+                return error.MenuItemHasNoAction;
+            }
+            try attachMenuItemAction(native_app, menu_item, std.mem.span(entry.action));
+            if (entry.shortcut != null) {
+                try addAccelerator(menu_item, accel_group, std.mem.span(entry.shortcut));
+            }
+        }
+        c.gtk_menu_shell_append(container, menu_item);
     }
     c.gtk_box_pack_start(box_widget, menu_bar, 0, 0, 0);
     c.gtk_box_reorder_child(box_widget, menu_bar, 0);
 }
 
 //
-// Adds the "items" of a menu or submenu to a GTK menu.
+// Attaches an action to a menu item, so choosing the item, or pressing its shortcut, does the action (see performAction).
 //
-fn appendItems(native_app: *NativeApp, arena: std.mem.Allocator, gtk_menu: *c.GtkWidget, accel_group: *c.GtkAccelGroup, menu: std.json.Value) !void {
-    const items = menu.object.get("items") orelse {
-        return error.MenuHasNoItems;
+fn attachMenuItemAction(native_app: *NativeApp, menu_item: *c.GtkWidget, action_name: []const u8) !void {
+    const action = try std.heap.c_allocator.dupeZ(u8, action_name);
+    errdefer std.heap.c_allocator.free(action);
+    const context = try std.heap.c_allocator.create(MenuItemContext);
+    context.* = .{
+        .native_app = native_app,
+        .action = action,
     };
-    for (items.array.items) |item| {
-        if (item.object.get("separator") != null) {
-            c.gtk_menu_shell_append(gtk_menu, c.gtk_separator_menu_item_new());
-            continue;
-        }
-        const menu_item = c.gtk_menu_item_new_with_label(try requireString(arena, item, "label"));
-        if (item.object.get("items") != null) {
-            const submenu = c.gtk_menu_new();
-            try appendItems(native_app, arena, submenu, accel_group, item);
-            c.gtk_menu_item_set_submenu(menu_item, submenu);
-        }
-        else {
-            const context = try std.heap.c_allocator.create(MenuItemContext);
-            errdefer std.heap.c_allocator.destroy(context);
-            context.* = .{
-                .native_app = native_app,
-                .action = try requireString(std.heap.c_allocator, item, "action"),
-            };
-            _ = c.g_signal_connect_data(menu_item, "activate", @ptrCast(&onMenuItemActivate), context, @ptrCast(@constCast(&freeMenuItemContext)), 0);
-            if (item.object.get("accelerator")) |accelerator_text| {
-                try addAccelerator(arena, menu_item, accel_group, accelerator_text.string);
-            }
-        }
-        c.gtk_menu_shell_append(gtk_menu, menu_item);
-    }
+    _ = c.g_signal_connect_data(menu_item, "activate", @ptrCast(&onMenuItemActivate), context, @ptrCast(@constCast(&freeMenuItemContext)), 0);
 }
-
 //
 // Registers a menu item's keyboard shortcut with the window.
 //
-fn addAccelerator(arena: std.mem.Allocator, menu_item: *c.GtkWidget, accel_group: *c.GtkAccelGroup, text: []const u8) !void {
+fn addAccelerator(menu_item: *c.GtkWidget, accel_group: *c.GtkAccelGroup, text: []const u8) !void {
+    const key = try parseGdkShortcut(text);
+    c.gtk_widget_add_accelerator(menu_item, "activate", accel_group, key.value, key.modifiers, c.GTK_ACCEL_VISIBLE);
+}
+
+//
+// A shortcut as GTK takes it: its key value and its modifier flags.
+//
+const GdkShortcut = struct {
+    // The key's value, from gdk_keyval_from_name.
+    value: c_uint,
+    // The GDK modifier flags.
+    modifiers: c_uint,
+};
+
+//
+// Reads a shortcut's text, as the menu and the action shortcuts carry it, into what GTK takes. Text that does not parse, or a key GTK
+// does not know, fails, naming the shortcut.
+//
+fn parseGdkShortcut(text: []const u8) !GdkShortcut {
     var parsed: z.ziggy_accelerator = undefined;
     if (!z.ziggy_parse_accelerator(text.ptr, text.len, &parsed)) {
-        std.debug.print("ziggy native app: the menu has a shortcut that cannot be read: {s}\n", .{text});
+        std.debug.print("ziggy native app: the app has a shortcut that cannot be read: {s}\n", .{text});
         return error.UnreadableShortcut;
     }
-    _ = arena;
     var name_buffer: [32]u8 = undefined;
     const key_name = try menu_keys.gdkKeyName(&name_buffer, std.mem.sliceTo(&parsed.key, 0));
     const key_value = c.gdk_keyval_from_name(key_name.ptr);
@@ -706,18 +731,47 @@ fn addAccelerator(arena: std.mem.Allocator, menu_item: *c.GtkWidget, accel_group
         std.debug.print("ziggy native app: GTK has no key named {s}, for the shortcut {s}\n", .{ key_name, text });
         return error.UnknownKey;
     }
-    c.gtk_widget_add_accelerator(menu_item, "activate", accel_group, key_value, menu_keys.gdkModifiers(parsed.modifiers), c.GTK_ACCEL_VISIBLE);
+    return .{
+        .value = key_value,
+        .modifiers = menu_keys.gdkModifiers(parsed.modifiers),
+    };
 }
 
 //
-// Reads a string field of a menu entry, as a NUL terminated copy allocated with the allocator.
+// Registers with the window the shortcut of every action of the app's that has no menu item, so pressing it posts the menu-action
+// system message naming the action, as choosing a menu item does. The window holds each shortcut whether or not it has a menu bar.
 //
-fn requireString(arena: std.mem.Allocator, entry: std.json.Value, name: []const u8) ![:0]const u8 {
-    const field = entry.object.get(name) orelse {
-        std.debug.print("ziggy native app: a menu entry has no \"{s}\"\n", .{name});
-        return error.MenuEntryIncomplete;
+fn addStandaloneActionShortcuts(native_app: *NativeApp, accel_group: *c.GtkAccelGroup) !void {
+    var count: usize = 0;
+    const shortcuts = z.ziggy_standalone_action_shortcuts(native_app.core, &count);
+    for (shortcuts[0..count]) |shortcut| {
+        const key = try parseGdkShortcut(std.mem.span(shortcut.shortcut));
+        const action = try std.heap.c_allocator.dupeZ(u8, std.mem.span(shortcut.action));
+        errdefer std.heap.c_allocator.free(action);
+        const context = try std.heap.c_allocator.create(MenuItemContext);
+        context.* = .{
+            .native_app = native_app,
+            .action = action,
+        };
+        const closure = c.g_cclosure_new(@ptrCast(&onStandaloneActionShortcutPressed), context, @ptrCast(&freeMenuItemContext));
+        c.gtk_accel_group_connect(accel_group, key.value, key.modifiers, c.GTK_ACCEL_VISIBLE, closure);
+    }
+}
+
+//
+// A shortcut of an action that has no menu item was pressed: does its action, as a menu item's activation does, and tells GTK the key
+// was used.
+//
+fn onStandaloneActionShortcutPressed(accel_group: *c.GtkAccelGroup, acceleratable: c.gpointer, keyval: c_uint, modifier: c_uint, user_data: c.gpointer) callconv(.c) c.gboolean {
+    _ = accel_group;
+    _ = acceleratable;
+    _ = keyval;
+    _ = modifier;
+    const context: *MenuItemContext = @ptrCast(@alignCast(user_data.?));
+    performAction(context.native_app, context.action) catch |err| {
+        fatal("could not do the action {s}: {s}", .{ context.action, @errorName(err) });
     };
-    return try arena.dupeZ(u8, field.string);
+    return 1;
 }
 
 //

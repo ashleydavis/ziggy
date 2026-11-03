@@ -6,7 +6,8 @@
 
 const std = @import("std");
 const ziggy = @import("ziggy");
-const helpers = @import("helpers.zig");
+const test_app = @import("test-app.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 const RemoteControlServer = @import("remote-control-server.zig").RemoteControlServer;
 
 //
@@ -46,11 +47,11 @@ const Client = struct {
 //
 // Starts a core in test mode connected to the server, and waits for the server to see the connection.
 //
-fn startControlledCore(native_app: *helpers.FakeNativeApp, server: *RemoteControlServer) !void {
+fn startControlledCore(native_app: *FakeNativeApp, server: *RemoteControlServer) !void {
     var config = native_app.config(1, 1);
     config.test_mode = true;
     config.remote_control = server.address();
-    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     try server.expectConnected();
 }
 
@@ -70,13 +71,13 @@ test "an app's on_create that fails in test mode stops the remote control connec
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
     config.test_mode = true;
     config.remote_control = server.address();
-    var failing_app = helpers.app;
+    var failing_app = test_app.app;
     failing_app.on_create = failCreate;
     // The testing allocator fails the test if the connection the core started is left unreleased, and the server sees it closed.
     try std.testing.expectError(error.AppCouldNotStart, native_app.start(std.testing.io, std.testing.allocator, config, failing_app));
@@ -88,7 +89,7 @@ test "a command reaches the UI and its result comes back" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -107,7 +108,7 @@ test "the core connects to the remote control address and answers commands" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -122,7 +123,7 @@ test "a line that is not JSON gets an error reply and never reaches the UI" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -139,7 +140,7 @@ test "a JSON object with no command field gets an error reply and never reaches 
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -156,7 +157,7 @@ test "the quit command calls the native app's quit callback" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -173,10 +174,10 @@ test "a core started without a remote control address does not connect" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     // A remote control connection is made before the core's start returns, so one that has not come by now never will.
     try std.testing.expect(!server.hasEventWithin(300));
@@ -189,24 +190,24 @@ test "a refused connection fails the core's start" {
     var address_buffer: [32]u8 = undefined;
     const address = try std.fmt.bufPrintZ(&address_buffer, "{s}", .{std.mem.span(server.address())});
     server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
     config.test_mode = true;
     config.remote_control = address.ptr;
     // The testing allocator fails the test if the connection thread's queue is left unreleased.
-    try std.testing.expectError(error.RemoteControlConnectFailed, native_app.start(std.testing.io, std.testing.allocator, config, helpers.app));
+    try std.testing.expectError(error.RemoteControlConnectFailed, native_app.start(std.testing.io, std.testing.allocator, config, test_app.app));
 }
 
 test "an address with no port fails the core's start" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
     config.test_mode = true;
     config.remote_control = "127.0.0.1";
-    try std.testing.expectError(error.RemoteControlConnectFailed, native_app.start(std.testing.io, std.testing.allocator, config, helpers.app));
+    try std.testing.expectError(error.RemoteControlConnectFailed, native_app.start(std.testing.io, std.testing.allocator, config, test_app.app));
 }
 
 test "splitAddress takes the port after the last colon and refuses an address without a host or a port" {
@@ -224,7 +225,7 @@ test "a test-result nobody is waiting for is an error reply" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -237,7 +238,7 @@ test "stopping the core ends the connection thread, which closes the connection"
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -250,7 +251,7 @@ test "a core still stops after the server closed the connection" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -264,7 +265,7 @@ test "a command is held until the UI reports it is listening" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -286,7 +287,7 @@ test "a test's paths for the next dialog are used once and then the native app's
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -306,7 +307,7 @@ test "paths for a dialog that are not an array of strings are refused" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -322,7 +323,7 @@ test "the menu command chooses the menu item through the native app's callback o
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -347,7 +348,7 @@ test "choosing reload holds commands until the UI reports it is listening again"
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -375,14 +376,14 @@ test "the menu command on a native app with no menu callback reports what is mis
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
     config.test_mode = true;
     config.remote_control = server.address();
     config.has_menu_action = false;
-    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     try server.expectConnected();
     defer native_app.stop(std.testing.io, std.testing.allocator);
     var client = Client.init(&server, "{\"command\":\"menu\",\"action\":\"zoom-in\"}");
@@ -406,7 +407,7 @@ test "the drop command records a drop the way the native app does, so the UI can
     defer std.testing.allocator.free(directory_path);
     const path = try std.fs.path.join(std.testing.allocator, &.{ directory_path, "dropped.txt" });
     defer std.testing.allocator.free(path);
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -446,7 +447,7 @@ test "a drop that names an element is also sent to the UI, and the UI's result i
     defer std.testing.allocator.free(directory_path);
     const path = try std.fs.path.join(std.testing.allocator, &.{ directory_path, "dropped.txt" });
     defer std.testing.allocator.free(path);
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -479,7 +480,7 @@ test "the screenshot command has the native app write a picture of the window to
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -499,7 +500,7 @@ test "the screenshot command replies with the reason when the native app cannot 
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -516,7 +517,7 @@ test "the screenshot command without an output path is an invalid command and ca
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -535,14 +536,14 @@ test "the screenshot command on a native app with no screenshot callback reports
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
     config.test_mode = true;
     config.remote_control = server.address();
     config.has_screenshot = false;
-    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     try server.expectConnected();
     defer native_app.stop(std.testing.io, std.testing.allocator);
     var client = Client.init(&server, "{\"command\":\"screenshot\",\"outputPath\":\"/shots/home.png\"}");
@@ -564,14 +565,14 @@ test "the quit command on a native app with no quit callback reports what is mis
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
     config.test_mode = true;
     config.remote_control = server.address();
     config.has_quit = false;
-    try native_app.start(std.testing.io, std.testing.allocator, config, helpers.app);
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     try server.expectConnected();
     defer native_app.stop(std.testing.io, std.testing.allocator);
     const response = try responseFor(&server, "{\"command\":\"quit\"}");
@@ -583,7 +584,7 @@ test "the menu command without an action is an invalid command and chooses nothi
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -600,7 +601,7 @@ test "the drop command without paths is an invalid command" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -614,7 +615,7 @@ test "a dialog result with no paths, or with paths that are not an array, is ref
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -631,7 +632,7 @@ test "second paths for the next dialog replace the first" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);
@@ -650,7 +651,7 @@ test "a test-result without a request id is an error reply" {
     var server: RemoteControlServer = undefined;
     try server.start();
     defer server.stop();
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try startControlledCore(&native_app, &server);

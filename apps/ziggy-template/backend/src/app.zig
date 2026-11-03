@@ -1,10 +1,11 @@
 //
 // Everything the template adds to Ziggy's core library: the messages its frontend sends and the tasks it queues, each with the Zig
-// function that handles it, its menu and its built frontend. Ziggy's build serves the app declared here.
+// function that handles it, its menu, its actions and its built frontend. Ziggy's build serves the app declared here.
 //
 
 const ziggy = @import("ziggy");
 const hello_world = @import("lib/hello-world.zig");
+const actions = @import("lib/actions.zig");
 const menu = @import("lib/menu.zig");
 const ui_query = @import("lib/ui-query.zig");
 pub const on_create = @import("lib/on-create.zig");
@@ -21,6 +22,7 @@ pub const app = ziggy.core.App(.{
         .@"hello-world-task" = hello_world.helloWorldTaskHandler,
     },
     .menu = menu.menu,
+    .actions = actions.actions,
     .ui_files = &ui.files,
     .ui_query = ui_query.uiQuery,
     .on_create = on_create.onCreate,

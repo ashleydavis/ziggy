@@ -29,7 +29,7 @@ A failure that leaves the app unusable prints to standard error and exits non-ze
 
 ## Menu and developer tools
 
-After the backend is created `ZiggyBridge.start` reads the menu JSON (`ziggy_menu_json`, which the core makes at compile time from the app's `ziggy.menu.Menu`) and `ZiggyMenu` makes it the main menu: the application menu first (About, Quit), then the app's menus. The backend's Quit and About items become the application menu's items instead of appearing twice. Shortcuts come from `ziggy_parse_accelerator` and become key equivalents with modifier masks, which AppKit runs even when the web view has the focus.
+After the backend is created `ZiggyBridge.start` reads the menu entries (`ziggy_menu`, which the core makes at compile time from the app's `ziggy.menu.Menu`) and `ZiggyMenu` makes them the main menu: the application menu first (About, Quit), then the app's menus. The backend's Quit and About items become the application menu's items instead of appearing twice. Shortcuts come from `ziggy_parse_accelerator` and become key equivalents with modifier masks, which AppKit runs even when the web view has the focus.
 
 The native app performs quit, close-window, reload, toggle-devtools, toggle-fullscreen, zoom-in, zoom-out, zoom-reset and focus-window (restore the window and bring it to the front) itself. The edit actions (undo, redo, cut, copy, paste, select-all) go to the first responder as the standard selectors. Every other action is the name of one of the app's own menu items and is posted to the backend as `{"kind":"system","name":"menu-action","data":{"action":"<name>"}}`, a system message. The core runs the item: it calls a Zig function or sends the frontend the app event `{"type": "menu", "item": "<name>"}`.
 

@@ -4,7 +4,7 @@ import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobList, IJobProgr
 import { makeLargePayload } from "./lib/large-payload";
 import { crc32 } from "./lib/crc32";
 import { ITestCommand, performDropFileCommand, performInsertCommand, performTestCommand, performViewportCommand, testResultToJson } from "./lib/test-commands";
-import { aboutText, buttonForMenuAction } from "./lib/menu-actions";
+import { aboutText, buttonForMenuAction, formatActionList, sayActionText } from "./lib/menu-actions";
 import { formatPicked } from "./lib/picked-paths";
 
 //
@@ -544,6 +544,30 @@ function listenForMenuEvents(): void {
 }
 
 //
+// The handler of the test app's action say-action, which its Example menu item, its shortcut and the "Run the say action" button all
+// run: it writes a fixed line a smoke test looks for.
+//
+function sayFromAction(): void {
+    element("action-result").textContent = sayActionText;
+}
+
+//
+// Registers the handler of say-action, has the "Run the say action" button run it by name, and has the "List the actions" button
+// show every action listActions gives.
+//
+function startActions(): void {
+    window.ziggy.registerAction("say-action", sayFromAction);
+    element("run-say-action").addEventListener("click", () => {
+        window.ziggy.runAction("say-action").catch((error: Error) => {
+            element("action-result").textContent = `the action did not run: ${error.message}`;
+        });
+    });
+    element("list-actions").addEventListener("click", async () => {
+        element("action-result").textContent = formatActionList(await window.ziggy.listActions());
+    });
+}
+
+//
 // Handles the commands the remote control connection forwards. It does nothing unless the native app started the frontend
 // in test mode, which it does only when the app was started with --remote-control, and it tells the backend when it is listening so that no
 // command is sent before it can be heard.
@@ -587,6 +611,7 @@ startMedia();
 startStorage();
 startAddressCheck();
 startDrop();
+startActions();
 showReply().catch(error => {
     element("reply").textContent = `The Zig core did not answer: ${(error as Error).message}`;
 });

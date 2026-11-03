@@ -4,6 +4,8 @@
 // commands).
 //
 
+import type { IActionInfo } from "ziggy";
+
 //
 // The data-id of the button an action presses, so the menu and the buttons do exactly the same thing.
 //
@@ -24,4 +26,16 @@ export const aboutText = "Ziggy test app: a small app built on Ziggy.";
 //
 export function buttonForMenuAction(action: string): string | null {
     return buttonForAction[action] ?? null;
+}
+
+//
+// The text the handler of the action say-action writes, so a smoke test can tell the handler ran.
+//
+export const sayActionText = "said by an action";
+
+//
+// Writes the actions listActions gave, one line each: the name, the label and the shortcut, or "none" when there is none.
+//
+export function formatActionList(actions: IActionInfo[]): string {
+    return actions.map(action => `${action.name} ${action.label} ${action.shortcut ?? "none"}`).join("\n");
 }

@@ -978,67 +978,62 @@ fn heldModifiers() u32 {
 }
 
 //
-// Adds the items of one menu or submenu to a Win32 menu, recording each item that does something in the native app's list of
-// menu actions. The menu's label text is shown with the shortcut after a tab, as Windows menus do.
 //
-fn appendMenuItems(native_app: *NativeApp, allocator: std.mem.Allocator, win32_menu: c.HMENU, items: []const menu_lib.MenuItem) !void {
-    for (items) |item| {
-        if (item.separator) {
-            if (c.AppendMenuW(win32_menu, c.MF_SEPARATOR, 0, null) == 0) {
-                return error.MenuBuildFailed;
-            }
-            continue;
-        }
-        const label = item.label orelse {
-            return error.MenuItemHasNoLabel;
-        };
-        const escaped = try menu_lib.escapeLabel(allocator, label);
-        defer allocator.free(escaped);
-        if (item.items) |sub_items| {
-            const submenu = c.CreatePopupMenu() orelse {
-                return error.MenuBuildFailed;
-            };
-            try appendMenuItems(native_app, allocator, submenu, sub_items);
-            const wide_label = try std.unicode.utf8ToUtf16LeAllocZ(allocator, escaped);
-            defer allocator.free(wide_label);
-            if (c.AppendMenuW(win32_menu, c.MF_POPUP, @intFromPtr(submenu), wide_label.ptr) == 0) {
-                return error.MenuBuildFailed;
-            }
-            continue;
-        }
-        const action = item.action orelse {
-            return error.MenuItemHasNoAction;
-        };
-        var binding: ?accelerator_lib.Binding = null;
-        var text = try allocator.dupe(u8, escaped);
-        defer allocator.free(text);
-        if (item.accelerator) |accelerator_text| {
-            var parsed: c.ziggy_accelerator = undefined;
-            if (!c.ziggy_parse_accelerator(accelerator_text.ptr, accelerator_text.len, &parsed)) {
-                std.debug.print("ziggy native app: the menu item \"{s}\" has a shortcut that is not valid: {s}\n", .{ label, accelerator_text });
-                return error.InvalidShortcut;
-            }
-            const key_name = std.mem.sliceTo(&parsed.key, 0);
-            binding = accelerator_lib.bindingFor(parsed.modifiers, key_name) orelse {
-                std.debug.print("ziggy native app: the menu item \"{s}\" has a shortcut with a key this native app does not know: {s}\n", .{ label, key_name });
-                return error.UnknownShortcutKey;
-            };
-            var shortcut_buffer: [64]u8 = undefined;
-            const shortcut = try accelerator_lib.formatShortcut(&shortcut_buffer, parsed.modifiers, key_name);
-            allocator.free(text);
-            text = try std.mem.concat(allocator, u8, &.{ escaped, "\t", shortcut });
-        }
-        const wide_text = try std.unicode.utf8ToUtf16LeAllocZ(allocator, text);
-        defer allocator.free(wide_text);
-        const command_id = first_command_id + native_app.menu_actions.items.len;
-        try native_app.menu_actions.append(allocator, .{
-            .action = try allocator.dupe(u8, action),
-            .binding = binding,
-        });
-        if (c.AppendMenuW(win32_menu, c.MF_STRING, command_id, wide_text.ptr) == 0) {
-            return error.MenuBuildFailed;
-        }
+// Adds a menu item that runs something to a Win32 menu, recording it in the native app's list of menu actions. Its label is shown
+// with the shortcut after a tab, as Windows menus do.
+//
+fn appendMenuItem(native_app: *NativeApp, allocator: std.mem.Allocator, win32_menu: c.HMENU, label: []const u8, entry: c.ziggy_menu_entry) !void {
+    if (entry.action == null) {
+        return error.MenuItemHasNoAction;
     }
+    const escaped = try menu_lib.escapeLabel(allocator, label);
+    defer allocator.free(escaped);
+    var binding: ?accelerator_lib.Binding = null;
+    var text = try allocator.dupe(u8, escaped);
+    defer allocator.free(text);
+    if (entry.shortcut != null) {
+        const parsed = try parseShortcut(label, std.mem.span(entry.shortcut));
+        binding = try shortcutBinding(label, parsed);
+        var shortcut_buffer: [64]u8 = undefined;
+        const shortcut = try accelerator_lib.formatShortcut(&shortcut_buffer, parsed.modifiers, std.mem.sliceTo(&parsed.key, 0));
+        allocator.free(text);
+        text = try std.mem.concat(allocator, u8, &.{ escaped, "\t", shortcut });
+    }
+    const wide_text = try std.unicode.utf8ToUtf16LeAllocZ(allocator, text);
+    defer allocator.free(wide_text);
+    const command_id = first_command_id + native_app.menu_actions.items.len;
+    try native_app.menu_actions.append(allocator, .{
+        .action = try allocator.dupe(u8, std.mem.span(entry.action)),
+        .binding = binding,
+    });
+    if (c.AppendMenuW(win32_menu, c.MF_STRING, command_id, wide_text.ptr) == 0) {
+        return error.MenuBuildFailed;
+    }
+}
+
+//
+// Reads a shortcut's text, as the menu and the action shortcuts carry it, with the core's parser. Text that does not parse fails,
+// naming the menu item or action it belongs to.
+//
+fn parseShortcut(owner: []const u8, text: []const u8) !c.ziggy_accelerator {
+    var parsed: c.ziggy_accelerator = undefined;
+    if (!c.ziggy_parse_accelerator(text.ptr, text.len, &parsed)) {
+        std.debug.print("ziggy native app: \"{s}\" has a shortcut that is not valid: {s}\n", .{ owner, text });
+        return error.InvalidShortcut;
+    }
+    return parsed;
+}
+
+//
+// The key binding of a parsed shortcut, which the accelerator table and the web view's shortcut handling match. A key this native app
+// does not know fails, naming the menu item or action it belongs to.
+//
+fn shortcutBinding(owner: []const u8, parsed: c.ziggy_accelerator) !accelerator_lib.Binding {
+    const key_name = std.mem.sliceTo(&parsed.key, 0);
+    return accelerator_lib.bindingFor(parsed.modifiers, key_name) orelse {
+        std.debug.print("ziggy native app: \"{s}\" has a shortcut with a key this native app does not know: {s}\n", .{ owner, key_name });
+        return error.UnknownShortcutKey;
+    };
 }
 
 //
@@ -1095,42 +1090,85 @@ fn buildAcceleratorTable(native_app: *NativeApp, allocator: std.mem.Allocator) !
 }
 
 //
-// Reads the menu from the core and, when it has any menus, puts them in a menu bar on the window and builds the shortcuts.
-// A menu of no menus shows no menu bar.
+//
+// The deepest a menu entry may be: menus of the menu bar are at 0, and each submenu is one deeper. Ziggy's own menus go two deep, so
+// eight leaves room for any menu a user can still find their way around.
+//
+const menu_depth_max = 8;
+
+//
+// Reads the menu entries from the core and, when there are any, puts them in a menu bar on the window. Then builds the shortcuts,
+// those of the actions that have no menu item included, with or without a menu bar. An app with no menu shows no menu bar.
 //
 fn buildMenu(native_app: *NativeApp, core: *anyopaque) !void {
     const allocator = std.heap.c_allocator;
-    var length: usize = 0;
-    const json_pointer = c.ziggy_menu_json(core, &length) orelse {
-        return error.MenuMissing;
-    };
-    const parsed = try menu_lib.parseMenu(allocator, json_pointer[0..length]);
-    defer parsed.deinit();
-    if (parsed.value.len == 0) {
-        return;
-    }
-    const menu_bar = c.CreateMenu() orelse {
-        return error.MenuBuildFailed;
-    };
-    for (parsed.value) |menu| {
-        const popup = c.CreatePopupMenu() orelse {
+    var count: usize = 0;
+    const entries = c.ziggy_menu(core, &count);
+    if (count > 0) {
+        const menu_bar = c.CreateMenu() orelse {
             return error.MenuBuildFailed;
         };
-        try appendMenuItems(native_app, allocator, popup, menu.items);
-        const escaped = try menu_lib.escapeLabel(allocator, menu.label);
-        defer allocator.free(escaped);
-        const wide_label = try std.unicode.utf8ToUtf16LeAllocZ(allocator, escaped);
-        defer allocator.free(wide_label);
-        if (c.AppendMenuW(menu_bar, c.MF_POPUP, @intFromPtr(popup), wide_label.ptr) == 0) {
+        // The Win32 menu each depth's entries go into: the menu bar at depth 0, and below it the menu or submenu opened last at the
+        // depth above.
+        var containers: [menu_depth_max + 1]c.HMENU = undefined;
+        containers[0] = menu_bar;
+        for (entries[0..count]) |entry| {
+            if (entry.depth > menu_depth_max) {
+                std.debug.print("ziggy native app: the menu goes deeper than {d}\n", .{menu_depth_max});
+                return error.MenuTooDeep;
+            }
+            const container = containers[entry.depth];
+            if (entry.kind == c.ZIGGY_MENU_ENTRY_SEPARATOR) {
+                if (c.AppendMenuW(container, c.MF_SEPARATOR, 0, null) == 0) {
+                    return error.MenuBuildFailed;
+                }
+                continue;
+            }
+            if (entry.label == null) {
+                return error.MenuEntryHasNoLabel;
+            }
+            const label = std.mem.span(entry.label);
+            if (entry.kind == c.ZIGGY_MENU_ENTRY_MENU or entry.kind == c.ZIGGY_MENU_ENTRY_SUBMENU) {
+                const popup = c.CreatePopupMenu() orelse {
+                    return error.MenuBuildFailed;
+                };
+                const escaped = try menu_lib.escapeLabel(allocator, label);
+                defer allocator.free(escaped);
+                const wide_label = try std.unicode.utf8ToUtf16LeAllocZ(allocator, escaped);
+                defer allocator.free(wide_label);
+                if (c.AppendMenuW(container, c.MF_POPUP, @intFromPtr(popup), wide_label.ptr) == 0) {
+                    return error.MenuBuildFailed;
+                }
+                containers[entry.depth + 1] = popup;
+                continue;
+            }
+            try appendMenuItem(native_app, allocator, container, label, entry);
+        }
+        native_app.menu_bar = menu_bar;
+        if (c.SetMenu(native_app.window, menu_bar) == 0) {
             return error.MenuBuildFailed;
         }
+        resizeWebView(native_app);
     }
-    native_app.menu_bar = menu_bar;
-    if (c.SetMenu(native_app.window, menu_bar) == 0) {
-        return error.MenuBuildFailed;
-    }
+    try appendStandaloneActionShortcuts(native_app, allocator, core);
     try buildAcceleratorTable(native_app, allocator);
-    resizeWebView(native_app);
+}
+
+//
+// Adds to the native app's list of menu actions, with no menu item, the shortcut of every action of the app's that has none, so the
+// accelerator table and the web view's shortcut handling run it as they run a menu item's, with or without a menu bar.
+//
+fn appendStandaloneActionShortcuts(native_app: *NativeApp, allocator: std.mem.Allocator, core: *anyopaque) !void {
+    var count: usize = 0;
+    const shortcuts = c.ziggy_standalone_action_shortcuts(core, &count);
+    for (shortcuts[0..count]) |shortcut| {
+        const action = std.mem.span(shortcut.action);
+        const parsed = try parseShortcut(action, std.mem.span(shortcut.shortcut));
+        try native_app.menu_actions.append(allocator, .{
+            .action = try allocator.dupe(u8, action),
+            .binding = try shortcutBinding(action, parsed),
+        });
+    }
 }
 
 //

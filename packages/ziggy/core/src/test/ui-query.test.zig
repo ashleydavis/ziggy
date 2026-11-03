@@ -1,6 +1,7 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
-const helpers = @import("helpers.zig");
+const test_app = @import("test-app.zig");
+const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 
 const core = ziggy.core;
 const Timers = ziggy.timers.Timers;
@@ -28,22 +29,22 @@ fn failToMakeQuery(services: core.HandlerServices, timers: Timers, io: std.Io, a
 }
 
 const app_with_query = blk: {
-    var copy = helpers.app;
+    var copy = test_app.app;
     copy.ui_query = sayTestMode;
     break :blk copy;
 };
 
 const app_with_failing_query = blk: {
-    var copy = helpers.app;
+    var copy = test_app.app;
     copy.ui_query = failToMakeQuery;
     break :blk copy;
 };
 
 test "an app with no UI query hook has an empty query" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try helpers.createCore(&native_app, 1, 1);
+    try test_app.createCore(&native_app, 1, 1);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     const query = try native_app.uiQuery(std.testing.allocator);
     defer std.testing.allocator.free(query);
@@ -51,7 +52,7 @@ test "an app with no UI query hook has an empty query" {
 }
 
 test "the query the app makes is passed through unread, with a terminator" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), app_with_query);
@@ -63,7 +64,7 @@ test "the query the app makes is passed through unread, with a terminator" {
 }
 
 test "the app is told whether the test mode switch is on" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
@@ -94,13 +95,13 @@ fn countQueries(services: core.HandlerServices, timers: Timers, io: std.Io, allo
 }
 
 const app_counting_queries = blk: {
-    var copy = helpers.app;
+    var copy = test_app.app;
     copy.ui_query = countQueries;
     break :blk copy;
 };
 
 test "a second query runs the app's function again" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), app_counting_queries);
@@ -114,7 +115,7 @@ test "a second query runs the app's function again" {
 }
 
 test "a query the app fails to make is an error, not an empty query" {
-    var native_app: helpers.FakeNativeApp = undefined;
+    var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), app_with_failing_query);

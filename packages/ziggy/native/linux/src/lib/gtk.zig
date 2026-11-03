@@ -116,6 +116,13 @@ pub extern fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int
 
 
 pub const GtkAccelGroup = opaque {};
+pub const GClosure = opaque {};
+
+// The handler of a shortcut connected with gtk_accel_group_connect, as g_cclosure_new calls it: the group, the window it is added to,
+// the key, its modifiers and the closure's data.
+pub const GtkAccelGroupActivate = *const fn (accel_group: *GtkAccelGroup, acceleratable: gpointer, keyval: c_uint, modifier: c_uint, user_data: gpointer) callconv(.c) gboolean;
+// A GClosureNotify: frees a closure's data when the closure is finalized.
+pub const GClosureNotify = *const fn (data: gpointer, closure: ?*GClosure) callconv(.c) void;
 pub const WebKitWebInspector = opaque {};
 pub const WebKitSettings = opaque {};
 
@@ -135,6 +142,8 @@ pub extern fn gtk_menu_shell_append(menu_shell: *GtkWidget, child: *GtkWidget) v
 pub extern fn gtk_separator_menu_item_new() *GtkWidget;
 pub extern fn gtk_accel_group_new() *GtkAccelGroup;
 pub extern fn gtk_window_add_accel_group(window: *GtkWindow, accel_group: *GtkAccelGroup) void;
+pub extern fn gtk_accel_group_connect(accel_group: *GtkAccelGroup, accel_key: c_uint, accel_mods: c_uint, accel_flags: c_uint, closure: *GClosure) void;
+pub extern fn g_cclosure_new(callback_func: GCallback, user_data: gpointer, destroy_data: GClosureNotify) *GClosure;
 pub extern fn gtk_widget_add_accelerator(widget: *GtkWidget, accel_signal: [*:0]const u8, accel_group: *GtkAccelGroup, accel_key: c_uint, accel_mods: c_uint, accel_flags: c_uint) void;
 pub extern fn gtk_window_fullscreen(window: *GtkWindow) void;
 pub extern fn gtk_window_unfullscreen(window: *GtkWindow) void;
