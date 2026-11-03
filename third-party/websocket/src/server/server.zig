@@ -100,6 +100,8 @@ pub fn Server(comptime H: type) type {
         _signals: []posix.fd_t,
         _mut: Io.Mutex,
         _cond: Io.Condition,
+        // Ziggy: set under _mut once listen has ended. stop waits for it rather than for a signal it can miss.
+        _listen_ended: bool,
 
         const Self = @This();
 
@@ -127,6 +129,7 @@ pub fn Server(comptime H: type) type {
                 .io = io,
                 ._mut = .init,
                 ._cond = .init,
+                ._listen_ended = false,
                 ._state = state,
                 ._signals = signals,
                 .config = config,
@@ -274,7 +277,12 @@ pub fn Server(comptime H: type) type {
                     thrd.join();
                 }
             }
+            // Ziggy: records that listen has ended under the lock stop holds. Signalled without it, the signal could come after stop
+            // closed the signals and before it waited, and stop then waited forever.
+            self._mut.lockUncancelable(io);
+            self._listen_ended = true;
             self._cond.signal(io);
+            self._mut.unlock(io);
         }
 
         pub fn stop(self: *Self) void {
@@ -290,7 +298,9 @@ pub fn Server(comptime H: type) type {
                 }
                 posix.close(s);
             }
-            self._cond.waitUncancelable(io, &self._mut);
+            while (!self._listen_ended) {
+                self._cond.waitUncancelable(io, &self._mut);
+            }
         }
     };
 }
