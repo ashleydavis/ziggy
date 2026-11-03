@@ -143,8 +143,9 @@ function startTasks(): void {
     });
     element("start-long").addEventListener("click", () => {
         const children = Number((element("child-count") as HTMLInputElement).value);
+        const durationMs = Number((element("long-duration") as HTMLInputElement).value);
         queueTask("hello-long", "long-source", {
-            durationMs: 3000,
+            durationMs,
             stepMs: 100,
             children,
             job: jobTag("Long job", "long-source"),
