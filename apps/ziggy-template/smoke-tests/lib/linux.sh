@@ -3,9 +3,6 @@
 # The Linux platform library of the Ziggy template's smoke tests. See common.sh for what it implements.
 #
 # The app runs on a virtual display of its own, so a run shows no window and two runs never share a display.
-# WebKitGTK starts its web process in a bubblewrap sandbox, which some Linux setups do not allow an unprivileged
-# program to create (Ubuntu's default restriction on user namespaces is one). The sandbox is switched off for these test
-# processes only, through the environment WebKitGTK documents for it.
 
 LINUX_SHELL_DIR="$ZIGGY_SMOKE_APP_DIR/native/linux"
 LINUX_EXAMPLE_DIR="$ZIGGY_SMOKE_APP_DIR"
@@ -44,7 +41,6 @@ ziggy_platform_start() {
     mkdir -p "$test_dir/data"
     local pgid
     read -r _ pgid < <(launch_in_process_group "$log" env \
-        WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
         XDG_DATA_HOME="$test_dir/data" \
         xvfb-run -a -s "-screen 0 1280x1024x24" "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
     echo "$pgid" > "$test_dir/$LINUX_PGID_FILE_NAME"

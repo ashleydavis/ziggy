@@ -165,27 +165,6 @@ fn fatal(comptime format: []const u8, arguments: anytype) noreturn {
 }
 
 //
-// WebKitGTK runs its web process in a bubblewrap sandbox, which needs the program to be allowed to create a user
-// namespace. Some systems do not allow that to an ordinary program (Ubuntu's default restriction on user namespaces is one),
-// and the web view then cannot start at all. This runs the same bubblewrap setup WebKitGTK does, and when it fails turns the
-// sandbox off for this process through the environment variable WebKitGTK documents for it, and reports it on standard error.
-// The app loads only its own bundled frontend and refuses every other navigation, which is what limits what runs without
-// the sandbox. A setting made in the environment is left alone, so it can still be set either way from outside.
-//
-fn turnSandboxOffWhenItCannotStart() !void {
-    if (c.g_getenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS") != null) {
-        return;
-    }
-    if (c.system("bwrap --ro-bind / / --unshare-user true > /dev/null 2>&1") == 0) {
-        return;
-    }
-    std.debug.print("ziggy native app: the web view's sandbox cannot start on this system (bubblewrap is not allowed to create a user namespace), so it is turned off for this run.\n", .{});
-    if (c.setenv("WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS", "1", 1) != 0) {
-        return error.SetEnvironmentFailed;
-    }
-}
-
-//
 // Serves a web view request for one of the bundled frontend's files, from the files the core holds. A path that is not
 // one of them gets a not found error. The frontend is loaded only once the core exists.
 //
@@ -257,7 +236,6 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
         setWindowIcon(window, icon_png);
     }
 
-    try turnSandboxOffWhenItCannotStart();
     const web_view_widget = c.webkit_web_view_new();
     const web_view: *c.WebKitWebView = @ptrCast(@alignCast(web_view_widget));
     native_app.web_view = web_view;
