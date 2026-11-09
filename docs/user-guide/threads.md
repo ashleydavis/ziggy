@@ -153,18 +153,6 @@ An app can start threads of its own, such as the threads of a server it runs. Ke
 - A thread keeps its own copy of anything it caches. Two threads never read or write the same memory.
 - A thread that can wait a long time (on a socket, on a queue) needs a way to be woken when the app stops, such as a `stop` message on its queue, so `on_destroy` can end it.
 
-## Key files
-
-| File | What it holds |
-|---|---|
-| `packages/ziggy/core/src/lib/core.zig` | The main thread and its message loop. |
-| `packages/ziggy/core/src/lib/message-queue.zig` | The queue every thread reads its messages from. |
-| `packages/ziggy/utils/src/lib/thread-allocator.zig` | The allocator each thread makes for itself. |
-| `packages/ziggy/core/src/lib/native-app.zig` | How a thread of the backend reaches the native app. |
-| `packages/ziggy/core/src/lib/worker-pool.zig` | The main thread's side of the tasks. |
-| `packages/ziggy/core/src/lib/worker.zig` | A worker thread and how it runs a task, waits and is cancelled. |
-| `packages/ziggy/core/src/lib/worker-messages.zig` | The messages between the main thread and the background task workers. |
-
 ## To fix
 
 - Investigate why `ThreadAllocator` is needed for threads (it's based on DebugAllocator, Why would we use that in prod code?) and remove it if not required.

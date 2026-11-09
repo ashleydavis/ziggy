@@ -65,20 +65,7 @@ Every message handler, menu item function and app function above (`ui_query`, `o
 
 A task handler takes the same, with `ziggy.task_runner.TaskServices` for its services and its worker's timers and Io, and then its context (see [Tasks](tasks.md#writing-a-handler)).
 
-The handler services are an interface, as `std.Io` is: the handler does not see how the main thread keeps its state. Each call runs on the main thread and is done before it returns. The services may be kept, for a timer's callback for one, until the main thread has called `on_destroy` for the last time.
-
-| Function | What it does |
-|---|---|
-| `sendEvent(allocator, data_json)` | Sends the frontend an app event whose data is the JSON text, which the frontend's `onEvent` listeners receive. |
-| `addTask(task_id, task_type, source, data_json, priority)` | Queues a task of the type, with the id, the source it is cancelled by and the JSON text of its input. |
-| `cancelTasks(source)` | Cancels every task queued under the source. |
-| `holdKeepAlive(keep_running)` | Keeps the app running with or without a task, through the native app's `keep_alive` callback, until it is called with `false`. |
-| `quit()` | Has the native app quit. A native app with no `quit` callback ignores it. |
-| `menuAction(action)` | Has the native app run one of its own menu actions, such as `focus-window`. A native app with no `menu_action` callback ignores it. |
-| `runAction(action)` | Runs the app's action with that name, through its frontend handler. A name that is not an action of the app fails with `UnknownAction`. See [Running an action](actions.md#running-an-action). |
-| `dataDir()` | The app's private data directory. |
-| `isPhone()` | Whether the native app is a phone's: the Android and iOS native apps handle the app's own native calls, which no desktop native app does. |
-| `log` | The main thread's log, a field: what a handler, a menu item's function or an app function writes to. It is the app's file log for the whole run, or the console log for an app without a name (see [Logging](logging.md#where-a-line-goes)). |
+The handler services are an interface, as `std.Io` is: the handler does not see how the main thread keeps its state. Each call runs on the main thread and is done before it returns. The services may be kept, for a timer's callback for one, until the main thread has called `on_destroy` for the last time. Their `log` is the main thread's log (see [Logging](logging.md#where-a-line-goes)).
 
 ## When the backend is created
 

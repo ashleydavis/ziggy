@@ -13,18 +13,7 @@ Ziggy's Android framework code: a Java library (no Kotlin) that is a Gradle buil
 - When the launching Intent has the string extra `ziggy.remoteControl` (the remote control server's address, `host:port`), tells the backend it is in test mode and passes the address on. The backend then connects to the remote control server there. An empty value counts as absent.
 - Appends `?` and the query the backend supplies (`ziggy_ui_query`) to the frontend's URL.
 
-The app's activity makes these calls (the template's `MainActivity` makes each one):
-
-- `new ZiggyNativeApp(activity, webView, nativeLibraryName, workerThreads, maxConcurrentChildTasks)`: the activity, the web view it shows, the name of the app's backend library (`lib<name>.so` without `lib` and `.so`), and the size of the backend's task pool and its limit on child tasks in flight.
-- `start()` in `onCreate`, on the main thread: creates the backend, configures the web view and loads the frontend.
-- `onResume()` in `onResume`: starts the keep-alive service if the system refused it earlier, which it does when the app was not yet in the foreground.
-- `onActivityResult(requestCode, resultCode, data)` in `onActivityResult`: hands a picker's result to the thread that showed the picker. It returns false when the result was not a picker's, and the activity then passes it on.
-- `destroy()` in `onDestroy`: destroys the backend once. Nothing is delivered after it.
-
-And these when the app needs them, before `start`:
-
-- `setKeepAliveNotification(channelName, channelDescription, title, text)`: the text of the keep-alive service's ongoing notification, and what the system settings show for its channel.
-- `setNativeCallHandler(handler)`: the object that handles the app's own native calls. Without one, every one of the app's own native calls fails with a message reporting that no handler is set.
+The app's activity makes a `ZiggyNativeApp` and calls it from each of its lifecycle methods. The template's `MainActivity` shows every call, and `ZiggyNativeApp.java` describes each one.
 
 A handler of the app's own native calls can show an activity of its own and wait for it, from a thread that is not the main thread: `startActivityAndWait(intent)` returns the activity's result data, and `startIntentSenderAndWait(sender)` shows a system confirmation and returns whether the user accepted it. Both share the one slot the pickers use, so one such activity is on screen at a time.
 

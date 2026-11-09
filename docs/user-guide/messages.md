@@ -187,19 +187,7 @@ Ziggy sends one app event of its own: when the user chooses a menu item that run
 
 ## Ziggy's own calls
 
-Ziggy's own messages and events, the system messages and system events, are separate from the app's: they never reach the app's message handlers or an `onEvent` listener. An app cannot send or define one. The frontend reaches what they do only through these calls on `window.ziggy`:
-
-| Call | What it does |
-|---|---|
-| `addTask(task)`, `cancelTasks(source)` | Queue a task and cancel the tasks of a source. See [Tasks](tasks.md). |
-| `onTaskEvent(callback)`, `onTaskCompleted(callback)` | Hear what a task sends while it runs and how it ended. See [Tasks](tasks.md). |
-| `registerAction(name, handler)`, `removeAction(name)`, `runAction(name)`, `listActions()` | Register or remove an action's frontend handler, run an action by its name and list every action with its label and shortcut. See [Actions](actions.md). |
-| `getPlatform()` | Resolves with whether the app is on a desktop or a mobile device (`platformKind`), and the operating system and processor (`os`, `arch`). |
-| `onCoreError(callback)` | Hears of a message that failed with no message response to carry the error, such as one that is not JSON or was sent with `send`, with the `error`. With no listener, the error is logged to the console. |
-| `getPathForFile(file)` | The real path of a file dropped on the window. It asks the backend for the paths of the last drop, so the frontend never does that itself. |
-| `onTestCommand(callback)`, `sendTestResult(requestId, result)`, `testUiReady()` | The test hooks, which act only when the app is started with `--remote-control`. See [Testing your app](testing.md). |
-
-Each `on...` call has a `remove...Listener` call beside it that takes the same callback, such as `removeTaskEventListener`.
+Ziggy's own messages and events, the system messages and system events, are separate from the app's: they never reach the app's message handlers or an `onEvent` listener. An app cannot send or define one. The frontend reaches what they do only through Ziggy's own calls on `window.ziggy`, typed and described in `packages/ziggy/frontend/src/ziggy-bridge.ts`. [Tasks](tasks.md), [Actions](actions.md) and [Testing your app](testing.md) describe them. Each `on...` call has a `remove...Listener` call beside it that takes the same callback.
 
 ## See also
 

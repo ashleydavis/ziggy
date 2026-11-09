@@ -256,14 +256,6 @@ choose_menu_item hello-from-ui
 wait_for_text log "Hello from the UI, run from the menu" 30
 ```
 
-## Key files
-
-| File | What it holds |
-|---|---|
-| `apps/ziggy-template/backend/src/lib/menu.zig` | The template's menu. |
-| `apps/ziggy-template/backend/src/lib/hello-world.zig` | The template's Zig function for a menu item. |
-| `apps/ziggy-template/frontend/src/lib/hello-world.ts` | How the template's frontend handles its menu event. |
-
 ## See also
 
 - [Actions](actions.md): what an `.action` item runs.

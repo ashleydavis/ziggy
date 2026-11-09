@@ -5,11 +5,6 @@ A task is work the backend runs on its own pool of worker threads, away from the
 ## How it works
 
 ```mermaid
-flowchart LR
-    Frontend --> Backend --> Worker
-```
-
-```mermaid
 %%{init: {
     "theme": "base",
     "themeVariables": {
@@ -103,22 +98,7 @@ The task's context holds plain values the task is started with:
 | `max_concurrent_child_tasks` | The limit on this task's child tasks in flight. |
 | `data_dir` | The app's private data directory. |
 
-The task services are what the task reaches outside its worker through. Each call is a JSON message to the main thread, which the task does not see:
-
-| Function | What it does |
-|---|---|
-| `sendEvent(value)` | Sends any value `std.json` can serialise to the frontend as a `task-event` system event. |
-| `isCancelled()` | Whether the task's source has been cancelled. |
-| `checkCancelled()` | Returns `error.Cancelled` when the source has been cancelled. Call it at the top of every loop. |
-| `waitUntilCancelled(timers)` | Waits until the source is cancelled, for a task whose work runs on threads of its own until then. |
-| `queueChild(type, data, priority)` | Queues a child task and returns its id. It waits while the child limit is reached. |
-| `awaitTask(child_id)` | Waits for one child and returns how it ended. A failed child is returned as a failure. |
-| `runChild(allocator, type, data, priority)` | Runs one child to its end and frees it, for a task that runs children one after another for as long as it lives. |
-| `nativeCall(method, request_json)` | Calls the native app's `native_call` native call to do one thing only the platform can do, by name, and returns its result. A platform with no `native_call` native call gives `error.NativeCallMissing`. |
-| `nativeCaller(storage)` | Hands this task's native calls to code that does not know about tasks, or null when the native app has no `native_call` native call. |
-| `pickPaths(kind, title, initial_name)` | Shows a native file or directory dialog and returns the JSON text of the paths chosen, an empty array when the user cancelled. When the app is started with `--remote-control`, a test can supply the paths instead. |
-| `osVersion()` | The operating system's version, through the native app's `os_version` native call. |
-| `log` | The worker's log, a field: each line written to it is sent to the main thread, which writes it to its own log tagged `Worker <id>` (see [Logging](logging.md#where-a-line-goes)). |
+The task services (`TaskServices` in `task-runner.zig`) are what the task reaches outside its worker through. Each call is a JSON message to the main thread, which the task does not see. Each line written to their `log` is sent to the main thread, which writes it to its own log tagged `Worker <id>` (see [Logging](logging.md#where-a-line-goes)).
 
 The timers are the worker's own: a timer the task sets runs on its worker while the task waits for a message, and is cleared when the task ends.
 
@@ -268,22 +248,6 @@ The core library implements the task queue's `IQueueBackend` on each worker, whi
 - A handler written against the task queue (that package's `TaskHandler`) is listed in `.tasks` like any other.
 - A task queued through a worker's backend runs at the priority of the task that queued it, unless the code passes one.
 - `onTaskComplete` callbacks hear of every task that ran, a cancelled one as failed with the message `Cancelled`. A task cancelled while it waited in the queue is not reported to them, though the frontend is told.
-
-
-## Key files
-
-| File | What it holds |
-|---|---|
-| `packages/ziggy/core/src/lib/task-runner.zig` | `TaskServices`, `TaskContext`, `TaskHandlerEntry`, `TaskPriority` and `TaskKind`. |
-| `packages/ziggy/core/src/lib/worker-pool.zig` | The worker pool, which owns the tasks on the main thread. |
-| `packages/ziggy/core/src/lib/worker.zig` | A worker, which runs one task at a time. |
-| `packages/ziggy/core/src/lib/system-messages/tasks.zig` | Ziggy's own `add-task` and `cancel-tasks` system messages. |
-| `packages/ziggy/core/src/lib/core.zig` | The main thread, which queues the task whose result is a message's response. |
-| `packages/ziggy/core/src/lib/handlers.zig` | `Response`, whose `.task` makes a task's result a message's response. |
-| `packages/ziggy/core/src/lib/task-queue` | The task queue that Ziggy's core library implements its queue backend for. |
-| `apps/ziggy-template/backend/src/lib/hello-world.zig` | The template's hello world task. |
-| `apps/ziggy-test-app/backend/src/lib/handlers.zig` | Everything the test app registers, including its task handlers: long tasks, child tasks, cancelling, failing and keep-alive. |
-| `apps/ziggy-template/frontend/src/main.ts` | How the template's frontend queues tasks and handles their events. |
 
 
 ## See also

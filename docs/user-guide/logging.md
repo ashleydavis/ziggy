@@ -30,18 +30,7 @@ fn readThumbnail(io: std.Io, log: ziggy.log.ILog, path: []const u8) !void {
 
 There is no function that gives a log. Code that has been given no log, such as a test, `main` before it has made its log or a thread of a program's own, makes a `ziggy.log.ConsoleLog` where it starts (`var console_log: ConsoleLog = .{};`, every option off unless it sets one) and passes `console_log.ilog()` down.
 
-| Function | What it logs |
-|---|---|
-| `info(message)` | An informational line. |
-| `verbose(message)` | Detail that is not needed day to day. |
-| `@"error"(message)` | An error. |
-| `exception(message, err)` | An error with the chain of errors that caused it. |
-| `warn(message)` | A warning. |
-| `debug(message)` | Detail for whoever is debugging the program. |
-| `tool(tool_name, .{ .stdout = ..., .stderr = ... })` | What an external tool wrote. |
-| `event(message)` | Something that happened, such as a task starting. |
-
-`log.verboseEnabled()` says whether verbose lines are shown on the console, so a caller can skip building an expensive verbose line.
+`ILog` (`packages/ziggy/log/src/lib/log.zig`) has a function for each kind of line. `log.verboseEnabled()` says whether verbose lines are shown on the console, so a caller can skip building an expensive verbose line.
 
 ## Where a line goes
 
@@ -235,15 +224,3 @@ The logger also gives `getLogFilePath()`, `getErrorLogFilePath()` and `hasLogged
 ## Writing lines that came from elsewhere
 
 A program with a worker pool of its own, or anything else that receives log lines from another thread, writes them on the main thread with `worker_pool.writeTaggedLine(arena, log, source, line)`, where `log` is the log to write them to (for the main thread's, `services.log`) and `line` is a `log.ILogLine` (level, message, error text, tool output). It writes the line through the log's ordinary functions with `[source] ` in front of it, and an exception becomes one error line with its error text under it. Ziggy's own worker pool writes its workers' lines this way, with the source `Worker <id>`, and starts its workers sending verbose and tool lines whenever the main thread's log writes a file (`log.logFilePath()` is not null), since the file always takes them.
-
-## Key files
-
-| File | What it holds |
-|---|---|
-| `packages/ziggy/log/src/lib/log.zig` | The `ILog` interface and the console log. |
-| `packages/ziggy/log/src/lib/file-log.zig` | The file log, `defaultLogsDir` and `readLogDetails`. |
-| `packages/ziggy/utils/src/lib/temp-dir.zig` | `osTmpDir`, the operating system's temporary directory. |
-| `packages/ziggy/core/src/lib/thread-log.zig` | A worker's log, which sends its lines to the main thread. |
-| `packages/ziggy/core/src/lib/worker-pool.zig` | `writeLog`, which writes a worker's line to the main thread's log. |
-| `packages/ziggy/core/src/lib/system-messages/log.zig` | The `log` system message `window.ziggy.log` sends. |
-| `packages/ziggy/core/src/lib/ziggy-inject.js` | `window.ziggy.log`. |
