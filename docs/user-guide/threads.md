@@ -10,6 +10,7 @@
   - **Background task worker threads** (Zig): each runs one task at a time.
   - **The remote control thread** (Zig): only when the app is started with `--remote-control`.
   - **The frontend** (JavaScript): runs in the system web view, on threads the web view manages.
+- **While a thread has no message:** it sleeps. The main thread and a worker whose task waits sleep on their queue until a message comes or their next timer is due. An idle worker sleeps until it is sent a task. The UI thread runs the platform's event loop and the remote control thread sleeps in a read on its socket.
 - **What each thread may touch:** its own `ThreadAllocator` and `std.Io`. The main thread's state stays on the main thread. A task gets JSON in and sends JSON back. Services are passed as arguments, never stored.
 - **The message queue:** many threads post, one thread takes. Text is copied in on post and out on take. A waiting thread sleeps until a message comes or its next timer is due. Each message has a `from` number and can name a queue for its reply.
 - **From the frontend to the backend:** `ziggy_send_message` is the backend's entry point for messages from the frontend: a C function declared in `ziggy.h` and written in Zig in Ziggy's core library (`ziggy-api.zig`), which posts the message to the main thread's queue. A message reaches it in three hops:
@@ -61,6 +62,17 @@ All communication between threads goes through `MessageQueue` (`ziggy.message_qu
 - A thread waiting on an empty queue sleeps until a post or a timeout. The main thread and each worker wait no longer than until their next timer is due, so timers run on the thread that owns them.
 - Each message carries a `from` number, so the main thread can tell the frontend, Ziggy's core library itself, the remote control connection and each worker apart.
 - A message can name a queue its reply goes to, for a sender that is not a thread the reader knows by number.
+
+## What a thread does while it has no message
+
+Every thread of the backend sleeps while it has nothing to do, so an idle app uses no CPU. A thread waiting on its queue sleeps in a futex wait (`MessageQueue.take`). A post to the queue wakes it.
+
+- **The main thread** (`mainThread` in `core.zig`) waits on its queue no longer than until its next timer is due. When it wakes it handles the message, if one came, then runs every timer that is due, then waits again.
+- **An idle worker** (`WorkerRuntime.run` in `worker.zig`) waits on its queue with no timeout until it is sent `execute` or `shutdown`. It runs the task of an `execute` message to its end on its own thread, then waits again. The worker's timers belong to its tasks, so they run only while a task runs.
+- **A worker whose task waits** (on its child tasks, a native call or another message, in `WorkerRuntime.waitFor`) sleeps on the worker's queue no longer than until the task's next timer is due. A timer that comes due runs on that worker. A message the task is not waiting for is kept, in the order it came, and read when the task next looks.
+- **The UI thread** runs the platform's event loop: GTK on Linux, the Win32 message loop on Windows, the main run loop on macOS and iOS and the main looper on Android. When the native app's queue has a message, the main thread's wake function puts a wake-up into that loop: `g_idle_add` on Linux, a `WM_ZIGGY_NATIVE` window message on Windows, `DispatchQueue.main.async` on macOS and iOS and a write to a file descriptor the main looper listens on, on Android.
+- **The JavaScript bridge thread** on Android belongs to the Android WebView. It enters Ziggy only when the page posts a message.
+- **The remote control thread** (`Connection.serve` in `remote-control.zig`) sleeps in a read on its WebSocket. On stop the main thread shuts the socket down, which ends the read.
 
 ## Between the native app and the backend
 
