@@ -5,6 +5,31 @@ A task is work the backend runs on its own pool of worker threads, away from the
 ## How it works
 
 ```mermaid
+flowchart LR
+    Frontend --> Backend --> Worker
+```
+
+```mermaid
+%%{init: {
+    "theme": "base",
+    "themeVariables": {
+        "actorBkg": "transparent",
+        "actorBorder": "#ffffff",
+        "actorTextColor": "#ffffff",
+        "actorLineColor": "#ffffff",
+        "signalColor": "#ffffff",
+        "signalTextColor": "#ffffff",
+        "noteBkgColor": "transparent",
+        "noteBorderColor": "#ffffff",
+        "noteTextColor": "#ffffff",
+        "labelBoxBkgColor": "transparent",
+        "labelBoxBorderColor": "#ffffff",
+        "labelTextColor": "#ffffff",
+        "loopTextColor": "#ffffff",
+        "textColor": "#ffffff"
+    },
+    "themeCSS": ".actor, .note, .labelBox, .loopLine, .actor-line, .messageLine0, .messageLine1 { stroke-width: 2px !important; } .actor, .note, .labelBox { fill: none !important; }"
+}}%%
 sequenceDiagram
     participant UI as Frontend
     participant NativeApp as Native app
