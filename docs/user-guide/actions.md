@@ -70,7 +70,7 @@ Four things run an action by its name:
   window.ziggy.runAction("hello-from-action");
   ```
 
-- **The backend**, by calling the handler services' `runAction(io, allocator, name)` (see [The app declaration](app-declaration.md#what-every-handler-is-given)).
+- **The backend**, by calling the handler services' `runAction(io, allocator, name)` (see [The app declaration](app-declaration.md#handler-arguments)).
 
 `runAction` can also run a standard action, such as `zoom-in`, when the app's menu has a `.standard` item for it.
 

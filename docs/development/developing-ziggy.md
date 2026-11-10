@@ -23,7 +23,7 @@ A Ziggy developer needs everything an app developer needs, listed in [Dependenci
 
 ## Using Ziggy from a local path
 
-The template and the test app take Ziggy from this repository by a local path. An app outside the repository does the same to work against a change to Ziggy that is not released yet. The examples below put the app beside a checkout of Ziggy, so Ziggy is `../ziggy` from the app's root. Each path is measured from the file that holds it, so a file in `native/<platform>` reaches Ziggy as `../../../ziggy`. Every part of the app must point at the same Ziggy.
+The template and the test app take Ziggy from this repository by a local path. An app outside the repository does the same to work against an unreleased change to Ziggy. The examples below put the app beside a checkout of Ziggy, so Ziggy is `../ziggy` from the app's root. Each path is measured from the file that holds it, so a file in `native/<platform>` reaches Ziggy as `../../../ziggy`. Every part of the app must point at the same Ziggy.
 
 - `build.zig.zon`:
 
@@ -40,10 +40,13 @@ The template and the test app take Ziggy from this repository by a local path. A
   ```json
   "dependencies": {
       "ziggy": "file:../ziggy/packages/ziggy/frontend"
+  },
+  "devDependencies": {
+      "ziggy-remote-control-server": "file:../ziggy/tools/remote-control-server"
   }
   ```
 
-  Inside this repository the template uses `"ziggy": "workspace:*"`, because `ziggy` is a workspace of the same repository.
+  Inside this repository the template uses `"workspace:*"` for both, because each is a workspace of the same repository.
 
 - `native/android/settings.gradle`: include Ziggy's Android build in place of the `sourceControl` block. Gradle builds it from the checkout in place of the dependency `app/build.gradle` declares, whatever version that names:
 

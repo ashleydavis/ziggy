@@ -2,11 +2,11 @@
 
 Terms are defined in the [glossary](../glossary.md).
 
-The app declaration is where an app gives Ziggy its messages, its task types, its menu, its built frontend and the functions Ziggy calls as the backend runs and ends.
+The app declaration is where we declare the app's messages, tasks, menu and its frontend.
 
 ## Declaring the app
 
-An app declares itself to Ziggy in one file, `backend/src/app.zig` in the template, with `ziggy.core.App`. It lists every message with its handler, every task type with its task handler and what else the app gives Ziggy. This is the template's:
+An app is declared in one file, `backend/src/app.zig` in the template, with `ziggy.core.App`. It lists every message with its handler, every task type with its task handler and what else the app gives Ziggy. This is the template's:
 
 ```zig
 const ziggy = @import("ziggy");
@@ -14,6 +14,7 @@ const hello_world = @import("lib/hello-world.zig");
 const actions = @import("lib/actions.zig");
 const menu = @import("lib/menu.zig");
 const ui_query = @import("lib/ui-query.zig");
+pub const on_create = @import("lib/on-create.zig");
 const ui = @import("ui-files");
 
 pub const app = ziggy.core.App(.{
@@ -30,6 +31,7 @@ pub const app = ziggy.core.App(.{
     .actions = actions.actions,
     .ui_files = &ui.files,
     .ui_query = ui_query.uiQuery,
+    .on_create = on_create.onCreate,
 });
 ```
 
@@ -39,8 +41,8 @@ The fields of `ziggy.core.App`:
 |---|---|---|
 | `messages` | Yes | Each field is a message name and its handler, in any of the forms under [What a handler returns](messages.md#what-a-handler-returns). `.{}` for an app with none. See [Messages](messages.md). |
 | `tasks` | Yes | Each field is a task type and its task handler, or `.{ .handler = ..., .kind = .keep_alive }` for a keep-alive task type. See [Tasks](tasks.md#registering-a-handler). |
-| `menu` | Yes | The desktop menu, a `[]const ziggy.menu.Menu`, `&.{}` for none. It is checked when the app is built. See [Menus](menus.md). |
-| `actions` | No | The app's actions, a `[]const ziggy.action.Action`. An app with none leaves it out. Each is a named piece of the app's functionality with its handler in the frontend. They are checked when the app is built. See [Actions](actions.md). |
+| `menu` | Yes | The desktop menu, a `[]const ziggy.menu.Menu`, `&.{}` for none. See [Menus](menus.md). |
+| `actions` | No | The app's actions, a `[]const ziggy.action.Action`. Optional. Each is a named piece of the app's functionality with its handler in the frontend. See [Actions](actions.md). |
 | `ui_files` | Yes | The files of the app's built frontend, `&ui.files` from the `ui-files` module the build makes. |
 | `ui_query` | No | A function that gives the query the native app adds to the frontend's address, so the frontend's first render already holds what the backend tells it at start-up. |
 | `describe_error` | No | A function that turns an error a handler returned into the text of the error response (see [When a handler fails](messages.md#when-a-handler-fails)). |
@@ -48,11 +50,9 @@ The fields of `ziggy.core.App`:
 | `on_create` | No | A function called once when the backend is created, before any message or task reaches the app, so the app can make what its handlers and tasks need. See [When the backend is created](#when-the-backend-is-created). |
 | `on_destroy` | No | A function called twice when the backend is destroyed, so the app can stop its own threads and then free its own resources. See [When the backend is destroyed](#when-the-backend-is-destroyed). |
 
-`ziggy.core.App` checks every field and every handler when the app is built. A field it does not know, a required field that is missing or a handler of the wrong type fails the build with a message that names it.
-
 Apart from this declaration, the app developer writes no code to connect the backend to Ziggy: no exported functions, no JNI entry points and no `main`. The app's `build.zig` names this file as `backend_source_file` in `addAppBackend`. Ziggy's build makes the backend library from it: the library exports Ziggy's C interface for the app's `app` and, for Android, the JNI entry points of Ziggy's Android native app. The app also gives its details (name, title and version) in an `app.zon` beside its `build.zig` (see [The app's details](building-your-app.md#the-apps-details)).
 
-## What every handler is given
+## Handler arguments
 
 Every message handler, menu item function and app function above (`ui_query`, `on_task_end`, `on_task_event`, `on_create` and `on_destroy`) runs on the backend's main thread and takes the same standard arguments first, whether it uses them or not:
 
@@ -69,13 +69,14 @@ The handler services are an interface, as `std.Io` is: the handler does not see 
 
 ## When the backend is created
 
-An app that has to make something before its handlers and tasks run (its own state, task handlers it registers with the task queue) gives `on_create` a function. Ziggy calls it once, on the backend's main thread, when the backend is otherwise ready: tasks can be queued, but no message or task has reached the app yet. If it returns an error, creating the backend fails with that error, Ziggy releases what it made and the native app reports the error. `on_destroy` is not called then, so `on_create` must release what it made itself before it returns the error. Ziggy keeps nothing for the app, so the app keeps what it makes where its handlers can reach it.
+An app that has to make something before its handlers and tasks run (its own state, task handlers it registers with the task queue) gives `on_create` a function. Ziggy calls it once, on the backend's main thread, when the backend is otherwise ready: tasks can be queued, but no message or task has reached the app yet. If it returns an error, creating the backend fails with that error, Ziggy releases what it made and the native app reports the error. `on_destroy` is not called then, so `on_create` must release what it made itself before it returns the error. The app keeps what it makes where its handlers can reach it.
 
 ```zig
 //
 // Opens the app's cache before any handler can use it.
 //
-fn onCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void {
+fn onCreate(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void {
+    _ = arguments;
     _ = timers;
     _ = allocator;
     try cache.init(std.heap.smp_allocator, io, services.dataDir());

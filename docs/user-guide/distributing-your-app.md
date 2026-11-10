@@ -12,7 +12,7 @@ Every package is built for release and optimized. The remote control code is in 
 |---|---|---|
 | Linux | a zip of the executable, and a `.deb` that installs it under `/opt`, links it into `/usr/bin`, adds a menu entry and depends on the runtime libraries of GTK 3 and WebKitGTK 4.1 and on the plugins of GStreamer | unsigned |
 | Windows | a zip of the executable, and an `.msi` installer for the current user, built with the WiX Toolset that `setup` fetches | unsigned |
-| MacOS | a `.dmg` with a link to Applications, and a zip | ad hoc signed, not notarized |
+| MacOS | a `.dmg` with a link to Applications, and a zip | ad hoc signed |
 | iOS | an `.xcarchive` and an `.ipa` built with code signing off | unsigned |
 | Android | an `.apk` per architecture (`x86_64` and `arm64`) | signed with the debug key, so it installs |
 
@@ -36,7 +36,7 @@ Tester builds of an Android app go out through [Firebase App Distribution](https
 
 One-time setup:
 
-1. In the [Firebase console](https://console.firebase.google.com), signed in with the Google account that should own it, create a project. Google Analytics is not needed.
+1. In the [Firebase console](https://console.firebase.google.com), signed in with the Google account that should own it, create a project.
 2. The distribute script finds the Firebase app by the Android package name (the `applicationId` in `native/android/app/build.gradle`) and creates it when the project has none for that package, so the app does not have to be added to the project first. Skip the `google-services.json` download and the SDK steps the console offers: App Distribution needs none of them.
 3. Open App Distribution and click Get started, which turns the API on for the project.
 4. On the Testers & Groups tab, create a group named Testers, check its alias is `testers` (the alias is what the upload names) and add the testers' email addresses, including your own.

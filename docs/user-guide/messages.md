@@ -24,7 +24,7 @@ pub const app = ziggy.core.App(.{
 
 ## A message handler
 
-A message handler takes the [standard arguments](app-declaration.md#what-every-handler-is-given) (the handler services, the timers, the Io and an allocator), then the message's data parsed into a payload type of the handler's own, and returns its result, the message response. This is the template's, in `backend/src/lib/hello-world.zig`:
+A message handler takes the [standard arguments](app-declaration.md#handler-arguments) (the handler services, the timers, the Io and an allocator), then the message's data parsed into a payload type of the handler's own, and returns its result, the message response. This is the template's, in `backend/src/lib/hello-world.zig`:
 
 ```zig
 //
@@ -85,7 +85,7 @@ fn (services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.I
 What it returns decides the message response:
 
 - A `Result`: sent at once as the message response.
-- `void`: there is nothing to send back. A message with an id still gets a successful message response holding null, so the frontend's `invoke` never waits for ever.
+- `void`: there is nothing to send back. A message with an id still gets a successful message response holding null.
 - A `ziggy.core.Response(Result)`, one of:
   - `.{ .now = value }`: the response, sent at once.
   - `.{ .task = .{ .task_type = "...", .data = json_text } }`: a task of that type is queued with `data` (JSON text, which `ziggy.json.stringify` makes from any value) as its input. The task's result is the message response. See "A message whose response is a task's result" below.
@@ -106,7 +106,7 @@ pub fn lookUpHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.
 }
 ```
 
-- The reply is a small value that can be copied and stored anywhere. It sends the response once, from any thread, with `reply.send(allocator, value)` or with `reply.fail(allocator, err)`, which gives an error response as a handler's error does. The allocator is the calling thread's own and is used only during the call. Either posts the response to the main thread, which sends it.
+- The reply is a small value that can be copied and stored anywhere. It sends the response once, from any thread, with `reply.send(io, allocator, value)` or with `reply.fail(io, allocator, err)`, which gives an error response as a handler's error does. The allocator is the calling thread's own and is used only during the call. Either posts the response to the main thread, which sends it.
 - A second response is reported as a `core-error` system event naming `MessageAlreadyAnswered`, and is not sent.
 - A message whose reply never sends a response is reported, when the backend shuts down, as a `core-error` system event naming `MessageNotAnswered` and the message's name. The reply must not be used after that.
 - A handler that takes a reply may still return `.now` or `.task` and then must not use the reply. It returns an `Response` of the same `Result` its `Reply` has, or the build fails.
@@ -164,10 +164,10 @@ A message whose message response takes time has a task's result as its response,
 
 ## Sending an event to the frontend
 
-The backend sends an app event with the handler services' `sendEvent(allocator, data_json)`, where `data_json` is the JSON text of the event's data. Like a message, an event's data is the app's to lay out, and the template gives it a `type` field. Events have no message name. Here a handler tells the frontend it queued a task:
+The backend sends an app event with the handler services' `sendEvent(io, allocator, data_json)`, where `data_json` is the JSON text of the event's data. Like a message, an event's data is the app's to lay out, and the template gives it a `type` field. Events have no message name. Here a handler tells the frontend it queued a task:
 
 ```zig
-try services.sendEvent(allocator, try ziggy.json.stringify(allocator, .{
+try services.sendEvent(io, allocator, try ziggy.json.stringify(allocator, .{
     .type = "queued-from-app",
     .queued = task_id,
 }));
@@ -176,7 +176,17 @@ try services.sendEvent(allocator, try ziggy.json.stringify(allocator, .{
 The frontend listens for every app event with `window.ziggy.onEvent`, and stops with `window.ziggy.removeEventListener(callback)`. The listener decides what an event means from its data:
 
 ```ts
-window.ziggy.onEvent<IAppEvent>(event => {
+//
+// The event the handler above sends when it queues a task.
+//
+interface IQueuedFromAppEvent {
+    // The event's type.
+    type: "queued-from-app";
+    // The id of the task queued.
+    queued: string;
+}
+
+window.ziggy.onEvent<IQueuedFromAppEvent>(event => {
     if (event.type === "queued-from-app") {
         ...
     }
@@ -187,7 +197,7 @@ Ziggy sends one app event of its own: when the user chooses a menu item that run
 
 ## Ziggy's own calls
 
-Ziggy's own messages and events, the system messages and system events, are separate from the app's: they never reach the app's message handlers or an `onEvent` listener. An app cannot send or define one. The frontend reaches what they do only through Ziggy's own calls on `window.ziggy`, typed and described in `packages/ziggy/frontend/src/ziggy-bridge.ts`. [Tasks](tasks.md), [Actions](actions.md) and [Testing your app](testing.md) describe them. Each `on...` call has a `remove...Listener` call beside it that takes the same callback.
+Ziggy's own messages and events, the system messages and system events, are separate from the app's. The frontend reaches what they do only through Ziggy's own calls on `window.ziggy`, typed and described in `packages/ziggy/frontend/src/ziggy-bridge.ts`. [Tasks](tasks.md), [Actions](actions.md) and [Testing your app](testing.md) describe them. Each `on...` call has a `remove...Listener` call beside it that takes the same callback.
 
 ## See also
 

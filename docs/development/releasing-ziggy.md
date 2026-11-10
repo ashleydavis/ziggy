@@ -12,15 +12,13 @@ Two workflows build and test this repository: CI tests every push, and the relea
 - **unit-tests-<platform>**: needs that platform's app-build. On Linux, MacOS and Windows, every Zig test (`zig build test`); on Android, the Android native app's JUnit tests (`bun run test:android-shell`) and the Zig tests run on an emulator; on iOS, the Zig tests run on a simulator.
 - **smoke-tests-<platform>**: needs that platform's app-build. Ziggy's smoke tests, which drive the app it built (`ZIGGY_SMOKE_BUILD`), on Linux, Windows, MacOS, an Android emulator and an iOS simulator.
 
-It packages nothing and creates no release.
-
 ## The release workflow
 
 `.github/workflows/release.yml` runs when a version tag is pushed, and when started from the Actions tab. It runs the same jobs as CI, then:
 
 - **publish**: only when every job passed, and only for a pushed version tag or a tag given when the run is started: the GitHub release of the tag (see [Releasing a version of the package](#releasing-a-version-of-the-package)).
 
-A run started from the Actions tab without a tag only tests. A run that fails anywhere publishes nothing.
+A run started from the Actions tab without a tag only tests.
 
 ### Reading a failed run
 
@@ -28,7 +26,7 @@ Open the run in the Actions tab. The summary shows which job failed and, for a j
 
 ## Releasing a version of the package
 
-An app pins Ziggy to a version tag. A version tag is `v` followed by the version, such as `v0.1.0`, and the tag alone carries the version: the `version` fields in `build.zig.zon`, `package.json` and `packages/ziggy/native/android/build.gradle` stay at `0.0.0` and are not changed for a release. The `/release` Claude Code command follows these steps. To release one:
+An app pins Ziggy to a version tag. A version tag is `v` followed by the version, such as `v0.1.0`, and the tag alone carries the version: the `version` fields in `build.zig.zon`, `package.json` and `packages/ziggy/native/android/build.gradle` stay at `0.0.0`. The `/release` Claude Code command follows these steps. To release one:
 
 1. Make sure the CI workflow passed on the commit to be released.
 2. Tag the commit and push the tag:

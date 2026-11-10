@@ -83,7 +83,7 @@ An item's `run` is one of three things.
 
 ### An action the native app does itself
 
-A `.standard` item runs an action the native app does itself, named by the `ziggy.menu.StandardAction` enum. It has no `name`, and choosing it never reaches the backend or the frontend. From the template's View menu:
+A `.standard` item runs an action the native app does itself, named by the `ziggy.menu.StandardAction` enum. From the template's View menu:
 
 ```zig
             .{
@@ -109,7 +109,7 @@ A `.standard` item runs an action the native app does itself, named by the `zigg
 
 ### A Zig function
 
-A `.zig` item calls a Zig function of the app's, which takes the same standard arguments as a message handler with no payload and no reply: `fn (services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void` (see [What every handler is given](app-declaration.md#what-every-handler-is-given)). The template's Hello menu has one:
+A `.zig` item calls a Zig function of the app's, which takes the same standard arguments as a message handler with no payload and no reply: `fn (services: ziggy.core.HandlerServices, timers: ziggy.timers.Timers, io: std.Io, allocator: std.mem.Allocator) anyerror!void` (see [Handler arguments](app-declaration.md#handler-arguments)). The template's Hello menu has one:
 
 ```zig
             .{
@@ -206,30 +206,13 @@ An item's `shortcut` is its keyboard shortcut: modifiers and one key joined by p
 
 A shortcut works wherever the focus is, including inside the system web view, and runs the item as a click on it does.
 
-## What the build checks
-
-`ziggy.core.App` checks the menu when the app is built. The build fails with a message naming the item when:
-
-- an item is not a separator or a submenu and has no `run`
-- a submenu has a `run` or a `name`
-- a separator has a `run`, `items`, `name` or `shortcut` (use `ziggy.menu.separator`)
-- a `.zig` or `.ui` item has no name, an empty name or the name of a standard action, such as `quit`
-- a `.standard` item has a name
-- two items have the same name or the same shortcut
-- a shortcut does not parse
-- an `.action` item names an action the app has not declared, or has a `name`
-- an item that is not a separator or an `.action` item has an empty label
-- two `.action` items run the same action
-- a `.zig` or `.ui` item has the name of one of the app's actions
-- two shortcuts are the same, including the shortcuts of actions that are not on the menu
-
 ## On each platform
 
 - **Linux:** a GTK menu bar above the system web view. Each shortcut is added to the window, so it works while the system web view has the focus. An app whose menu is `&.{}` shows no menu bar.
 - **Windows:** a Win32 menu bar, with each shortcut shown after the label in the Windows style (`Ctrl+Shift+I`). While the system web view has the keyboard, WebView2's `AcceleratorKeyPressed` event runs the shortcuts, except the editing ones, which the system web view does itself. Full screen hides the menu bar. An app whose menu is `&.{}` shows no menu bar. The template's [Windows native app README](../../apps/ziggy-template/native/windows/README.md) explains how each standard action is done.
 - **macOS:** the application's main menu. An application menu named after the app comes first, with About and Quit. The `quit` item is drawn there, as Quit and the app's name, with the shortcut the menu gave it, and not in its own menu. An app with no `quit` item still gets Quit there, on Command+Q. An item named `about` (a `.zig` or `.ui` item) is drawn there in the same way, as About and the app's name, and an app without one gets the standard About panel. A menu left empty by moving them is not shown. Shortcuts become key equivalents, which work while the system web view has the focus. The template's [macOS native app README](../../apps/ziggy-template/native/macos/README.md) covers the developer tools on macOS.
 - **iOS and Android:** no menu is drawn and no shortcut is registered, so a user on a phone has no way to choose a menu item. Put anything a mobile user needs in the frontend.
-- **Dev mode:** the frontend runs in a browser, so no menu is drawn. The shortcuts of menu items that are not standard actions still work, apart from those the browser keeps for itself (see [Dev mode](dev-mode.md)).
+- **Dev mode:** the frontend runs in a browser. The shortcuts of menu items that are not standard actions still work, apart from those the browser keeps for itself (see [Dev mode](dev-mode.md)).
 
 Zoom steps by 0.1 on every desktop platform. It reaches from 0.25 to 5 on Linux and Windows and from 0.3 to 5 on macOS.
 

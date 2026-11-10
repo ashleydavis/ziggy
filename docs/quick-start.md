@@ -32,7 +32,7 @@ Run `bun run setup`. It downloads the WebView2 SDK and installs Microsoft's C++ 
 
 ### Linux, MacOS
 
-For desktop builds you need nothing else, If you want to run it on Android or iOS run `bun run setup`. It installs the Android SDK, NDK and JDK, and on a Mac checks Xcode for iOS.
+If you want to run it on Android or iOS run `bun run setup`. It installs the Android SDK, NDK and JDK, and on a Mac checks Xcode for iOS.
 
 ## 4. Run it
 
@@ -192,15 +192,13 @@ A Zig function runs the task on a worker thread, sends the frontend an event and
 //
 pub fn helloWorldTaskHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
     _ = timers;
-    _ = io;
-    _ = allocator;
     _ = context;
     _ = payload;
 
     //
     // Sends the frontend an event while the task runs.
     //
-    try services.sendEvent(.{
+    try services.sendEvent(io, allocator, .{
         .type = "output",
         .text = "Hello world from a task",
     });
@@ -214,7 +212,7 @@ pub fn helloWorldTaskHandler(services: TaskServices, timers: Timers, io: std.Io,
 
 ### Using the menu
 
-The Hello menu has two items. Choosing "Say Hello From Zig" runs a Zig function in the backend, which sends the frontend an event. Choosing "Say Hello From the UI" runs no Zig: it reaches the frontend as the menu event `{"type": "menu", "item": "hello-from-ui"}`. Both are declared in the app's menu ([`backend/src/lib/menu.zig`](../apps/ziggy-template/backend/src/lib/menu.zig)):
+Two of the Hello menu's items run code. Choosing "Say Hello From Zig" runs a Zig function in the backend, which sends the frontend an event. Choosing "Say Hello From the UI" runs no Zig: it reaches the frontend as the menu event `{"type": "menu", "item": "hello-from-ui"}`. Both are declared in the app's menu ([`backend/src/lib/menu.zig`](../apps/ziggy-template/backend/src/lib/menu.zig)):
 
 ```zig
 pub const menu: []const ziggy.menu.Menu = &.{
@@ -236,6 +234,7 @@ pub const menu: []const ziggy.menu.Menu = &.{
                 .name = "hello-from-ui",
                 .run = .ui,
             },
+            ...
         },
     },
 };
@@ -249,8 +248,7 @@ The Zig function sends the frontend an event of its own ([`backend/src/lib/hello
 //
 pub fn helloFromZigMenuItem(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) !void {
     _ = timers;
-    _ = io;
-    try services.sendEvent(allocator, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
+    try services.sendEvent(io, allocator, "{\"type\":\"hello-from-zig\",\"text\":\"Hello from Zig, run from the menu\"}");
 }
 ```
 

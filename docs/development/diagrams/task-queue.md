@@ -8,7 +8,6 @@ The task queue lives on the main thread, which starts each task on a free worker
 
 - TypeScript frees a worker when its task runs past the pool's task timeout: the pool fails the task and ends the worker.
 - Ziggy cannot end a thread from outside it, so it has no task timeout. The queue stays stopped until those parents are cancelled or the app stops.
-- This is not a problem in practice, and it may have to be addressed later.
 
 ## How it is made
 

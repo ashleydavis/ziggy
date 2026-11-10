@@ -2,7 +2,7 @@
 
 A new app starts from the Ziggy template (`apps/ziggy-template`), which is a complete app with a frontend, a Zig backend and a native project for each platform, with tests and scripts to build, run and package it. The copy of template is then owned by the app and as the app developer you can modify it how you like. Ziggy itself is a dependency.
 
-Check the [glossary](glossary.md) to understand the jargon.
+Check the [glossary](../glossary.md) to understand the jargon.
 
 ## Starting a new app from the template
 
@@ -35,7 +35,7 @@ Creating the app takes a while: it downloads the template, customizes it, instal
 
 #### 4. Run setup
 
-If you build for Windows, Android or iOS, run setup in your app's directory, once per machine. Linux and macOS desktop do not need it.
+If you build for Windows, Android or iOS, run setup in your app's directory, once per machine.
 
 - Windows: downloads the WebView2 SDK and installs Microsoft's C++ build tools.
 - Android (on Linux or a Mac): installs the Android SDK, NDK and a JDK 17.
@@ -91,7 +91,7 @@ bun run android             # Builds your app, installs it on the emulator or ph
 bun run test:smoke:android  # Runs the smoke tests on the emulator or phone.
 ```
 
-On a Mac you can also build, run and test it on iOS. The run and the tests use a connected iPhone or iPad if there is one, otherwise they boot an existing iOS simulator. They never create a simulator.
+On a Mac you can also build, run and test it on iOS. The run and the tests use a connected iPhone or iPad if there is one, otherwise they boot an existing iOS simulator.
 
 ```bash
 bun run build:ios       # Builds your app for iOS.

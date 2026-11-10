@@ -70,13 +70,11 @@ const Timers = ziggy.timers.Timers;
 //
 pub fn helloWorldTaskHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) ![]const u8 {
     _ = timers;
-    _ = io;
-    _ = allocator;
     _ = context;
     _ = payload;
 
     // Sends the frontend an event while the task runs, which the frontend hears through window.ziggy.onTaskEvent.
-    try services.sendEvent(.{
+    try services.sendEvent(io, allocator, .{
         .type = "output",
         .text = "Hello world from a task",
     });
@@ -98,7 +96,7 @@ The task's context holds plain values the task is started with:
 | `max_concurrent_child_tasks` | The limit on this task's child tasks in flight. |
 | `data_dir` | The app's private data directory. |
 
-The task services (`TaskServices` in `task-runner.zig`) are what the task reaches outside its worker through. Each call is a JSON message to the main thread, which the task does not see. Each line written to their `log` is sent to the main thread, which writes it to its own log tagged `Worker <id>` (see [Logging](logging.md#where-a-line-goes)).
+The task services (`TaskServices` in `task-runner.zig`) are what the task reaches outside its worker through. Each call is a JSON message to the main thread. Each line written to their `log` is sent to the main thread, which writes it to its own log tagged `Worker <id>` (see [Logging](logging.md#where-a-line-goes)).
 
 The timers are the worker's own: a timer the task sets runs on its worker while the task waits for a message, and is cleared when the task ends.
 
@@ -153,7 +151,7 @@ window.ziggy.onTaskCompleted(event => {
 });
 ```
 
-Every event a handler sends arrives as one `task-event` event. The template gives each event a `type` field (`"output"`, `"job-progress"`) and the frontend decides what to do with it from that. Ziggy does not look inside an event. `removeTaskEventListener(callback)` and `removeTaskCompletedListener(callback)` stop a callback hearing them.
+Every event a handler sends arrives as one `task-event` event. The template gives each event a `type` field (`"output"`, `"job-progress"`) and the frontend decides what to do with it from that. `removeTaskEventListener(callback)` and `removeTaskCompletedListener(callback)` stop a callback hearing them.
 
 ## Cancelling
 
@@ -161,13 +159,13 @@ Every event a handler sends arrives as one `task-event` event. The template give
 window.ziggy.cancelTasks("my-source");
 ```
 
-Cancelling a source cancels its queued and running tasks, children included. A running task stops only when its handler next calls `checkCancelled()` or `isCancelled()`, so a handler that loops must check at every step.
+Cancelling a source cancels its queued and running tasks, children included. A running task stops only when its handler next calls `checkCancelled(io, allocator)` or `isCancelled(io, allocator)`, so a handler that loops must check at every step.
 
 ## Child tasks
 
 A handler can split its work into child tasks with `queueChild` and wait for each with `awaitTask`. Ziggy's test app does this in `hello-long`, in `apps/ziggy-test-app/backend/src/lib/handlers.zig`. Ziggy waits for every child a task still has before the task ends.
 
-- Children run on the same pool as their parent. A parent that waits on its children keeps its worker thread while it waits, as in TypeScript, so if every worker holds a waiting parent the queue stops: no worker is free for the children they wait on. TypeScript frees a worker when its task runs past the pool's task timeout, by failing the task and ending the worker. Ziggy cannot end a thread from outside it, so it has no task timeout, and the queue stays stopped until those parents are cancelled or the app stops. This is not a problem in practice, and it may have to be addressed later.
+- Children run on the same pool as their parent. A parent that waits on its children keeps its worker thread while it waits, as in TypeScript, so if every worker holds a waiting parent the queue stops: no worker is free for the children they wait on. TypeScript frees a worker when its task runs past the pool's task timeout, by failing the task and ending the worker. Ziggy cannot end a thread from outside it, so it has no task timeout, and the queue stays stopped until those parents are cancelled or the app stops.
 - A child runs at the priority passed to `queueChild` or `runChild`, and otherwise at its parent's.
 - A failed child makes `awaitTask` return its failure to the parent.
 
@@ -198,18 +196,18 @@ pub fn pickFolderMessageHandler(services: HandlerServices, timers: Timers, io: s
 
 ## Threads and state
 
-Message handlers, menu functions and timers run on the backend's main thread, a thread Ziggy starts that is not the native app's UI thread, on every platform. Tasks run on worker threads. Each thread keeps its own state and never touches anything that belongs to another thread, so the app's own state needs no locks.
+Message handlers, menu functions and timers run on the backend's main thread, a thread Ziggy starts apart from the native app's UI thread, on every platform. Tasks run on worker threads. Each thread keeps its own state.
 
 - The main thread's state can be a variable at the top level of the backend, read and changed only by message handlers and menu functions.
 - A task's state lives in the task: its handler's local variables and what it allocates with its allocator.
-- Only the handlers and task handlers Ziggy calls keep state. The functions they call keep nothing of their own and take what they need as arguments.
+- Only the handlers and task handlers Ziggy calls keep state. The functions they call take what they need as arguments.
 - Threads talk only by JSON messages. The frontend sends messages to the main thread. A task gets its input as JSON data when it is queued (`data` in `window.ziggy.addTask`, or `.data` of a `.task` result), reports with `services.sendEvent` and ends with its result, all JSON.
 - `on_task_end` and `on_task_event` (see [The app declaration](app-declaration.md)) run on the main thread, when it hears from the worker that the task ended or sent an event.
-- In dev mode the dev backend's core keeps the same main thread for as long as it runs, and a page reload does not change it. Keep the main thread's state in an ordinary top-level `var`.
+- In dev mode the dev backend's core keeps the same main thread for as long as it runs. Keep the main thread's state in an ordinary top-level `var`.
 
 It works like an Electron app: the main thread is like the main process, and each task is like a worker that shares nothing with it and talks to it only by messages. [Threads](threads.md) describes every thread an app runs on and the messages between them.
 
-Here a message handler keeps a count on the main thread and has a task give its response. The task never reads `greeting_count`: it gets the count in its JSON input and sends its greeting back as its result, which reaches the frontend as the message response.
+Here a message handler keeps a count on the main thread and has a task give its response. The task gets the count in its JSON input and sends its greeting back as its result, which reaches the frontend as the message response.
 
 ```zig
 // The main thread's state: how many greetings have been requested. Only message handlers read or change it.
@@ -247,7 +245,7 @@ The core library implements the task queue's `IQueueBackend` on each worker, whi
 
 - A handler written against the task queue (that package's `TaskHandler`) is listed in `.tasks` like any other.
 - A task queued through a worker's backend runs at the priority of the task that queued it, unless the code passes one.
-- `onTaskComplete` callbacks hear of every task that ran, a cancelled one as failed with the message `Cancelled`. A task cancelled while it waited in the queue is not reported to them, though the frontend is told.
+- `onTaskComplete` callbacks hear of every task that ran, a cancelled one as failed with the message `Cancelled`.
 
 
 ## See also

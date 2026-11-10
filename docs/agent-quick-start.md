@@ -43,7 +43,7 @@ Before each step below, and before committing the app, tell the human in one pla
 Do not build the app or run its tests, apart from the `zig build` in step 5 that prints the fingerprint. Building and testing it is the human's next step in the guide.
 
 1. Check the current directory is empty apart from hidden files. If it is not, stop and say what is in it.
-2. Download the release's template archive, `ziggy-template-<tag>.zip`, unpack it into the current directory and install the tools, following step 1 of the guide's "Creating your app without Claude". The archive is the template with every reference to Ziggy already pinned to the release, and Ziggy's `mise.toml`, so nothing has to be pinned. If the download fails, stop and say so. Before `mise install`, tell the human: "Installing Zig, Bun, Node and jq with mise, at the exact versions Ziggy's `mise.toml` pins, so this app builds with the same tools Ziggy is tested with."
+2. Download the release's template archive, `ziggy-template-<tag>.zip`, unpack it into the current directory and install the tools, following step 1 of the guide's "Creating your app without Claude". The archive is the template with every reference to Ziggy already pinned to the release, and Ziggy's `mise.toml`. If the download fails, stop and say so. Before `mise install`, tell the human: "Installing Zig, Bun, Node and jq with mise, at the exact versions Ziggy's `mise.toml` pins, so this app builds with the same tools Ziggy is tested with."
 
    ```bash
    curl -fsSLO https://github.com/ashleydavis/ziggy/releases/latest/download/ziggy-template-<tag>.zip
@@ -53,7 +53,7 @@ Do not build the app or run its tests, apart from the `zig build` in step 5 that
    mise install
    ```
 
-3. Rename the app, every form the guide lists, using the answers above. Rename the directories and files that carry a name too: the `.xcodeproj` directories, the source directories beside them, the schemes and the Android Java package's directory. When done, search the whole app, case-insensitively, for `ziggy-template`, `ziggy_template`, `ZiggyTemplate`, `dev.ziggy.template` and "Ziggy template", and fix anything left. Anything that names Ziggy itself (`@import("ziggy")`, the `ziggy` package, `ZiggyNativeMacOS`, `dev.ziggy.nativeapp` and the like) stays as it is, and so do the Claude Code commands in `.claude/commands/ziggy`, which talk about the Ziggy template.
+3. Rename the app, every form the guide lists, using the answers above. Rename the directories and files that carry a name too: the `.xcodeproj` directories, the source directories beside them, the schemes and the Android Java package's directory. When done, search the whole app, case-insensitively, for `ziggy-template`, `ziggy_template`, `ZiggyTemplate`, `dev.ziggy.template` and "Ziggy template", and fix anything left. Anything that names Ziggy itself (`@import("ziggy")`, the `ziggy` package, `ZiggyNativeMacOS`, `dev.ziggy.nativeapp` and the like) stays as it is, and so do the Claude Code commands in `.claude/commands/ziggy`, which refer to the Ziggy template.
 4. Make new GUIDs for `scripts/package-windows.wxs` with `uuidgen`: the `UpgradeCode` and every `Component`'s `Guid`.
 5. Run `zig build`. It fails and prints the new fingerprint. Put it in `build.zig.zon` as `.fingerprint` and run `zig build` again.
 6. Run `bun install`. Before it, tell the human: "Installing the app's Bun dependencies: TypeScript, Vite, Jest, Ziggy's frontend types (`ziggy`) and the rest of `package.json`."
