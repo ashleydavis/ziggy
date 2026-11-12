@@ -199,6 +199,8 @@ Ziggy sends one app event of its own: when the user chooses a menu item that run
 
 Ziggy's own messages and events, the system messages and system events, are separate from the app's. The frontend reaches what they do only through Ziggy's own calls on `window.ziggy`, typed and described in `packages/ziggy/frontend/src/ziggy-bridge.ts`. [Tasks](tasks.md), [Actions](actions.md) and [Testing your app](testing.md) describe them. Each `on...` call has a `remove...Listener` call beside it that takes the same callback.
 
+The app's config and state files are read and written with `window.ziggy.getConfig`, `setConfig`, `getState`, `setState` and `getConfigProblem`. See [the config file](config-file.md) and [the state file](state-file.md).
+
 ## See also
 
 - [Tasks](tasks.md): slow work, and a message whose response is a task's result.

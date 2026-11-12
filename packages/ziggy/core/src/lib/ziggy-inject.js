@@ -305,6 +305,38 @@
             getPlatform: function () {
                 return invokeSystem("get-platform", null);
             },
+            // The value at a dotted key path of the app's config file, or undefined when it is absent.
+            getConfig: function (path) {
+                return invokeSystem("get-config", path).then(function (value) {
+                    return value === null ? undefined : value;
+                });
+            },
+            // Writes a value at a dotted key path of the app's config file. undefined removes the key.
+            setConfig: function (path, value) {
+                return invokeSystem("set-config", {
+                    path: path,
+                    value: value === undefined ? null : value,
+                });
+            },
+            // The value at a dotted key path of the app's state file, or undefined when it is absent.
+            getState: function (path) {
+                return invokeSystem("get-state", path).then(function (value) {
+                    return value === null ? undefined : value;
+                });
+            },
+            // Writes a value at a dotted key path of the app's state file. undefined removes the key.
+            setState: function (path, value) {
+                return invokeSystem("set-state", {
+                    path: path,
+                    value: value === undefined ? null : value,
+                });
+            },
+            // The problem with a line of the app's config file, or undefined when it reads or is missing.
+            getConfigProblem: function () {
+                return invokeSystem("get-config-problem", null).then(function (problem) {
+                    return problem === null ? undefined : problem;
+                });
+            },
             addTask: function (task) {
                 postSystem("add-task", task);
             },

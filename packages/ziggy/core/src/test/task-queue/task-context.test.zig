@@ -42,7 +42,7 @@ test "isCancelled returns false initially" {
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
     var recorder: EventRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10, "", "");
 
     try std.testing.expect(!context.isCancelled());
 }
@@ -51,7 +51,7 @@ test "cancel causes isCancelled to return true" {
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
     var recorder: EventRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10, "", "");
 
     context.cancel();
 
@@ -66,7 +66,7 @@ test "sendEvent invokes the injected sendEventFn with the correct argument" {
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
     var recorder: EventRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "session-1", "task-1", recorder.sendEventFn(), 10, "", "");
 
     const msg = try std.json.parseFromSliceLeaky(std.json.Value, arena.allocator(), "{\"type\":\"progress\",\"value\":42}", .{});
     context.sendEvent(std.testing.io, arena.allocator(), msg);
@@ -84,7 +84,7 @@ test "everything the task needs is exposed as provided" {
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
     var recorder: EventRecorder = .{ .calls = 0, .lastType = "", .lastValue = 0 };
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "my-session", "my-task", recorder.sendEventFn(), 7);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "my-session", "my-task", recorder.sendEventFn(), 7, "", "");
 
     try std.testing.expect(context.uuidGenerator.ptr == @as(*anyopaque, &uuid_generator));
     try std.testing.expect(context.timestampProvider.ptr == @as(*anyopaque, &timestamp_provider));

@@ -20,6 +20,9 @@ pub fn build(b: *std.Build) !void {
     const app_title = b.option([]const u8, "app-title", "The title of the app the core is built for, which heads its log files") orelse null;
     // The version of that app, which its log files give. dependency sets it from the app's app.zon.
     const app_version = b.option([]const u8, "app-version", "The version of the app the core is built for, which its log files give") orelse null;
+    // The directory to write a kcov line-coverage report of the unit tests to. The tests are then compiled with the LLVM backend, whose
+    // debug info kcov reads, and run under kcov.
+    const coverage_dir = b.option([]const u8, "coverage", "Write a kcov line-coverage report of the unit tests to this directory");
 
     const core = b.addModule("ziggy", .{
         .root_source_file = b.path("packages/ziggy/core/src/index.zig"),
@@ -63,11 +66,11 @@ pub fn build(b: *std.Build) !void {
                 .optimize = optimize,
             }),
         },
-    }, target, optimize, core_test_binary_step, test_filters);
+    }, target, optimize, core_test_binary_step, test_filters, coverage_dir);
 
-    // The unit tests of the utils and of the log. Some of them start threads, which talk through the core's message queue, so they import
-    // the core too.
-    for ([_][]const u8{ "utils", "log" }) |package_name| {
+    // The unit tests of the utils, of the log and of config-state. Some of them start threads, which talk through the core's message queue,
+    // so they import the core too.
+    for ([_][]const u8{ "utils", "log", "config-state" }) |package_name| {
         const package_test_binary_step = b.step(
             b.fmt("test-binary-ziggy-{s}", .{package_name}),
             b.fmt("Build the unit test program of Ziggy's {s} and install it to test-bin without running it", .{package_name}),
@@ -85,7 +88,15 @@ pub fn build(b: *std.Build) !void {
                 .name = "log",
                 .module = test_packages.log,
             },
-        }, target, optimize, package_test_binary_step, test_filters);
+            .{
+                .name = "config_state",
+                .module = test_packages.config_state,
+            },
+            .{
+                .name = "toml",
+                .module = test_packages.toml,
+            },
+        }, target, optimize, package_test_binary_step, test_filters, coverage_dir);
     }
 
     // The console writing to the real stdout, which a unit test cannot see: a program writes through it and the build checks what it
@@ -102,6 +113,43 @@ pub fn build(b: *std.Build) !void {
     }));
     run_console_stdout.expectStdOutEqual("logged to stdout\ndebugged to stdout\n");
     test_step.dependOn(&run_console_stdout.step);
+
+    // Two processes writing different keys of one config file at once, which proves the update lock and the fingerprint check keep every
+    // change; a unit test runs in one process and cannot.
+    const two_writers_module = b.createModule(.{
+        .root_source_file = b.path("packages/ziggy/config-state/src/test/fixtures/two-writers.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    two_writers_module.addImport("config_state", test_packages.config_state);
+    const two_writers = b.addExecutable(.{
+        .name = "config-state-two-writers",
+        .root_module = two_writers_module,
+    });
+    const run_two_writers = b.addRunArtifact(two_writers);
+    _ = run_two_writers.addOutputDirectoryArg("two-writers");
+    run_two_writers.expectExitCode(0);
+    test_step.dependOn(&run_two_writers.step);
+
+    // A type no file can hold is a compile error naming the type.
+    const compile_error_module = b.createModule(.{
+        .root_source_file = b.path("packages/ziggy/config-state/src/test/fixtures/compile-error-json-value.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    compile_error_module.addImport("config_state", test_packages.config_state);
+    const compile_error_test = b.addTest(.{
+        .name = "config-state-compile-error",
+        .root_module = compile_error_module,
+    });
+    // The compiler's error line ends with this text, so it names the type that cannot be stored.
+    compile_error_test.expect_errors = .{
+        .contains = "std.json.Value cannot be stored in a config or state file. Use a bool, an integer, a float, a string, an enum, an optional, a slice, an array or a struct.",
+    };
+    const compile_error_step = b.step("test-compile-error", "Build a fixture whose get of std.json.Value must fail to compile, naming the type");
+    compile_error_step.dependOn(&compile_error_test.step);
 
     // The unit tests of the parts of the native apps that do not need the platform's libraries.
     const linux_tests = b.createModule(.{
@@ -156,6 +204,11 @@ const IPackages = struct {
     utils: *std.Build.Module,
     // The log package, imported as "log". It is built on the utils.
     log: *std.Build.Module,
+    // The config-state package, imported as "config_state". It holds the config file and the state file, and needs no core,
+    // so a program with no native app can use it.
+    config_state: *std.Build.Module,
+    // The TOML library the config file is stored with, imported as "toml".
+    toml: *std.Build.Module,
 };
 
 //
@@ -175,9 +228,23 @@ fn createPackages(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
         .link_libc = true,
     });
     log.addImport("utils", utils);
+    const toml = b.dependency("toml", .{
+        .target = target,
+        .optimize = optimize,
+    }).module("toml");
+    const config_state = b.createModule(.{
+        .root_source_file = b.path("packages/ziggy/config-state/src/index.zig"),
+        .target = target,
+        .optimize = optimize,
+        .link_libc = true,
+    });
+    config_state.addImport("utils", utils);
+    config_state.addImport("toml", toml);
     return .{
         .utils = utils,
         .log = log,
+        .config_state = config_state,
+        .toml = toml,
     };
 }
 
@@ -197,6 +264,7 @@ fn configureCore(
 ) !void {
     module.addImport("utils", packages.utils);
     module.addImport("log", packages.log);
+    module.addImport("config_state", packages.config_state);
     const options = b.addOptions();
     options.addOption(?[]const u8, "app_name", app_name);
     options.addOption(?[]const u8, "app_title", app_title);
@@ -513,7 +581,7 @@ pub fn addDirectoryTests(
     optimize: std.builtin.OptimizeMode,
     test_binary_step: ?*std.Build.Step,
 ) !void {
-    try addFilteredDirectoryTests(b, test_step, directory, imports, target, optimize, test_binary_step, testFilters(b));
+    try addFilteredDirectoryTests(b, test_step, directory, imports, target, optimize, test_binary_step, testFilters(b), null);
 }
 
 //
@@ -536,6 +604,7 @@ fn addFilteredDirectoryTests(
     optimize: std.builtin.OptimizeMode,
     test_binary_step: ?*std.Build.Step,
     filters: []const []const u8,
+    coverage_dir: ?[]const u8,
 ) !void {
     const test_files = b.addWriteFiles();
     _ = test_files.addCopyDirectory(b.path(b.fmt("{s}/src", .{directory})), "src", .{});
@@ -579,6 +648,7 @@ fn addFilteredDirectoryTests(
         .name = std.fs.path.basename(directory),
         .filters = filters,
         .root_module = tests,
+        .use_llvm = if (coverage_dir != null) true else null,
     });
     // The NDK has no libc.a for the sysroot's API level directory Zig looks in, only libc.so, so a test program for Android is linked
     // dynamically. Zig's build failed with "failed to parse archive: FileNotFound" on libc.a, libm.a and libdl.a.
@@ -596,9 +666,41 @@ fn addFilteredDirectoryTests(
             },
         }).step);
     }
-    const run_test = b.addRunArtifact(unit_test);
+    const run_test = if (coverage_dir) |directory_path|
+        addCoverageRun(b, unit_test, directory_path, std.fs.path.basename(directory))
+    else
+        b.addRunArtifact(unit_test);
     run_test.setCwd(b.path(directory));
     test_step.dependOn(&run_test.step);
+}
+
+//
+// Runs the unit test program under kcov, which writes a line-coverage report of the packages' own sources (not their tests) under the
+// directory, one report per test program.
+//
+fn addCoverageRun(b: *std.Build, unit_test: *std.Build.Step.Compile, coverage_dir: []const u8, program_name: []const u8) *std.Build.Step.Run {
+    var test_paths: std.ArrayList(u8) = .empty;
+    for ([_][]const u8{ "core", "utils", "log", "config-state" }) |package_name| {
+        if (test_paths.items.len > 0) {
+            test_paths.append(b.allocator, ',') catch @panic("out of memory building the coverage exclude list");
+        }
+        test_paths.appendSlice(b.allocator, b.pathFromRoot(b.fmt("packages/ziggy/{s}/src/test", .{package_name}))) catch @panic("out of memory building the coverage exclude list");
+    }
+    const run = b.addSystemCommand(&.{
+        "kcov",
+        b.fmt("--include-path={s}", .{b.pathFromRoot("packages/ziggy")}),
+        b.fmt("--exclude-path={s}", .{test_paths.items}),
+        b.pathFromRoot(b.fmt("{s}/{s}", .{ coverage_dir, program_name })),
+    });
+    run.addArtifactArg(unit_test);
+    // kcov writes its report into a directory it expects to exist.
+    const make_directory = b.addSystemCommand(&.{
+        "mkdir",
+        "-p",
+        b.pathFromRoot(coverage_dir),
+    });
+    run.step.dependOn(&make_directory.step);
+    return run;
 }
 
 //

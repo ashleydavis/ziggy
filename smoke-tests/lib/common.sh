@@ -32,6 +32,12 @@
 #
 #   ziggy_platform_data_dir <test_dir>
 #       Prints the directory the app uses for its private data in this scenario, when the host can read it, or nothing.
+#
+#   ziggy_platform_config_path <test_dir>
+#       Prints the path of the app's config file in this scenario, once the platform has copied the data out where it can be read.
+#
+#   ziggy_platform_state_path <test_dir>
+#       Prints the path of the app's state file in this scenario, once the platform has copied the data out where it can be read.
 
 set -u
 

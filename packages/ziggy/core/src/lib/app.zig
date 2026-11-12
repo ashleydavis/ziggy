@@ -220,7 +220,7 @@ pub fn App(comptime definition: anytype) RegisteredApp {
         }
         for (@typeInfo(Definition).@"struct".fields) |field| {
             if (!isAppField(field.name)) {
-                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, actions, ui_files, describe_error, on_task_end, on_task_event, on_create, on_destroy and ui_query.");
+                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, actions, ui_files, describe_error, on_task_end, on_task_event, on_create, on_destroy, ui_query.");
             }
         }
         for (app_fields) |field| {

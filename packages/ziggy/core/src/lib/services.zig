@@ -120,6 +120,8 @@ pub const HandlerServices = struct {
         menuAction: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, action: []const u8) void,
         runAction: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, action: []const u8) anyerror!void,
         dataDir: *const fn (ptr: *anyopaque) []const u8,
+        configPath: *const fn (ptr: *anyopaque) []const u8,
+        statePath: *const fn (ptr: *anyopaque) []const u8,
         isPhone: *const fn (ptr: *anyopaque) bool,
         nativeCallbacks: *const fn (ptr: *anyopaque) NativeCallbacks,
         configureLog: *const fn (ptr: *anyopaque, options: logging.ILogOptions) anyerror!void,
@@ -192,6 +194,20 @@ pub const HandlerServices = struct {
     //
     pub fn dataDir(self: HandlerServices) []const u8 {
         return self.vtable.dataDir(self.ptr);
+    }
+
+    //
+    // The path of the app's config file. Valid while the main thread runs.
+    //
+    pub fn configPath(self: HandlerServices) []const u8 {
+        return self.vtable.configPath(self.ptr);
+    }
+
+    //
+    // The path of the app's state file. Valid while the main thread runs.
+    //
+    pub fn statePath(self: HandlerServices) []const u8 {
+        return self.vtable.statePath(self.ptr);
     }
 
     //

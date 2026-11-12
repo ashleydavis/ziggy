@@ -8,6 +8,7 @@ const ziggy = @import("ziggy");
 const app = @import("ziggy-template-backend");
 
 const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
+const test_environment = @import("test-environment.zig");
 
 test "the template writes its two log files in its data directory, with its header and footer, the lines its hello world code logs and none of another thread's lines" {
     const console_log = ziggy.log.mute_log.MuteLog.init();
@@ -17,6 +18,8 @@ test "the template writes its two log files in its data directory, with its head
     const data_dir = try std.fmt.bufPrintZ(&path_buffer, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(2, 2);
     config.data_dir = data_dir.ptr;

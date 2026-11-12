@@ -80,6 +80,15 @@ The `kind` field shows which kind a message or event is:
 - Each of Ziggy's own calls on `window.ziggy` names its own system message.
 - The `id` is any JSON value the frontend chooses, and the message response carries it back unchanged.
 
+## Config and state
+
+- The app's config file and state file are read and written by `packages/ziggy/config-state`, a package of its own that needs no core, so a program with no native app can use it.
+- The config file is TOML, read and written losslessly with [`sakakibara/toml-zig`](https://github.com/sakakibara/toml-zig) at `v0.6.0`, which `build.zig.zon` takes with `zig fetch`. The state file is nested JSON.
+- The two formats stay inside the package. The core exports only the typed API as `ziggy.config_state`: `config.get`, `config.set`, `config.update`, `config.problem` and their `state` twins. No TOML or JSON type reaches an app's code.
+- A write takes a lock file `<file>.lock` beside the file, reads it under the lock, applies the change, writes a temporary file beside it, checks the file did not change under it, renames it into place and releases the lock. Writers in other threads and processes take turns through that file alone: they share nothing in memory.
+- The paths reach each thread as copied strings, in the handler services for the main thread and in the worker and task contexts for a worker. Nothing of the files is kept between calls.
+- The frontend reaches the files through the system messages `get-config`, `set-config`, `get-state`, `set-state` and `get-config-problem`, for any config key or state key.
+
 ## Handlers
 
 - **App messages and task types.** The app declares them in `ziggy.core.App` (`app.zig`), which makes the lists of messages and task types, constants of the app's code that the main thread and every worker read.

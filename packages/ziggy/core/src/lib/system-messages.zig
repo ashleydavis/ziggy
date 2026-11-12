@@ -41,6 +41,12 @@ pub const log = @import("system-messages/log.zig");
 pub const remote_control = @import("system-messages/remote-control.zig");
 
 //
+// The system messages of the config and state files (get-config, set-config, get-state, set-state, get-config-problem).
+//
+pub const config = @import("system-messages/config.zig");
+pub const state = @import("system-messages/state.zig");
+
+//
 // The name of every system message the main thread handles, other than those of the remote control connection.
 //
 pub const names = [_][]const u8{
@@ -52,6 +58,11 @@ pub const names = [_][]const u8{
     "list-actions",
     "get-dropped-paths",
     "log",
+    "get-config",
+    "set-config",
+    "get-state",
+    "set-state",
+    "get-config-problem",
 };
 
 //

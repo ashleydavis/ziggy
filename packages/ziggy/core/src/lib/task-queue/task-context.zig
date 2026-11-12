@@ -57,6 +57,16 @@ pub const TaskContext = struct {
     maxConcurrentChildTasks: u32,
 
     //
+    // The path of the app's config file. Empty for a core built for no app.
+    //
+    configPath: []const u8,
+
+    //
+    // The path of the app's state file. Empty for a core built for no app.
+    //
+    statePath: []const u8,
+
+    //
     // Whether this task has been cancelled. The context is used only on the thread that runs the task.
     //
     _isCancelled: bool,
@@ -76,6 +86,8 @@ pub const TaskContext = struct {
         taskId: []const u8,
         sendEventFn: SendEventFn,
         maxConcurrentChildTasks: u32,
+        configPath: []const u8,
+        statePath: []const u8,
     ) TaskContext {
         return .{
             .uuidGenerator = uuidGenerator,
@@ -83,6 +95,8 @@ pub const TaskContext = struct {
             .sessionId = sessionId,
             .taskId = taskId,
             .maxConcurrentChildTasks = maxConcurrentChildTasks,
+            .configPath = configPath,
+            .statePath = statePath,
             ._isCancelled = false,
             .sendEventFn = sendEventFn,
         };
@@ -98,6 +112,8 @@ pub const TaskContext = struct {
             .sessionId = self.sessionId,
             .taskId = self.taskId,
             .maxConcurrentChildTasks = self.maxConcurrentChildTasks,
+            .configPath = self.configPath,
+            .statePath = self.statePath,
             .nativeCaller = null,
             .ptr = self,
             .vtable = &vtable,

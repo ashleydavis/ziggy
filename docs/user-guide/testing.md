@@ -11,6 +11,7 @@ A smoke test cannot click a native file dialog, read what the web view shows or 
 - The remote control code is in every build. It does nothing unless the app is started with `--remote-control <host:port>`. On Android the address is the string Intent extra `ziggy.remoteControl`.
 - Test mode is on exactly when the app is started that way. The template's backend tells the frontend through the `testMode=1` query parameter.
 - A test sets up its state from outside the app, with config files and data placed on disk, wherever it can.
+- A smoke test sets `<NAME>_CONFIG_DIR` and `<NAME>_STATE_DIR` for the app's config and state files, on every platform, so one run's files are never another's. See [where the config file lives](config-file.md#where-it-lives) and [where the state file lives](state-file.md#where-it-lives).
 - Add a hook of the app's own only where nothing outside the app can do the job.
 
 The native apps take `--remote-control` and its address out of the command line.

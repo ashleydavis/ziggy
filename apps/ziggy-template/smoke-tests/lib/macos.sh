@@ -34,6 +34,8 @@ ziggy_platform_start() {
     read -r _ pgid < <(launch_in_process_group "$log" env \
         HOME="$test_dir/home" \
         CFFIXED_USER_HOME="$test_dir/home" \
+        ZIGGY_TEMPLATE_CONFIG_DIR="$test_dir/config" \
+        ZIGGY_TEMPLATE_STATE_DIR="$test_dir/state" \
         "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
     echo "$pgid" > "$test_dir/$MACOS_PGID_FILE_NAME"
 }

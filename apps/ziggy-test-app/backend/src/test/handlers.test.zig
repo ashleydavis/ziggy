@@ -8,6 +8,7 @@ const template = @import("ziggy-test-app-backend");
 const media_server = template.handlers;
 
 const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
+const test_environment = @import("test-environment.zig");
 
 //
 // Creates a backend for the test app on the fake native app.
@@ -101,6 +102,8 @@ fn startServer(native_app: *FakeNativeApp) !u16 {
 test "ping replies with the Zig version, the platform and an echo of the payload" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -118,6 +121,8 @@ test "ping replies with the Zig version, the platform and an echo of the payload
 test "payload-stats reports the length and checksum of a multi-megabyte payload" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -143,6 +148,8 @@ test "payload-stats reports the length and checksum of a multi-megabyte payload"
 test "payload-stats counts the bytes of text with non-ASCII characters" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -154,6 +161,8 @@ test "payload-stats counts the bytes of text with non-ASCII characters" {
 test "payload-stats without text is an error reply" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -167,6 +176,8 @@ test "file-roundtrip writes a file in the data directory and reads it back" {
     const data_dir = try std.fmt.bufPrintZ(&path_buffer, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCoreInDataDir(&native_app, data_dir.ptr);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -189,6 +200,8 @@ test "the test app does not start when its data directory cannot hold its log fi
     const data_dir = try std.fmt.bufPrintZ(&path_buffer, ".zig-cache/tmp/{s}/a-file/data", .{tmp.sub_path});
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try std.testing.expect(std.meta.isError(createCoreInDataDir(&native_app, data_dir.ptr)));
 }
@@ -221,6 +234,8 @@ test "the test app writes its log files in its data directory, headed with its a
     const data_dir = try std.fmt.bufPrintZ(&path_buffer, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCoreInDataDir(&native_app, data_dir.ptr);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"ping\",\"data\":null}");
@@ -252,6 +267,8 @@ test "a line the frontend logs reaches the test app's log files tagged Frontend"
     const data_dir = try std.fmt.bufPrintZ(&path_buffer, ".zig-cache/tmp/{s}", .{tmp.sub_path});
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCoreInDataDir(&native_app, data_dir.ptr);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"log\",\"data\":{\"level\":\"info\",\"message\":\"the page opened\",\"error\":null}}");
@@ -271,6 +288,8 @@ test "a line the frontend logs reaches the test app's log files tagged Frontend"
 test "a line the frontend logs at a level the core does not know is a core-error event" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -280,6 +299,8 @@ test "a line the frontend logs at a level the core does not know is a core-error
 test "the fail message replies with an error" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -289,6 +310,8 @@ test "the fail message replies with an error" {
 test "hello-short sends an output event and a job-progress event then completes" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -303,6 +326,8 @@ test "hello-short sends an output event and a job-progress event then completes"
 test "a job-progress event leaves out the cancel source when the job has none" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -312,6 +337,8 @@ test "a job-progress event leaves out the cancel source when the job has none" {
 test "a task with no job sends no job-progress event" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -322,6 +349,8 @@ test "a task with no job sends no job-progress event" {
 test "hello-long sends output and progress at every step, starts its children and waits for them" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -338,6 +367,8 @@ test "hello-long sends output and progress at every step, starts its children an
 test "hello-long with no children and more children than steps both complete" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -349,6 +380,8 @@ test "hello-long with no children and more children than steps both complete" {
 test "cancelling hello-long stops it early and its children are cancelled" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -361,6 +394,8 @@ test "cancelling hello-long stops it early and its children are cancelled" {
 test "hello-fail completes as failed" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -370,6 +405,8 @@ test "hello-fail completes as failed" {
 test "os-version returns what the native app's os-version call gives" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -379,6 +416,8 @@ test "os-version returns what the native app's os-version call gives" {
 test "os-version fails clearly when the native app provides no os-version call" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
     config.has_os_version = false;
@@ -397,6 +436,8 @@ test "the keep-alive background task counts in a file in the data directory and 
 
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCoreInDataDir(&native_app, data_dir_z.ptr);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -422,6 +463,8 @@ test "the keep-alive background task counts in a file in the data directory and 
 test "file-roundtrip without text is an error reply" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -431,6 +474,8 @@ test "file-roundtrip without text is an error reply" {
 test "os-version fails clearly when the native app cannot give the version" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), template.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -441,6 +486,8 @@ test "os-version fails clearly when the native app cannot give the version" {
 test "a background task without a file to count in fails with MissingFile" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -450,6 +497,8 @@ test "a background task without a file to count in fails with MissingFile" {
 test "a message of a name the test app does not know is an UnknownMessageName error" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -459,6 +508,8 @@ test "a message of a name the test app does not know is an UnknownMessageName er
 test "a message with no name, or an empty one, is refused with MissingMessageName" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -474,6 +525,8 @@ test "a message with no name, or an empty one, is refused with MissingMessageNam
 test "the refuse message's error reaches the UI as the sentence the test app's describer gives" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -483,6 +536,8 @@ test "the refuse message's error reaches the UI as the sentence the test app's d
 test "an error the describer has no sentence for is replied to by name" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -496,6 +551,8 @@ test "an error the describer has no sentence for is replied to by name" {
 test "queue-from-app queues a task from the app's code, tells the UI with an app event, and the task runs" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -507,6 +564,8 @@ test "queue-from-app queues a task from the app's code, tells the UI with an app
 test "queue-from-app and cancel-from-app without a source are error replies" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -518,6 +577,8 @@ test "queue-from-app and cancel-from-app without a source are error replies" {
 test "cancel-from-app cancels, from the app's code, a task the UI queued" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -533,6 +594,8 @@ test "cancel-from-app cancels, from the app's code, a task the UI queued" {
 test "describe-self replies with the task's id, type, source and child limit" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -542,6 +605,8 @@ test "describe-self replies with the task's id, type, source and child limit" {
 test "run-in-turn runs its children one after another and reports how each ended" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -551,6 +616,8 @@ test "run-in-turn runs its children one after another and reports how each ended
 test "run-in-turn stops starting children once it is cancelled" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -568,6 +635,8 @@ test "run-in-turn stops starting children once it is cancelled" {
 test "pick-files asks for an open dialog with the title and replies with the paths" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createPickersCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -577,6 +646,8 @@ test "pick-files asks for an open dialog with the title and replies with the pat
 test "pick-files with no title uses a default one" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createPickersCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -586,6 +657,8 @@ test "pick-files with no title uses a default one" {
 test "pick-folder asks for a folder dialog with the title from the options and replies with one path" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createPickersCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -595,6 +668,8 @@ test "pick-folder asks for a folder dialog with the title from the options and r
 test "pick-folder with no options uses a default title" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createPickersCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -604,6 +679,8 @@ test "pick-folder with no options uses a default title" {
 test "pick-file is a save dialog with the suggested name and replies with one path" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createPickersCore(&native_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -613,6 +690,8 @@ test "pick-file is a save dialog with the suggested name and replies with one pa
 test "a cancelled dialog is a reply of null" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), template.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -627,6 +706,8 @@ test "a cancelled dialog is a reply of null" {
 test "a native app with no dialog callback gives an error reply naming what is missing" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(2, 2);
     config.has_pick_paths = false;
@@ -642,6 +723,8 @@ test "a native app with no dialog callback gives an error reply naming what is m
 test "the observers the test app gives the core tell the UI of each task that ended and each event it sent" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try createCore(&native_app);
     try addTask(&native_app, "s1", "hello-short", "src", "null");
@@ -660,11 +743,13 @@ test "the menu has the .ui items the UI handles, the zig-event item and the say-
         const target = template.app.menu_targets.get(name) orelse return error.MenuItemMissing;
         try std.testing.expect(target == .ui);
     }
-    const zig_event = template.app.menu_targets.get("zig-event") orelse return error.MenuItemMissing;
-    try std.testing.expect(zig_event == .zig);
+    for ([_][]const u8{ "zig-event", "read-config" }) |name| {
+        const zig_item = template.app.menu_targets.get(name) orelse return error.MenuItemMissing;
+        try std.testing.expect(zig_item == .zig);
+    }
     const say_action = template.app.menu_targets.get("say-action") orelse return error.MenuItemMissing;
     try std.testing.expect(say_action == .action);
-    try std.testing.expectEqual(@as(usize, 7), template.app.menu_targets.keys().len);
+    try std.testing.expectEqual(@as(usize, 8), template.app.menu_targets.keys().len);
     for ([_][]const u8{ "toggle-devtools", "quit" }) |action| {
         try std.testing.expect(template.app.menu_targets.get(action) == null);
         var found = false;
@@ -681,6 +766,8 @@ test "the menu has the .ui items the UI handles, the zig-event item and the say-
 test "a menu-action naming say-action sends the UI the action system event naming it" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), template.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -692,6 +779,8 @@ test "a menu-action naming say-action sends the UI the action system event namin
 test "the zig-event item's function sends the UI the app event menu-zig-event" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), template.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -706,6 +795,8 @@ test "the zig-event item's function sends the UI the app event menu-zig-event" {
 test "the test app's UI query says the test mode switch and nothing else" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), template.app);
     const without_switch = try native_app.uiQuery(std.testing.allocator);
@@ -724,6 +815,8 @@ test "the test app's UI query says the test mode switch and nothing else" {
 test "the test app core gives the UI an empty query outside test mode" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), template.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -768,6 +861,8 @@ test "findAsset finds the image and the video and ignores a query" {
 test "the media server serves the image whole, the video by range, and stops when its source is cancelled" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), template.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);

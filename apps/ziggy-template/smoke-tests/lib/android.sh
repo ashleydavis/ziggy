@@ -157,6 +157,8 @@ ziggy_platform_start() {
 
     ziggy_adb logcat -c
     ziggy_adb shell am start -W -n "$ANDROID_APP_ID/.MainActivity" \
+        --es ZIGGY_TEMPLATE_CONFIG_DIR "/data/data/$ANDROID_APP_ID/files/config" \
+        --es ZIGGY_TEMPLATE_STATE_DIR "/data/data/$ANDROID_APP_ID/files/state" \
         ${ZIGGY_REMOTE_CONTROL:+--es ziggy.remoteControl "$ZIGGY_REMOTE_CONTROL"} > "$test_dir/am-start.log" 2>&1 || {
         cat "$test_dir/am-start.log" >&2
         return 1

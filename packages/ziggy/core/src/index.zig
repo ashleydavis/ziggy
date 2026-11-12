@@ -35,3 +35,34 @@ pub const exec = @import("lib/exec.zig");
 pub const utils = @import("utils");
 pub const log = @import("log");
 pub const UiFile = ui_files.UiFile;
+
+//
+// Where the running app's config file and state file are, each in its own module, and the typed key-path API the app reads and writes
+// them through. The config-state module's TOML and JSON values stay inside this package: an app reaches only the typed API, so no file
+// format's type reaches its code.
+//
+pub const config_path = @import("lib/config-path.zig");
+pub const state_path = @import("lib/state-path.zig");
+
+const config_state_lib = @import("config_state");
+
+pub const config_state = struct {
+    pub const platform = config_state_lib.platform;
+    pub const config = struct {
+        pub const get = config_state_lib.config.get;
+        pub const set = config_state_lib.config.set;
+        pub const update = config_state_lib.config.update;
+        pub const has = config_state_lib.config.has;
+        pub const Values = config_state_lib.config.Values;
+        pub const problem = config_state_lib.config.problem;
+        pub const ConfigProblem = config_state_lib.config.ConfigProblem;
+    };
+    pub const state = struct {
+        pub const get = config_state_lib.state.get;
+        pub const set = config_state_lib.state.set;
+        pub const update = config_state_lib.state.update;
+        pub const Values = config_state_lib.state.Values;
+        pub const status = config_state_lib.state.status;
+        pub const StateStatus = config_state_lib.state.StateStatus;
+    };
+};

@@ -48,6 +48,10 @@ pub const IWorkerOptions = struct {
     hasOsVersion: bool = false,
     // The app's private data directory.
     dataDir: []const u8 = "",
+    // The path of the app's config file. Empty for a core built for no app.
+    configPath: []const u8 = "",
+    // The path of the app's state file. Empty for a core built for no app.
+    statePath: []const u8 = "",
     // A copy of the environment of the thread that started the worker, as a JSON object of names and values, which the worker sets as
     // its own (see process-env.zig), or null when that thread had none.
     environment: ?std.json.Value = null,
@@ -612,6 +616,8 @@ pub const WorkerRuntime = struct {
             .source = message.source,
             .max_concurrent_child_tasks = self.options.maxConcurrentChildTasks,
             .data_dir = self.options.dataDir,
+            .config_path = self.options.configPath,
+            .state_path = self.options.statePath,
         };
         const completion = self.callHandler(io, arena, timers, &task, context, message.data);
         task.awaitAllTasks(io, arena, timers);

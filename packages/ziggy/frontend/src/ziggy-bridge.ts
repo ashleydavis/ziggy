@@ -145,6 +145,23 @@ export interface IPlatformInfo {
 }
 
 //
+// A line of the config file that could not be read.
+//
+export interface IConfigProblem {
+    // The config file's path.
+    path: string;
+
+    // The line the problem starts on, counted from 1.
+    line: number;
+
+    // The column of that line, counted from 1.
+    column: number;
+
+    // What the TOML library said was wrong.
+    reason: string;
+}
+
+//
 // The level of a line the frontend writes to the backend's log with log.
 //
 export type LogLevel = "info" | "verbose" | "error" | "exception" | "warn" | "debug" | "tool" | "event";
@@ -219,6 +236,32 @@ export interface IZiggyBridge {
     // Resolves with what the backend reports about the platform the app runs on.
     //
     getPlatform(): Promise<IPlatformInfo>;
+
+    //
+    // Resolves with the value at a dotted key path of the app's config file, or undefined when it is absent.
+    //
+    getConfig<TValue extends IJsonValue>(path: string): Promise<TValue | undefined>;
+
+    //
+    // Writes a plain JavaScript value at a dotted key path of the app's config file; undefined removes the config key. Rejects with
+    // ConfigFileInvalid when the file has a bad line, and leaves it alone.
+    //
+    setConfig(path: string, value: IJsonValue | undefined): Promise<void>;
+
+    //
+    // Resolves with the value at a dotted key path of the app's state file, or undefined when it is absent.
+    //
+    getState<TValue extends IJsonValue>(path: string): Promise<TValue | undefined>;
+
+    //
+    // Writes a plain JavaScript value at a dotted key path of the app's state file; undefined removes the state key.
+    //
+    setState(path: string, value: IJsonValue | undefined): Promise<void>;
+
+    //
+    // Resolves with the problem with a line of the app's config file, or undefined when it reads or is missing.
+    //
+    getConfigProblem(): Promise<IConfigProblem | undefined>;
 
     //
     // Queues a task. There is no message response: the task's events report what became of it, and a task that could not be queued is

@@ -81,7 +81,7 @@ test "executeTaskHandler runs the listed handler with the data and context" {
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "task-7", .{ .context = null, .function = ignoreEvent }, 1);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "task-7", .{ .context = null, .function = ignoreEvent }, 1, "", "");
 
     const outputs = try worker.executeTaskHandler(arena.allocator(), std.testing.io, timer_list.interface(), console_log, &handlers, "worker-test-echo", .{ .string = "hi" }, context.taskContext());
     try std.testing.expectEqualStrings("hi", outputs.object.get("echo").?.string);
@@ -95,7 +95,7 @@ test "executeTaskHandler propagates handler errors" {
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "t", .{ .context = null, .function = ignoreEvent }, 1);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "t", .{ .context = null, .function = ignoreEvent }, 1, "", "");
 
     try std.testing.expectError(error.Thrown, worker.executeTaskHandler(arena.allocator(), std.testing.io, timer_list.interface(), console_log, &handlers, "worker-test-throw", .null, context.taskContext()));
     try std.testing.expectEqualStrings("Handler failed", errors.lastErrorMessage());
@@ -108,7 +108,7 @@ test "executeTaskHandler throws when the list has no handler for the type, namin
     defer arena.deinit();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
     var timestamp_provider: utils.test_timestamp_provider.TestTimestampProvider = .{};
-    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "t", .{ .context = null, .function = ignoreEvent }, 1);
+    var context = TaskContext.init(uuid_generator.uuidGenerator(), timestamp_provider.timestampProvider(), "s", "t", .{ .context = null, .function = ignoreEvent }, 1, "", "");
 
     try std.testing.expectError(error.Thrown, worker.executeTaskHandler(arena.allocator(), std.testing.io, timer_list.interface(), console_log, &handlers, "worker-test-nope", .null, context.taskContext()));
     try std.testing.expectEqualStrings("No handler registered for task type: worker-test-nope. Available handlers: worker-test-one, worker-test-echo, worker-test-throw, worker-test-available", errors.lastErrorMessage());

@@ -42,6 +42,8 @@ ziggy_platform_start() {
     local pgid
     read -r _ pgid < <(launch_in_process_group "$log" env \
         XDG_DATA_HOME="$test_dir/data" \
+        ZIGGY_TEST_APP_CONFIG_DIR="$test_dir/config" \
+        ZIGGY_TEST_APP_STATE_DIR="$test_dir/state" \
         xvfb-run -a -s "-screen 0 1280x1024x24" "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
     echo "$pgid" > "$test_dir/$LINUX_PGID_FILE_NAME"
 }
@@ -55,6 +57,14 @@ ziggy_platform_stop() {
 
 ziggy_platform_data_dir() {
     printf '%s\n' "$1/data/dev.ziggy.testapp"
+}
+
+ziggy_platform_config_path() {
+    printf '%s\n' "$1/config/config.toml"
+}
+
+ziggy_platform_state_path() {
+    printf '%s\n' "$1/state/state.json"
 }
 
 ziggy_platform_wait_exit() {

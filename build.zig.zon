@@ -7,6 +7,11 @@
         .websocket = .{
             .path = "third-party/websocket",
         },
+        // The TOML library of the config file: sakakibara/toml-zig at v0.6.0, the release line for Zig 0.16.
+        .toml = .{
+            .url = "git+https://github.com/sakakibara/toml-zig?ref=v0.6.0#5706d29906d73d7c4f58a8a4b913c6e93251aa4e",
+            .hash = "toml-0.6.0-L7MJe3OzCwA3XOqr_osjlm3RKU-wMgeeap3oKpgdfuYw",
+        },
     },
     .paths = .{
         "build.zig",

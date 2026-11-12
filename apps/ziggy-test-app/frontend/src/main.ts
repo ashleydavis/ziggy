@@ -1,5 +1,5 @@
 import type { IJsonValue, IMenuEvent } from "ziggy";
-import { formatPingReply, IPingReply } from "./lib/format-reply";
+import { formatConfigProblem, formatPingReply, formatSettingValue, IPingReply } from "./lib/format-reply";
 import { applyJobProgress, applyTaskCompleted, emptyJobList, IJobList, IJobProgressEvent } from "./lib/job-list";
 import { makeLargePayload } from "./lib/large-payload";
 import { crc32 } from "./lib/crc32";
@@ -79,6 +79,17 @@ interface IAppEvent {
 interface IMenuZigEvent {
     // Always "menu-zig-event".
     type: "menu-zig-event";
+}
+
+//
+// The app event the Read Config menu item's Zig function sends.
+//
+interface IConfigFromMenuEvent {
+    // Always "config-from-menu".
+    type: "config-from-menu";
+
+    // The value the config file holds at test.value, or null when it holds none.
+    value: IJsonValue;
 }
 
 function element(dataId: string): HTMLElement {
@@ -513,6 +524,9 @@ function listenForEvents(): void {
         if ((event.taskId.startsWith("describe-self") || event.taskId.startsWith("run-in-turn")) && event.result.status === "succeeded") {
             appendTo("app-result", `${event.result.type}: ${JSON.stringify(event.result.outputs)}`);
         }
+        if (event.taskId.startsWith("read-config") && event.result.status === "succeeded") {
+            element("config-result").textContent = formatSettingValue("task config", event.result.outputs);
+        }
     });
 }
 
@@ -522,9 +536,13 @@ function listenForEvents(): void {
 // the section for the app's own code can remove, so the menu keeps working after that button is pressed.
 //
 function listenForMenuEvents(): void {
-    window.ziggy.onEvent<IMenuEvent | IMenuZigEvent>(event => {
+    window.ziggy.onEvent<IMenuEvent | IMenuZigEvent | IConfigFromMenuEvent>(event => {
         if (event.type === "menu-zig-event") {
             appendTo("event-log", "menu-zig-event");
+            return;
+        }
+        if (event.type === "config-from-menu") {
+            element("config-result").textContent = formatSettingValue("menu config", event.value);
             return;
         }
         if (event.type !== "menu") {
@@ -601,9 +619,48 @@ function listenForTestCommands(): void {
     window.ziggy.testUiReady();
 }
 
+//
+// Wires the buttons that read and write the app's config and state files, through window.ziggy and through the backend's own message and
+// task.
+//
+function startConfig(): void {
+    const input = element("config-input") as HTMLInputElement;
+    const result = element("config-result");
+    element("config-set").addEventListener("click", async () => {
+        try {
+            await window.ziggy.setConfig("test.value", input.value);
+            result.textContent = "config saved";
+        }
+        catch (error) {
+            result.textContent = `config not saved: ${(error as Error).message}`;
+        }
+    });
+    element("config-get").addEventListener("click", async () => {
+        result.textContent = formatSettingValue("config", await window.ziggy.getConfig("test.value"));
+    });
+    element("state-set").addEventListener("click", async () => {
+        await window.ziggy.setState("test.value", input.value);
+        result.textContent = "state saved";
+    });
+    element("state-get").addEventListener("click", async () => {
+        result.textContent = formatSettingValue("state", await window.ziggy.getState("test.value"));
+    });
+    element("config-problem").addEventListener("click", async () => {
+        result.textContent = formatConfigProblem(await window.ziggy.getConfigProblem());
+    });
+    element("config-from-backend").addEventListener("click", async () => {
+        const reply = await window.ziggy.invoke<string | null>("read-config", null);
+        result.textContent = formatSettingValue("backend config", reply);
+    });
+    element("config-from-task").addEventListener("click", () => {
+        queueTask("read-config", "config-source", null);
+    });
+}
+
 listenForEvents();
 listenForMenuEvents();
 listenForTestCommands();
+startConfig();
 startTasks();
 startEdgeChecks();
 startAppOwnCode();

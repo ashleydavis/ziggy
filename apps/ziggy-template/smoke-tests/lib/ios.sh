@@ -54,7 +54,7 @@ ziggy_platform_start() {
         xcrun simctl install "$udid" "$app" || return 1
     fi
     local launched
-    launched="$(xcrun simctl launch "$udid" "$IOS_BUNDLE_ID" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"})" || return 1
+    launched="$(SIMCTL_CHILD_ZIGGY_TEMPLATE_CONFIG_DIR="$test_dir/config" SIMCTL_CHILD_ZIGGY_TEMPLATE_STATE_DIR="$test_dir/state" xcrun simctl launch "$udid" "$IOS_BUNDLE_ID" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"})" || return 1
     local pid="${launched##*: }"
     echo "$pid" > "$test_dir/$IOS_PID_FILE_NAME"
 }

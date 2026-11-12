@@ -49,6 +49,43 @@ fn expectCompleted(native_app: *FakeNativeApp, id: []const u8, status: []const u
     }
 }
 
+test "a task and a queue handler see the config and state paths" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+    var registered = test_app.app;
+    registered.name = "task-paths-test";
+    registered.title = "Task paths test";
+
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var environ_map = try std.testing.environ.createMap(std.testing.allocator);
+    defer environ_map.deinit();
+    const data_dir = std.mem.sliceTo(&native_app.data_dir_path, 0);
+    const config_dir = try std.fs.path.join(arena, &.{ data_dir, "config" });
+    const state_dir = try std.fs.path.join(arena, &.{ data_dir, "state" });
+    try environ_map.put(try ziggy.config_state.platform.appVariableName(arena, "task-paths-test", "_CONFIG_DIR"), config_dir);
+    try environ_map.put(try ziggy.config_state.platform.appVariableName(arena, "task-paths-test", "_STATE_DIR"), state_dir);
+    ziggy.utils.process_env.setEnvironMap(&environ_map);
+
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), registered);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+
+    const config_path = try std.fs.path.join(arena, &.{ config_dir, "config.toml" });
+    const state_path = try std.fs.path.join(arena, &.{ state_dir, "state.json" });
+    const expected = try std.fmt.allocPrint(std.testing.allocator, "\"configPath\":\"{s}\",\"statePath\":\"{s}\"", .{ config_path, state_path });
+    defer std.testing.allocator.free(expected);
+
+    try addTask(&native_app, "t1", "paths", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, expected);
+
+    try addTask(&native_app, "t2", "paths-queue", "s", "null", "background");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, expected);
+}
+
 test "a short task sends its event and completes as succeeded with its result" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();

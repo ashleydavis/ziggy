@@ -157,6 +157,8 @@ ziggy_platform_start() {
 
     ziggy_adb logcat -c
     ziggy_adb shell am start -W -n "$ANDROID_APP_ID/.MainActivity" \
+        --es ZIGGY_TEST_APP_CONFIG_DIR "/data/data/$ANDROID_APP_ID/files/config" \
+        --es ZIGGY_TEST_APP_STATE_DIR "/data/data/$ANDROID_APP_ID/files/state" \
         ${ZIGGY_REMOTE_CONTROL:+--es ziggy.remoteControl "$ZIGGY_REMOTE_CONTROL"} > "$test_dir/am-start.log" 2>&1 || {
         cat "$test_dir/am-start.log" >&2
         return 1
@@ -186,6 +188,14 @@ ziggy_platform_data_dir() {
     # The app's private files directory is read through run-as, which can only stream it, so it is copied out as a tar.
     ziggy_adb exec-out run-as "$ANDROID_APP_ID" tar -cf - -C files . | tar -xf - -C "$data_dir" || return 1
     printf '%s\n' "$data_dir"
+}
+
+ziggy_platform_config_path() {
+    printf '%s\n' "$(ziggy_platform_data_dir "$1")/config/config.toml"
+}
+
+ziggy_platform_state_path() {
+    printf '%s\n' "$(ziggy_platform_data_dir "$1")/state/state.json"
 }
 
 #

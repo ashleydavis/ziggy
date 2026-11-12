@@ -16,6 +16,7 @@ const types = @import("types.zig");
 const json = @import("json.zig");
 const task_runner = @import("task-runner.zig");
 const utils = @import("utils");
+const environment_variable = @import("environment-variable.zig");
 const remote_control = @import("remote-control.zig");
 const test_commands = @import("test-commands.zig");
 const dropped_files = @import("dropped-files.zig");
@@ -30,6 +31,9 @@ const worker_lib = @import("worker.zig");
 const worker_messages = @import("worker-messages.zig");
 const timers_lib = @import("timers.zig");
 const services_lib = @import("services.zig");
+const config_state = @import("config_state");
+const config_path = @import("config-path.zig");
+const state_path = @import("state-path.zig");
 const ThreadAllocator = utils.thread_allocator.ThreadAllocator;
 const native_app = @import("native-app.zig");
 const native_message = @import("native-message.zig");
@@ -320,6 +324,10 @@ const MainServices = struct {
     menu_targets: menu_lib.MenuTargets,
     // Every `.standard` item of the app's menu: the standard actions runAction may run by name.
     standard_menu_items: []const menu_lib.StandardMenuItem,
+    // The app's config file path, or null for a core built for no app.
+    config_path: ?[]const u8,
+    // The app's state file path, or null for a core built for no app.
+    state_path: ?[]const u8,
 
     const vtable: services_lib.HandlerServices.VTable = .{
         .sendEvent = sendEvent,
@@ -330,6 +338,8 @@ const MainServices = struct {
         .menuAction = menuAction,
         .runAction = runAction,
         .dataDir = dataDir,
+        .configPath = configPath,
+        .statePath = statePath,
         .isPhone = isPhone,
         .nativeCallbacks = nativeCallbacks,
         .configureLog = configureLog,
@@ -472,6 +482,16 @@ const MainServices = struct {
     fn dataDir(ptr: *anyopaque) []const u8 {
         const self: *MainServices = @ptrCast(@alignCast(ptr));
         return std.mem.span(self.config.data_dir);
+    }
+
+    fn configPath(ptr: *anyopaque) []const u8 {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        return self.config_path orelse @panic("the core was built for no app, so it has no config file");
+    }
+
+    fn statePath(ptr: *anyopaque) []const u8 {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        return self.state_path orelse @panic("the core was built for no app, so it has no state file");
     }
 
     fn isPhone(ptr: *anyopaque) bool {
@@ -886,11 +906,8 @@ fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u
     var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
-    const variable = try std.mem.concat(arena, u8, &.{ name, "_LOG_DIR" });
-    for (variable) |*character| {
-        character.* = if (character.* == '-') '_' else std.ascii.toUpper(character.*);
-    }
-    const logs_parent = try environmentVariable(arena, variable) orelse data_dir;
+    const variable = try config_state.platform.variableName(arena, .{ .name = name, .title = name }, "_LOG_DIR");
+    const logs_parent = (try environment_variable.get(arena, variable)) orelse data_dir;
     return try logging.file_log.FileLog.start(allocator, io, .{
         .file_prefix = name,
         .title = title,
@@ -905,25 +922,19 @@ fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u
 }
 
 //
-// The value of an environment variable: from the environment the native app gave the core when it gave one, or else from the process's.
-// Allocated with the arena when it is read from the process.
+// Reads both of the app's files once as the main thread starts, before on_create, and logs a bad config line, a missing state file and an
+// unreadable state file.
 //
-fn environmentVariable(arena: std.mem.Allocator, variable: []const u8) !?[]const u8 {
-    if (utils.process_env.getEnvironMap() != null) {
-        return utils.process_env.getEnv(variable);
+fn logFileProblems(arena: std.mem.Allocator, io: std.Io, log: logging.ILog, config_file_path: []const u8, state_file_path: []const u8) !void {
+    if (try config_state.config.problem(arena, io, config_file_path)) |problem| {
+        log.@"error"(try std.fmt.allocPrint(arena, "The config file {s} has an error on line {d}, column {d}: {s}. Every setting is at its default and the file is left as it is.", .{ config_file_path, problem.line, problem.column, problem.reason }));
     }
-    const environ: std.process.Environ = switch (builtin.os.tag) {
-        .windows => .{
-            .block = .global,
-        },
-        else => .{
-            .block = .{
-                .slice = std.mem.span(std.c.environ),
-            },
-        },
-    };
-    const map = try environ.createMap(arena);
-    return map.get(variable);
+    const status = try config_state.state.status(arena, io, state_file_path);
+    switch (status) {
+        .present => {},
+        .missing => log.info(try std.fmt.allocPrint(arena, "The state file {s} does not exist yet, so the app starts with an empty state.", .{state_file_path})),
+        .unreadable => |problem| log.@"error"(try std.fmt.allocPrint(arena, "The state file {s} could not be read ({s}), so the app starts with an empty state. The first write keeps the file's bytes beside it as {s}.unreadable-<id>.", .{ state_file_path, problem, state_file_path })),
+    }
 }
 
 //
@@ -1005,7 +1016,33 @@ fn mainThread(given: MainStart) void {
         .log_configured = false,
         .menu_targets = app.menu_targets,
         .standard_menu_items = app.standard_menu_items,
+        .config_path = null,
+        .state_path = null,
     };
+    if (app.name) |name| {
+        const app_names: config_state.platform.AppNames = .{ .name = name, .title = app.title orelse name };
+        main_services.config_path = config_path.appConfigPath(start_arena, app_names, std.mem.span(config.data_dir)) catch |err| {
+            if (file_log) |logger| {
+                logger.stop(allocator, io);
+            }
+            reportStartFailure(&main_start, io, err);
+            return;
+        };
+        main_services.state_path = state_path.appStatePath(start_arena, app_names, std.mem.span(config.data_dir)) catch |err| {
+            if (file_log) |logger| {
+                logger.stop(allocator, io);
+            }
+            reportStartFailure(&main_start, io, err);
+            return;
+        };
+        logFileProblems(start_arena, io, main_services.log, main_services.config_path.?, main_services.state_path.?) catch |err| {
+            if (file_log) |logger| {
+                logger.stop(allocator, io);
+            }
+            reportStartFailure(&main_start, io, err);
+            return;
+        };
+    }
     const services = main_services.interface();
     var native_calls: NativeCalls = .{
         .config = &config,
@@ -1025,6 +1062,8 @@ fn mainThread(given: MainStart) void {
             .hasNativeCall = config.has_native_call,
             .hasOsVersion = config.has_os_version,
             .dataDir = std.mem.span(config.data_dir),
+            .configPath = main_services.config_path orelse "",
+            .statePath = main_services.state_path orelse "",
         },
         .sink = .{
             .user_data = &main_services,
@@ -1074,7 +1113,7 @@ fn mainThread(given: MainStart) void {
             switch (message.from) {
                 from_frontend => {
                     if (!stopping) {
-                        handleFrontendMessage(allocator, frontend, app, services, timers, io, queue, &later_replies, &pool, &dropped, &tests, &next_request_task, message.text);
+                        handleFrontendMessage(allocator, frontend, app, main_services.config_path, main_services.state_path, services, timers, io, queue, &later_replies, &pool, &dropped, &tests, &next_request_task, message.text);
                     }
                 },
                 from_core => {
@@ -1184,7 +1223,7 @@ fn runUiQuery(arena: std.mem.Allocator, ui_query: ?UiQuery, services: services_l
 // passes it on by its kind, "app" to runAppMessage and "system" to runSystemMessage, and does nothing else. A message that is not a
 // JSON object, or has no kind or any other kind, is refused as InvalidMessage, reported as a core-error system event.
 //
-fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, next_request_task: *u64, text: []const u8) void {
+fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, next_request_task: *u64, text: []const u8) void {
     var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -1202,7 +1241,7 @@ fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: 
         return;
     }
     if (kind == .string and std.mem.eql(u8, kind.string, "system")) {
-        runSystemMessage(allocator, arena, frontend, app, services, timers, io, pool, dropped, tests, parsed);
+        runSystemMessage(allocator, arena, frontend, app, config_file_path, state_file_path, services, timers, io, pool, dropped, tests, parsed);
         return;
     }
     frontend.reportError(io, arena, null, "InvalidMessage");
@@ -1350,14 +1389,14 @@ const SystemOutcome = union(enum) {
 // It never reaches the app's handlers. A message with no name is InvalidMessage, and a name Ziggy has no system message of is
 // UnknownSystemMessage.
 //
-fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, parsed: std.json.Value) void {
+fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, parsed: std.json.Value) void {
     const request_id: ?std.json.Value = parsed.object.get("id");
     const name = messageName(parsed) orelse {
         frontend.reportError(io, arena, request_id, "InvalidMessage");
         return;
     };
     const data = parsed.object.get("data") orelse .null;
-    const outcome = runSystem(allocator, arena, name, data, app.menu_targets, app.actions, app.standard_menu_items, services, timers, io, pool, dropped, tests) catch |err| {
+    const outcome = runSystem(allocator, arena, name, data, app.menu_targets, app.actions, app.standard_menu_items, config_file_path, state_file_path, services, timers, io, pool, dropped, tests) catch |err| {
         frontend.reportHandlerError(io, arena, app.describe_error, request_id, err);
         return;
     };
@@ -1378,7 +1417,7 @@ fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fron
 //
 // Runs the system message of the name with its data, giving its function only the piece of the main thread's state it uses.
 //
-fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []const u8, data: std.json.Value, menu_targets: menu_lib.MenuTargets, app_actions: []const action_lib.Action, standard_menu_items: []const menu_lib.StandardMenuItem, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
+fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []const u8, data: std.json.Value, menu_targets: menu_lib.MenuTargets, app_actions: []const action_lib.Action, standard_menu_items: []const menu_lib.StandardMenuItem, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
     if (std.mem.eql(u8, name, "add-task")) {
         const payload = switch (try handlers_lib.parsePayload(system_messages.tasks.AddTaskRequest, arena, data)) {
             .parsed => |value| value,
@@ -1445,6 +1484,45 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
     if (std.mem.eql(u8, name, "test-ui-ready")) {
         return try respond(arena, try system_messages.remote_control.testUiReady(tests, io, allocator, timers));
     }
+    if (std.mem.eql(u8, name, "get-config")) {
+        const path = switch (try handlers_lib.parsePayload([]const u8, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.config.getConfig(arena, io, config_file_path, path));
+    }
+    if (std.mem.eql(u8, name, "set-config")) {
+        const payload = switch (try handlers_lib.parsePayload(system_messages.config.SetValueRequest, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.config.setConfig(arena, io, services.log, config_file_path, payload));
+    }
+    if (std.mem.eql(u8, name, "get-state")) {
+        const path = switch (try handlers_lib.parsePayload([]const u8, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.state.getState(arena, io, state_file_path, path));
+    }
+    if (std.mem.eql(u8, name, "set-state")) {
+        const payload = switch (try handlers_lib.parsePayload(system_messages.state.SetValueRequest, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.state.setState(arena, io, state_file_path, payload));
+    }
+    if (std.mem.eql(u8, name, "get-config-problem")) {
+        return try respond(arena, try system_messages.config.getConfigProblem(arena, io, config_file_path));
+    }
     return .unknown;
 }
 
@@ -1452,6 +1530,11 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
 // The outcome of a system message that gave the value as its response.
 //
 fn respond(arena: std.mem.Allocator, value: anytype) !SystemOutcome {
+    if (@TypeOf(value) == void) {
+        return .{
+            .response = "null",
+        };
+    }
     return .{
         .response = try json.stringify(arena, value),
     };

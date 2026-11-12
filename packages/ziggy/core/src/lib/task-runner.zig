@@ -90,6 +90,10 @@ pub const TaskContext = struct {
     max_concurrent_child_tasks: u32,
     // The app's private data directory.
     data_dir: []const u8,
+    // The path of the app's config file, empty for a core built for no app.
+    config_path: []const u8,
+    // The path of the app's state file, empty for a core built for no app.
+    state_path: []const u8,
 };
 
 //
@@ -497,6 +501,8 @@ pub fn runQueueHandler(services: TaskServices, timers: Timers, io: std.Io, alloc
         .sessionId = worker.session_id,
         .taskId = context.task_id,
         .maxConcurrentChildTasks = context.max_concurrent_child_tasks,
+        .configPath = context.config_path,
+        .statePath = context.state_path,
         .nativeCaller = services.nativeCaller(&native_caller_storage),
         .ptr = services.task,
         .vtable = &queue_context_vtable,

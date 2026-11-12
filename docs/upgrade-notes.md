@@ -2,6 +2,15 @@
 
 What an app has to change to move to each version of Ziggy, newest first. The `/ziggy:upgrade` Claude Code command reads this, along with the release notes. A version with nothing listed needs no change to the app beyond taking the new version.
 
+## v0.0.24
+
+- **`HandlerServices.VTable` has `configPath` and `statePath`.** Code of the app's that builds its own handler services vtable, such as a test, adds both.
+- **`ITaskContext` has `configPath` and `statePath`,** and the task context constructor takes them. Code of the app's that builds a task context passes the two paths, or empty strings when the code it runs reads neither file.
+- **`window.ziggy` has `getConfig`, `setConfig`, `getState`, `setState` and `getConfigProblem`.** A fake of `IZiggyBridge` in the app's tests adds the five.
+- **The frontend reads and writes any config key or state key.** `window.ziggy.getConfig`, `setConfig`, `getState` and `setState` are not limited to a list; an app that wants to restrict them checks the key path in its own handlers.
+- **The app's smoke tests set `<NAME>_CONFIG_DIR` and `<NAME>_STATE_DIR`.** The template's launchers show how: `env` on the desktop, `SIMCTL_CHILD_` variables on iOS and the `ZIGGY_TEST_APP_` extras on Android, which `ZiggyNativeApp.start` reads into the environment.
+- **New, and optional:** the config and state files and `ziggy.config_state`, the typed key-path API that reads and writes them. See [the config file](user-guide/config-file.md) and [the state file](user-guide/state-file.md).
+
 ## v0.0.23
 
 - **Menu items' `accelerator` is now `shortcut`.** Rename every `.accelerator =` in the app's menu to `.shortcut =`. The syntax of the shortcut is unchanged.

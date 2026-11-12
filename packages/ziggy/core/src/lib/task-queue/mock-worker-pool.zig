@@ -29,6 +29,12 @@ pub const IBaseContext = struct {
 
     // How many child tasks a task may have running at once.
     maxConcurrentChildTasks: u32 = 2,
+
+    // The path of the app's config file, empty for a core built for no app.
+    configPath: []const u8 = "",
+
+    // The path of the app's state file, empty for a core built for no app.
+    statePath: []const u8 = "",
 };
 
 //
@@ -65,6 +71,8 @@ pub const MockWorkerPool = struct {
                 .workerId = 0,
                 .sessionId = baseContext.sessionId,
                 .maxConcurrentChildTasks = baseContext.maxConcurrentChildTasks,
+                .configPath = baseContext.configPath,
+                .statePath = baseContext.statePath,
             },
         });
         return self;

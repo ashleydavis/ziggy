@@ -158,6 +158,31 @@ const unnamed_app = ziggy.core.App(.{
 });
 
 //
+// The environment a test that starts a named app gives the core, so the app's config and state files go in directories of the test's own
+// under the fake native app's data directory, and no test reads or writes the developer's own files. The process's own environment is
+// copied in first, so the platform rules that read HOME or XDG find them. The map and everything it points at live in the arena.
+//
+fn testFileDirectories(
+    allocator: std.mem.Allocator,
+    arena: std.mem.Allocator,
+    native_app: *FakeNativeApp,
+    app_name: []const u8,
+) !std.process.Environ.Map {
+    var map = try std.testing.environ.createMap(allocator);
+    errdefer map.deinit();
+    const data_dir = std.mem.sliceTo(&native_app.data_dir_path, 0);
+    try map.put(
+        try ziggy.config_state.platform.appVariableName(arena, app_name, "_CONFIG_DIR"),
+        try std.fs.path.join(arena, &.{ data_dir, "config" }),
+    );
+    try map.put(
+        try ziggy.config_state.platform.appVariableName(arena, app_name, "_STATE_DIR"),
+        try std.fs.path.join(arena, &.{ data_dir, "state" }),
+    );
+    return map;
+}
+
+//
 // Reads the one log file in the directory whose name starts with the prefix, the error log file when `errors` is true or else the
 // other one. Fails when the directory does not hold exactly two files.
 //
@@ -185,6 +210,13 @@ test "an app with a name has its two log files in the logs directory of its data
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var environ_map = try testFileDirectories(std.testing.allocator, arena_state.allocator(), &native_app, "logged-app");
+    defer environ_map.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    ziggy.utils.process_env.setEnvironMap(&environ_map);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), logged_app);
     native_app.stop(std.testing.io, std.testing.allocator);
     const logs_dir = try std.fs.path.join(std.testing.allocator, &.{ std.mem.sliceTo(&native_app.data_dir_path, 0), "logs" });
@@ -214,7 +246,9 @@ test "an app's log files go in the logs directory of the directory <NAME>_LOG_DI
     // The core is given the environment of the thread that starts it.
     const previous = ziggy.utils.process_env.getEnvironMap();
     defer ziggy.utils.process_env.setEnvironMap(previous);
-    var environ_map = std.process.Environ.Map.init(std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var environ_map = try testFileDirectories(std.testing.allocator, arena_state.allocator(), &native_app, "logged-app");
     defer environ_map.deinit();
     try environ_map.put("LOGGED_APP_LOG_DIR", elsewhere);
     ziggy.utils.process_env.setEnvironMap(&environ_map);
@@ -234,6 +268,13 @@ test "configureLog turns on the verbose lines of an app's file log once, and a s
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var environ_map = try testFileDirectories(std.testing.allocator, arena_state.allocator(), &native_app, "configured-app");
+    defer environ_map.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    ziggy.utils.process_env.setEnvironMap(&environ_map);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), configured_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"verboseBefore\":false,\"verboseAfter\":true,\"verboseAfterSecond\":true,\"second\":\"LogAlreadyConfigured\"");
@@ -294,6 +335,13 @@ test "the core does not start, and on_create is not called, when the app's log f
     const data_dir = try std.fmt.bufPrintZ(&path_buffer, "{s}/a-file/data", .{std.mem.sliceTo(&native_app.data_dir_path, 0)});
     var config = native_app.config(1, 1);
     config.data_dir = data_dir.ptr;
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var environ_map = try testFileDirectories(std.testing.allocator, arena_state.allocator(), &native_app, "failing-app");
+    defer environ_map.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    ziggy.utils.process_env.setEnvironMap(&environ_map);
     native_app.start(std.testing.io, std.testing.allocator, config, failing_app) catch |err| {
         try std.testing.expect(err != error.OnCreateRan);
         return;

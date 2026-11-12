@@ -53,6 +53,16 @@ pub const ITaskContext = struct {
     maxConcurrentChildTasks: u32,
 
     //
+    // The path of the app's config file. Empty for a core built for no app.
+    //
+    configPath: []const u8,
+
+    //
+    // The path of the app's state file. Empty for a core built for no app.
+    //
+    statePath: []const u8,
+
+    //
     // Has the program hosting the app (the native app) do what only it can do, such as the device keychain and photo library.
     // Null where there is no such program, which is every desktop and the command line.
     //

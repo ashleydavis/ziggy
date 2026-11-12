@@ -45,6 +45,8 @@ ziggy_platform_start() {
     local pgid
     read -r _ pgid < <(launch_in_process_group "$log" env \
         LOCALAPPDATA="$(windows_native_path "$test_dir/data")" \
+        ZIGGY_TEMPLATE_CONFIG_DIR="$(windows_native_path "$test_dir/config")" \
+        ZIGGY_TEMPLATE_STATE_DIR="$(windows_native_path "$test_dir/state")" \
         "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
     echo "$pgid" > "$test_dir/$WINDOWS_PGID_FILE_NAME"
 }

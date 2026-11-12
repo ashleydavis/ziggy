@@ -9,6 +9,7 @@ const ziggy = @import("ziggy");
 const app = @import("ziggy-template-backend");
 
 const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
+const test_environment = @import("test-environment.zig");
 
 test "the Hello menu has a Zig item and a UI item" {
     const from_zig = app.app.menu_targets.get("hello-from-zig") orelse return error.MenuItemMissing;
@@ -20,6 +21,8 @@ test "the Hello menu has a Zig item and a UI item" {
 test "Say Hello From Zig sends the UI the hello-from-zig event" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -30,6 +33,8 @@ test "Say Hello From Zig sends the UI the hello-from-zig event" {
 test "Say Hello From the UI sends the UI the menu event naming it" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
@@ -45,6 +50,8 @@ test "the Hello menu's action item is found by its action's name" {
 test "Say Hello From an Action sends the UI the action system event naming it" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);

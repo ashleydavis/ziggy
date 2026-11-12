@@ -31,6 +31,7 @@ A scenario starts the app with `start_test_app`, which starts the [remote contro
 - `21-app-own-code`: the parts of Ziggy an app's own backend code uses beyond messages and tasks: an error the app describes in a sentence, a task that reads its id, type, source and child limit from its context, a task that runs children one after another and stops when cancelled, a task queued and a task cancelled from the app's code, an event the app sends to the frontend, the app observing tasks end and send events and the frontend removing its listeners for an event.
 
 - `26-log-files`: a task's info and error lines, a message handler's line and a line the frontend logs with `window.ziggy.log` reach the log files the test app writes in its data directory, tagged with the worker and `Frontend` (the handler's line, logged on the main thread, has no tag), the error line is in the error log file too, and both files end with their footers when the app quits. On a connected iPhone or iPad, whose data directory the host cannot read, the files are not checked.
+- `28-config-and-state`: the frontend sets and gets a value of the config file and of the state file through dotted key paths, the backend's message handler and its task read the config file, and both values are still there after the app is started again.
 
 The scenarios in `native-only` run in a native app on every platform:
 
@@ -46,6 +47,7 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mob
 - `19-normal-task-ends-with-window`: closing the window with only a normal background task running ends the app.
 - `20-drop-files`: a file dropped on the window gets its real path from `getPathForFile`, and a file of another size does not. The drop is faked in two steps, because no tool can drag a file into the window: the `drop` command records it with the backend and `drop-file` gives the frontend a drop event. The native app's own reading of a real drop is not covered by any automatic test.
 - `25-close-with-dialog-open`: quitting while a real file dialog is open ends the app. Nothing reports that the dialog is on screen, so the scenario waits a few seconds after the click before it quits.
+- `29-config-files`: a config file with a bad line is reported by its line, the app runs on its defaults and the file is left alone; an unreadable state file is logged and the app starts with an empty state; a write keeps the file's comment and its other key; and a menu item's Zig function reads the config file.
 
 
 Toggle Full Screen is not smoke tested. The Linux suite runs on a virtual display with no window manager, and nothing honours a request for full screen there, so there is nothing to see change.

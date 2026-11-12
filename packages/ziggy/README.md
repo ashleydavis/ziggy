@@ -2,6 +2,7 @@
 
 The package an app is built on: a Zig core library with its task queue, a native host for each platform that shows the system web view and the TypeScript types of `window.ziggy` for the frontend. The frontend is TypeScript, and everything else is Zig. Nothing in this directory names an app. Terms are defined in the [glossary](../../docs/glossary.md).
 
+- `config-state/`: the config file and the state file, where they live and how they are read and written, a Zig module of its own that needs no core. The core imports it and gives the app only its typed key-path API as `@import("ziggy").config_state`.
 - `core/`: the core library every app links, imported as `@import("ziggy")`. It has the C interface (`core/src/lib/ziggy.h`), the message dispatcher, the task runner, the origin check, the native call plumbing, the remote control connection, the task queue, running a command (`exec`), and `ziggy-inject.js`, the script every native app injects to create `window.ziggy` (embedded in the core library, so an app supplies nothing for it).
 - `log/`: the log, a Zig module of its own that the core imports and gives to the app as `@import("ziggy").log`: the log interface (`ILog`), the console log, the file log, the memory log, the mute log, the console and the standard streams. It is built on `utils/`.
 - `utils/`: the helpers Ziggy is written with, a Zig module of its own that the core imports and gives to the app as `@import("ziggy").utils`: errors, IDs, timestamps, paths, the process environment and each thread's allocator.

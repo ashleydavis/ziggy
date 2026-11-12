@@ -68,6 +68,8 @@ fn makeContext(recorder: *EventRecorder, generators: *Generators) ITaskContext {
         .sessionId = "session-1",
         .taskId = "task-1",
         .maxConcurrentChildTasks = 1,
+        .configPath = "",
+        .statePath = "",
         .nativeCaller = null,
         .ptr = recorder,
         .vtable = &EventRecorder.vtable,

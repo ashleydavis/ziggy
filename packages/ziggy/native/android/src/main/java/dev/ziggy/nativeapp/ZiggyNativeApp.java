@@ -15,6 +15,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.MessageQueue;
 import android.os.ParcelFileDescriptor;
+import android.system.ErrnoException;
+import android.system.Os;
 import android.graphics.Insets;
 import android.util.Log;
 import android.view.ViewGroup;
@@ -151,6 +153,10 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         System.loadLibrary(nativeLibraryName);
         Intent intent = activity.getIntent();
         String remoteControl = RemoteControlExtra.address(intent.getStringExtra(RemoteControlExtra.NAME));
+        // The test app's smoke tests keep the app's config and state files apart from other runs by starting it with these two
+        // extras, which name the directories of the two files (see the app's config and state file documentation).
+        setEnvironmentExtra(intent, "ZIGGY_TEST_APP_CONFIG_DIR");
+        setEnvironmentExtra(intent, "ZIGGY_TEST_APP_STATE_DIR");
 
         long created = ZiggyNative.create(
             this,
@@ -171,6 +177,19 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         configureWebView();
         String query = new String(ZiggyNative.uiQuery(created), StandardCharsets.UTF_8);
         webView.loadUrl(APP_URL_PREFIX + "index.html" + (query.isEmpty() ? "" : "?" + query));
+    }
+
+    // Sets a string extra of the launching Intent as an environment variable of the same name, when it is given.
+    private void setEnvironmentExtra(Intent intent, String name) {
+        String value = intent.getStringExtra(name);
+        if (value == null) {
+            return;
+        }
+        try {
+            Os.setenv(name, value, true);
+        } catch (ErrnoException error) {
+            throw new RuntimeException("Could not set " + name + ": " + error.getMessage(), error);
+        }
     }
 
     // Destroys the core once. After it returns nothing more is delivered to the frontend. Call it from onDestroy, on the UI thread.

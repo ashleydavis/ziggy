@@ -23,6 +23,7 @@ pub const app = ziggy.core.App(.{
         .@"pick-folder" = handlers.pickFolderMessageHandler,
         .@"pick-files" = handlers.pickFilesMessageHandler,
         .@"pick-file" = handlers.pickFileMessageHandler,
+        .@"read-config" = handlers.readConfigHandler,
     },
     .tasks = .{
         .@"hello-short" = handlers.helloShortHandler,
@@ -41,6 +42,7 @@ pub const app = ziggy.core.App(.{
         .@"pick-folder" = handlers.pickFolderHandler,
         .@"pick-files" = handlers.pickFilesHandler,
         .@"pick-file" = handlers.pickFileHandler,
+        .@"read-config" = handlers.readConfigTaskHandler,
     },
     .on_task_end = handlers.onTaskEnd,
     .on_task_event = handlers.onTaskEvent,

@@ -95,6 +95,8 @@ The task's context holds plain values the task is started with:
 | `source` | The source it was queued under. |
 | `max_concurrent_child_tasks` | The limit on this task's child tasks in flight. |
 | `data_dir` | The app's private data directory. |
+| `config_path` | The path of the app's config file. Empty for a core built for no app. |
+| `state_path` | The path of the app's state file. Empty for a core built for no app. |
 
 The task services (`TaskServices` in `task-runner.zig`) are what the task reaches outside its worker through. Each call is a JSON message to the main thread. Each line written to their `log` is sent to the main thread, which writes it to its own log tagged `Worker <id>` (see [Logging](logging.md#where-a-line-goes)).
 

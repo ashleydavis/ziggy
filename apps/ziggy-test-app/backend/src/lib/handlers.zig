@@ -1156,6 +1156,13 @@ pub const menu: []const ziggy.menu.Menu = &.{
                     .zig = sendZigEvent,
                 },
             },
+            .{
+                .label = "Read Config",
+                .name = "read-config",
+                .run = .{
+                    .zig = readConfigMenu,
+                },
+            },
         },
     },
     .{
@@ -1182,6 +1189,37 @@ pub const menu: []const ziggy.menu.Menu = &.{
 pub fn sendZigEvent(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) !void {
     _ = timers;
     try services.sendEvent(io, allocator, "{\"type\":\"menu-zig-event\"}");
+}
+
+//
+// read-config: replies with the config file's test.value, or null when it is absent. The smoke tests prove the config file reaches a
+// message handler.
+//
+pub fn readConfigHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: struct {}) !?[]const u8 {
+    _ = timers;
+    _ = payload;
+    return try ziggy.config_state.config.get(?[]const u8, allocator, io, services.configPath(), "test.value");
+}
+
+//
+// read-config, as a task: replies with the config file's test.value, or null when it is absent.
+//
+pub fn readConfigTaskHandler(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !?[]const u8 {
+    _ = services;
+    _ = timers;
+    _ = payload;
+    return try ziggy.config_state.config.get(?[]const u8, allocator, io, context.config_path, "test.value");
+}
+
+//
+// Read Config: sends the frontend the app event {"type": "config-from-menu", "value": <the value or null>}, which shows that a `.zig`
+// item read the config file.
+//
+pub fn readConfigMenu(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator) !void {
+    _ = timers;
+    const value = try ziggy.config_state.config.get(?[]const u8, allocator, io, services.configPath(), "test.value");
+    const text = if (value) |found| try ziggy.json.stringify(allocator, found) else "null";
+    try services.sendEvent(io, allocator, try std.fmt.allocPrint(allocator, "{{\"type\":\"config-from-menu\",\"value\":{s}}}", .{text}));
 }
 
 //

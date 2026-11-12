@@ -30,3 +30,8 @@
 - **Remote control connection**: the WebSocket connection the core opens to the remote control server when the app is started with `--remote-control`. Each text message is one command and each reply is one text message. See [Testing your app](user-guide/testing.md#the-remote-control-connection).
 - **Remote control server**: the separate program `ziggy-remote-control-server` that a smoke test starts. The app connects out to it on one port and the test script on another. It passes each line the script writes to the app and each reply back to the script. See its [README](../tools/remote-control-server/README.md).
 - **Test hooks**: what an app has only so tests can control it or look inside it: the remote control connection's commands, events and the app's own hooks. They act only when the app is started with `--remote-control`.
+- **Config file**: the TOML file holding the settings the user chose, one per Ziggy app, read and written through the typed key-path API. See [the config file](user-guide/config-file.md).
+- **State file**: the nested JSON file holding what the app remembers on one computer, one per Ziggy app, read and written through the typed key-path API. See [the state file](user-guide/state-file.md).
+- **Config key**: one named value in a config file, such as `theme` or `sync.enabled`.
+- **State key**: one named value in a state file, such as `desktop.last_folder` or `searches.recent`.
+- **Key path**: the keys of a config or state file's nesting joined with dots, such as `sidebar.left.open`, naming one config key or state key in `get`, `set` and `update`.

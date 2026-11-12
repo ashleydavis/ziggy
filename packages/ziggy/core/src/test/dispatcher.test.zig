@@ -999,3 +999,201 @@ test "an app's on_create that fails makes the core's create fail with its error,
     // The testing allocator fails the test if anything the core made is left unreleased.
     try std.testing.expectError(error.AppCouldNotStart, native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), failing_app));
 }
+
+//
+// The app of the config and state file tests: an app named core-test, which opens the top-level keys `top` and the table `open`, but nothing
+// else, to the frontend.
+//
+const files_app = registered: {
+    var copy = test_app.app;
+    copy.name = "core-test";
+    copy.title = "Core test";
+    
+    
+    break :registered copy;
+};
+
+//
+// The directories of the config and state files the file tests use, under a directory of the test's own.
+//
+const FileDirectories = struct {
+    // The directory of the config file.
+    config_dir: []const u8,
+    // The directory of the state file.
+    state_dir: []const u8,
+};
+
+//
+// Sets the process environment so the core's files go in directories of the test's own, and returns their paths.
+//
+fn setUpFileDirectories(
+    tmp: *std.testing.TmpDir,
+    arena_state: *std.heap.ArenaAllocator,
+    map: *std.process.Environ.Map,
+) !FileDirectories {
+    const arena = arena_state.allocator();
+    const root = try tmp.dir.realPathFileAlloc(std.testing.io, ".", arena);
+    const config_dir = try std.fs.path.join(arena, &.{ root, "config" });
+    const state_dir = try std.fs.path.join(arena, &.{ root, "state" });
+    map.* = try std.testing.environ.createMap(std.testing.allocator);
+    try map.put(try ziggy.config_state.platform.appVariableName(arena, "core-test", "_CONFIG_DIR"), config_dir);
+    try map.put(try ziggy.config_state.platform.appVariableName(arena, "core-test", "_STATE_DIR"), state_dir);
+    ziggy.utils.process_env.setEnvironMap(map);
+    return .{ .config_dir = config_dir, .state_dir = state_dir };
+}
+
+//
+// Sends a system message with the given id, name and data text.
+//
+fn sendSystem(native_app: *FakeNativeApp, id: u32, name: []const u8, data: []const u8) !void {
+    const message = try std.fmt.allocPrint(std.testing.allocator, "{{\"kind\":\"system\",\"id\":{d},\"name\":\"{s}\",\"data\":{s}}}", .{ id, name, data });
+    defer std.testing.allocator.free(message);
+    native_app.sendMessage(std.testing.allocator, message);
+}
+
+test "get-config, set-config, get-state and set-state round trip through top-level and dotted paths, and a null removes a key" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var map: std.process.Environ.Map = undefined;
+    const directories = try setUpFileDirectories(&tmp, &arena_state, &map);
+    defer map.deinit();
+    const arena = arena_state.allocator();
+
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), files_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+
+    try sendSystem(&native_app, 1, "set-config", "{\"path\":\"top\",\"value\":\"blue\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":null}");
+    try sendSystem(&native_app, 2, "get-config", "\"top\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":true,\"data\":\"blue\"}");
+    try sendSystem(&native_app, 3, "set-config", "{\"path\":\"open.a.b\",\"value\":7}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":3,\"ok\":true,\"data\":null}");
+    try sendSystem(&native_app, 4, "get-config", "\"open.a.b\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":4,\"ok\":true,\"data\":7}");
+
+    try sendSystem(&native_app, 5, "set-state", "{\"path\":\"top\",\"value\":\"remembered\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":5,\"ok\":true,\"data\":null}");
+    try sendSystem(&native_app, 6, "get-state", "\"top\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":6,\"ok\":true,\"data\":\"remembered\"}");
+
+    try sendSystem(&native_app, 7, "set-config", "{\"path\":\"top\",\"value\":null}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":7,\"ok\":true,\"data\":null}");
+    try sendSystem(&native_app, 8, "get-config", "\"top\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":8,\"ok\":true,\"data\":null}");
+
+    const config_path = try std.fs.path.join(arena, &.{ directories.config_dir, "config.toml" });
+    const config_text = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, config_path, arena, .limited(1024 * 1024));
+    try std.testing.expect(std.mem.indexOf(u8, config_text, "b = 7") != null);
+}
+
+
+test "get-config-problem reports a bad line, set-config refuses the file and logs the problem, and the start-up log names it" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var map: std.process.Environ.Map = undefined;
+    const directories = try setUpFileDirectories(&tmp, &arena_state, &map);
+    defer map.deinit();
+    const arena = arena_state.allocator();
+    const config_path = try std.fs.path.join(arena, &.{ directories.config_dir, "config.toml" });
+    try std.Io.Dir.cwd().createDirPath(std.testing.io, directories.config_dir);
+    const bad = "top = \"blue\"\noops = = 1\n";
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = config_path, .data = bad });
+
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), files_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+
+    try sendSystem(&native_app, 1, "get-config-problem", "null");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"id\":1,\"ok\":true,\"data\":{\"path\":");
+    try sendSystem(&native_app, 2, "set-config", "{\"path\":\"top\",\"value\":\"green\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":false,\"error\":\"ConfigFileInvalid\"}");
+    const after = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, config_path, arena, .limited(1024 * 1024));
+    try std.testing.expectEqualStrings(bad, after);
+
+    const logs_dir = try std.fs.path.join(arena, &.{ std.mem.sliceTo(&native_app.data_dir_path, 0), "logs" });
+    var directory = try std.Io.Dir.cwd().openDir(std.testing.io, logs_dir, .{ .iterate = true });
+    defer directory.close(std.testing.io);
+    var iterator = directory.iterate();
+    var found = false;
+    while (try iterator.next(std.testing.io)) |entry| {
+        const text = try directory.readFileAlloc(std.testing.io, entry.name, arena, .limited(1024 * 1024));
+        if (std.mem.indexOf(u8, text, "has an error on line 2") != null) {
+            found = true;
+        }
+    }
+    try std.testing.expect(found);
+}
+
+test "the file messages answer AppNameMissing for a core built for no app" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+
+    try sendSystem(&native_app, 1, "get-config", "\"top\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"AppNameMissing\"}");
+    try sendSystem(&native_app, 2, "set-config", "{\"path\":\"top\",\"value\":1}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":false,\"error\":\"AppNameMissing\"}");
+    try sendSystem(&native_app, 3, "get-state", "\"top\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":3,\"ok\":false,\"error\":\"AppNameMissing\"}");
+    try sendSystem(&native_app, 4, "set-state", "{\"path\":\"top\",\"value\":1}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":4,\"ok\":false,\"error\":\"AppNameMissing\"}");
+}
+
+test "the start-up log names a missing state file and an unreadable one" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var map: std.process.Environ.Map = undefined;
+    const directories = try setUpFileDirectories(&tmp, &arena_state, &map);
+    defer map.deinit();
+    const arena = arena_state.allocator();
+
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), files_app);
+    native_app.stop(std.testing.io, std.testing.allocator);
+    const logs_dir = try std.fs.path.join(arena, &.{ std.mem.sliceTo(&native_app.data_dir_path, 0), "logs" });
+    try expectLogLine(arena, logs_dir, "does not exist yet, so the app starts with an empty state");
+
+    const state_path = try std.fs.path.join(arena, &.{ directories.state_dir, "state.json" });
+    try std.Io.Dir.cwd().createDirPath(std.testing.io, directories.state_dir);
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = state_path, .data = "not json" });
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), files_app);
+    native_app.stop(std.testing.io, std.testing.allocator);
+    try expectLogLine(arena, logs_dir, "could not be read (it is not JSON");
+}
+
+//
+// Fails unless one of the log files in the directory holds the text.
+//
+fn expectLogLine(arena: std.mem.Allocator, logs_dir: []const u8, text: []const u8) !void {
+    var directory = try std.Io.Dir.cwd().openDir(std.testing.io, logs_dir, .{ .iterate = true });
+    defer directory.close(std.testing.io);
+    var iterator = directory.iterate();
+    while (try iterator.next(std.testing.io)) |entry| {
+        const log_text = try directory.readFileAlloc(std.testing.io, entry.name, arena, .limited(1024 * 1024));
+        if (std.mem.indexOf(u8, log_text, text) != null) {
+            return;
+        }
+    }
+    return error.LogLineMissing;
+}

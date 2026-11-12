@@ -34,6 +34,8 @@ ziggy_platform_start() {
     read -r _ pgid < <(launch_in_process_group "$log" env \
         HOME="$test_dir/home" \
         CFFIXED_USER_HOME="$test_dir/home" \
+        ZIGGY_TEST_APP_CONFIG_DIR="$test_dir/config" \
+        ZIGGY_TEST_APP_STATE_DIR="$test_dir/state" \
         "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
     echo "$pgid" > "$test_dir/$MACOS_PGID_FILE_NAME"
 }
@@ -47,6 +49,14 @@ ziggy_platform_stop() {
 
 ziggy_platform_data_dir() {
     printf '%s\n' "$1/home/Library/Application Support/dev.ziggy.testapp"
+}
+
+ziggy_platform_config_path() {
+    printf '%s\n' "$1/config/config.toml"
+}
+
+ziggy_platform_state_path() {
+    printf '%s\n' "$1/state/state.json"
 }
 
 ziggy_platform_wait_exit() {

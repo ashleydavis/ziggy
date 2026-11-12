@@ -176,10 +176,45 @@ fn pickSaveTask(services: TaskServices, timers: Timers, io: std.Io, allocator: s
 }
 
 //
+// The app's config and state paths a task is given, so a test can see them in its outputs.
+//
+const TaskPaths = struct {
+    // The path of the app's config file.
+    configPath: []const u8,
+    // The path of the app's state file.
+    statePath: []const u8,
+};
+
+fn pathsTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !TaskPaths {
+    _ = services;
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
+    return .{ .configPath = context.config_path, .statePath = context.state_path };
+}
+
+//
+// The app's config and state paths, read from the context of a task written against the task queue package.
+//
+fn pathsQueueTask(allocator: std.mem.Allocator, io: std.Io, timers: Timers, log: ziggy.log.ILog, payload: std.json.Value, context: ziggy.task_queue.types.ITaskContext) anyerror!std.json.Value {
+    _ = io;
+    _ = timers;
+    _ = log;
+    _ = payload;
+    var object: std.json.ObjectMap = .empty;
+    try object.put(allocator, "configPath", .{ .string = try allocator.dupe(u8, context.configPath) });
+    try object.put(allocator, "statePath", .{ .string = try allocator.dupe(u8, context.statePath) });
+    return .{ .object = object };
+}
+
+//
 // The task handlers the tests register.
 //
 pub const task_handlers = [_]task_runner.TaskHandlerEntry{
     .{ .name = "quick", .handler = task_runner.wrapTask("quick", quickTask) },
+    .{ .name = "paths", .handler = task_runner.wrapTask("paths", pathsTask) },
+    .{ .name = "paths-queue", .handler = task_runner.fromQueueHandler(pathsQueueTask) },
     .{ .name = "spin", .handler = task_runner.wrapTask("spin", spinTask) },
     .{ .name = "fail", .handler = task_runner.wrapTask("fail", failTask) },
     .{ .name = "sleep", .handler = task_runner.wrapTask("sleep", sleepTask) },

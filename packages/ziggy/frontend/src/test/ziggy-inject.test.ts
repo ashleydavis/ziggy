@@ -361,6 +361,38 @@ describe("ziggy-inject", () => {
         expect(await listed).toEqual([{ name: "open-database", label: "Open Database...", shortcut: "Ctrl+O" }]);
     });
 
+    test("the config and state calls post their system messages, turn null into undefined and send null for undefined", async () => {
+        const posted: string[] = [];
+        const fakeWindow = windowWithWebkit(posted);
+        inject(fakeWindow);
+        const config = fakeWindow.ziggy!.getConfig("a.b");
+        const setConfig = fakeWindow.ziggy!.setConfig("a.b", 3);
+        const removedConfig = fakeWindow.ziggy!.setConfig("a.b", undefined);
+        const stateValue = fakeWindow.ziggy!.getState("remembered");
+        const setState = fakeWindow.ziggy!.setState("remembered", undefined);
+        const problem = fakeWindow.ziggy!.getConfigProblem();
+        expect(posted.map(text => JSON.parse(text))).toEqual([
+            { kind: "system", id: 1, name: "get-config", data: "a.b" },
+            { kind: "system", id: 2, name: "set-config", data: { path: "a.b", value: 3 } },
+            { kind: "system", id: 3, name: "set-config", data: { path: "a.b", value: null } },
+            { kind: "system", id: 4, name: "get-state", data: "remembered" },
+            { kind: "system", id: 5, name: "set-state", data: { path: "remembered", value: null } },
+            { kind: "system", id: 6, name: "get-config-problem", data: null },
+        ]);
+        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: null });
+        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: null });
+        fakeWindow.__ziggyReceive!({ id: 3, ok: true, data: null });
+        fakeWindow.__ziggyReceive!({ id: 4, ok: true, data: "yes" });
+        fakeWindow.__ziggyReceive!({ id: 5, ok: true, data: null });
+        fakeWindow.__ziggyReceive!({ id: 6, ok: true, data: { path: "config.toml", line: 2, column: 1, reason: "bad" } });
+        expect(await config).toBeUndefined();
+        await setConfig;
+        await removedConfig;
+        expect(await stateValue).toEqual("yes");
+        await setState;
+        expect(await problem).toEqual({ path: "config.toml", line: 2, column: 1, reason: "bad" });
+    });
+
     test("an action system event runs the handler registered for the action", () => {
         const fakeWindow = windowWithWebkit([]);
         inject(fakeWindow);
@@ -528,8 +560,11 @@ describe("ziggy-inject", () => {
         expect(Object.keys(fakeWindow.ziggy!).sort()).toEqual([
             "addTask",
             "cancelTasks",
+            "getConfig",
+            "getConfigProblem",
             "getPathForFile",
             "getPlatform",
+            "getState",
             "invoke",
             "listActions",
             "log",
@@ -548,6 +583,8 @@ describe("ziggy-inject", () => {
             "runAction",
             "send",
             "sendTestResult",
+            "setConfig",
+            "setState",
             "testUiReady",
         ]);
         expect(() => {

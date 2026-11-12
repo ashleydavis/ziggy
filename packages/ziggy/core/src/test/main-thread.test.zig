@@ -353,3 +353,71 @@ test "destroying a core with tasks still running stops the main thread, every wo
         try std.testing.expectEqual(before, try threadCount());
     }
 }
+
+//
+// The app's config and state paths, as the handler services give them.
+//
+const PathsResponse = struct {
+    // The path of the app's config file.
+    configPath: []const u8,
+    // The path of the app's state file.
+    statePath: []const u8,
+};
+
+//
+// paths: the message response is the app's config and state paths.
+//
+fn pathsHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: struct {}) !PathsResponse {
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
+    return .{ .configPath = services.configPath(), .statePath = services.statePath() };
+}
+
+//
+// The app of the paths test: one message that reports the app's config and state paths.
+//
+const paths_app = named: {
+    var registered = ziggy.core.App(.{
+        .messages = .{
+            .paths = pathsHandler,
+        },
+        .tasks = .{},
+        .menu = &.{},
+        .ui_files = &[_]ziggy.ui_files.UiFile{},
+    });
+    registered.name = "main-thread-paths";
+    registered.title = "Main thread paths";
+    break :named registered;
+};
+
+test "the handler services give the app's config and state paths" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const arena = arena_state.allocator();
+
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var environ_map = try std.testing.environ.createMap(std.testing.allocator);
+    defer environ_map.deinit();
+    const data_dir = std.mem.sliceTo(&native_app.data_dir_path, 0);
+    const config_dir = try std.fs.path.join(arena, &.{ data_dir, "config" });
+    const state_dir = try std.fs.path.join(arena, &.{ data_dir, "state" });
+    try environ_map.put(try ziggy.config_state.platform.appVariableName(arena, "main-thread-paths", "_CONFIG_DIR"), config_dir);
+    try environ_map.put(try ziggy.config_state.platform.appVariableName(arena, "main-thread-paths", "_STATE_DIR"), state_dir);
+    ziggy.utils.process_env.setEnvironMap(&environ_map);
+
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), paths_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+
+    const config_path = try std.fs.path.join(arena, &.{ config_dir, "config.toml" });
+    const state_path = try std.fs.path.join(arena, &.{ state_dir, "state.json" });
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"paths\",\"data\":{}}");
+    const expected = try std.fmt.allocPrint(std.testing.allocator, "\"configPath\":\"{s}\",\"statePath\":\"{s}\"", .{ config_path, state_path });
+    defer std.testing.allocator.free(expected);
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, expected);
+}
