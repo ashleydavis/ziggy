@@ -5,7 +5,7 @@
 # Starts the built app through the remote control server, chooses each item of the Hello menu as a user would and checks what each writes to
 # the log: Say Hello From Zig runs a Zig function that sends the frontend an event, Say Hello From the UI reaches the frontend
 # as a menu event, and Say Hello From an Action runs the frontend's handler of the template's action.
-# A desktop-only test, because a phone has no menu.
+# A desktop-only test, because a mobile has no menu.
 #
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"

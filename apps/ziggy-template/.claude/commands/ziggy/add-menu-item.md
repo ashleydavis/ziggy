@@ -13,10 +13,10 @@ Read Ziggy's guide [Menus](https://github.com/ashleydavis/ziggy/blob/main/docs/u
 - A `.standard` item when one of the guide's standard actions already does it (quit, close the window, reload, zoom, the editing commands, full screen, the developer tools, focus the window). It has no `name` and needs no code of the app's.
 - A `.zig` item when the backend does the work. The function runs on the thread that handles every frontend message, so it must be quick: slow work queues a task from it (use `/ziggy:add-task` for the task).
 - A `.ui` item when the frontend does the work, such as showing a page or a dialog.
-- An `.action` item when the work is one of the app's actions (see Ziggy's guide [Actions](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/actions.md)): work the frontend does that a shortcut, a button or the backend can also run. A phone's user can run it through `window.ziggy.runAction`.
+- An `.action` item when the work is one of the app's actions (see Ziggy's guide [Actions](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/actions.md)): work the frontend does that a shortcut, a button or the backend can also run. A mobile's user can run it through `window.ziggy.runAction`.
 - A submenu when the human asks for items grouped under one label.
 
-A phone shows no menu, so a user on Android or iOS can never choose the item. When a mobile user needs what it does, tell the human, and give the frontend its own way to do it too.
+A mobile shows no menu, so a user on Android or iOS can never choose the item. When a mobile user needs what it does, tell the human, and give the frontend its own way to do it too.
 
 ## Add it
 

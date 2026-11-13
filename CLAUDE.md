@@ -75,6 +75,7 @@ Ziggy and the Ziggy template are developed on Linux and delivered and tested on 
 - The example apps `ziggy-example-vite` and `ziggy-example-rsbuild` (separate repositories under `https://github.com/ashleydavis`) each pin Ziggy to a version tag. When Ziggy has changed and a new version is released, update both to the new tag (`build.zig.zon`, `package.json`, the Xcode projects and `native/android/app/build.gradle`), carry over any change an app has to make (the template shows it) and run each example's full test set against it.
 - When I ask for an ETA, give one at once, as a time range with what it depends on. Never refuse, argue or ask a question first.
 - When I ask you to record a note or a todo, never change my writing or distort it in any way.
+- "phone" is banned. Say "mobile".
 - Keep this file terse. It is loaded into context for every task, so state the rule and stop: no lists of examples, no worked illustrations.
 - A change to the Android or iOS native app, or to Ziggy's core library or the backend, is not tested until the suites for that mobile platform have run.
 

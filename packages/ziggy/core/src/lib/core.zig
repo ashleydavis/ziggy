@@ -342,7 +342,7 @@ const MainServices = struct {
         .dataDir = dataDir,
         .configPath = configPath,
         .statePath = statePath,
-        .isPhone = isPhone,
+        .isMobile = isMobile,
         .nativeCallbacks = nativeCallbacks,
         .configureLog = configureLog,
     };
@@ -496,9 +496,9 @@ const MainServices = struct {
         return self.state_path orelse @panic("the core was built for no app, so it has no state file");
     }
 
-    fn isPhone(ptr: *anyopaque) bool {
+    fn isMobile(ptr: *anyopaque) bool {
         const self: *MainServices = @ptrCast(@alignCast(ptr));
-        return self.config.is_phone;
+        return self.config.is_mobile;
     }
 
     fn nativeCallbacks(ptr: *anyopaque) services_lib.NativeCallbacks {

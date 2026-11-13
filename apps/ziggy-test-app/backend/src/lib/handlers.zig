@@ -973,7 +973,7 @@ pub fn onTaskEvent(services: HandlerServices, timers: Timers, io: std.Io, alloca
 
 
 //
-// The test app's desktop menu. The native app draws it with the platform's own menu API on every desktop platform and never on a phone.
+// The test app's desktop menu. The native app draws it with the platform's own menu API on every desktop platform and never on a mobile.
 //
 // Each item names what it runs. A `.standard` item is an action the native app does itself (quit, close-window, reload, the zoom and
 // editing actions, full screen and the developer tools). A `.zig` item calls a Zig function of the app's on the thread that handles

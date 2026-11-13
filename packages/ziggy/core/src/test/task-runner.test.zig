@@ -626,7 +626,7 @@ test "a task is told why the native app could not do the native call" {
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), native_call_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"add-task\",\"data\":{\"taskId\":\"h2\",\"taskType\":\"native-call\",\"source\":\"src\",\"data\":{\"method\":\"fail\"},\"priority\":\"background\"}}");
-    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"outputs\":{\"failedBecause\":\"The phone refused.\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"outputs\":{\"failedBecause\":\"The mobile refused.\"}");
 }
 
 test "a task on a platform with no native call callback gets NativeCallMissing" {

@@ -714,7 +714,7 @@ jobs:
     # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
     # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
     # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
-    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # simulator, because a program built for a mobile cannot run on the runner. It starts from the Zig build caches app-build saved and
     # compiles only the tests.
     needs: app-build-linux
     timeout-minutes: 50
@@ -778,7 +778,7 @@ jobs:
     # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
     # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
     # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
-    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # simulator, because a program built for a mobile cannot run on the runner. It starts from the Zig build caches app-build saved and
     # compiles only the tests.
     needs: app-build-macos
     timeout-minutes: 50
@@ -835,7 +835,7 @@ jobs:
     # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
     # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
     # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
-    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # simulator, because a program built for a mobile cannot run on the runner. It starts from the Zig build caches app-build saved and
     # compiles only the tests.
     needs: app-build-windows
     timeout-minutes: 50
@@ -892,7 +892,7 @@ jobs:
     # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
     # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
     # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
-    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # simulator, because a program built for a mobile cannot run on the runner. It starts from the Zig build caches app-build saved and
     # compiles only the tests.
     needs: app-build-android
     timeout-minutes: 50
@@ -987,7 +987,7 @@ jobs:
     # The unit tests on each platform. The desktop platforms run the TypeScript tests (the bridge and the template's frontend) and every
     # Zig test (`zig build test`: Ziggy's core, the task queue, the native apps and the template's core) on the runner. Android runs the
     # Zig test programs on an emulator and the Android native app's JUnit tests on the runner's JVM. iOS runs the Zig test programs on a
-    # simulator, because a program built for a phone cannot run on the runner. It starts from the Zig build caches app-build saved and
+    # simulator, because a program built for a mobile cannot run on the runner. It starts from the Zig build caches app-build saved and
     # compiles only the tests.
     needs: app-build-ios
     timeout-minutes: 50

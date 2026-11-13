@@ -77,7 +77,7 @@ Four things run an action by its name:
 `runAction` fails with one of these errors, and `window.ziggy.runAction` rejects with an `Error` whose message is the error's name:
 
 - `UnknownAction`: the name is neither one of the app's actions nor a standard action on the app's menu.
-- `StandardActionUnavailable`: the name is a standard action on the app's menu, but the app is on a phone or in dev mode, where standard actions cannot run.
+- `StandardActionUnavailable`: the name is a standard action on the app's menu, but the app is on a mobile or in dev mode, where standard actions cannot run.
 
 ## Listing the actions
 
@@ -85,7 +85,7 @@ Four things run an action by its name:
 
 - `name`: the name of the action or standard action, such as `zoom-in`.
 - `label`: the label of the action or `.standard` item.
-- `shortcut`: the shortcut as the platform shows it, such as `Ctrl+Shift+H` on Linux and Windows or `⇧⌘H` on macOS. It is null when there is none and on a phone. `?` is a shortcut an action can have, and it is reported as `?`.
+- `shortcut`: the shortcut as the platform shows it, such as `Ctrl+Shift+H` on Linux and Windows or `⇧⌘H` on macOS. It is null when there is none and on a mobile. `?` is a shortcut an action can have, and it is reported as `?`.
 
 An app can build its own command palette from this list and run the chosen entry with `runAction`.
 
@@ -96,7 +96,7 @@ An app can build its own command palette from this list and run the chosen entry
 
 ## Testing actions
 
-A smoke test runs the action as a user would. The template's [`smoke-tests/hello-world-app/test.sh`](../../apps/ziggy-template/smoke-tests/hello-world-app/test.sh) presses the button that calls `runAction`, on every platform including phones:
+A smoke test runs the action as a user would. The template's [`smoke-tests/hello-world-app/test.sh`](../../apps/ziggy-template/smoke-tests/hello-world-app/test.sh) presses the button that calls `runAction`, on every platform including mobiles:
 
 ```bash
 click run-hello-action

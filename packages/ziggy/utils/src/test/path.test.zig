@@ -17,7 +17,7 @@ const JoinCase = struct {
 };
 
 //
-// Loads the path.join cases, which are embedded so that the tests run where the source tree is not, such as on a phone.
+// Loads the path.join cases, which are embedded so that the tests run where the source tree is not, such as on a mobile.
 //
 fn loadJoinCases(allocator: std.mem.Allocator) ![]const JoinCase {
     return std.json.parseFromSliceLeaky([]const JoinCase, allocator, @embedFile("fixtures/path-join.json"), .{});

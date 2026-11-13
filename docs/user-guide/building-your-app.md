@@ -83,12 +83,12 @@ bun run build:macos                                             # Builds your ap
 open native/macos/zig-out/xcode/Build/Products/Debug/MyApp.app  # Runs the macOS build.
 ```
 
-On Linux or a Mac you can also build, run and test it on Android. Start an Android emulator first (Android Studio's Device Manager creates and starts one), or plug in a phone with USB debugging on:
+On Linux or a Mac you can also build, run and test it on Android. Start an Android emulator first (Android Studio's Device Manager creates and starts one), or plug in a mobile with USB debugging on:
 
 ```bash
 bun run build:android       # Builds your app for Android.
-bun run android             # Builds your app, installs it on the emulator or phone and starts it.
-bun run test:smoke:android  # Runs the smoke tests on the emulator or phone.
+bun run android             # Builds your app, installs it on the emulator or mobile and starts it.
+bun run test:smoke:android  # Runs the smoke tests on the emulator or mobile.
 ```
 
 On a Mac you can also build, run and test it on iOS. The run and the tests use a connected iPhone or iPad if there is one, otherwise they boot an existing iOS simulator.

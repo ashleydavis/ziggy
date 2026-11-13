@@ -122,7 +122,7 @@ The name `postMessage` comes from the system web views, not from Ziggy. It is th
 
 ### Native calls
 
-- A task that needs the native app to do something (a file dialog, the phone's keychain) sends the main thread a `native-app-request`. The main thread posts the call to the native app's queue, with a pointer to the worker's own queue and a call id attached so the result knows where to go (`NativeApp.call` in `native-app.zig`). The UI thread does the call, then posts the result as a `native-app-response` straight to that worker's queue, where the task is waiting for it. See [Native calls](native-calls.md).
+- A task that needs the native app to do something (a file dialog, the mobile's keychain) sends the main thread a `native-app-request`. The main thread posts the call to the native app's queue, with a pointer to the worker's own queue and a call id attached so the result knows where to go (`NativeApp.call` in `native-app.zig`). The UI thread does the call, then posts the result as a `native-app-response` straight to that worker's queue, where the task is waiting for it. See [Native calls](native-calls.md).
 
 ## Between the main thread and the background task workers
 

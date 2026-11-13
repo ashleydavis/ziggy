@@ -60,7 +60,7 @@ if ! ziggy_platform_prepare "$RUN_DIR"; then
 fi
 #
 # Prints the scenario directories, one per line, in name order: every folder here that holds a test.sh, and on a desktop platform
-# every folder in desktop-only that holds one too, because a phone has no menu or window of its own to test.
+# every folder in desktop-only that holds one too, because a mobile has no menu or window of its own to test.
 #
 list_scenarios() {
     {

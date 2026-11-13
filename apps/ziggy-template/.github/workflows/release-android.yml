@@ -522,4 +522,4 @@ jobs:
             ${{ steps.release-notes.outputs.RELEASE_NOTES }}
 
             ## Downloads
-            - **Android**: the `.apk` for your phone's architecture (debug signed, so it installs)
+            - **Android**: the `.apk` for your mobile's architecture (debug signed, so it installs)

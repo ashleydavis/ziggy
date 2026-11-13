@@ -202,8 +202,8 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.has_keep_alive = true
         config.has_pick_paths = true
         config.has_native_call = nativeCallHandler != nil
-        // A phone has no menu and no shortcut.
-        config.is_phone = true
+        // A mobile has no menu and no shortcut.
+        config.is_mobile = true
         config.worker_threads = 5
         config.max_concurrent_child_tasks = 2
         config.system_theme = ZiggyBridge.systemTheme()

@@ -34,7 +34,7 @@ export interface IRemoteControlServerOptions {
 
     //
     // How long a script line waits for an app to connect before it is answered with AppNotConnected. The app connects only
-    // once it has started, which on a phone or a busy CI machine takes many seconds.
+    // once it has started, which on a mobile or a busy CI machine takes many seconds.
     //
     appWaitTimeoutMs: number;
 
@@ -105,7 +105,7 @@ export interface IListenFailedError {
 export type StartError = IPortInUseError | IListenFailedError;
 
 //
-// The address both ports listen on. The script and the app run on this machine (a phone reaches it through adb reverse), so
+// The address both ports listen on. The script and the app run on this machine (a mobile reaches it through adb reverse), so
 // nothing outside the machine can reach the server.
 //
 const LOOPBACK_HOST = "127.0.0.1";

@@ -78,7 +78,7 @@ test "config path: the override wins on every platform and needs no other variab
     }
 }
 
-test "config path: a phone keeps the file in the app's data directory" {
+test "config path: a mobile keeps the file in the app's data directory" {
     var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();

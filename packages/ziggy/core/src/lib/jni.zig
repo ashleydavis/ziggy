@@ -361,15 +361,15 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
         .has_os_version = true,
         .has_quit = true,
         .has_pick_paths = true,
-        // A phone has no menu bar, so a test's menu item reaches the core as the frontend's menu-action message instead.
+        // A mobile has no menu bar, so a test's menu item reaches the core as the frontend's menu-action message instead.
         .has_menu_action = true,
         .has_keep_alive = true,
         .has_native_call = true,
-        // A phone has no menu and no shortcut.
-        .is_phone = true,
-        // A phone's screenshot is taken from the computer with adb, so the app has no way of taking one itself.
+        // A mobile has no menu and no shortcut.
+        .is_mobile = true,
+        // A mobile's screenshot is taken from the computer with adb, so the app has no way of taking one itself.
         .has_screenshot = false,
-        // A phone has no shortcuts.
+        // A mobile has no shortcuts.
         .has_key_press = false,
         .worker_threads = arguments.worker_threads,
         .max_concurrent_child_tasks = arguments.max_concurrent_child_tasks,
@@ -377,7 +377,7 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
         .data_dir = data_dir.ptr,
         .test_mode = remote_control != null,
         .remote_control = if (remote_control) |address| address.ptr else null,
-        // A phone app has no command line, other than the theme extra, which is passed as --theme.
+        // A mobile app has no command line, other than the theme extra, which is passed as --theme.
         .arg_count = arg_count,
         .args = args_pointer,
         .system_theme = arguments.system_theme,
@@ -397,7 +397,7 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
 
 //
 // Takes every message the core has posted for the native app, on the main thread, and calls ZiggyNativeCalls for each: onCoreMessage for a
-// message for the frontend, and the method of each call. A menu action becomes the frontend's menu-action message, because a phone has
+// message for the frontend, and the method of each call. A menu action becomes the frontend's menu-action message, because a mobile has
 // no menu of the native app's own.
 //
 fn takeMessages(env: *c.JNIEnv, bridge: *Bridge) void {

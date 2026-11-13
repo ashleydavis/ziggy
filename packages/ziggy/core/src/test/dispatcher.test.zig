@@ -477,14 +477,14 @@ test "a run-action message naming an unknown name, or a standard action the menu
     try std.testing.expectEqualStrings("", actions);
 }
 
-test "a run-action message naming a standard action fails with StandardActionUnavailable on a phone or with no menu_action callback" {
+test "a run-action message naming a standard action fails with StandardActionUnavailable on a mobile or with no menu_action callback" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    // A phone's core.
-    var phone_config = native_app.config(1, 1);
-    phone_config.is_phone = true;
-    try native_app.start(std.testing.io, std.testing.allocator, phone_config, test_app.app);
+    // A mobile's core.
+    var mobile_config = native_app.config(1, 1);
+    mobile_config.is_mobile = true;
+    try native_app.start(std.testing.io, std.testing.allocator, mobile_config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"run-action\",\"data\":{\"action\":\"quit\"}}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"StandardActionUnavailable\"}");
@@ -526,12 +526,12 @@ test "a list-actions message answers every action and standard item with its lab
     try expectLastMessage(&native_app, expected);
 }
 
-test "a list-actions message on a phone answers no shortcuts" {
+test "a list-actions message on a mobile answers no shortcuts" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
-    config.is_phone = true;
+    config.is_mobile = true;
     try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-actions\"}");
@@ -570,12 +570,12 @@ test "a list-shortcuts message answers every shortcut of the menu and the action
     try expectLastMessage(&native_app, expected);
 }
 
-test "a list-shortcuts message on a phone answers none" {
+test "a list-shortcuts message on a mobile answers none" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     var config = native_app.config(1, 1);
-    config.is_phone = true;
+    config.is_mobile = true;
     try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-shortcuts\"}");
@@ -706,8 +706,8 @@ test "get-dropped-paths replies with the paths of the last drop, and an empty ar
 // What the native-services message gives: what the handler services report about the native app.
 //
 const NativeServicesResult = struct {
-    // Whether the native app is a phone's.
-    isPhone: bool,
+    // Whether the native app is a mobile's.
+    isMobile: bool,
     // The app's data directory.
     dataDir: []const u8,
 };
@@ -722,7 +722,7 @@ fn nativeServicesHandler(services: ziggy.core.HandlerServices, timers: ziggy.tim
     services.quit(io, allocator);
     services.menuAction(io, allocator, "focus-window");
     return .{
-        .isPhone = services.isPhone(),
+        .isMobile = services.isMobile(),
         .dataDir = services.dataDir(),
     };
 }
@@ -750,11 +750,11 @@ test "the handler services reach the native app's quit and menu action callbacks
     // The data directory is only reported, never written to, by this app.
     var config = native_app.config(1, 1);
     config.data_dir = "/tmp";
-    config.is_phone = true;
+    config.is_mobile = true;
     try native_app.start(std.testing.io, std.testing.allocator, config, native_services_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-services\"}");
-    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"isPhone\":true,\"dataDir\":\"/tmp\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"isMobile\":true,\"dataDir\":\"/tmp\"}}");
     try std.testing.expect(native_app.quitCalled(std.testing.io, std.testing.allocator));
     const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
     defer std.testing.allocator.free(actions);
@@ -774,7 +774,7 @@ test "the handler services report a desktop's native app, which has no native ca
     try native_app.start(std.testing.io, std.testing.allocator, config, native_services_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-services\"}");
-    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"isPhone\":false,\"dataDir\":\"/tmp\"}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"isMobile\":false,\"dataDir\":\"/tmp\"}}");
     try std.testing.expect(!native_app.quitCalled(std.testing.io, std.testing.allocator));
     const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);
     defer std.testing.allocator.free(actions);

@@ -211,7 +211,7 @@ Every shortcut runs in the frontend, on every desktop platform and in dev mode. 
 - **Linux:** a GTK menu bar above the system web view, with each shortcut shown after the label. An app whose menu is `&.{}` shows no menu bar.
 - **Windows:** a Win32 menu bar, with each shortcut shown after the label in the Windows style (`Ctrl+Shift+I`). WebView2's own browser accelerator keys are off, so the app's menu and the frontend are the only source of reload, zoom, find, print and developer tools keys. Full screen hides the menu bar. An app whose menu is `&.{}` shows no menu bar. The template's [Windows native app README](../../apps/ziggy-template/native/windows/README.md) explains how each standard action is done.
 - **macOS:** the application's main menu. An application menu named after the app comes first, with About and Quit. The `quit` item is drawn there, as Quit and the app's name, with the shortcut the menu gave it, and not in its own menu. An app with no `quit` item still gets Quit there, on Command+Q. An item named `about` (a `.zig` or `.ui` item) is drawn there in the same way, as About and the app's name, and an app without one gets the standard About panel. A menu left empty by moving them is not shown. Each item shows its shortcut after its title, and the frontend runs it. The template's [macOS native app README](../../apps/ziggy-template/native/macos/README.md) covers the developer tools on macOS.
-- **iOS and Android:** no menu is drawn and no shortcut runs, so a user on a phone has no way to choose a menu item. Put anything a mobile user needs in the frontend.
+- **iOS and Android:** no menu is drawn and no shortcut runs, so a user on a mobile has no way to choose a menu item. Put anything a mobile user needs in the frontend.
 - **Dev mode:** the frontend runs in a browser. Every shortcut works, apart from those the browser keeps for itself (see [Dev mode](dev-mode.md)).
 
 Zoom steps by 0.1 on every desktop platform. It reaches from 0.25 to 5 on Linux and Windows and from 0.3 to 5 on macOS.
@@ -232,7 +232,7 @@ test "Say Hello From the UI sends the UI the menu event naming it" {
 }
 ```
 
-A smoke test chooses an item as a user would with `choose_menu_item <action>`, which sends the remote control connection's `menu` command (see [Testing your app](testing.md#the-remote-control-connection)). The native app's own actions happen for real and any other item reaches the backend as it does from a click. From the template's [`smoke-tests/desktop-only/hello-menu/test.sh`](../../apps/ziggy-template/smoke-tests/desktop-only/hello-menu/test.sh), which runs on desktop platforms only, because a phone has no menu:
+A smoke test chooses an item as a user would with `choose_menu_item <action>`, which sends the remote control connection's `menu` command (see [Testing your app](testing.md#the-remote-control-connection)). The native app's own actions happen for real and any other item reaches the backend as it does from a click. From the template's [`smoke-tests/desktop-only/hello-menu/test.sh`](../../apps/ziggy-template/smoke-tests/desktop-only/hello-menu/test.sh), which runs on desktop platforms only, because a mobile has no menu:
 
 ```bash
 choose_menu_item hello-from-ui

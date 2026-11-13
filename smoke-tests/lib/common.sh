@@ -14,7 +14,7 @@
 #       ZIGGY_THEME is set to "light", "dark" or "system",
 #       recording what it started through launch_in_process_group. The app connects to the remote control server that
 #       start_test_app started. Returns non-zero when the app did not start. With keep-data it starts the app again on the data the
-#       last run left, instead of fresh data, and on a phone on the same device and the same install.
+#       last run left, instead of fresh data, and on a mobile on the same device and the same install.
 #
 #   ziggy_platform_changes_appearance   (Linux, Windows, macOS, Android and the iOS simulator)
 #       Succeeds when the platform can change the system's appearance, so the workflows-only scenarios can run there. A connected
@@ -28,7 +28,7 @@
 #       Puts the appearance in <test_dir>/system-appearance.txt back. A failure prints what could not be set and returns non-zero.
 #
 #   ziggy_platform_stop <test_dir> [keep-device]
-#       Stops the app and everything it started. With keep-device a phone stays claimed, so a restart finds its data.
+#       Stops the app and everything it started. With keep-device a mobile stays claimed, so a restart finds its data.
 #
 #   ziggy_platform_devtools_visible <test_dir> <the frontend's area before they opened>   (desktop platforms)
 #       Succeeds when the developer tools are showing. How a script sees them differs: on Linux and macOS they dock inside the

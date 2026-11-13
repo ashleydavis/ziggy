@@ -10,7 +10,7 @@ Run it from a project that depends on Ziggy with `bun run ziggy-remote-control-s
 
 ## Arguments
 
-- `--app-port <port>`: the loopback port the app connects to. It is an Express server, and the app opens a WebSocket connection to `ws://127.0.0.1:<port>/`. A phone reaches it through `adb reverse` on Android, and the iOS simulator shares the Mac's loopback address.
+- `--app-port <port>`: the loopback port the app connects to. It is an Express server, and the app opens a WebSocket connection to `ws://127.0.0.1:<port>/`. A mobile reaches it through `adb reverse` on Android, and the iOS simulator shares the Mac's loopback address.
 - `--script-port <port>`: the loopback port the test script connects to, a plain TCP server that bash reaches with `/dev/tcp/127.0.0.1/<port>`.
 
 Both are required, from 0 to 65535, and different unless both are 0. A port of 0 lets the system choose a free one. Once both ports listen, the server writes `The remote control server is listening: the app on 127.0.0.1:<app port>, the script on 127.0.0.1:<script port>.` to stderr, and the smoke tests start it with ports of 0 and read the ports from that line, so two runs never ask for the same port.

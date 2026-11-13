@@ -104,7 +104,7 @@ ziggy_platform_prepare() {
         # another run building at the same time would replace the library between this run's sync and its Gradle build. One run
         # builds at a time per checkout, under a lock on that shared directory. The lock's descriptor is closed for every
         # command, so nothing a build starts (the Gradle daemon) can keep the lock held after this function returns. The APK
-        # holds the library for both architectures, so the scenarios run on an emulator and on a connected phone alike.
+        # holds the library for both architectures, so the scenarios run on an emulator and on a connected mobile alike.
         ziggy_android_require_commands zig bun jq || return 1
         build="$run_dir/build"
         local build_lock_fd

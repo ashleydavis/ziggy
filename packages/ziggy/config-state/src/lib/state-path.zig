@@ -27,7 +27,7 @@ pub const Variables = struct {
 
 //
 // The path of the state file for a platform and the variables it reads. A non-empty override names the directory and no other
-// variable is read. On a phone the file lives in the app's data directory.
+// variable is read. On a mobile the file lives in the app's data directory.
 //
 pub fn path(
     arena: std.mem.Allocator,

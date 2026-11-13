@@ -122,7 +122,7 @@ pub const HandlerServices = struct {
         dataDir: *const fn (ptr: *anyopaque) []const u8,
         configPath: *const fn (ptr: *anyopaque) []const u8,
         statePath: *const fn (ptr: *anyopaque) []const u8,
-        isPhone: *const fn (ptr: *anyopaque) bool,
+        isMobile: *const fn (ptr: *anyopaque) bool,
         nativeCallbacks: *const fn (ptr: *anyopaque) NativeCallbacks,
         configureLog: *const fn (ptr: *anyopaque, options: logging.ILogOptions) anyerror!void,
     };
@@ -183,7 +183,7 @@ pub const HandlerServices = struct {
     // Runs one of the app's actions by its name, as window.ziggy.runAction does: the frontend is sent the action, and the handler it
     // registered for it runs. A standard action that is a `.standard` item of the app's menu is run by the native app instead. Fails
     // with error.UnknownAction for any other name, and with error.StandardActionUnavailable for a standard action the native app
-    // cannot run: on a phone, or with no menu_action callback, as in dev mode.
+    // cannot run: on a mobile, or with no menu_action callback, as in dev mode.
     //
     pub fn runAction(self: HandlerServices, io: std.Io, allocator: std.mem.Allocator, action: []const u8) !void {
         try self.vtable.runAction(self.ptr, io, allocator, action);
@@ -211,10 +211,10 @@ pub const HandlerServices = struct {
     }
 
     //
-    // Whether the native app is a phone's, Android or iOS, where there is no menu and no shortcut.
+    // Whether the native app is a mobile's, Android or iOS, where there is no menu and no shortcut.
     //
-    pub fn isPhone(self: HandlerServices) bool {
-        return self.vtable.isPhone(self.ptr);
+    pub fn isMobile(self: HandlerServices) bool {
+        return self.vtable.isMobile(self.ptr);
     }
 
     //

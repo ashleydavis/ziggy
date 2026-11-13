@@ -2,7 +2,7 @@
 
 ## Overview
 
-The smoke tests must test the app that ships. The smoke tests drive a separate test build, compiled with the `test-hooks` build option, so the release build is never tested, and the app listens on a loopback port for the test script to connect to. This plan compiles the remote control code into every build, removes the `test-hooks` option and reverses the connection: a separate program, the remote control server, listens, and the app connects out to it only when started with `--remote-control <host:port>`. Because the release build is the test build, each platform is built and packaged once per workflow run, in a `app-build` job that runs first and caches its output, and the smoke tests install and drive that package. The work covers the `ziggy` repository (Ziggy, its template and its test app), the `ziggy-example-vite` and `ziggy-example-rsbuild` repositories and the `photosphere` repository. The same smoke tests run on Linux, Windows and macOS, and on Android and iOS they use a connected phone when there is one and an emulator or simulator otherwise.
+The smoke tests must test the app that ships. The smoke tests drive a separate test build, compiled with the `test-hooks` build option, so the release build is never tested, and the app listens on a loopback port for the test script to connect to. This plan compiles the remote control code into every build, removes the `test-hooks` option and reverses the connection: a separate program, the remote control server, listens, and the app connects out to it only when started with `--remote-control <host:port>`. Because the release build is the test build, each platform is built and packaged once per workflow run, in a `app-build` job that runs first and caches its output, and the smoke tests install and drive that package. The work covers the `ziggy` repository (Ziggy, its template and its test app), the `ziggy-example-vite` and `ziggy-example-rsbuild` repositories and the `photosphere` repository. The same smoke tests run on Linux, Windows and macOS, and on Android and iOS they use a connected mobile when there is one and an emulator or simulator otherwise.
 
 ## Issues
 
@@ -137,7 +137,7 @@ Make every change in this section in `ziggy-example-vite` and again in `ziggy-ex
 - Steps 6 and 9 need a Ziggy release tag that contains steps 1 to 5. The executing agent cannot push or tag Ziggy: at step 6 it reports that the tag is needed and continues with the steps that do not depend on it. `docs/plans/new/plan-ziggy-signed-test-hooks.md` describes a different design (signed tokens and a listening port) for the same goal; this plan replaces that design.
 - Photosphere's Electron app (`apps/desktop`) and `apps/smoke-tests` have their own control server (`TestControlServer`) and are not changed by this plan.
 - `websocket.zig` becomes Ziggy's first dependency (`build.zig.zon` has none), so every app built on Ziggy links it.
-- The iOS device package (`package-ios.sh`) is unsigned and does not install on a phone, so a smoke run on a connected iPhone still needs its own signed build.
+- The iOS device package (`package-ios.sh`) is unsigned and does not install on a mobile, so a smoke run on a connected iPhone still needs its own signed build.
 - Settled, not to be reopened:
     - The app connects to the remote control server over WebSocket. The server is TypeScript with Express.js, in `tools/remote-control-server/` in the Ziggy repository.
     - The test picks the server's two ports at random and passes them in. There is no port file.

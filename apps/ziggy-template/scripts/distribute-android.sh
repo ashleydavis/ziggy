@@ -68,7 +68,7 @@ RELEASE_NOTES="$(bash "$SCRIPT_DIR/release-notes.sh" --limit 20)"
 APP_VERSION="$(jq -r '.version' "$EXAMPLE_DIR/package.json")-dev.$(date -u +%Y%m%d%H%M%S)"
 VERSION_CODE=$(( $(date +%s) / 60 ))
 
-# The phones testers have are arm64. The APK is the release build's, which is debug signed so that it installs.
+# The mobiles testers have are arm64. The APK is the release build's, which is debug signed so that it installs.
 echo "Building the Android APK ($APP_VERSION, version code $VERSION_CODE)..."
 OUTPUT_DIR="$EXAMPLE_DIR/out/android"
 bash "$SCRIPT_DIR/package-android.sh" --arch arm64 --output-dir "$OUTPUT_DIR" --version-name "$APP_VERSION" --version-code "$VERSION_CODE"

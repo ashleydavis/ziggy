@@ -33,7 +33,7 @@ pub const ActionInfo = struct {
     name: []const u8,
     // The action's label, or the `.standard` item's.
     label: []const u8,
-    // The shortcut as the platform shows it, such as "Ctrl+Shift+H" or "⇧⌘H", or null when there is none or on a phone, which
+    // The shortcut as the platform shows it, such as "Ctrl+Shift+H" or "⇧⌘H", or null when there is none or on a mobile, which
     // registers no shortcut.
     shortcut: ?[]const u8,
 
@@ -64,10 +64,10 @@ pub fn runAction(services: services_lib.HandlerServices, io: std.Io, allocator: 
 
 //
 // Lists every action of the app and every `.standard` item of its menu, with its label and its shortcut as the platform the core was
-// built for shows it. A phone registers no shortcut, so every shortcut is null there.
+// built for shows it. A mobile registers no shortcut, so every shortcut is null there.
 //
 pub fn listActions(app_actions: []const action_lib.Action, standard_menu_items: []const menu_lib.StandardMenuItem, services: services_lib.HandlerServices, allocator: std.mem.Allocator) ![]ActionInfo {
-    const show_shortcuts = !services.isPhone();
+    const show_shortcuts = !services.isMobile();
     var found: std.ArrayList(ActionInfo) = .empty;
     for (app_actions) |action| {
         try found.append(allocator, .{
@@ -87,14 +87,14 @@ pub fn listActions(app_actions: []const action_lib.Action, standard_menu_items: 
 }
 
 //
-// The shortcuts the inject script runs, or none on a phone, which registers no shortcut.
+// The shortcuts the inject script runs, or none on a mobile, which registers no shortcut.
 //
 pub fn list_shortcuts(shortcuts: []const shortcuts_lib.BrowserShortcut, services: services_lib.HandlerServices) []const shortcuts_lib.BrowserShortcut {
     for (shortcuts) |entry| {
         std.debug.assert(entry.action.len > 0);
         std.debug.assert((entry.key.len == 0) != (entry.code.len == 0));
     }
-    if (services.isPhone()) {
+    if (services.isMobile()) {
         return &.{};
     }
     return shortcuts;

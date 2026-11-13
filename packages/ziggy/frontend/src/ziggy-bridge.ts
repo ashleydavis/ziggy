@@ -100,7 +100,7 @@ export interface IActionInfo {
     // The action's label, or the `.standard` item's.
     label: string;
 
-    // The action's shortcut as the platform shows it, such as "Ctrl+Shift+H" or "⇧⌘H", or null when it has none or on a phone.
+    // The action's shortcut as the platform shows it, such as "Ctrl+Shift+H" or "⇧⌘H", or null when it has none or on a mobile.
     shortcut: string | null;
 }
 
@@ -378,7 +378,7 @@ export interface IZiggyBridge {
 
     //
     // Runs one of the app's actions, or a standard action of the app's menu, by its name. Rejects with UnknownAction for a name the
-    // app does not have, and StandardActionUnavailable for a standard action on a phone or in dev mode.
+    // app does not have, and StandardActionUnavailable for a standard action on a mobile or in dev mode.
     //
     runAction(name: string): Promise<void>;
 

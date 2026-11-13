@@ -17,7 +17,7 @@ Install what your platform needs before you start on an app:
 
 - **Windows:** install [Git for Windows](https://gitforwindows.org), add `%LOCALAPPDATA%\mise\shims` to PATH and run every command in Git Bash. Install "App Installer" from the Microsoft Store if `winget` is missing. Then run `bun run setup` in the app's directory, once per machine.
 - **macOS and iOS:** install Xcode.
-- **Android (on Linux or a Mac):** install `curl` and `unzip` (on Linux, `sudo apt install curl unzip`), then run `bun run setup` in the app's directory, once per machine. Start an emulator or attach a phone with USB debugging on before you run or test the app.
+- **Android (on Linux or a Mac):** install `curl` and `unzip` (on Linux, `sudo apt install curl unzip`), then run `bun run setup` in the app's directory, once per machine. Start an emulator or attach a mobile with USB debugging on before you run or test the app.
 - **Distributing:** install the [Firebase CLI](https://firebase.google.com/docs/cli) and sign in to it.
 
 ## On every platform
@@ -33,7 +33,7 @@ Install what your platform needs before you start on an app:
 | Vite | A bundler and dev server for web pages | Builds the template's frontend into `dist` and serves it in dev mode. Any other bundler can take its place | npm (`package.json`) |
 | Jest and ts-jest | A test runner for JavaScript and its TypeScript support | Runs the frontend's unit tests (`bun run test`) | npm (`package.json`) |
 | ziggy | Ziggy's TypeScript types of `window.ziggy` | Types the frontend's calls to the backend | Ziggy's repository, at the app's Ziggy version |
-| native-run | Ionic's library for installing and starting apps on phones | Installs and starts the app on an Android device or emulator and on a connected iPhone or iPad | npm (`package.json`) |
+| native-run | Ionic's library for installing and starting apps on mobiles | Installs and starts the app on an Android device or emulator and on a connected iPhone or iPad | npm (`package.json`) |
 
 ## Linux
 

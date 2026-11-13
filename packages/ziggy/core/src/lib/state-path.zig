@@ -28,7 +28,7 @@ pub fn appStatePath(arena: std.mem.Allocator, names: platform_lib.AppNames, data
 }
 
 //
-// The path of an app's state file on a desktop platform, from its names and the process environment, failing for a phone platform or
+// The path of an app's state file on a desktop platform, from its names and the process environment, failing for a mobile platform or
 // when the app's names are missing.
 //
 pub fn desktopStatePath(

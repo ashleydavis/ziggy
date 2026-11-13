@@ -73,4 +73,4 @@ The work is in the `ziggy` repository (Ziggy and its example) and the `ziggy-exa
 - Every shipped app now contains the hook code. A leaked private key lets anyone switch the hooks on in that app until the key is changed, and a bug in the token check is a way in. The expiry and the per-run secret limit what a stolen token can do.
 - Local runs use a key pair made under the app's `tmp/`, so developers never need the CI private key, and a build made locally only accepts tokens from that local key.
 - Photosphere's smoke tests use `-Dtest-hooks` and `ZIGGY_TEST_MODE` today. They change to the token when Photosphere moves to the `ziggy` package, which is part of the extraction plan, not this one.
-- Phone clocks: the expiry is checked against the device's clock. Emulators and simulators take the host's time, so this is not expected to matter in the tests.
+- Mobile clocks: the expiry is checked against the device's clock. Emulators and simulators take the host's time, so this is not expected to matter in the tests.

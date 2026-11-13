@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Runs the unit tests of the test app's backend, and of Ziggy's core library when --ziggy-dir names a checkout of Ziggy, on a phone platform,
+# Runs the unit tests of the test app's backend, and of Ziggy's core library when --ziggy-dir names a checkout of Ziggy, on a mobile platform,
 # where the program has to run on the emulator or simulator and not on this machine. See test-zig-mobile.md.
 
 set -euo pipefail
@@ -20,7 +20,7 @@ esac
 shift
 
 # The checkout of Ziggy whose core library's, utils', log's and config-state's tests run too, when one is named. The test app names the
-# repository it lives in, so the tests of Ziggy's core library, utils, log and config-state run on a phone beside its own; an app built on
+# repository it lives in, so the tests of Ziggy's core library, utils, log and config-state run on a mobile beside its own; an app built on
 # Ziggy runs its own backend's tests only.
 ZIGGY_DIR=""
 while [ $# -gt 0 ]; do

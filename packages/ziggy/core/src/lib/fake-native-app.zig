@@ -171,7 +171,7 @@ pub const FakeNativeApp = struct {
             .has_menu_action = true,
             .has_keep_alive = true,
             .has_native_call = true,
-            .is_phone = false,
+            .is_mobile = false,
             .has_screenshot = true,
             .has_key_press = true,
             .worker_threads = worker_threads,
@@ -743,7 +743,7 @@ fn defaultResult(arena: std.mem.Allocator, call: native_message.Call) !CallResul
             if (std.mem.eql(u8, native_call.method, "fail")) {
                 return .{
                     .succeeded = false,
-                    .text = try arena.dupe(u8, "The phone refused."),
+                    .text = try arena.dupe(u8, "The mobile refused."),
                 };
             }
             return .{

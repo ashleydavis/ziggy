@@ -46,8 +46,8 @@ typedef struct ziggy_config {
     bool has_keep_alive;
     // Whether the native app does "native-call" calls, the app's own native calls.
     bool has_native_call;
-    // Whether the native app is a phone's, Android or iOS, where there is no menu and no shortcut. False on a desktop.
-    bool is_phone;
+    // Whether the native app is a mobile's, Android or iOS, where there is no menu and no shortcut. False on a desktop.
+    bool is_mobile;
     // Whether the native app does "screenshot" calls. Used only by the remote control connection.
     bool has_screenshot;
     // Whether the native app does "key-press" calls. False on a platform with no shortcuts. Used only by the remote control connection.
@@ -196,7 +196,7 @@ typedef struct ziggy_menu_entry {
 } ziggy_menu_entry;
 
 // Returns the desktop menu's entries, valid until ziggy_destroy, and writes how many there are to the pointer given. Desktop native
-// apps show the menu, and a phone's native app never calls this.
+// apps show the menu, and a mobile's native app never calls this.
 const ziggy_menu_entry *ziggy_menu(void *handle, size_t *count);
 
 // The shortcut of an action that has no menu item.
