@@ -104,7 +104,6 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
 
     // The shortcuts of the app's actions that have no menu item, once the core exists. This holds them because their key monitor
     // lives as long as they do.
-    private var actionShortcuts: ZiggyActionShortcuts?
 
     // The pickers the core requested, which shutdown closes before it destroys the core.
     private let pickers = ZiggyPickers()
@@ -263,11 +262,6 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             ZiggyBridge.fail("the core has no menu entries")
         }
         menu = ZiggyMenu(bridge: self, entries: UnsafeBufferPointer(start: entries, count: entryCount))
-        var shortcutCount = 0
-        guard let shortcuts = ziggy_standalone_action_shortcuts(created, &shortcutCount) else {
-            ZiggyBridge.fail("the core has no standalone action shortcuts")
-        }
-        actionShortcuts = ZiggyActionShortcuts(bridge: self, shortcuts: UnsafeBufferPointer(start: shortcuts, count: shortcutCount))
 
         var themeLength = 0
         guard let themeText = ziggy_theme(created, &themeLength) else {

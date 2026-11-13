@@ -21,7 +21,7 @@ pub const platform = @import("system-messages/platform.zig");
 pub const menu = @import("system-messages/menu.zig");
 
 //
-// The system messages of the app's actions (run-action, list-actions).
+// The system messages of the app's actions (run-action, list-actions, list-shortcuts).
 //
 pub const action = @import("system-messages/action.zig");
 
@@ -61,6 +61,7 @@ pub const names = [_][]const u8{
     "menu-action",
     "run-action",
     "list-actions",
+    "list-shortcuts",
     "get-dropped-paths",
     "log",
     "get-config",

@@ -984,13 +984,35 @@ pub fn onTaskEvent(services: HandlerServices, timers: Timers, io: std.Io, alloca
 
 //
 // The test app's actions, which it passes to ziggy.core.App as `.actions`: Say From an Action, on the Example menu, whose handler the
-// frontend registers and whose shortcut, CmdOrCtrl+5, is free of the Example menu's.
+// frontend registers and whose shortcut, CmdOrCtrl+5, is free of the Example menu's; and Escape Action, Enter Action, Down Action and
+// Show Help, which have no menu item because the build refuses a shortcut a text box keeps on one, and whose handlers the frontend
+// registers too.
 //
 pub const actions: []const ziggy.action.Action = &.{
     .{
         .name = "say-action",
         .label = "Say From an Action",
         .shortcut = "CmdOrCtrl+5",
+    },
+    .{
+        .name = "escape-action",
+        .label = "Escape Action",
+        .shortcut = "Escape",
+    },
+    .{
+        .name = "enter-action",
+        .label = "Enter Action",
+        .shortcut = "Enter",
+    },
+    .{
+        .name = "down-action",
+        .label = "Down Action",
+        .shortcut = "Down",
+    },
+    .{
+        .name = "show-help",
+        .label = "Show Help",
+        .shortcut = "?",
     },
 };
 

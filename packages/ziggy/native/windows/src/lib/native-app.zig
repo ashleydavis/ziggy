@@ -588,9 +588,6 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
         if (result < 0) {
             return error.MessageLoopFailed;
         }
-        if (native_app.accelerator_table != null and c.TranslateAcceleratorW(native_app.window, native_app.accelerator_table, &message) != 0) {
-            continue;
-        }
         _ = c.TranslateMessage(&message);
         _ = c.DispatchMessageW(&message);
     }
@@ -842,7 +839,7 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .pick_paths => |pick| try askForPick(native_app, reply, pick),
         .screenshot => |output_path| startScreenshot(native_app, reply, output_path),
         .theme => |theme_call| applyTheme(native_app, theme_call),
-        .keep_alive, .native_call, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
+        .keep_alive, .native_call, .key_press, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
 }
 
@@ -986,6 +983,15 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     };
     // Developer tools are part of a normal desktop app, so they are on in a release build too.
     check("put_AreDevToolsEnabled", web_view_settings.lpVtbl.*.put_AreDevToolsEnabled.?(web_view_settings, 1));
+    // The web view's own reload, zoom, find, print and developer tools keys would act beside the app's shortcuts, so the app's menu is
+    // the only source of them. The movement and editing keys keep working.
+    var browser_keys_settings: ?*c.ICoreWebView2Settings3 = null;
+    check("QueryInterface", web_view_settings.lpVtbl.*.QueryInterface.?(web_view_settings, &c.IID_ICoreWebView2Settings3, @ptrCast(&browser_keys_settings)));
+    const browser_keys = browser_keys_settings orelse {
+        fatal("the web view's settings have no browser accelerator keys setting", .{});
+    };
+    check("put_AreBrowserAcceleratorKeysEnabled", browser_keys.lpVtbl.*.put_AreBrowserAcceleratorKeysEnabled.?(browser_keys, 0));
+    _ = browser_keys.lpVtbl.*.Release.?(browser_keys);
     _ = web_view_settings.lpVtbl.*.Release.?(web_view_settings);
     buildMenu(native_app, native_app.core.?) catch |err| {
         fatal("could not build the menu: {s}", .{@errorName(err)});
@@ -1036,12 +1042,10 @@ fn appendMenuItem(native_app: *NativeApp, allocator: std.mem.Allocator, win32_me
     }
     const escaped = try menu_lib.escapeLabel(allocator, label);
     defer allocator.free(escaped);
-    var binding: ?accelerator_lib.Binding = null;
     var text = try allocator.dupe(u8, escaped);
     defer allocator.free(text);
     if (entry.shortcut != null) {
         const parsed = try parseShortcut(label, std.mem.span(entry.shortcut));
-        binding = try shortcutBinding(label, parsed);
         var shortcut_buffer: [64]u8 = undefined;
         const shortcut = try accelerator_lib.formatShortcut(&shortcut_buffer, parsed.modifiers, std.mem.sliceTo(&parsed.key, 0));
         allocator.free(text);
@@ -1052,7 +1056,7 @@ fn appendMenuItem(native_app: *NativeApp, allocator: std.mem.Allocator, win32_me
     const command_id = first_command_id + native_app.menu_actions.items.len;
     try native_app.menu_actions.append(allocator, .{
         .action = try allocator.dupe(u8, std.mem.span(entry.action)),
-        .binding = binding,
+        .binding = null,
     });
     if (c.AppendMenuW(win32_menu, c.MF_STRING, command_id, wide_text.ptr) == 0) {
         return error.MenuBuildFailed;
@@ -1128,6 +1132,31 @@ fn buildAcceleratorTable(native_app: *NativeApp, allocator: std.mem.Allocator) !
                 .cmd = command,
             });
         }
+        // A Plus shortcut also runs on the key that types = in the layout, which is not VK_OEM_PLUS on every layout.
+        if (binding.shift_optional) {
+            const equal_scan = c.VkKeyScanExW('=', c.GetKeyboardLayout(0));
+            if (accelerator_lib.layout_equal_key(equal_scan)) |equal| {
+                if (equal.virtual_key != binding.virtual_key) {
+                    const command: c.WORD = @intCast(first_command_id + index);
+                    var equal_flags = flags;
+                    if (equal.needs_shift or binding.modifiers & accelerator_lib.modifier_shift != 0) {
+                        equal_flags |= c.FSHIFT;
+                    }
+                    try entries.append(allocator, .{
+                        .fVirt = equal_flags,
+                        .key = @intCast(equal.virtual_key),
+                        .cmd = command,
+                    });
+                    if (!equal.needs_shift) {
+                        try entries.append(allocator, .{
+                            .fVirt = equal_flags | c.FSHIFT,
+                            .key = @intCast(equal.virtual_key),
+                            .cmd = command,
+                        });
+                    }
+                }
+            }
+        }
     }
     if (entries.items.len == 0) {
         return;
@@ -1199,7 +1228,6 @@ fn buildMenu(native_app: *NativeApp, core: *anyopaque) !void {
         resizeWebView(native_app);
     }
     try appendStandaloneActionShortcuts(native_app, allocator, core);
-    try buildAcceleratorTable(native_app, allocator);
 }
 
 //
@@ -1664,39 +1692,13 @@ fn toggleFullscreen(native_app: *NativeApp) void {
 }
 
 //
-// A key was pressed with the keyboard inside the web view, before the frontend sees it. When it is a menu shortcut the
-// native app runs the action and marks the key handled. The editing shortcuts are left to the web view, which does them natively.
+// A key was pressed with the keyboard inside the web view, before the frontend sees it. The frontend runs every shortcut, so the
+// native app handles none and the key goes on to the page.
 //
 fn acceleratorInvoke(this: [*c]c.ICoreWebView2AcceleratorKeyPressedEventHandler, sender: [*c]c.ICoreWebView2Controller, args: [*c]c.ICoreWebView2AcceleratorKeyPressedEventArgs) callconv(.c) c.HRESULT {
+    _ = this;
     _ = sender;
-    const native_app = AcceleratorHandler.fromInterface(this).native_app;
-    var kind: c.COREWEBVIEW2_KEY_EVENT_KIND = undefined;
-    check("get_KeyEventKind", args.*.lpVtbl.*.get_KeyEventKind.?(args, &kind));
-    if (kind != c.COREWEBVIEW2_KEY_EVENT_KIND_KEY_DOWN and kind != c.COREWEBVIEW2_KEY_EVENT_KIND_SYSTEM_KEY_DOWN) {
-        return c.S_OK;
-    }
-    var virtual_key: c.UINT = 0;
-    check("get_VirtualKey", args.*.lpVtbl.*.get_VirtualKey.?(args, &virtual_key));
-    const held = heldModifiers();
-    for (native_app.menu_actions.items) |menu_action| {
-        const binding = menu_action.binding orelse {
-            continue;
-        };
-        if (!accelerator_lib.matches(binding, virtual_key, held)) {
-            continue;
-        }
-        const known = actions_lib.fromName(menu_action.action);
-        if (known != null and actions_lib.editCommand(known.?) != null) {
-            return c.S_OK;
-        }
-        check("put_Handled", args.*.lpVtbl.*.put_Handled.?(args, 1));
-        var status = std.mem.zeroes(c.COREWEBVIEW2_PHYSICAL_KEY_STATUS);
-        check("get_PhysicalKeyStatus", args.*.lpVtbl.*.get_PhysicalKeyStatus.?(args, &status));
-        if (status.WasKeyDown == 0) {
-            runAction(native_app, menu_action.action);
-        }
-        return c.S_OK;
-    }
+    _ = args;
     return c.S_OK;
 }
 

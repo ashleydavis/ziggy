@@ -136,6 +136,64 @@ pub fn bindingFor(modifiers: u32, key_name: []const u8) ?Binding {
 }
 
 //
+// The key that types = in a keyboard layout, as VkKeyScanExW gives it.
+//
+pub const LayoutEqualKey = struct {
+    // The virtual key code of the key.
+    virtual_key: u32,
+    // Whether the layout types = only with Shift held.
+    needs_shift: bool,
+};
+
+//
+// The key that types = in the layout, from what VkKeyScanExW('=') gave: its low byte is the virtual key, and bit 0 of its high byte
+// is set when the layout types = with Shift. Null when the layout has no key for =, or needs Ctrl or Alt to type it.
+//
+pub fn layout_equal_key(equal_scan: i16) ?LayoutEqualKey {
+    std.debug.assert(equal_scan >= -1);
+    if (equal_scan == -1) {
+        return null;
+    }
+    const scan: u16 = @bitCast(equal_scan);
+    const virtual_key: u8 = @truncate(scan);
+    const shift_state: u8 = @truncate(scan >> 8);
+    // Bit 1 is Ctrl and bit 2 is Alt: a layout that needs either for = gets no = match.
+    if (shift_state & 0b110 != 0) {
+        return null;
+    }
+    return .{
+        .virtual_key = virtual_key,
+        .needs_shift = shift_state & 0b001 != 0,
+    };
+}
+
+//
+// Returns true when a key press is a Plus binding run from the key that types = in the current layout: the binding is a Plus one,
+// the key press is the layout's = key, and the held modifiers are the binding's without Shift, with Shift held when the layout types
+// = with Shift. A layout that types = without Shift lets Shift be held or not, as matches does for Plus.
+//
+pub fn matches_layout_equal(binding: Binding, equal_scan: i16, virtual_key: u32, held_modifiers: u32) bool {
+    std.debug.assert(equal_scan >= -1);
+    std.debug.assert(binding.virtual_key != 0);
+    if (!binding.shift_optional) {
+        return false;
+    }
+    const equal = layout_equal_key(equal_scan) orelse {
+        return false;
+    };
+    if (virtual_key != equal.virtual_key) {
+        return false;
+    }
+    if ((held_modifiers & ~modifier_shift) != (binding.modifiers & ~modifier_shift)) {
+        return false;
+    }
+    if (equal.needs_shift) {
+        return held_modifiers & modifier_shift != 0;
+    }
+    return true;
+}
+
+//
 // Returns true when a key press is the binding: the key is its key (or its alternate) and the modifiers held are exactly
 // its modifiers, except that Shift is ignored when the binding allows either.
 //

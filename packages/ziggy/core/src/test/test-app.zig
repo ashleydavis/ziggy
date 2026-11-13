@@ -188,8 +188,9 @@ fn menuItemFails(services: HandlerServices, timers: Timers, io: std.Io, allocato
 }
 
 //
-// The tests' actions, which the test app is given as `.actions`: "say-hello", which the menu has an `.action` item for, and
-// "shortcut-only", which it has none for.
+// The tests' actions, which the test app is given as `.actions`: "say-hello", which the menu has an `.action` item for; and
+// "shortcut-only", "typing-only" and "ask", which it has none for. "typing-only" and "ask" have shortcuts with no Ctrl, Alt or Cmd,
+// which the frontend runs rather than a native app.
 //
 pub const actions: []const ziggy.action.Action = &.{
     .{
@@ -201,6 +202,16 @@ pub const actions: []const ziggy.action.Action = &.{
         .name = "shortcut-only",
         .label = "Shortcut Only",
         .shortcut = "CmdOrCtrl+Shift+O",
+    },
+    .{
+        .name = "typing-only",
+        .label = "Typing Only",
+        .shortcut = "Escape",
+    },
+    .{
+        .name = "ask",
+        .label = "Ask",
+        .shortcut = "?",
     },
 };
 

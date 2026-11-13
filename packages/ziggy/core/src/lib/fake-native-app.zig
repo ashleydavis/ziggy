@@ -172,6 +172,7 @@ pub const FakeNativeApp = struct {
             .has_keep_alive = true,
             .has_native_call = true,
             .has_screenshot = true,
+            .has_key_press = true,
             .worker_threads = worker_threads,
             .max_concurrent_child_tasks = max_children,
             .app_url_prefix = "file:///app/dist/",
@@ -263,6 +264,15 @@ pub const FakeNativeApp = struct {
     pub fn screenshotPaths(self: *FakeNativeApp, io: std.Io, allocator: std.mem.Allocator) ![]u8 {
         return try self.request(io, allocator, .{
             .request = "screenshot-paths",
+        });
+    }
+
+    //
+    // The keys the native app was called to press so far, one per line, allocated with the allocator.
+    //
+    pub fn pressedKeys(self: *FakeNativeApp, io: std.Io, allocator: std.mem.Allocator) ![]u8 {
+        return try self.request(io, allocator, .{
+            .request = "pressed-keys",
         });
     }
 
@@ -432,6 +442,8 @@ const Recorded = struct {
     chosen_actions: std.ArrayList(u8),
     // The paths screenshots were called for, one per line.
     screenshot_paths: std.ArrayList(u8),
+    // The keys key presses were called for, one per line.
+    pressed_keys: std.ArrayList(u8),
     // The value of each keep-alive call, in order.
     keep_alive_calls: std.ArrayList(bool),
     // Whether a quit call came.
@@ -445,6 +457,7 @@ const Recorded = struct {
         .messages = .empty,
         .chosen_actions = .empty,
         .screenshot_paths = .empty,
+        .pressed_keys = .empty,
         .keep_alive_calls = .empty,
         .quit_called = false,
         .last_calls = .empty,
@@ -458,6 +471,7 @@ const Recorded = struct {
         self.messages.deinit(allocator);
         self.chosen_actions.deinit(allocator);
         self.screenshot_paths.deinit(allocator);
+        self.pressed_keys.deinit(allocator);
         self.keep_alive_calls.deinit(allocator);
         var calls = self.last_calls.iterator();
         while (calls.next()) |entry| {
@@ -654,6 +668,9 @@ fn replyTo(allocator: std.mem.Allocator, arena: std.mem.Allocator, recorded: *Re
     if (std.mem.eql(u8, name, "screenshot-paths")) {
         return recorded.screenshot_paths.items;
     }
+    if (std.mem.eql(u8, name, "pressed-keys")) {
+        return recorded.pressed_keys.items;
+    }
     if (std.mem.eql(u8, name, "keep-alive-calls")) {
         return try json.stringify(arena, recorded.keep_alive_calls.items);
     }
@@ -691,6 +708,10 @@ fn handleCall(io: std.Io, allocator: std.mem.Allocator, native: *NativeSide, rec
             recorded.screenshot_paths.appendSlice(allocator, path) catch @panic("out of memory");
             recorded.screenshot_paths.append(allocator, '\n') catch @panic("out of memory");
         },
+        .key_press => |key| {
+            recorded.pressed_keys.appendSlice(allocator, key) catch @panic("out of memory");
+            recorded.pressed_keys.append(allocator, '\n') catch @panic("out of memory");
+        },
         .os_version, .pick_paths, .native_call, .theme, .stopped => {},
     }
     if (reply == 0) {
@@ -727,6 +748,18 @@ fn defaultResult(arena: std.mem.Allocator, call: native_message.Call) !CallResul
             return .{
                 .succeeded = true,
                 .text = try std.fmt.allocPrint(arena, "{{\"method\":\"{s}\",\"request\":{s}}}", .{ native_call.method, native_call.request }),
+            };
+        },
+        .key_press => |key| {
+            if (std.mem.eql(u8, key, "F24")) {
+                return .{
+                    .succeeded = false,
+                    .text = try arena.dupe(u8, "no such key"),
+                };
+            }
+            return .{
+                .succeeded = true,
+                .text = "",
             };
         },
         .screenshot => |path| {

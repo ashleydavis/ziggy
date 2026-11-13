@@ -3,8 +3,8 @@
 // native app reads shortcuts the same way and each only has to turn the result into its own platform's form.
 //
 // A shortcut is modifiers and one key joined by plus signs. The modifiers are CmdOrCtrl (Command on MacOS and Control
-// everywhere else), Cmd, Ctrl, Alt (also Option) and Shift. The key is a letter, a digit, a function key such as F12, or one of
-// Plus, Minus, Equal, Space, Enter, Tab, Escape, Up, Down, Left, Right, Home, End, PageUp, PageDown, Delete and Backspace.
+// everywhere else), Cmd, Ctrl, Alt (also Option) and Shift. The key is a letter, a digit, a function key such as F12, `?`, or one
+// of Plus, Minus, Equal, Space, Enter, Tab, Escape, Up, Down, Left, Right, Home, End, PageUp, PageDown, Delete and Backspace.
 //
 
 const std = @import("std");
@@ -30,7 +30,8 @@ pub const key_capacity: usize = 16;
 pub const Shortcut = extern struct {
     // Which modifier keys are held, as a mix of the modifier bits.
     modifiers: u32,
-    // The key's name, NUL terminated: a lower case letter or digit, a function key name, or one of the names listed above.
+    // The key's name, NUL terminated: a lower case letter or digit, a function key name, `?`, or one of the names listed above. `?`
+    // takes no modifiers, because a native app matches a fixed key while the key that types `?` changes with the keyboard layout.
     key: [key_capacity]u8,
 };
 
@@ -42,6 +43,9 @@ pub const ParseError = error{
     UnknownModifier,
     MissingKey,
     UnknownKey,
+    // `?` cannot be matched with a modifier: the key that types it changes with the keyboard layout, so only a native app's fixed
+    // key could match it.
+    ModifierWithQuestionMark,
 };
 
 //
@@ -85,6 +89,9 @@ pub fn parse(text: []const u8) ParseError!Shortcut {
         return error.MissingKey;
     };
     try writeKey(&result.key, key);
+    if (std.mem.eql(u8, std.mem.sliceTo(&result.key, 0), "?") and result.modifiers != 0) {
+        return error.ModifierWithQuestionMark;
+    }
     return result;
 }
 
@@ -98,6 +105,10 @@ fn writeKey(destination: *[key_capacity]u8, key: []const u8) ParseError!void {
     }
     if (key.len == 1 and std.ascii.isAlphanumeric(key[0])) {
         destination[0] = std.ascii.toLower(key[0]);
+        return;
+    }
+    if (key.len == 1 and key[0] == '?') {
+        destination[0] = '?';
         return;
     }
     if ((key[0] == 'F' or key[0] == 'f') and key.len >= 2 and key.len <= 3) {
@@ -200,4 +211,43 @@ pub fn writeDisplayText(buffer: []u8, parsed: Shortcut, os_tag: std.Target.Os.Ta
         }
     }
     return writer.buffered();
+}
+
+//
+// Whether the shortcut is a typing shortcut: one with no Ctrl, Alt or Cmd whose key is not a function key. A focused text box types,
+// moves its cursor or extends its selection with every such key, so the frontend runs these and only while no text box has the focus.
+// A parsed `?` has no modifiers and is not a function key, so it is a typing shortcut.
+//
+pub fn is_text_box_key(parsed: Shortcut) bool {
+    const key = std.mem.sliceTo(&parsed.key, 0);
+    std.debug.assert(key.len != 0);
+    std.debug.assert(parsed.modifiers & ~(modifier_ctrl | modifier_shift | modifier_alt | modifier_meta) == 0);
+    if (parsed.modifiers & (modifier_ctrl | modifier_alt | modifier_meta) != 0) {
+        return false;
+    }
+    if (key[0] == 'f' and key.len >= 2 and std.ascii.isDigit(key[1])) {
+        return false;
+    }
+    return true;
+}
+
+//
+// Whether two shortcuts are the same key press: the same modifiers and the same key, with Plus and Equal counting as one key because
+// a Plus shortcut also runs on `=`.
+//
+pub fn is_same_key_press(first: Shortcut, second: Shortcut) bool {
+    const first_key = std.mem.sliceTo(&first.key, 0);
+    const second_key = std.mem.sliceTo(&second.key, 0);
+    std.debug.assert(first_key.len != 0);
+    std.debug.assert(second_key.len != 0);
+    std.debug.assert(first.modifiers & ~(modifier_ctrl | modifier_shift | modifier_alt | modifier_meta) == 0);
+    std.debug.assert(second.modifiers & ~(modifier_ctrl | modifier_shift | modifier_alt | modifier_meta) == 0);
+    if (first.modifiers != second.modifiers) {
+        return false;
+    }
+    if (std.mem.eql(u8, first_key, second_key)) {
+        return true;
+    }
+    return (std.mem.eql(u8, first_key, "plus") and std.mem.eql(u8, second_key, "equal")) or
+        (std.mem.eql(u8, first_key, "equal") and std.mem.eql(u8, second_key, "plus"));
 }

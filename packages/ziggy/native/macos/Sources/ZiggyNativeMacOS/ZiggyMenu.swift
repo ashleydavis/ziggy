@@ -1,7 +1,7 @@
 //
 // The desktop menu on MacOS. The core gives the menu as a flat list of entries, and this draws it as the application's main menu: the
-// application menu first (About and Quit), then the app's own menus. Each item's shortcut becomes its key equivalent, which
-// AppKit handles even while the web view has the focus.
+// application menu first (About and Quit), then the app's own menus. Each item shows its shortcut after its title; the frontend runs
+// it, so the item carries no key equivalent for AppKit to match.
 //
 
 
@@ -193,11 +193,11 @@ final class ZiggyMenu: NSObject {
         return item
     }
 
-    // Reads the shortcut text with the core and sets the item's key equivalent and modifier keys from it.
+    // Shows the shortcut after the item's title. The frontend runs the shortcut, so the item carries no key equivalent, which AppKit
+    // would match itself.
     private func apply(accelerator text: String, to item: NSMenuItem) {
-        let key = ZiggyMenu.parseShortcut(text, owner: item.title)
-        item.keyEquivalent = key.keyEquivalent
-        item.keyEquivalentModifierMask = key.modifiers
+        _ = ZiggyMenu.parseShortcut(text, owner: item.title)
+        item.title = item.title + "\t" + text
     }
 
     // Reads shortcut text with the core into the key equivalent and modifier keys AppKit uses, for a menu item and for a shortcut

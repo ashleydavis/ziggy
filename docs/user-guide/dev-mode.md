@@ -19,7 +19,7 @@ Run `bun run dev`. It starts your app's own dev server, builds the dev backend a
 The frontend is the same code as in the native app and talks to the backend through the same `window.ziggy`.
 
 - What only the native app can do (menus, screenshots and the app's own native calls) fails with the error `NativeCallMissing`.
-- The menu's shortcuts work, apart from those of standard actions, and so do the shortcuts of actions that are not on the menu. A browser keeps some shortcuts for itself, such as Ctrl+W and Ctrl+T.
+- Every shortcut works, in the frontend, as it does in the native app. A browser keeps some shortcuts for itself, such as Ctrl+W and Ctrl+T.
 - File and directory dialogs work on Linux, where the dev backend shows them with zenity, and fail with `NativeCallMissing` on Windows and macOS.
 - A dropped file's path is the path of a copy the dev backend saves, because a browser gives a page no file's path.
 - The page renders in the browser's engine, so check the native app on each platform as well.

@@ -511,10 +511,14 @@ test "a list-actions message answers every action and standard item with its lab
     const expected = if (builtin.os.tag == .macos)
         "{\"id\":1,\"ok\":true,\"data\":[{\"name\":\"say-hello\",\"label\":\"Say Hello\",\"shortcut\":\"⇧⌘H\"}," ++
             "{\"name\":\"shortcut-only\",\"label\":\"Shortcut Only\",\"shortcut\":\"⇧⌘O\"}," ++
+            "{\"name\":\"typing-only\",\"label\":\"Typing Only\",\"shortcut\":\"Escape\"}," ++
+            "{\"name\":\"ask\",\"label\":\"Ask\",\"shortcut\":\"?\"}," ++
             "{\"name\":\"quit\",\"label\":\"Quit\",\"shortcut\":\"⌘Q\"}]}"
     else
         "{\"id\":1,\"ok\":true,\"data\":[{\"name\":\"say-hello\",\"label\":\"Say Hello\",\"shortcut\":\"Ctrl+Shift+H\"}," ++
             "{\"name\":\"shortcut-only\",\"label\":\"Shortcut Only\",\"shortcut\":\"Ctrl+Shift+O\"}," ++
+            "{\"name\":\"typing-only\",\"label\":\"Typing Only\",\"shortcut\":\"Escape\"}," ++
+            "{\"name\":\"ask\",\"label\":\"Ask\",\"shortcut\":\"?\"}," ++
             "{\"name\":\"quit\",\"label\":\"Quit\",\"shortcut\":\"Ctrl+Q\"}]}";
     try expectLastMessage(&native_app, expected);
 }
@@ -527,7 +531,47 @@ test "a list-actions message on a phone answers no shortcuts" {
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-actions\"}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":[{\"name\":\"say-hello\",\"label\":\"Say Hello\",\"shortcut\":null}," ++
-        "{\"name\":\"shortcut-only\",\"label\":\"Shortcut Only\",\"shortcut\":null},{\"name\":\"quit\",\"label\":\"Quit\",\"shortcut\":null}]}");
+        "{\"name\":\"shortcut-only\",\"label\":\"Shortcut Only\",\"shortcut\":null},{\"name\":\"typing-only\",\"label\":\"Typing Only\",\"shortcut\":null}," ++
+        "{\"name\":\"ask\",\"label\":\"Ask\",\"shortcut\":null},{\"name\":\"quit\",\"label\":\"Quit\",\"shortcut\":null}]}");
+}
+
+test "a list-shortcuts message answers every shortcut of the menu and the actions, standards included" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.has_native_call = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-shortcuts\"}");
+    // CmdOrCtrl is Ctrl on Linux and Windows and Command on macOS.
+    const expected = if (builtin.os.tag == .macos)
+        "{\"id\":1,\"ok\":true,\"data\":[" ++
+            "{\"action\":\"say-hello\",\"standard\":false,\"text_box\":false,\"code\":\"\",\"ctrl\":false,\"alt\":false,\"shift\":true,\"meta\":true,\"shiftOptional\":false,\"key\":\"h\"}," ++
+            "{\"action\":\"nested\",\"standard\":false,\"text_box\":false,\"code\":\"\",\"ctrl\":false,\"alt\":false,\"shift\":true,\"meta\":true,\"shiftOptional\":false,\"key\":\"n\"}," ++
+            "{\"action\":\"shortcut-only\",\"standard\":false,\"text_box\":false,\"code\":\"\",\"ctrl\":false,\"alt\":false,\"shift\":true,\"meta\":true,\"shiftOptional\":false,\"key\":\"o\"}," ++
+            "{\"action\":\"typing-only\",\"standard\":false,\"text_box\":true,\"code\":\"Escape\",\"ctrl\":false,\"alt\":false,\"shift\":false,\"meta\":false,\"shiftOptional\":false,\"key\":\"\"}," ++
+            "{\"action\":\"ask\",\"standard\":false,\"text_box\":true,\"code\":\"\",\"ctrl\":false,\"alt\":false,\"shift\":false,\"meta\":false,\"shiftOptional\":true,\"key\":\"?\"}," ++
+            "{\"action\":\"quit\",\"standard\":true,\"text_box\":false,\"code\":\"\",\"ctrl\":false,\"alt\":false,\"shift\":false,\"meta\":true,\"shiftOptional\":false,\"key\":\"q\"}]}"
+    else
+        "{\"id\":1,\"ok\":true,\"data\":[" ++
+            "{\"action\":\"say-hello\",\"standard\":false,\"text_box\":false,\"code\":\"\",\"ctrl\":true,\"alt\":false,\"shift\":true,\"meta\":false,\"shiftOptional\":false,\"key\":\"h\"}," ++
+            "{\"action\":\"nested\",\"standard\":false,\"text_box\":false,\"code\":\"\",\"ctrl\":true,\"alt\":false,\"shift\":true,\"meta\":false,\"shiftOptional\":false,\"key\":\"n\"}," ++
+            "{\"action\":\"shortcut-only\",\"standard\":false,\"text_box\":false,\"code\":\"\",\"ctrl\":true,\"alt\":false,\"shift\":true,\"meta\":false,\"shiftOptional\":false,\"key\":\"o\"}," ++
+            "{\"action\":\"typing-only\",\"standard\":false,\"text_box\":true,\"code\":\"Escape\",\"ctrl\":false,\"alt\":false,\"shift\":false,\"meta\":false,\"shiftOptional\":false,\"key\":\"\"}," ++
+            "{\"action\":\"ask\",\"standard\":false,\"text_box\":true,\"code\":\"\",\"ctrl\":false,\"alt\":false,\"shift\":false,\"meta\":false,\"shiftOptional\":true,\"key\":\"?\"}," ++
+            "{\"action\":\"quit\",\"standard\":true,\"text_box\":false,\"code\":\"\",\"ctrl\":true,\"alt\":false,\"shift\":false,\"meta\":false,\"shiftOptional\":false,\"key\":\"q\"}]}";
+    try expectLastMessage(&native_app, expected);
+}
+
+test "a list-shortcuts message on a phone answers none" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-shortcuts\"}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":[]}");
 }
 
 test "a handler's services.runAction sends the frontend the action system event" {

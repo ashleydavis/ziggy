@@ -63,7 +63,7 @@ function registerActions(): void {
 Four things run an action by its name:
 
 - **A menu item** of the `.action` kind (see [Menus](menus.md#an-action-of-the-apps)).
-- **The action's keyboard shortcut**, which works whether or not the action is on the menu (see [Keyboard shortcuts](menus.md#keyboard-shortcuts) for the syntax).
+- **The action's keyboard shortcut**, which works whether or not the action is on the menu and runs in the frontend (see [Keyboard shortcuts](menus.md#keyboard-shortcuts) for the syntax).
 - **The frontend**, by calling `window.ziggy.runAction(name)`, as the template's "Say hello from an action" button does:
 
   ```ts
@@ -85,14 +85,14 @@ Four things run an action by its name:
 
 - `name`: the name of the action or standard action, such as `zoom-in`.
 - `label`: the label of the action or `.standard` item.
-- `shortcut`: the shortcut as the platform shows it, such as `Ctrl+Shift+H` on Linux and Windows or `⇧⌘H` on macOS. It is null when there is none and on a phone.
+- `shortcut`: the shortcut as the platform shows it, such as `Ctrl+Shift+H` on Linux and Windows or `⇧⌘H` on macOS. It is null when there is none and on a phone. `?` is a shortcut an action can have, and it is reported as `?`.
 
 An app can build its own command palette from this list and run the chosen entry with `runAction`.
 
 ## On each platform
 
 - **iOS and Android:** no menu and no shortcuts. Actions run only through `runAction`.
-- **Dev mode:** there is no menu, but action shortcuts work in the browser, except those the browser keeps for itself, such as Ctrl+W and Ctrl+T (see [Dev mode](dev-mode.md)).
+- **Dev mode:** there is no menu, but every action shortcut works in the browser, except those the browser keeps for itself, such as Ctrl+W and Ctrl+T (see [Dev mode](dev-mode.md)).
 
 ## Testing actions
 

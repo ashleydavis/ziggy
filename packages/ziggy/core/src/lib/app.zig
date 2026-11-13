@@ -11,8 +11,7 @@ const handlers = @import("handlers.zig");
 const task_runner = @import("task-runner.zig");
 const menu_lib = @import("menu.zig");
 const action_lib = @import("action.zig");
-const dev_shortcuts = @import("dev-shortcuts.zig");
-const json = @import("json.zig");
+const shortcuts_lib = @import("shortcuts.zig");
 const ui_files = @import("ui-files.zig");
 const services_lib = @import("services.zig");
 const timers_lib = @import("timers.zig");
@@ -46,9 +45,9 @@ pub const RegisteredApp = struct {
     // Every `.standard` item of the menu (see standardMenuItems in menu.zig), which list-actions lists and runAction checks a standard
     // action's name against.
     standard_menu_items: []const menu_lib.StandardMenuItem = &.{},
-    // The shortcuts dev mode's script registers in the browser, as JSON the dev backend reads through ziggy_dev_shortcuts_json (see
-    // devShortcuts in dev-shortcuts.zig). "[]" for an app with none.
-    dev_shortcuts_json: []const u8 = "[]",
+    // Every shortcut the inject script runs, which list-shortcuts gives the frontend (see shortcut_list in shortcuts.zig). None for
+    // an app with none.
+    shortcuts: []const shortcuts_lib.BrowserShortcut = &.{},
     // The files of the app's bundled frontend, embedded in the app's library, for a native app that serves the frontend by
     // calling the core for each file (the MacOS, iOS and Android native apps). Empty for an app whose native app embeds the
     // frontend itself.
@@ -248,7 +247,7 @@ pub fn App(comptime definition: anytype) RegisteredApp {
         .actions = actions,
         .standalone_action_shortcuts = comptime action_lib.standaloneActionShortcuts(definition.menu, actions),
         .standard_menu_items = comptime menu_lib.standardMenuItems(definition.menu),
-        .dev_shortcuts_json = comptime json.stringifyComptime(dev_shortcuts.devShortcuts(definition.menu, actions)),
+        .shortcuts = comptime shortcuts_lib.shortcut_list(definition.menu, actions),
         .ui_files = definition.ui_files,
         .describe_error = if (@hasField(Definition, "describe_error")) definition.describe_error else null,
         .on_task_end = if (@hasField(Definition, "on_task_end")) definition.on_task_end else null,

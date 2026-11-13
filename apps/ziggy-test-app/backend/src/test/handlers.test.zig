@@ -749,7 +749,7 @@ test "the menu has the .ui items the UI handles, the zig-event item and the say-
     }
     const say_action = template.app.menu_targets.get("say-action") orelse return error.MenuItemMissing;
     try std.testing.expect(say_action == .action);
-    try std.testing.expectEqual(@as(usize, 8), template.app.menu_targets.keys().len);
+    try std.testing.expectEqual(@as(usize, 12), template.app.menu_targets.keys().len);
     for ([_][]const u8{ "toggle-devtools", "quit" }) |action| {
         try std.testing.expect(template.app.menu_targets.get(action) == null);
         var found = false;

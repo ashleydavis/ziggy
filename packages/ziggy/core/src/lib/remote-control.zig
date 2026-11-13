@@ -5,7 +5,7 @@
 // reply back to the script.
 //
 // The connection is one WebSocket connection to `ws://<host:port>/`. Each text message is one command: a JSON object with a
-// "command" field. A command the native app does (quit, menu, screenshot) is posted to the native app's queue as a call, and the
+// "command" field. A command the native app does (quit, menu, screenshot, press-key) is posted to the native app's queue as a call, and the
 // connection waits on its own queue for the result of one that has one. Every other command goes to the core's main thread as a
 // message, and the connection waits for the main thread's reply on a queue of its own: the main thread forwards a command for the
 // frontend as a test-command event, the frontend performs it and replies with Ziggy's own test-result message, and the main thread
@@ -27,6 +27,7 @@ const types = @import("types.zig");
 const json = @import("json.zig");
 const message_queue = @import("message-queue.zig");
 const dropped_files = @import("dropped-files.zig");
+const shortcut = @import("shortcut.zig");
 
 const MessageQueue = message_queue.MessageQueue;
 const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
@@ -121,6 +122,7 @@ pub const RemoteControl = struct {
                 .has_quit = config.has_quit,
                 .has_menu_action = config.has_menu_action,
                 .has_screenshot = config.has_screenshot,
+                .has_key_press = config.has_key_press,
             },
             .main_queue = main_queue,
             .queue = queue,
@@ -258,6 +260,8 @@ const NativeAccess = struct {
     has_menu_action: bool,
     // Whether the native app does "screenshot" calls.
     has_screenshot: bool,
+    // Whether the native app does "key-press" calls.
+    has_key_press: bool,
 };
 
 //
@@ -506,6 +510,40 @@ const Connection = struct {
             });
             const reply = self.replies.take(io, arena, .none) orelse {
                 @panic("ziggy remote control: a connection's queue closed while it waited for a screenshot");
+            };
+            const response = try worker_messages.decode(worker_messages.INativeAppResponseMessage, arena, reply.text);
+            if (response.@"error") |reason| {
+                return try json.stringify(allocator, .{
+                    .@"error" = reason,
+                });
+            }
+            return try allocator.dupe(u8, "{\"ok\":true}");
+        }
+        if (std.mem.eql(u8, name, "press-key")) {
+            // Presses a key as a user does, through the native app, so the press takes the path a real one takes and a shortcut that is
+            // broken for a user fails. The key is written as a shortcut, such as CmdOrCtrl+Plus.
+            const key = json.getString(command, "key") orelse {
+                return try allocator.dupe(u8, "{\"error\":\"InvalidCommand\"}");
+            };
+            _ = shortcut.parse(key) catch {
+                return try json.stringify(allocator, .{
+                    .@"error" = "InvalidKey",
+                    .key = key,
+                });
+            };
+            if (!native.has_key_press) {
+                return try allocator.dupe(u8, "{\"error\":\"NativeCallMissing\"}");
+            }
+            try self.waitForUi(io, allocator);
+            // The native app's result comes back on the connection's own queue.
+            try native.app.call(io, arena, .{
+                .key_press = key,
+            }, .{
+                .queue = &self.replies,
+                .call_id = 0,
+            });
+            const reply = self.replies.take(io, arena, .none) orelse {
+                @panic("ziggy remote control: a connection's queue closed while it waited for a key press");
             };
             const response = try worker_messages.decode(worker_messages.INativeAppResponseMessage, arena, reply.text);
             if (response.@"error") |reason| {

@@ -49,6 +49,9 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mob
 - `20-drop-files`: a file dropped on the window gets its real path from `getPathForFile`, and a file of another size does not. The drop is faked in two steps, because no tool can drag a file into the window: the `drop` command records it with the backend and `drop-file` gives the frontend a drop event. The native app's own reading of a real drop is not covered by any automatic test.
 - `25-close-with-dialog-open`: quitting while a real file dialog is open ends the app. Nothing reports that the dialog is on screen, so the scenario waits a few seconds after the click before it quits.
 - `29-config-files`: a config file with a bad line is reported by its line, the app runs on its defaults and the file is left alone; an unreadable state file is logged and the app starts with an empty state; a write keeps the file's comment and its other key; and a menu item's Zig function reads the config file.
+- `32-text-box-keys`: a shortcut with no Ctrl, Alt or Cmd runs its action outside a text box, and a focused text area keeps Escape, Enter, Down and `?`, so Enter types a newline and `?` a question mark.
+- `33-browser-keys`: Ctrl+= and Ctrl+Plus zoom in by one step, Ctrl+Minus zooms out and Ctrl+0 resets, and a key the app does not define, F5, does nothing to the page.
+- `34-question-mark-shortcut`: `listActions` reports `?`, `?` runs its action outside a text box, and a focused text area types a question mark instead.
 
 
 The scenarios in `workflows-only` change the system's appearance, which on a desktop is the developer's own screen. They run only in the workflow, and locally only when named with `ZIGGY_SMOKE_SCENARIO` or the runner's second argument, so an unfiltered local run never changes it:

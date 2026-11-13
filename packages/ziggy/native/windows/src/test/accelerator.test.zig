@@ -42,6 +42,32 @@ test "plus matches with or without Shift and on the keypad" {
     try std.testing.expect(!accelerator.matches(binding, 0xBB, accelerator.modifier_control | accelerator.modifier_alt));
 }
 
+test "a Plus shortcut runs on the key that types = in the layout" {
+    const binding = accelerator.bindingFor(accelerator.modifier_control, "plus").?;
+    // A US layout types = with the key VK_OEM_PLUS, with Shift or without.
+    try std.testing.expect(accelerator.matches_layout_equal(binding, 0x00BB, 0xBB, accelerator.modifier_control));
+    try std.testing.expect(accelerator.matches_layout_equal(binding, 0x00BB, 0xBB, accelerator.modifier_control | accelerator.modifier_shift));
+    // A German layout types = with Shift and the 0 key, so Ctrl+0 alone is Actual Size's key press and runs nothing.
+    try std.testing.expect(accelerator.matches_layout_equal(binding, 0x0130, 0x30, accelerator.modifier_control | accelerator.modifier_shift));
+    try std.testing.expect(!accelerator.matches_layout_equal(binding, 0x0130, 0x30, accelerator.modifier_control));
+    // A layout with no key for =, or one that needs Ctrl or Alt, gets no match.
+    try std.testing.expect(!accelerator.matches_layout_equal(binding, -1, 0xBB, accelerator.modifier_control));
+    try std.testing.expect(!accelerator.matches_layout_equal(binding, 0x0230, 0x30, accelerator.modifier_control));
+    try std.testing.expect(!accelerator.matches_layout_equal(binding, 0x0430, 0x30, accelerator.modifier_control));
+    // A binding that is not a Plus one gets no layout = match.
+    const equal = accelerator.bindingFor(accelerator.modifier_control, "equal").?;
+    try std.testing.expect(!accelerator.matches_layout_equal(equal, 0x00BB, 0xBB, accelerator.modifier_control));
+    const zero = accelerator.bindingFor(accelerator.modifier_control, "0").?;
+    try std.testing.expect(!accelerator.matches_layout_equal(zero, 0x00BB, 0xBB, accelerator.modifier_control));
+}
+
+test "the layout equal key gives its virtual key and whether it needs Shift" {
+    try std.testing.expectEqual(@as(?accelerator.LayoutEqualKey, .{ .virtual_key = 0xBB, .needs_shift = false }), accelerator.layout_equal_key(0x00BB));
+    try std.testing.expectEqual(@as(?accelerator.LayoutEqualKey, .{ .virtual_key = 0x30, .needs_shift = true }), accelerator.layout_equal_key(0x0130));
+    try std.testing.expectEqual(@as(?accelerator.LayoutEqualKey, null), accelerator.layout_equal_key(-1));
+    try std.testing.expectEqual(@as(?accelerator.LayoutEqualKey, null), accelerator.layout_equal_key(0x0230));
+}
+
 test "shortcut text is written the Windows way" {
     var buffer: [64]u8 = undefined;
     try std.testing.expectEqualStrings("Ctrl+Shift+I", try accelerator.formatShortcut(&buffer, accelerator.modifier_control | accelerator.modifier_shift, "i"));

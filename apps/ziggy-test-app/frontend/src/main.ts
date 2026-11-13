@@ -572,10 +572,23 @@ function sayFromAction(): void {
 
 //
 // Registers the handler of say-action, has the "Run the say action" button run it by name, and has the "List the actions" button
-// show every action listActions gives.
+// show every action listActions gives. It also registers the handlers of the actions whose shortcuts have no Ctrl, Alt or Cmd and of
+// Show Help on ?: each writes its name to key-log, so a smoke test can see which key press ran which action.
 //
 function startActions(): void {
     window.ziggy.registerAction("say-action", sayFromAction);
+    window.ziggy.registerAction("escape-action", () => {
+        appendTo("key-log", "escape-action");
+    });
+    window.ziggy.registerAction("enter-action", () => {
+        appendTo("key-log", "enter-action");
+    });
+    window.ziggy.registerAction("down-action", () => {
+        appendTo("key-log", "down-action");
+    });
+    window.ziggy.registerAction("show-help", () => {
+        appendTo("key-log", "show-help");
+    });
     element("run-say-action").addEventListener("click", () => {
         window.ziggy.runAction("say-action").catch((error: Error) => {
             element("action-result").textContent = `the action did not run: ${error.message}`;

@@ -24,6 +24,7 @@ pub const fake_native_app = @import("lib/fake-native-app.zig");
 pub const shortcut = @import("lib/shortcut.zig");
 pub const menu = @import("lib/menu.zig");
 pub const action = @import("lib/action.zig");
+pub const shortcuts = @import("lib/shortcuts.zig");
 pub const inject_script = @import("lib/inject-script.zig");
 pub const ui_files = @import("lib/ui-files.zig");
 pub const dropped_files = @import("lib/dropped-files.zig");

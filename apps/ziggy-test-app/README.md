@@ -14,7 +14,7 @@ The app Ziggy's own tests drive: it has a feature for each part of Ziggy, and no
 - Frontend storage: `localStorage` and IndexedDB values the frontend writes and reads back after the app is started again.
 - The frontend's address: the address and origin the frontend is served from, whether it is a secure context and whether `localStorage`, IndexedDB, and `fetch` and `XMLHttpRequest` of the frontend's own files work there.
 - Dropped files: a drop zone that shows the real path of a dropped file, from `window.ziggy.getPathForFile`.
-- A desktop menu defined once in Zig and drawn natively, with keyboard shortcuts that work anywhere in the window, and developer tools (Ctrl+Shift+I, or Cmd+Shift+I on a Mac) that open from it. A mobile device shows no menu.
+- A desktop menu defined once in Zig and drawn natively, with every shortcut runs in the frontend: a shortcut with Ctrl, Alt or Cmd runs anywhere in the window, and a shortcut with no Ctrl, Alt or Cmd, the Escape, Enter, Down and `?` ones included, runs anywhere but in a text box, which keeps those keys, and developer tools (Ctrl+Shift+I, or Cmd+Shift+I on a Mac) that open from it. A mobile device shows no menu.
 
 ## Where things are
 

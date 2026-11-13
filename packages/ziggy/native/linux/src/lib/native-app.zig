@@ -255,6 +255,7 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     config.has_pick_paths = true;
     config.has_menu_action = true;
     config.has_screenshot = true;
+    config.has_key_press = true;
     config.has_native_call = native_app.app_config.native_call != null;
     config.worker_threads = c.g_get_num_processors();
     config.max_concurrent_child_tasks = 10;
@@ -313,7 +314,7 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     }
     // The menu bar goes into the box before the window is shown, so the first frame holds it. A menu bar packed after
     // gtk_widget_show_all stays hidden, because a widget is hidden until it is shown.
-    try buildMenu(native_app, box_widget, window);
+    try buildMenu(native_app, box_widget);
     c.gtk_widget_show_all(window_widget);
     c.gtk_window_present(window);
 
@@ -564,6 +565,7 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .native_call => |native_call| runNativeCall(native_app, reply, native_call.method, native_call.request),
         .pick_paths => |pick| try showPickDialog(native_app, reply, pick),
         .screenshot => |output_path| try startScreenshot(native_app, reply, output_path),
+        .key_press => |key| press_key(native_app, reply, key),
         .theme => |theme_call| applyTheme(native_app, theme_call),
         .keep_alive, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
@@ -679,13 +681,9 @@ const menu_depth_max = 8;
 
 //
 // Builds the menu bar from the app's menu entries, which the core holds, and puts it above the web view. An app with no menu gets no
-// menu bar. Every item's shortcut, and every shortcut of an action that has no menu item, is registered with the window, so it works
-// wherever the focus is, with or without a menu bar.
+// menu bar. Each item shows its shortcut in its label; the frontend runs the shortcut, so the window binds none.
 //
-fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget, window: *c.GtkWindow) !void {
-    const accel_group = c.gtk_accel_group_new();
-    c.gtk_window_add_accel_group(window, accel_group);
-    try addStandaloneActionShortcuts(native_app, accel_group);
+fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget) !void {
     var count: usize = 0;
     const entries = z.ziggy_menu(native_app.core, &count);
     if (count == 0) {
@@ -709,7 +707,7 @@ fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget, window: *c.GtkWin
         if (entry.label == null) {
             return error.MenuEntryHasNoLabel;
         }
-        const menu_item = c.gtk_menu_item_new_with_label(std.mem.span(entry.label).ptr);
+        const menu_item = if (entry.shortcut) |shortcut| shortcutLabel(entry.label.?, shortcut) else c.gtk_menu_item_new_with_label(entry.label.?);
         if (entry.kind == z.ZIGGY_MENU_ENTRY_MENU or entry.kind == z.ZIGGY_MENU_ENTRY_SUBMENU) {
             const submenu = c.gtk_menu_new();
             c.gtk_menu_item_set_submenu(menu_item, submenu);
@@ -720,14 +718,20 @@ fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget, window: *c.GtkWin
                 return error.MenuItemHasNoAction;
             }
             try attachMenuItemAction(native_app, menu_item, std.mem.span(entry.action));
-            if (entry.shortcut != null) {
-                try addAccelerator(menu_item, accel_group, std.mem.span(entry.shortcut));
-            }
         }
         c.gtk_menu_shell_append(container, menu_item);
     }
     c.gtk_box_pack_start(box_widget, menu_bar, 0, 0, 0);
     c.gtk_box_reorder_child(box_widget, menu_bar, 0);
+}
+
+//
+// A menu item with its shortcut shown after its label, which GTK copies, so the buffer is freed at once.
+//
+fn shortcutLabel(label: [*:0]const u8, shortcut: [*:0]const u8) *c.GtkWidget {
+    var buffer: [512]u8 = undefined;
+    const text = std.fmt.bufPrintZ(&buffer, "{s}\t{s}", .{ std.mem.span(label), std.mem.span(shortcut) }) catch @panic("the menu label and its shortcut are too long");
+    return c.gtk_menu_item_new_with_label(text.ptr);
 }
 
 //
@@ -743,82 +747,217 @@ fn attachMenuItemAction(native_app: *NativeApp, menu_item: *c.GtkWidget, action_
     };
     _ = c.g_signal_connect_data(menu_item, "activate", @ptrCast(&onMenuItemActivate), context, @ptrCast(@constCast(&freeMenuItemContext)), 0);
 }
-//
-// Registers a menu item's keyboard shortcut with the window.
-//
-fn addAccelerator(menu_item: *c.GtkWidget, accel_group: *c.GtkAccelGroup, text: []const u8) !void {
-    const key = try parseGdkShortcut(text);
-    c.gtk_widget_add_accelerator(menu_item, "activate", accel_group, key.value, key.modifiers, c.GTK_ACCEL_VISIBLE);
-}
 
 //
-// A shortcut as GTK takes it: its key value and its modifier flags.
+// The event one step of a key press sends: the GDK event type, the keyval the event carries, the key on the keyboard that sends it,
+// the modifier mask held and whether the key is a modifier key.
 //
-const GdkShortcut = struct {
-    // The key's value, from gdk_keyval_from_name.
-    value: c_uint,
-    // The GDK modifier flags.
-    modifiers: c_uint,
+const PressKeyEvent = struct {
+    // The GDK event type: GDK_KEY_PRESS or GDK_KEY_RELEASE.
+    event_type: c_int,
+    // The keyval the event carries, which for a key with Shift is the character Shift gives.
+    keyval: c_uint,
+    // The key on the keyboard that sends the keyval.
+    key: c.GdkKeymapKey,
+    // The modifier mask the event carries.
+    state: c_uint,
+    // Whether the key is one of the modifier keys the press holds down.
+    is_modifier: bool,
 };
 
 //
-// Reads a shortcut's text, as the menu and the action shortcuts carry it, into what GTK takes. Text that does not parse, or a key GTK
-// does not know, fails, naming the shortcut.
+// The key on the keyboard that types the keyval, as the layout gives it, or null when the layout has none. More than sixteen keys
+// for one keyval is TooManyKeys, which the key press reports.
 //
-fn parseGdkShortcut(text: []const u8) !GdkShortcut {
+fn press_key_find_key(keymap: *c.GdkKeymap, keyval: c_uint) error{TooManyKeys}!?c.GdkKeymapKey {
+    std.debug.assert(@intFromPtr(keymap) != 0);
+    std.debug.assert(keyval != 0);
+    var keys: ?[*]c.GdkKeymapKey = null;
+    var count: c_int = 0;
+    if (c.gdk_keymap_get_entries_for_keyval(keymap, keyval, &keys, &count) == 0) {
+        return null;
+    }
+    const entries_pointer = keys orelse return null;
+    defer c.g_free(@ptrCast(entries_pointer));
+    const entry_count: usize = @intCast(count);
+    if (entry_count > 16) {
+        return error.TooManyKeys;
+    }
+    var entries: [16]menu_keys.KeyEntry = undefined;
+    for (entries_pointer[0..entry_count], 0..) |entry, index| {
+        entries[index] = .{
+            .keycode = entry.keycode,
+            .group = entry.group,
+            .level = entry.level,
+        };
+    }
+    const lowest = menu_keys.lowest_level_key(entries[0..entry_count]) orelse return null;
+    std.debug.assert(lowest.level >= 0);
+    return .{
+        .keycode = lowest.keycode,
+        .group = lowest.group,
+        .level = lowest.level,
+    };
+}
+
+//
+// Sends one key event to GTK, as the keyboard sends it. The event is read back through GTK's getters before GTK is given it, so a
+// wrong hand-written GdkEventKey layout stops the app on the first press rather than pressing the wrong key.
+//
+fn press_key_send_event(gdk_window: *c.GdkWindow, keyboard: *c.GdkDevice, event_options: PressKeyEvent) void {
+    std.debug.assert(@intFromPtr(gdk_window) != 0);
+    std.debug.assert(@intFromPtr(keyboard) != 0);
+    const event = c.gdk_event_new(event_options.event_type);
+    defer c.gdk_event_free(event);
+    const key_event: *c.GdkEventKey = @ptrCast(@alignCast(event));
+    key_event.window = @ptrCast(c.g_object_ref(gdk_window));
+    key_event.send_event = 0;
+    key_event.time = c.GDK_CURRENT_TIME;
+    key_event.state = event_options.state;
+    key_event.keyval = event_options.keyval;
+    key_event.length = 0;
+    key_event.string = c.g_strdup("");
+    key_event.hardware_keycode = @intCast(event_options.key.keycode);
+    key_event.group = @intCast(event_options.key.group);
+    key_event.is_modifier = if (event_options.is_modifier) 1 else 0;
+    var read_keyval: c_uint = 0;
+    var read_keycode: u16 = 0;
+    var read_state: c_uint = 0;
+    if (c.gdk_event_get_event_type(event) != event_options.event_type) {
+        std.debug.panic("GdkEventKey does not match GTK's layout: the type was written as {d} and GTK reads {d}", .{ event_options.event_type, c.gdk_event_get_event_type(event) });
+    }
+    if (c.gdk_event_get_window(event) != key_event.window) {
+        std.debug.panic("GdkEventKey does not match GTK's layout: the window was written as {?} and GTK reads {?}", .{ key_event.window, c.gdk_event_get_window(event) });
+    }
+    if (c.gdk_event_get_keyval(event, &read_keyval) == 0 or read_keyval != event_options.keyval) {
+        std.debug.panic("GdkEventKey does not match GTK's layout: the keyval was written as {d} and GTK reads {d}", .{ event_options.keyval, read_keyval });
+    }
+    if (c.gdk_event_get_keycode(event, &read_keycode) == 0 or read_keycode != key_event.hardware_keycode) {
+        std.debug.panic("GdkEventKey does not match GTK's layout: the keycode was written as {d} and GTK reads {d}", .{ key_event.hardware_keycode, read_keycode });
+    }
+    if (c.gdk_event_get_state(event, &read_state) == 0 or read_state != event_options.state) {
+        std.debug.panic("GdkEventKey does not match GTK's layout: the state was written as {d} and GTK reads {d}", .{ event_options.state, read_state });
+    }
+    c.gdk_event_set_device(event, keyboard);
+    c.gtk_main_do_event(event);
+}
+
+//
+// Sends the core the result of a key press that failed, with the reason built from the format and its arguments.
+//
+fn press_key_result(native_app: *NativeApp, reply: u64, comptime format: []const u8, arguments: anytype) void {
+    var buffer: [512]u8 = undefined;
+    const text = std.fmt.bufPrint(&buffer, format, arguments) catch "the key press failed";
+    sendResult(native_app, reply, false, text);
+}
+
+//
+// Presses and releases a key as a user does, through GTK's own key handling, so a shortcut that is broken for a user fails. The key
+// is written as a shortcut, such as CmdOrCtrl+Plus.
+//
+fn press_key(native_app: *NativeApp, reply: u64, key: []const u8) void {
+    std.debug.assert(key.len != 0);
     var parsed: z.ziggy_accelerator = undefined;
-    if (!z.ziggy_parse_accelerator(text.ptr, text.len, &parsed)) {
-        std.debug.print("ziggy native app: the app has a shortcut that cannot be read: {s}\n", .{text});
-        return error.UnreadableShortcut;
+    if (!z.ziggy_parse_accelerator(key.ptr, key.len, &parsed)) {
+        return press_key_result(native_app, reply, "the native app cannot press {s}", .{key});
     }
     var name_buffer: [32]u8 = undefined;
-    const key_name = try menu_keys.gdkKeyName(&name_buffer, std.mem.sliceTo(&parsed.key, 0));
-    const key_value = c.gdk_keyval_from_name(key_name.ptr);
-    if (key_value == 0) {
-        std.debug.print("ziggy native app: GTK has no key named {s}, for the shortcut {s}\n", .{ key_name, text });
-        return error.UnknownKey;
-    }
-    return .{
-        .value = key_value,
-        .modifiers = menu_keys.gdkModifiers(parsed.modifiers),
+    const key_name = menu_keys.gdkKeyName(&name_buffer, std.mem.sliceTo(&parsed.key, 0)) catch {
+        return press_key_result(native_app, reply, "GTK has no key for {s}", .{key});
     };
-}
-
-//
-// Registers with the window the shortcut of every action of the app's that has no menu item, so pressing it posts the menu-action
-// system message naming the action, as choosing a menu item does. The window holds each shortcut whether or not it has a menu bar.
-//
-fn addStandaloneActionShortcuts(native_app: *NativeApp, accel_group: *c.GtkAccelGroup) !void {
-    var count: usize = 0;
-    const shortcuts = z.ziggy_standalone_action_shortcuts(native_app.core, &count);
-    for (shortcuts[0..count]) |shortcut| {
-        const key = try parseGdkShortcut(std.mem.span(shortcut.shortcut));
-        const action = try std.heap.c_allocator.dupeZ(u8, std.mem.span(shortcut.action));
-        errdefer std.heap.c_allocator.free(action);
-        const context = try std.heap.c_allocator.create(MenuItemContext);
-        context.* = .{
-            .native_app = native_app,
-            .action = action,
+    const keyval = c.gdk_keyval_from_name(key_name.ptr);
+    if (keyval == 0) {
+        return press_key_result(native_app, reply, "GTK has no key for {s}", .{key});
+    }
+    const window = native_app.window orelse {
+        return press_key_result(native_app, reply, "the native app has no window", .{});
+    };
+    const gdk_window = c.gtk_widget_get_window(@ptrCast(window)) orelse {
+        return press_key_result(native_app, reply, "the window is not shown", .{});
+    };
+    const display = c.gdk_display_get_default() orelse {
+        return press_key_result(native_app, reply, "there is no display", .{});
+    };
+    const seat = c.gdk_display_get_default_seat(display);
+    const keyboard = c.gdk_seat_get_keyboard(seat) orelse {
+        return press_key_result(native_app, reply, "the display has no keyboard", .{});
+    };
+    const keymap = c.gdk_keymap_get_for_display(display);
+    const key_entry = press_key_find_key(keymap, keyval) catch {
+        return press_key_result(native_app, reply, "the keyboard has too many keys for {s}", .{key});
+    } orelse {
+        return press_key_result(native_app, reply, "the keyboard has no key for {s}", .{key});
+    };
+    var core_modifiers: u32 = parsed.modifiers;
+    if (key_entry.level == 1) {
+        core_modifiers |= z.ZIGGY_MOD_SHIFT;
+    }
+    const modifier_names = menu_keys.gdk_modifier_key_names(core_modifiers);
+    const modifier_count: usize = modifier_names.count;
+    var modifier_masks: [4]c_uint = undefined;
+    var modifier_keys: [4]c.GdkKeymapKey = undefined;
+    var index: usize = 0;
+    while (index < modifier_count) : (index += 1) {
+        const modifier_name = modifier_names.names[index];
+        const modifier_keyval = c.gdk_keyval_from_name(modifier_name.ptr);
+        modifier_keys[index] = press_key_find_key(keymap, modifier_keyval) catch {
+            return press_key_result(native_app, reply, "the keyboard has too many keys for {s}", .{modifier_name});
+        } orelse {
+            return press_key_result(native_app, reply, "the keyboard has no key for {s}", .{modifier_name});
         };
-        const closure = c.g_cclosure_new(@ptrCast(&onStandaloneActionShortcutPressed), context, @ptrCast(&freeMenuItemContext));
-        c.gtk_accel_group_connect(accel_group, key.value, key.modifiers, c.GTK_ACCEL_VISIBLE, closure);
+        modifier_masks[index] = menu_keys.gdk_modifier_mask(modifier_name) catch {
+            return press_key_result(native_app, reply, "the native app cannot press the modifier {s}", .{modifier_name});
+        };
     }
-}
-
-//
-// A shortcut of an action that has no menu item was pressed: does its action, as a menu item's activation does, and tells GTK the key
-// was used.
-//
-fn onStandaloneActionShortcutPressed(accel_group: *c.GtkAccelGroup, acceleratable: c.gpointer, keyval: c_uint, modifier: c_uint, user_data: c.gpointer) callconv(.c) c.gboolean {
-    _ = accel_group;
-    _ = acceleratable;
-    _ = keyval;
-    _ = modifier;
-    const context: *MenuItemContext = @ptrCast(@alignCast(user_data.?));
-    performAction(context.native_app, context.action) catch |err| {
-        fatal("could not do the action {s}: {s}", .{ context.action, @errorName(err) });
-    };
-    return 1;
+    var full_state: c_uint = 0;
+    for (modifier_masks[0..modifier_count]) |mask| {
+        full_state |= mask;
+    }
+    var event_keyval: c_uint = 0;
+    if (c.gdk_keymap_translate_keyboard_state(keymap, key_entry.keycode, full_state, key_entry.group, &event_keyval, null, null, null) == 0) {
+        return press_key_result(native_app, reply, "the keyboard has no key for {s}", .{key});
+    }
+    if (c.gtk_window_is_active(window) == 0) {
+        const focus_event = c.gdk_event_new(c.GDK_FOCUS_CHANGE);
+        defer c.gdk_event_free(focus_event);
+        const focus: *c.GdkEventFocus = @ptrCast(@alignCast(focus_event));
+        focus.window = @ptrCast(c.g_object_ref(gdk_window));
+        focus.send_event = 0;
+        focus.in = 1;
+        if (c.gdk_event_get_event_type(focus_event) != c.GDK_FOCUS_CHANGE) {
+            std.debug.panic("GdkEventFocus does not match GTK's layout", .{});
+        }
+        if (c.gdk_event_get_window(focus_event) != focus.window) {
+            std.debug.panic("GdkEventFocus does not match GTK's layout", .{});
+        }
+        c.gdk_event_set_device(focus_event, keyboard);
+        c.gtk_main_do_event(focus_event);
+    }
+    var steps_buffer: [10]menu_keys.KeyPressStep = undefined;
+    const steps = menu_keys.key_press_steps(&steps_buffer, modifier_masks[0..modifier_count]);
+    for (steps) |step| {
+        const event_type = if (step.is_release) c.GDK_KEY_RELEASE else c.GDK_KEY_PRESS;
+        if (step.modifier_index) |modifier_index| {
+            const modifier_position: usize = @intCast(modifier_index);
+            press_key_send_event(gdk_window, keyboard, .{
+                .event_type = event_type,
+                .keyval = c.gdk_keyval_from_name(modifier_names.names[modifier_position].ptr),
+                .key = modifier_keys[modifier_position],
+                .state = step.state,
+                .is_modifier = true,
+            });
+        }
+        else {
+            press_key_send_event(gdk_window, keyboard, .{
+                .event_type = event_type,
+                .keyval = event_keyval,
+                .key = key_entry,
+                .state = step.state,
+                .is_modifier = false,
+            });
+        }
+    }
+    sendResult(native_app, reply, true, "");
 }
 
 //

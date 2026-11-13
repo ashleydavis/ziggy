@@ -25,6 +25,7 @@ const app_lib = @import("app.zig");
 const handlers_lib = @import("handlers.zig");
 const menu_lib = @import("menu.zig");
 const action_lib = @import("action.zig");
+const shortcuts_lib = @import("shortcuts.zig");
 const message_queue = @import("message-queue.zig");
 const worker_pool = @import("worker-pool.zig");
 const worker_lib = @import("worker.zig");
@@ -1306,7 +1307,7 @@ fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: 
         return;
     }
     if (kind == .string and std.mem.eql(u8, kind.string, "system")) {
-        runSystemMessage(allocator, arena, frontend, app, theme_state, backgrounds, config_file_path, state_file_path, services, timers, io, pool, dropped, tests, parsed);
+        runSystemMessage(allocator, arena, frontend, app, app.shortcuts, theme_state, backgrounds, config_file_path, state_file_path, services, timers, io, pool, dropped, tests, parsed);
         return;
     }
     frontend.reportError(io, arena, null, "InvalidMessage");
@@ -1454,14 +1455,14 @@ const SystemOutcome = union(enum) {
 // It never reaches the app's handlers. A message with no name is InvalidMessage, and a name Ziggy has no system message of is
 // UnknownSystemMessage.
 //
-fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, parsed: std.json.Value) void {
+fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, shortcuts: []const shortcuts_lib.BrowserShortcut, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, parsed: std.json.Value) void {
     const request_id: ?std.json.Value = parsed.object.get("id");
     const name = messageName(parsed) orelse {
         frontend.reportError(io, arena, request_id, "InvalidMessage");
         return;
     };
     const data = parsed.object.get("data") orelse .null;
-    const outcome = runSystem(allocator, arena, frontend, name, data, theme_state, backgrounds, app.menu_targets, app.actions, app.standard_menu_items, config_file_path, state_file_path, services, timers, io, pool, dropped, tests) catch |err| {
+    const outcome = runSystem(allocator, arena, frontend, name, data, theme_state, backgrounds, app.menu_targets, app.actions, app.standard_menu_items, shortcuts, config_file_path, state_file_path, services, timers, io, pool, dropped, tests) catch |err| {
         frontend.reportHandlerError(io, arena, app.describe_error, request_id, err);
         return;
     };
@@ -1482,7 +1483,7 @@ fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fron
 //
 // Runs the system message of the name with its data, giving its function only the piece of the main thread's state it uses.
 //
-fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, name: []const u8, data: std.json.Value, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, menu_targets: menu_lib.MenuTargets, app_actions: []const action_lib.Action, standard_menu_items: []const menu_lib.StandardMenuItem, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
+fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, name: []const u8, data: std.json.Value, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, menu_targets: menu_lib.MenuTargets, app_actions: []const action_lib.Action, standard_menu_items: []const menu_lib.StandardMenuItem, shortcuts: []const shortcuts_lib.BrowserShortcut, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
     if (std.mem.eql(u8, name, "add-task")) {
         const payload = switch (try handlers_lib.parsePayload(system_messages.tasks.AddTaskRequest, arena, data)) {
             .parsed => |value| value,
@@ -1524,6 +1525,9 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: F
     }
     if (std.mem.eql(u8, name, "list-actions")) {
         return try respond(arena, try system_messages.action.listActions(app_actions, standard_menu_items, services, arena));
+    }
+    if (std.mem.eql(u8, name, "list-shortcuts")) {
+        return try respond(arena, system_messages.action.list_shortcuts(shortcuts, services));
     }
     if (std.mem.eql(u8, name, "get-dropped-paths")) {
         return try respond(arena, try system_messages.dropped_files.getDroppedPaths(dropped, arena));

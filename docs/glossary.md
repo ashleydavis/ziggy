@@ -32,6 +32,7 @@
 - **Test hooks**: what an app has only so tests can control it or look inside it: the remote control connection's commands, events and the app's own hooks. They act only when the app is started with `--remote-control`.
 - **Config file**: the TOML file holding the settings the user chose, one per Ziggy app, read and written through the typed key-path API. See [the config file](user-guide/config-file.md).
 - **State file**: the nested JSON file holding what the app remembers on one computer, one per Ziggy app, read and written through the typed key-path API. See [the state file](user-guide/state-file.md).
+- **Shortcut**: a key press that runs a menu item or an action, such as Ctrl+Shift+H or ?. It has optional modifiers and one key, and every shortcut runs in the frontend.
 - **Config key**: one named value in a config file, such as `theme` or `sync.enabled`.
 - **State key**: one named value in a state file, such as `desktop.last_folder` or `searches.recent`.
 - **Key path**: the keys of a config or state file's nesting joined with dots, such as `sidebar.left.open`, naming one config key or state key in `get`, `set` and `update`.

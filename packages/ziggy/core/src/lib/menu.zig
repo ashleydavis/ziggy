@@ -124,8 +124,9 @@ pub const StandardMenuItem = struct {
 // Fails the build, naming the item, when the menu is wrong: an item that is neither a separator, a submenu nor has a `run`, a submenu
 // that also has a `run`, a `.zig` or `.ui` item with no name or with an action's name, a `.standard` or `.action` item with a name, an
 // `.action` item naming an action the app does not have, two `.action` items running the same action, an empty label, two items
-// with the same name, a name spelled like a standard action, two shortcuts the same or a shortcut that does not parse. The shortcuts
-// compared are each item's own, an `.action` item's action's when it has none, and those of the actions that are not on the menu.
+// with the same name, a name spelled like a standard action, two shortcuts that are the same key press, a shortcut that does not
+// parse, or an item with a typing shortcut. The shortcuts compared are each item's own, an `.action` item's action's when it has
+// none, and those of the actions that are not on the menu.
 //
 pub fn rejectInvalidMenu(comptime menu: []const Menu, comptime actions: []const action_lib.Action) void {
     comptime {
@@ -139,8 +140,13 @@ pub fn rejectInvalidMenu(comptime menu: []const Menu, comptime actions: []const 
                 }
                 const item_shortcut = menuItemShortcut(item, actions);
                 const earlier_shortcut = menuItemShortcut(earlier, actions);
-                if (item_shortcut != null and earlier_shortcut != null and std.mem.eql(u8, item_shortcut.?, earlier_shortcut.?)) {
-                    @compileError("ziggy.menu: the items \"" ++ menuItemLabel(earlier, actions) ++ "\" and \"" ++ menuItemLabel(item, actions) ++ "\" have the same shortcut \"" ++ item_shortcut.? ++ "\".");
+                if (item_shortcut != null and earlier_shortcut != null) {
+                    const same = sameKeyPressTexts(earlier_shortcut.?, item_shortcut.?) catch |err| {
+                        @compileError(shortcutParseError(menu, actions, err));
+                    };
+                    if (same) {
+                        @compileError("ziggy.menu: the items \"" ++ menuItemLabel(earlier, actions) ++ "\" and \"" ++ menuItemLabel(item, actions) ++ "\" have the same key press, \"" ++ earlier_shortcut.? ++ "\" and \"" ++ item_shortcut.? ++ "\".");
+                    }
                 }
                 if (menuItemActionName(item) != null and menuItemActionName(earlier) != null and std.mem.eql(u8, menuItemActionName(item).?, menuItemActionName(earlier).?)) {
                     @compileError("ziggy.menu: two items run the action \"" ++ menuItemActionName(item).? ++ "\".");
@@ -157,11 +163,137 @@ pub fn rejectInvalidMenu(comptime menu: []const Menu, comptime actions: []const 
                 if (hasActionMenuItem(menu, action.name)) {
                     continue;
                 }
-                if (std.mem.eql(u8, shortcut, action_shortcut)) {
-                    @compileError("ziggy.menu: the item \"" ++ menuItemLabel(item, actions) ++ "\" and the action \"" ++ action.name ++ "\" have the same shortcut \"" ++ shortcut ++ "\".");
+                const same = sameKeyPressTexts(shortcut, action_shortcut) catch |err| {
+                    @compileError(shortcutParseError(menu, actions, err));
+                };
+                if (same) {
+                    @compileError("ziggy.menu: the item \"" ++ menuItemLabel(item, actions) ++ "\" and the action \"" ++ action.name ++ "\" have the same key press, \"" ++ shortcut ++ "\" and \"" ++ action_shortcut ++ "\".");
                 }
             }
         }
+        const typing_label = menu_typing_shortcut_item(menu, actions) catch |err| {
+            @compileError(shortcutParseError(menu, actions, err));
+        };
+        if (typing_label) |label| {
+            @compileError("ziggy.menu: the item \"" ++ label ++ "\" has a shortcut with no Ctrl, Alt or Cmd that is not a function key. Typing shortcuts are never shown in a menu: take the item off the menu and keep the shortcut on an action, or give the shortcut Ctrl, Alt or Cmd.");
+        }
+        const clash = off_menu_key_press_clash(menu, actions) catch |err| {
+            @compileError(shortcutParseError(menu, actions, err));
+        };
+        if (clash) |pair| {
+            @compileError("ziggy.menu: the actions \"" ++ pair[0] ++ "\" and \"" ++ pair[1] ++ "\" have the same key press, \"" ++ actionShortcut(actions, pair[0]) ++ "\" and \"" ++ actionShortcut(actions, pair[1]) ++ "\".");
+        }
+    }
+}
+
+//
+// Whether two shortcut texts are the same key press, or the parse error of the first that does not parse.
+//
+fn sameKeyPressTexts(comptime first: []const u8, comptime second: []const u8) shortcut_lib.ParseError!bool {
+    const first_parsed = try shortcut_lib.parse(first);
+    const second_parsed = try shortcut_lib.parse(second);
+    return shortcut_lib.is_same_key_press(first_parsed, second_parsed);
+}
+
+//
+// The build failure for a shortcut that does not parse, naming the first one that does not.
+//
+fn shortcutParseError(comptime menu: []const Menu, comptime actions: []const action_lib.Action, comptime err: shortcut_lib.ParseError) []const u8 {
+    const text = firstUnparseableShortcut(menu, actions) orelse "";
+    return "ziggy.menu: the shortcut \"" ++ text ++ "\" does not parse: " ++ @errorName(err) ++ ".";
+}
+
+//
+// The first shortcut text in the menu or in the actions that are not on it that does not parse, or null when every one does.
+//
+fn firstUnparseableShortcut(comptime menu: []const Menu, comptime actions: []const action_lib.Action) ?[]const u8 {
+    comptime {
+        for (allItems(menu)) |item| {
+            const shortcut = menuItemShortcut(item, actions) orelse continue;
+            _ = shortcut_lib.parse(shortcut) catch return shortcut;
+        }
+        for (actions) |action| {
+            const shortcut = action.shortcut orelse continue;
+            if (hasActionMenuItem(menu, action.name)) {
+                continue;
+            }
+            _ = shortcut_lib.parse(shortcut) catch return shortcut;
+        }
+        return null;
+    }
+}
+
+//
+// The label of the first item, of any kind and in a submenu or not, whose shortcut parses and has no Ctrl, Alt or Cmd, or null when
+// no item has one. A typing shortcut is one the frontend runs, so it is never shown in a menu. The parse error is given when a
+// shortcut does not parse.
+//
+pub fn menu_typing_shortcut_item(comptime menu: []const Menu, comptime actions: []const action_lib.Action) shortcut_lib.ParseError!?[]const u8 {
+    comptime {
+        @setEvalBranchQuota(100_000);
+        for (allItems(menu)) |item| {
+            const shortcut = menuItemShortcut(item, actions) orelse continue;
+            const parsed = try shortcut_lib.parse(shortcut);
+            if (!shortcut_lib.is_text_box_key(parsed)) {
+                continue;
+            }
+            const label = menuItemLabel(item, actions);
+            std.debug.assert(label.len > 0);
+            std.debug.assert(allItems(menu).len > 0);
+            return label;
+        }
+        return null;
+    }
+}
+
+//
+// The names of the first two of the app's actions that have a shortcut and no menu item and whose shortcuts are the same key press, or
+// null when no two are. The parse error is given when a shortcut does not parse.
+//
+pub fn off_menu_key_press_clash(comptime menu: []const Menu, comptime actions: []const action_lib.Action) shortcut_lib.ParseError!?[2][]const u8 {
+    comptime {
+        @setEvalBranchQuota(100_000);
+        var off_menu: []const action_lib.Action = &.{};
+        for (actions) |action| {
+            if (action.shortcut == null) {
+                continue;
+            }
+            if (hasActionMenuItem(menu, action.name)) {
+                continue;
+            }
+            off_menu = off_menu ++ &[_]action_lib.Action{action};
+        }
+        for (off_menu) |action| {
+            _ = try shortcut_lib.parse(action.shortcut.?);
+        }
+        for (off_menu, 0..) |action, index| {
+            for (off_menu[0..index]) |earlier| {
+                const earlier_parsed = try shortcut_lib.parse(earlier.shortcut.?);
+                const action_parsed = try shortcut_lib.parse(action.shortcut.?);
+                if (shortcut_lib.is_same_key_press(earlier_parsed, action_parsed)) {
+                    std.debug.assert(!std.mem.eql(u8, earlier.name, action.name));
+                    std.debug.assert(earlier.shortcut != null);
+                    std.debug.assert(action.shortcut != null);
+                    return .{ earlier.name, action.name };
+                }
+            }
+        }
+        return null;
+    }
+}
+
+//
+// The shortcut text of the action with the name, or an empty string when no action has the name.
+//
+fn actionShortcut(comptime actions: []const action_lib.Action, comptime name: []const u8) []const u8 {
+    comptime {
+        for (actions) |action| {
+            if (std.mem.eql(u8, action.name, name)) {
+                std.debug.assert(action.shortcut != null);
+                return action.shortcut.?;
+            }
+        }
+        return "";
     }
 }
 

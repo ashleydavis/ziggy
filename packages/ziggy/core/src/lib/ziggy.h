@@ -48,6 +48,8 @@ typedef struct ziggy_config {
     bool has_native_call;
     // Whether the native app does "screenshot" calls. Used only by the remote control connection.
     bool has_screenshot;
+    // Whether the native app does "key-press" calls. False on a platform with no shortcuts. Used only by the remote control connection.
+    bool has_key_press;
     // The number of worker threads.
     uint32_t worker_threads;
     // The limit on child tasks in flight for any one parent task.
@@ -102,6 +104,8 @@ enum {
     //                                                           the JSON text the method gives, and a failure's reason is in words the user
     //                                                           can act on
     //   {"type":"screenshot","outputPath":"..."}                write a PNG of the app's window to the file; the result is empty
+    //   {"type":"key-press","key":"CmdOrCtrl+Plus"}             press and release the key, written as a shortcut, by the path a user's key press
+    //                                                           takes into the native app; the result is empty
     //   {"type":"theme","setting":"system","theme":"dark","background":"#000000"}
     //                                                           set the web view's colour scheme and background from the theme; no result
     // A call that has a result also carries "callId", which the native app ignores.
@@ -161,7 +165,7 @@ enum {
 typedef struct ziggy_accelerator {
     // Which modifier keys are held, as a mix of the ZIGGY_MOD_ bits.
     uint32_t modifiers;
-    // The key's name, NUL terminated: a lower case letter or digit, a function key name such as "f12", or a name such as
+    // The key's name, NUL terminated: a lower case letter or digit, a function key name such as "f12", "?", or a name such as
     // "plus", "minus", "equal", "space", "enter", "tab", "escape", "up", "down", "left", "right", "home", "end", "pageup",
     // "pagedown", "delete" or "backspace".
     char key[16];
@@ -201,15 +205,8 @@ typedef struct ziggy_standalone_action_shortcut {
     const char *shortcut;
 } ziggy_standalone_action_shortcut;
 
-// Returns the shortcut of every action that has a shortcut but no menu item, valid until ziggy_destroy, and writes how many there are
-// to the pointer given. A desktop native app registers each one alongside the menu's shortcuts, and posts the menu-action system
-// message naming the action when it is pressed.
+// Returns no shortcut: the frontend runs every shortcut, so a native app registers none. Writes 0 to the pointer given.
 const ziggy_standalone_action_shortcut *ziggy_standalone_action_shortcuts(void *handle, size_t *count);
-
-// Returns, valid until ziggy_destroy, the JSON text of the shortcuts dev mode's script registers in the browser, standing in for a
-// desktop native app: an array of {"action", "code", "ctrl", "alt", "shift", "meta"}, where "code" is the KeyboardEvent code of the
-// key. Only the dev backend calls this. The length is written to the pointer given.
-const char *ziggy_dev_shortcuts_json(void *handle, size_t *length);
 
 // A file of the app's bundled frontend, as ziggy_ui_file gives it.
 typedef struct ziggy_ui_file_result {

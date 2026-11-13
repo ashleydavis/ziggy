@@ -553,6 +553,102 @@ test "the screenshot command on a native app with no screenshot callback reports
     try std.testing.expectEqualStrings("{\"error\":\"NativeCallMissing\"}", client.response.?);
 }
 
+test "the press-key command has the native app press the key" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &server);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    var client = Client.init(&server, "{\"command\":\"press-key\",\"key\":\"Escape\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"ok\":true}", client.response.?);
+    const keys = try native_app.pressedKeys(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(keys);
+    try std.testing.expectEqualStrings("Escape\n", keys);
+}
+
+test "the press-key command replies with the reason when the native app cannot press the key" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &server);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.sendMessage(std.testing.allocator, "{\"kind\":\"system\",\"name\":\"test-ui-ready\",\"data\":null}");
+    var client = Client.init(&server, "{\"command\":\"press-key\",\"key\":\"F24\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"no such key\"}", client.response.?);
+}
+
+test "the press-key command without a key is an invalid command and presses nothing" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &server);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(&server, "{\"command\":\"press-key\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidCommand\"}", client.response.?);
+    const keys = try native_app.pressedKeys(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(keys);
+    try std.testing.expectEqualStrings("", keys);
+}
+
+test "the press-key command with a key that is not a shortcut is an invalid key and presses nothing" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &server);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(&server, "{\"command\":\"press-key\",\"key\":\"Banana\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"InvalidKey\",\"key\":\"Banana\"}", client.response.?);
+    const keys = try native_app.pressedKeys(std.testing.io, std.testing.allocator);
+    defer std.testing.allocator.free(keys);
+    try std.testing.expectEqualStrings("", keys);
+}
+
+test "the press-key command on a native app with no key press callback reports what is missing" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.test_mode = true;
+    config.remote_control = server.address();
+    config.has_key_press = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
+    try server.expectConnected();
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    var client = Client.init(&server, "{\"command\":\"press-key\",\"key\":\"Escape\"}");
+    try client.start();
+    client.finish();
+    defer if (client.response) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"error\":\"NativeCallMissing\"}", client.response.?);
+}
+
 //
 // Sends one line to the core's remote control connection and returns its reply, allocated with the testing allocator.
 //

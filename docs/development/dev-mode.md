@@ -22,7 +22,7 @@ How the dev backend differs from a native app beyond its native calls:
 How it works:
 
 - The dev backend listens on `127.0.0.1` only. Its backend embeds no frontend, because the dev server serves the frontend, so dev mode needs no frontend build.
-- The dev backend serves `/__ziggy/dev.js` (the dev script), `/__ziggy/inject.js` (the inject script), `/__ziggy/alive`, `/__ziggy/start`, `/__ziggy/shortcuts` (the shortcuts the dev script registers in the browser, which posts `menu-action` for one that is pressed, as a desktop native app does), the dropped file uploads and the WebSocket at `/__ziggy/socket`.
+- The dev backend serves `/__ziggy/dev.js` (the dev script), `/__ziggy/inject.js` (the inject script), `/__ziggy/alive`, `/__ziggy/start`, the dropped file uploads and the WebSocket at `/__ziggy/socket`. The inject script runs every shortcut, as it does in the native app, so the dev script registers none.
 - Everything else goes to the dev server. Each request is sent on a connection of its own that closes after the response, with `accept-encoding: identity` so the response comes back uncompressed, so a page can have the scripts put in it. Any other response is passed back as it came. A WebSocket the dev server serves, such as its live reload, is passed through byte for byte in both directions.
 - Messages the backend sends while no page is connected wait for the next page.
 - When the WebSocket to the backend closes, the page fetches `/__ziggy/alive` until the dev backend responds and then reloads. The supervisor restarts the dev backend on the same port, so the page finds it again.

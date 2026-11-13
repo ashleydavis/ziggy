@@ -119,6 +119,7 @@ The system messages, each handled by Ziggy's core library and never by the app:
 | `menu-action` | The native app | Passes on a menu item the native app does not run itself, by its name: the core calls a `.zig` item's function or sends a `.ui` item to the frontend as the app event `{"type": "menu", "item": "<name>"}`. An action's name runs the action, whether or not it is on the menu. Any other name the menu does not have, or a standard action, fails with `UnknownMenuItem`. |
 | `run-action` | `window.ziggy.runAction(name)` | Runs the action named in `action`: one of the app's actions, or a standard action on the app's menu. See [Actions](../user-guide/actions.md#running-an-action) for the errors. |
 | `list-actions` | `window.ziggy.listActions()` | Answers with the `name`, `label` and `shortcut` of every action of the app and every `.standard` item of its menu. `shortcut` is as the platform shows it, or null. |
+| `list-shortcuts` | The inject script, when it runs | Answers with every shortcut the frontend runs: the action's name, whether it is a standard item, whether a text box keeps it, its modifiers, and its `code` or the `key` character it types. Empty on a phone. |
 | `test-result` | `window.ziggy.sendTestResult(requestId, result)` | The frontend's result for a `test-command`. Fails with `RemoteControlNotRunning` when the app was started without `--remote-control`. |
 | `test-ui-ready` | `window.ziggy.testUiReady()` | Reports that the frontend is listening for test commands. Fails with `RemoteControlNotRunning` when the app was started without `--remote-control`. |
 | `get-system-theme` | `window.ziggy.getSystemTheme()` | Answers with the operating system's theme, `light` or `dark`, whatever the app's theme setting is. |
@@ -159,7 +160,7 @@ The system events, each with its own listener on `window.ziggy`:
 - An action is a named piece of the app's functionality that takes no arguments. The app declares each as a `ziggy.action.Action`, with a name, a label and an optional shortcut, and passes them to `ziggy.core.App` as `.actions` (`core/src/lib/action.zig`).
 - Every action's handler is in the frontend, registered with `window.ziggy.registerAction(name, handler)`.
 - An action is run by a menu item of the `.action` kind, the action's shortcut, `window.ziggy.runAction(name)` or the handler services' `runAction`. The core runs each of them through its `runAction`, which sends the frontend the `action` system event naming the action. The injected script calls the handler registered for that name.
-- Each desktop native app registers the shortcut of every action, whether or not the action is on the menu.
+- The frontend runs every shortcut, those of the menu's items and of the actions alike, and the native apps register none. A native app shows each item's shortcut and runs the action the frontend posts.
 - `window.ziggy.listActions()` lists every action and every `.standard` item of the menu with its label and shortcut, so an app can draw its own command palette.
 
 ## Menus

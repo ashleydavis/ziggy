@@ -69,6 +69,9 @@ pub const ZiggyConfig = extern struct {
     // Whether the native app writes a PNG of its window to a file. Used only by the remote control connection; without it a screenshot
     // is taken from outside the app.
     has_screenshot: bool,
+    // Whether the native app presses a key by the path a user's key press takes into it. False on a platform with no shortcuts. Used
+    // only by the remote control connection.
+    has_key_press: bool,
     // The number of worker threads.
     worker_threads: u32,
     // The limit on child tasks in flight for any one parent task.

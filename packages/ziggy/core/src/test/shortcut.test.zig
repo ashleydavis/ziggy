@@ -69,6 +69,51 @@ test "writeDisplayText shows Plus as a plus sign and a function key as F and its
     try std.testing.expectEqualStrings("Shift+PageDown", try shortcut_lib.writeDisplayText(&buffer, try shortcut_lib.parse("Shift+PageDown"), .linux));
 }
 
+test "a typing shortcut has no Ctrl, Alt or Cmd and is not a function key" {
+    try std.testing.expect(shortcut_lib.is_text_box_key(try shortcut_lib.parse("Escape")));
+    try std.testing.expect(shortcut_lib.is_text_box_key(try shortcut_lib.parse("Enter")));
+    try std.testing.expect(shortcut_lib.is_text_box_key(try shortcut_lib.parse("Up")));
+    try std.testing.expect(shortcut_lib.is_text_box_key(try shortcut_lib.parse("Down")));
+    try std.testing.expect(shortcut_lib.is_text_box_key(try shortcut_lib.parse("Shift+Down")));
+    try std.testing.expect(shortcut_lib.is_text_box_key(try shortcut_lib.parse("J")));
+    try std.testing.expect(shortcut_lib.is_text_box_key(try shortcut_lib.parse("Plus")));
+    try std.testing.expect(shortcut_lib.is_text_box_key(try shortcut_lib.parse("?")));
+    try std.testing.expect(!shortcut_lib.is_text_box_key(try shortcut_lib.parse("Ctrl+Escape")));
+    try std.testing.expect(!shortcut_lib.is_text_box_key(try shortcut_lib.parse("Alt+Down")));
+    try std.testing.expect(!shortcut_lib.is_text_box_key(try shortcut_lib.parse("Cmd+Enter")));
+    try std.testing.expect(!shortcut_lib.is_text_box_key(try shortcut_lib.parse("CmdOrCtrl+J")));
+    try std.testing.expect(!shortcut_lib.is_text_box_key(try shortcut_lib.parse("F5")));
+    try std.testing.expect(!shortcut_lib.is_text_box_key(try shortcut_lib.parse("Shift+F5")));
+}
+
+test "the same key press counts Plus and Equal as one key" {
+    try std.testing.expect(shortcut_lib.is_same_key_press(try shortcut_lib.parse("CmdOrCtrl+Plus"), try shortcut_lib.parse("CmdOrCtrl+Equal")));
+    try std.testing.expect(shortcut_lib.is_same_key_press(try shortcut_lib.parse("CmdOrCtrl+Equal"), try shortcut_lib.parse("CmdOrCtrl+Plus")));
+    try std.testing.expect(shortcut_lib.is_same_key_press(try shortcut_lib.parse("Escape"), try shortcut_lib.parse("Escape")));
+    try std.testing.expect(!shortcut_lib.is_same_key_press(try shortcut_lib.parse("Ctrl+Plus"), try shortcut_lib.parse("Alt+Equal")));
+    try std.testing.expect(!shortcut_lib.is_same_key_press(try shortcut_lib.parse("Ctrl+Plus"), try shortcut_lib.parse("Ctrl+Minus")));
+    // CmdOrCtrl is Ctrl on Linux and Windows and Command on macOS.
+    const command_or_control = if (builtin.os.tag == .macos) shortcut_lib.modifier_meta else shortcut_lib.modifier_ctrl;
+    try std.testing.expectEqual(command_or_control == shortcut_lib.modifier_ctrl, shortcut_lib.is_same_key_press(try shortcut_lib.parse("Ctrl+S"), try shortcut_lib.parse("CmdOrCtrl+S")));
+}
+
+test "? is a key, with no modifiers" {
+    const parsed = try shortcut_lib.parse("?");
+    try std.testing.expectEqual(@as(u32, 0), parsed.modifiers);
+    try std.testing.expectEqualStrings("?", keyText(&parsed));
+    try std.testing.expectError(error.ModifierWithQuestionMark, shortcut_lib.parse("Ctrl+?"));
+    try std.testing.expectError(error.ModifierWithQuestionMark, shortcut_lib.parse("Shift+?"));
+    try std.testing.expectError(error.ModifierWithQuestionMark, shortcut_lib.parse("Alt+?"));
+    try std.testing.expectError(error.ModifierWithQuestionMark, shortcut_lib.parse("CmdOrCtrl+?"));
+}
+
+test "writeDisplayText writes ? on every platform" {
+    var buffer: [8]u8 = undefined;
+    try std.testing.expectEqualStrings("?", try shortcut_lib.writeDisplayText(&buffer, try shortcut_lib.parse("?"), .macos));
+    try std.testing.expectEqualStrings("?", try shortcut_lib.writeDisplayText(&buffer, try shortcut_lib.parse("?"), .linux));
+    try std.testing.expectEqualStrings("?", try shortcut_lib.writeDisplayText(&buffer, try shortcut_lib.parse("?"), .windows));
+}
+
 test "writeDisplayText fails when the buffer is too small" {
     var buffer: [4]u8 = undefined;
     try std.testing.expectError(error.WriteFailed, shortcut_lib.writeDisplayText(&buffer, try shortcut_lib.parse("Ctrl+Alt+Shift+h"), .linux));

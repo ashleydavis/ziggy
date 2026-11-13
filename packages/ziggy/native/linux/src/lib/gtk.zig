@@ -73,6 +73,92 @@ pub const WEBKIT_POLICY_DECISION_TYPE_NEW_WINDOW_ACTION: c_uint = 1;
 // GDK_CURRENT_TIME.
 pub const GDK_CURRENT_TIME: u32 = 0;
 
+// Opaque types the key press uses, declared only as pointers.
+pub const GdkWindow = opaque {};
+pub const GdkDisplay = opaque {};
+pub const GdkSeat = opaque {};
+pub const GdkDevice = opaque {};
+pub const GdkKeymap = opaque {};
+pub const GdkEvent = opaque {};
+
+// struct _GdkEventKey from gdk/gdkevents.h. C declares is_modifier as a one-bit field, which on the little-endian targets Ziggy
+// builds sits in the byte after group.
+pub const GdkEventKey = extern struct {
+    type: c_int,
+    window: ?*GdkWindow,
+    send_event: i8,
+    time: u32,
+    state: c_uint,
+    keyval: c_uint,
+    length: c_int,
+    string: ?[*:0]u8,
+    hardware_keycode: u16,
+    group: u8,
+    is_modifier: u8,
+};
+
+comptime {
+    // The layout read from gdk/gdkevents.h on GTK's gtk-3-24 branch. A mismatch stops the build rather than a key press.
+    if (@offsetOf(GdkEventKey, "string") != 40) {
+        @compileError("GdkEventKey.string is not at the offset gdk/gdkevents.h gives it");
+    }
+    if (@offsetOf(GdkEventKey, "hardware_keycode") != 48) {
+        @compileError("GdkEventKey.hardware_keycode is not at the offset gdk/gdkevents.h gives it");
+    }
+    if (@offsetOf(GdkEventKey, "is_modifier") != 51) {
+        @compileError("GdkEventKey.is_modifier is not at the offset gdk/gdkevents.h gives it");
+    }
+    if (@sizeOf(GdkEventKey) != 56) {
+        @compileError("GdkEventKey is not the size gdk/gdkevents.h gives it");
+    }
+}
+
+// struct _GdkEventFocus from gdk/gdkevents.h.
+pub const GdkEventFocus = extern struct {
+    type: c_int,
+    window: ?*GdkWindow,
+    send_event: i8,
+    in: i16,
+};
+
+// GdkEventType: a key press, a key release and the window gaining or losing the keyboard.
+pub const GDK_KEY_PRESS: c_int = 8;
+pub const GDK_KEY_RELEASE: c_int = 9;
+pub const GDK_FOCUS_CHANGE: c_int = 12;
+
+pub extern fn gdk_event_new(event_type: c_int) *GdkEvent;
+pub extern fn gdk_event_free(event: *GdkEvent) void;
+pub extern fn gdk_event_set_device(event: *GdkEvent, device: *GdkDevice) void;
+
+// The getters gdk/gdkevents.h gives the fields of a key event, used to read an event back before GTK is given it.
+pub extern fn gdk_event_get_event_type(event: *const GdkEvent) c_int;
+pub extern fn gdk_event_get_window(event: *const GdkEvent) ?*GdkWindow;
+pub extern fn gdk_event_get_keyval(event: *const GdkEvent, keyval: *c_uint) gboolean;
+pub extern fn gdk_event_get_keycode(event: *const GdkEvent, keycode: *u16) gboolean;
+pub extern fn gdk_event_get_state(event: *const GdkEvent, state: *c_uint) gboolean;
+
+// GdkKeymapKey from gdk/gdkkeys.h: one key of the layout that types a keyval.
+pub const GdkKeymapKey = extern struct {
+    keycode: c_uint,
+    group: c_int,
+    level: c_int,
+};
+
+pub extern fn gdk_keymap_get_for_display(display: *GdkDisplay) *GdkKeymap;
+pub extern fn gdk_keymap_get_entries_for_keyval(keymap: *GdkKeymap, keyval: c_uint, keys: *?[*]GdkKeymapKey, n_keys: *c_int) gboolean;
+pub extern fn gdk_keymap_translate_keyboard_state(keymap: *GdkKeymap, hardware_keycode: c_uint, state: c_uint, group: c_int, keyval: ?*c_uint, effective_group: ?*c_int, level: ?*c_int, consumed_modifiers: ?*c_uint) gboolean;
+
+pub extern fn gdk_display_get_default() ?*GdkDisplay;
+pub extern fn gdk_display_get_default_seat(display: *GdkDisplay) *GdkSeat;
+pub extern fn gdk_seat_get_keyboard(seat: *GdkSeat) ?*GdkDevice;
+
+pub extern fn gtk_main_do_event(event: *GdkEvent) void;
+pub extern fn gtk_window_is_active(window: *GtkWindow) gboolean;
+pub extern fn gtk_widget_get_window(widget: *GtkWidget) ?*GdkWindow;
+
+pub extern fn g_object_ref(object: gpointer) gpointer;
+pub extern fn g_strdup(text: [*:0]const u8) [*:0]u8;
+
 pub extern fn g_object_unref(object: gpointer) void;
 pub extern fn g_signal_connect_data(instance: gpointer, detailed_signal: [*:0]const u8, handler: GCallback, data: gpointer, destroy_data: gpointer, connect_flags: c_uint) c_ulong;
 pub extern fn g_application_run(application: *GApplication, argc: c_int, argv: ?[*]?[*:0]u8) c_int;

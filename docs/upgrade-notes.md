@@ -4,6 +4,13 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 
 ## v0.0.24
 
+- **Every shortcut runs in the frontend.** A native app of the app's own registers no accelerator, key equivalent or key monitor: it shows each item's shortcut and runs the action the frontend posts.
+- **`ziggy_standalone_action_shortcuts` returns no shortcut.** A native app that read it registers nothing.
+- **A menu item with a shortcut a text box keeps fails the build,** so move the shortcut to an action with no menu item. Two shortcuts that are the same key press fail the build, which covers `Plus` and `Equal`, and on Linux and Windows `Ctrl+<key>` beside `CmdOrCtrl+<key>`. Two actions that are not on the menu and have the same shortcut also fail the build.
+- **A held shortcut key runs its action once per press.**
+- **A shortcut on a letter, a digit, `Plus`, `Minus`, `Equal` or `?` runs from the key that types its character.** One that holds Shift with a digit, `Plus`, `Minus` or `Equal` fails the build, so add Ctrl, Alt or Cmd.
+- **WebView2's browser accelerator keys are off on Windows,** so an app that relied on F5 or Ctrl+F adds a menu item or an action.
+- **New, and optional:** a shortcut can be `?` (see [Menus](user-guide/menus.md#keyboard-shortcuts)).
 - **`HandlerServices.VTable` has `configPath` and `statePath`.** Code of the app's that builds its own handler services vtable, such as a test, adds both.
 - **`ITaskContext` has `configPath` and `statePath`,** and the task context constructor takes them. Code of the app's that builds a task context passes the two paths, or empty strings when the code it runs reads neither file.
 - **`window.ziggy` has `getConfig`, `setConfig`, `getState`, `setState` and `getConfigProblem`.** A fake of `IZiggyBridge` in the app's tests adds the five.

@@ -60,29 +60,19 @@ pub fn rejectInvalidActions(comptime actions: []const Action) void {
 pub const StandaloneActionShortcut = extern struct {
     // The action's name, which the native app posts in the menu-action system message.
     action: [*:0]const u8,
-    // The action's shortcut text, such as "CmdOrCtrl+Shift+P".
+    // The action's shortcut text, such as "CmdOrCtrl+Shift+P", which holds Ctrl, Alt or Cmd or is a function key.
     shortcut: [*:0]const u8,
 };
 
 //
-// The shortcuts a desktop native app registers apart from the menu's: one for every action that has a shortcut and no `.action` item
-// on the menu. A native app posts the menu-action system message naming the action when its shortcut is pressed.
+// The shortcuts a native app registers: none. The frontend runs every shortcut, the menu's and the actions', so a native app only
+// runs the action the frontend posts. The list stays empty so the C interface keeps its shape.
 //
 pub fn standaloneActionShortcuts(comptime menu: []const menu_lib.Menu, comptime actions: []const Action) []const StandaloneActionShortcut {
-    return comptime made: {
-        @setEvalBranchQuota(1_000_000);
-        var entries: []const StandaloneActionShortcut = &.{};
-        for (actions) |action| {
-            const shortcut = action.shortcut orelse continue;
-            if (menu_lib.hasActionMenuItem(menu, action.name)) {
-                continue;
-            }
-            entries = entries ++ &[_]StandaloneActionShortcut{.{
-                .action = menu_lib.cString(action.name),
-                .shortcut = menu_lib.cString(shortcut),
-            }};
-        }
-        const result = entries[0..entries.len].*;
-        break :made &result;
-    };
+    comptime {
+        _ = menu;
+        _ = actions;
+        std.debug.assert(@sizeOf(StandaloneActionShortcut) > 0);
+        return &.{};
+    }
 }

@@ -272,6 +272,130 @@
 
     window.addEventListener("drop", onDrop, true);
 
+    // The shortcuts this script runs: every menu item's and action's, with the character or the code a key press must give. Empty
+    // until the core's reply arrives.
+    var shortcuts = [];
+
+    // Whether a shortcut list from the core is one this script can read: an array whose every entry has the fields it matches on. A
+    // list in any other form is reported and leaves no shortcut working.
+    function isShortcutList(reply) {
+        if (!Array.isArray(reply)) {
+            return false;
+        }
+        for (var index = 0; index < reply.length; index += 1) {
+            var entry = reply[index];
+            if (typeof entry !== "object" || entry === null) {
+                return false;
+            }
+            if (typeof entry.action !== "string" || typeof entry.code !== "string" || typeof entry.key !== "string") {
+                return false;
+            }
+            if (typeof entry.standard !== "boolean" || typeof entry.text_box !== "boolean") {
+                return false;
+            }
+            if (typeof entry.ctrl !== "boolean" || typeof entry.alt !== "boolean" || typeof entry.shift !== "boolean" || typeof entry.meta !== "boolean" || typeof entry.shiftOptional !== "boolean") {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Whether the element the key press started at is a text box, which types, moves its cursor or extends its selection with the keys
+    // a typing shortcut uses: a textarea, a select, an editable element, or an input of any type but button, checkbox, color, file,
+    // hidden, image, reset and submit.
+    function isTextBox(element) {
+        if (!element || !element.tagName) {
+            return false;
+        }
+        if (element.isContentEditable) {
+            return true;
+        }
+        var tagName = element.tagName.toUpperCase();
+        if (tagName === "TEXTAREA" || tagName === "SELECT") {
+            return true;
+        }
+        if (tagName !== "INPUT") {
+            return false;
+        }
+        var type = String(element.type).toLowerCase();
+        return ["button", "checkbox", "color", "file", "hidden", "image", "reset", "submit"].indexOf(type) < 0;
+    }
+
+    // Whether a key press matches a typing shortcut: its key by the character it types, or by the code it gives, and the modifiers.
+    // Shift matches its own state, or either state when the keyboard layout decides whether Shift is held for that character.
+    function keyMatchesShortcut(event, shortcut) {
+        var keyMatches;
+        if (shortcut.key.length > 0) {
+            var typed = String(event.key).toLowerCase();
+            keyMatches = typed === shortcut.key || (shortcut.key === "+" && event.key === "=");
+        }
+        else {
+            keyMatches = event.code === shortcut.code;
+        }
+        if (!keyMatches) {
+            return false;
+        }
+        if (shortcut.ctrl !== event.ctrlKey || shortcut.alt !== event.altKey || shortcut.meta !== event.metaKey) {
+            return false;
+        }
+        return shortcut.shiftOptional || shortcut.shift === event.shiftKey;
+    }
+
+    // Runs the first shortcut a key press matches, by posting the run-action system message for a standard item or the menu-action one
+    // naming the action otherwise, and keeps the browser from doing anything else with the key. A text box keeps a typing shortcut's
+    // key. A key an input method is composing with, an auto-repeated press of a held key and a key another listener has already handled
+    // run no shortcut. The listener is on window in the bubbling phase, so a page's own handler on an element, on document or on window
+    // in the capture phase has seen the key first; one added on window in the bubbling phase runs after this one.
+    function onKeyDown(event) {
+        if (event.defaultPrevented || event.isComposing || event.repeat) {
+            return;
+        }
+        for (var index = 0; index < shortcuts.length; index += 1) {
+            var shortcut = shortcuts[index];
+            if (!keyMatchesShortcut(event, shortcut)) {
+                continue;
+            }
+            if (shortcut.text_box && isTextBox(event.composedPath()[0])) {
+                return;
+            }
+            event.preventDefault();
+            if (shortcut.standard) {
+                postSystem("run-action", {
+                    action: shortcut.action,
+                });
+            }
+            else {
+                postSystem("menu-action", {
+                    action: shortcut.action,
+                });
+            }
+            return;
+        }
+    }
+
+    // The listener is added before the request, so a key press during the wait finds no shortcut and runs none. The wait is one round
+    // trip.
+    window.addEventListener("keydown", onKeyDown, false);
+    invokeSystem("list-shortcuts", null).then(function (reply) {
+        if (!isShortcutList(reply)) {
+            postSystem("log", {
+                level: "error",
+                message: "Ziggy got a shortcut list it cannot read, so no shortcut works in this page.",
+                error: JSON.stringify(reply),
+                toolData: null,
+            });
+            return;
+        }
+        shortcuts = reply;
+    }).catch(function (error) {
+        postSystem("log", {
+            level: "error",
+            message: "Ziggy could not read the shortcuts, so no shortcut works in this page.",
+            error: String(error),
+            toolData: null,
+        });
+    });
+
 
     function receive(message) {
         if (message.id !== undefined && message.ok !== undefined) {
@@ -400,7 +524,15 @@
             },
             // Resolves with every action of the app and every standard item of its menu, with its label and its shortcut.
             listActions: function () {
-                return invokeSystem("list-actions", null);
+                return invokeSystem("list-actions", null).catch(function (error) {
+                    postSystem("log", {
+                        level: "error",
+                        message: "Ziggy could not read the action list, so listActions gives none.",
+                        error: String(error),
+                        toolData: null,
+                    });
+                    throw error;
+                });
             },
         }),
     });

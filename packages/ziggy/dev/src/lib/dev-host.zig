@@ -68,10 +68,6 @@ const Hub = struct {
     const native: u32 = 8;
     // A dialog's result, from the dialog thread. The text is a PickResult.
     const picked: u32 = 9;
-    // A request for the shortcuts the dev script registers. The reply, to the reply queue, is their JSON text (see
-    // ziggy_dev_shortcuts_json in ziggy.h),
-    // or an empty text with from 1 when there is no core.
-    const dev_shortcuts: u32 = 10;
 };
 
 //
@@ -411,16 +407,6 @@ fn handleHubMessage(dev_host: *DevHost, io: std.Io, allocator: std.mem.Allocator
                 return;
             };
             reply_to.post(io, 0, query_pointer[0..query_length]) catch @panic("out of memory replying to a request for the query");
-        },
-        Hub.dev_shortcuts => {
-            const reply_to = message.reply_to.?;
-            const core = dev_host.core orelse {
-                reply_to.post(io, 1, "") catch @panic("out of memory replying to a request for the shortcuts");
-                return;
-            };
-            var length: usize = 0;
-            const text = z.ziggy_dev_shortcuts_json(core, &length);
-            reply_to.post(io, 0, text[0..length]) catch @panic("out of memory replying to a request for the shortcuts");
         },
         Hub.drop => {
             const reply_to = message.reply_to.?;
@@ -762,9 +748,6 @@ fn serveRequest(connection: Connection, io: std.Io, allocator: std.mem.Allocator
             const script = z.ziggy_inject_script(&length);
             return respondWithScript(request, script[0..length]);
         }
-        if (std.mem.eql(u8, target, "/__ziggy/shortcuts")) {
-            return sendDevShortcuts(connection, io, allocator, request);
-        }
         if (std.mem.eql(u8, target, "/__ziggy/start")) {
             return redirectToIndex(connection, io, allocator, request);
         }
@@ -803,31 +786,6 @@ fn requestFromMain(connection: Connection, io: std.Io, allocator: std.mem.Alloca
     };
 }
 
-//
-// Sends the browser the shortcuts the dev script registers, as the JSON response to its request for /__ziggy/shortcuts. It asks the
-// main thread for them, which reads them from the core through ziggy_dev_shortcuts_json.
-//
-fn sendDevShortcuts(connection: Connection, io: std.Io, allocator: std.mem.Allocator, request: *std.http.Server.Request) !void {
-    var replies = MessageQueue.init();
-    defer replies.deinit();
-    const reply = try requestFromMain(connection, io, allocator, &replies, Hub.dev_shortcuts, "");
-    defer allocator.free(reply.text);
-    if (reply.from != 0) {
-        return error.CoreMissing;
-    }
-    return request.respond(reply.text, .{
-        .extra_headers = &.{
-            .{
-                .name = "content-type",
-                .value = "application/json",
-            },
-            .{
-                .name = "cache-control",
-                .value = "no-store",
-            },
-        },
-    });
-}
 
 //
 // Sends the browser to index.html with the query the app makes, as a native app loads it. A browser opened at /__ziggy/start gets

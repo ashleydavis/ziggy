@@ -2,6 +2,11 @@ import fs from "fs";
 import path from "path";
 
 //
+// A listener the script registers: a listener for a drop or for a key press.
+//
+type IEventListener = (event: IFakeDropEvent | IFakeKeyEvent) => void;
+
+//
 // A fake of the frontend's window, with the native handle of the platform under test.
 //
 interface IFakeWindow {
@@ -27,7 +32,7 @@ interface IFakeWindow {
         [listenerCall: string]: any;
     };
     __ziggyReceive?: (message: object) => void;
-    addEventListener?: (type: string, listener: (event: IFakeDropEvent) => void, capture: boolean) => void;
+    addEventListener?: (type: string, listener: IEventListener, capture: boolean) => void;
     DataTransfer?: new () => IFakeDataTransfer;
     DragEvent?: new (type: string, init: object) => IFakeDropEvent;
     File?: new (parts: unknown[], name: string) => { name: string; size: number };
@@ -114,7 +119,7 @@ function windowForDrops(posted: string[]): IFakeWindow & { dropListeners: ((even
     fakeWindow.dropListeners = dropListeners;
     fakeWindow.addEventListener = (type, listener, capture) => {
         if (type === "drop" && capture) {
-            dropListeners.push(listener);
+            dropListeners.push(listener as (event: IFakeDropEvent) => void);
         }
     };
     fakeWindow.File = function (this: { name: string; size: number }, parts: unknown[], name: string) {
@@ -128,6 +133,96 @@ function windowForDrops(posted: string[]): IFakeWindow & { dropListeners: ((even
     } as unknown as new (type: string, init: object) => IFakeDropEvent;
     return fakeWindow;
 }
+
+//
+// A fake key press as the inject script sees one, carrying the element the press started at and the path it composes.
+//
+interface IFakeKeyEvent {
+    key: string;
+    code: string;
+    ctrlKey: boolean;
+    altKey: boolean;
+    shiftKey: boolean;
+    metaKey: boolean;
+    repeat: boolean;
+    isComposing: boolean;
+    defaultPrevented: boolean;
+    target: object;
+    composedPath: () => object[];
+    prevented: boolean;
+    preventDefault: () => void;
+}
+
+//
+// A window that records the keydown listener the script registers in the bubbling phase.
+//
+function windowForKeys(posted: string[]): IFakeWindow & { keyListeners: IEventListener[] } {
+    const keyListeners: IEventListener[] = [];
+    const fakeWindow = windowWithWebkit(posted) as IFakeWindow & { keyListeners: IEventListener[] };
+    fakeWindow.keyListeners = keyListeners;
+    fakeWindow.addEventListener = (type, listener, capture) => {
+        if (type === "keydown" && !capture) {
+            keyListeners.push(listener);
+        }
+    };
+    return fakeWindow;
+}
+
+//
+// A key press whose path starts at the element given.
+//
+function makeKeyEvent(path: object[], options: Partial<IFakeKeyEvent>): IFakeKeyEvent {
+    const event: IFakeKeyEvent = {
+        key: options.key ?? "",
+        code: options.code ?? "",
+        ctrlKey: options.ctrlKey ?? false,
+        altKey: options.altKey ?? false,
+        shiftKey: options.shiftKey ?? false,
+        metaKey: options.metaKey ?? false,
+        repeat: options.repeat ?? false,
+        isComposing: options.isComposing ?? false,
+        defaultPrevented: options.defaultPrevented ?? false,
+        target: path[0],
+        composedPath: () => path,
+        prevented: false,
+        preventDefault: () => {
+            event.prevented = true;
+        },
+    };
+    return event;
+}
+
+//
+// Injects the script, gives the shortcut request its reply and lets the reply's handler run.
+//
+async function injectWithShortcuts(posted: string[], shortcuts: object[]): Promise<IFakeWindow & { keyListeners: IEventListener[] }> {
+    const fakeWindow = windowForKeys(posted);
+    inject(fakeWindow);
+    fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: shortcuts });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return fakeWindow;
+}
+
+//
+// The element a key press lands on: the page's body, a text box of some kind, or a button, link or checkbox.
+//
+const body = { tagName: "BODY" };
+
+function elementOf(tagName: string, type?: string): object {
+    return { tagName, type: type ?? "" };
+}
+
+//
+// The shortcuts the tests reply with.
+//
+const escapeShortcut = { action: "escape-action", standard: false, text_box: true, code: "Escape", ctrl: false, alt: false, shift: false, meta: false, shiftOptional: false, key: "" };
+const plusShortcut = { action: "zoom-in", standard: false, text_box: true, code: "", ctrl: false, alt: false, shift: false, meta: false, shiftOptional: true, key: "+" };
+const jShortcut = { action: "j-action", standard: false, text_box: true, code: "", ctrl: false, alt: false, shift: false, meta: false, shiftOptional: false, key: "j" };
+const shiftJShortcut = { action: "shift-j-action", standard: false, text_box: true, code: "", ctrl: false, alt: false, shift: true, meta: false, shiftOptional: false, key: "j" };
+const fiveShortcut = { action: "five-action", standard: false, text_box: true, code: "", ctrl: false, alt: false, shift: false, meta: false, shiftOptional: true, key: "5" };
+const askShortcut = { action: "ask", standard: false, text_box: true, code: "", ctrl: false, alt: false, shift: false, meta: false, shiftOptional: true, key: "?" };
+const standardShortcut = { action: "zoom-in", standard: true, text_box: false, code: "", ctrl: true, alt: false, shift: false, meta: false, shiftOptional: false, key: "+" };
+const controlShortcut = { action: "open", standard: false, text_box: false, code: "", ctrl: true, alt: false, shift: false, meta: false, shiftOptional: false, key: "o" };
 
 function makeEvent(type: string, dataTransfer: IFakeDataTransfer | null, target: IFakeTarget, clientX: number, clientY: number): IFakeDropEvent {
     const event: IFakeDropEvent = {
@@ -154,8 +249,8 @@ describe("ziggy-inject", () => {
         const fakeWindow = windowWithWebkit(posted);
         inject(fakeWindow);
         const reply = fakeWindow.ziggy!.invoke("ping", { a: 1 });
-        expect(JSON.parse(posted[0])).toEqual({ kind: "app", id: 1, name: "ping", data: { a: 1 } });
-        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: { answer: 42 } });
+        expect(JSON.parse(posted[1])).toEqual({ kind: "app", id: 2, name: "ping", data: { a: 1 } });
+        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: { answer: 42 } });
         expect(await reply).toEqual({ answer: 42 });
     });
 
@@ -164,7 +259,7 @@ describe("ziggy-inject", () => {
         const fakeWindow = windowWithWebkit(posted);
         inject(fakeWindow);
         const reply = fakeWindow.ziggy!.invoke("fail", null);
-        fakeWindow.__ziggyReceive!({ id: 1, ok: false, error: "ExampleFailure" });
+        fakeWindow.__ziggyReceive!({ id: 2, ok: false, error: "ExampleFailure" });
         await expect(reply).rejects.toThrow("ExampleFailure");
     });
 
@@ -174,8 +269,8 @@ describe("ziggy-inject", () => {
         inject(fakeWindow);
         const first = fakeWindow.ziggy!.invoke("a", null);
         const second = fakeWindow.ziggy!.invoke("b", null);
-        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: "second" });
-        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: "first" });
+        fakeWindow.__ziggyReceive!({ id: 3, ok: true, data: "second" });
+        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: "first" });
         expect(await first).toBe("first");
         expect(await second).toBe("second");
     });
@@ -189,8 +284,8 @@ describe("ziggy-inject", () => {
         fakeWindow.dropListeners[0](drop);
         expect(drop.prevented).toBe(true);
         expect(drop.stopped).toBe(true);
-        expect(JSON.parse(posted[0])).toEqual({ kind: "system", id: 1, name: "get-dropped-paths", data: null });
-        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: ["/home/me/two words.txt", "/home/me/a folder"] });
+        expect(JSON.parse(posted[1])).toEqual({ kind: "system", id: 2, name: "get-dropped-paths", data: null });
+        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: ["/home/me/two words.txt", "/home/me/a folder"] });
         await new Promise(resolve => setTimeout(resolve, 0));
         expect(target.dispatched.length).toBe(1);
         const made = target.dispatched[0].dataTransfer!.files;
@@ -209,7 +304,7 @@ describe("ziggy-inject", () => {
         const target: IFakeTarget = { dispatched: [], dispatchEvent: event => { target.dispatched.push(event); } };
         const files = [{ name: "a.txt", size: 3 }, { name: "b.txt", size: 4 }];
         fakeWindow.dropListeners[0](makeEvent("drop", fakeTransfer(files, {}, ["Files"]), target, 0, 0));
-        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: ["/home/me/a.txt", "/home/me/b.txt"] });
+        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: ["/home/me/a.txt", "/home/me/b.txt"] });
         await new Promise(resolve => setTimeout(resolve, 0));
         const made = target.dispatched[0].dataTransfer!.files;
         expect(made.map(file => file.name)).toEqual(["a.txt", "b.txt"]);
@@ -233,7 +328,7 @@ describe("ziggy-inject", () => {
         const target: IFakeTarget = { dispatched: [], dispatchEvent: () => undefined };
         fakeWindow.dropListeners[0](makeEvent("drop", fakeTransfer(files, {}, ["Files"]), target, 0, 0));
         expect(withObjects).toEqual([{ text: "ziggy-file", objects: files }]);
-        expect(JSON.parse(posted[0])).toEqual({ kind: "system", id: 1, name: "get-dropped-paths", data: null });
+        expect(JSON.parse(posted[1])).toEqual({ kind: "system", id: 2, name: "get-dropped-paths", data: null });
     });
 
     test("a drop of a link or of text is left alone", () => {
@@ -253,7 +348,7 @@ describe("ziggy-inject", () => {
         const fakeWindow = windowWithWebkit(posted);
         inject(fakeWindow);
         fakeWindow.ziggy!.send("notify", { source: "s" });
-        expect(JSON.parse(posted[0])).toEqual({ kind: "app", name: "notify", data: { source: "s" } });
+        expect(JSON.parse(posted[1])).toEqual({ kind: "app", name: "notify", data: { source: "s" } });
     });
 
     test("onEvent gets every app event and none of Ziggy's own", () => {
@@ -340,23 +435,25 @@ describe("ziggy-inject", () => {
         const ran = fakeWindow.ziggy!.runAction("open-database");
         const listed = fakeWindow.ziggy!.listActions();
         expect(posted.map(text => JSON.parse(text))).toEqual([
-            { kind: "system", id: 1, name: "get-platform", data: null },
+            { kind: "system", id: 1, name: "list-shortcuts", data: null },
+            { kind: "system", id: 2, name: "get-platform", data: null },
             { kind: "system", name: "add-task", data: { taskId: "t1", taskType: "quick", source: "s", data: null } },
             { kind: "system", name: "cancel-tasks", data: "s" },
             { kind: "system", name: "log", data: { level: "info", message: "opened", error: null, toolData: null } },
             { kind: "system", name: "log", data: { level: "exception", message: "failed", error: "Error: at line 4", toolData: null } },
             { kind: "system", name: "log", data: { level: "tool", message: "magick", error: null, toolData: { stdout: "done" } } },
-            { kind: "system", id: 2, name: "test-result", data: { requestId: 4, result: { ok: true } } },
+            { kind: "system", id: 3, name: "test-result", data: { requestId: 4, result: { ok: true } } },
             { kind: "system", name: "test-ui-ready", data: null },
-            { kind: "system", id: 3, name: "run-action", data: { action: "open-database" } },
-            { kind: "system", id: 4, name: "list-actions", data: null },
+            { kind: "system", id: 4, name: "run-action", data: { action: "open-database" } },
+            { kind: "system", id: 5, name: "list-actions", data: null },
         ]);
-        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: { platformKind: "desktop" } });
-        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: {} });
+        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: [] });
+        fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: { platformKind: "desktop" } });
+        fakeWindow.__ziggyReceive!({ id: 3, ok: true, data: {} });
         expect(await platform).toEqual({ platformKind: "desktop" });
         expect(await result).toEqual({});
-        fakeWindow.__ziggyReceive!({ id: 3, ok: true, data: {} });
-        fakeWindow.__ziggyReceive!({ id: 4, ok: true, data: [{ name: "open-database", label: "Open Database...", shortcut: "Ctrl+O" }] });
+        fakeWindow.__ziggyReceive!({ id: 4, ok: true, data: {} });
+        fakeWindow.__ziggyReceive!({ id: 5, ok: true, data: [{ name: "open-database", label: "Open Database...", shortcut: "Ctrl+O" }] });
         expect(await ran).toEqual({});
         expect(await listed).toEqual([{ name: "open-database", label: "Open Database...", shortcut: "Ctrl+O" }]);
     });
@@ -373,21 +470,22 @@ describe("ziggy-inject", () => {
         const problem = fakeWindow.ziggy!.getConfigProblem();
         const systemTheme = fakeWindow.ziggy!.getSystemTheme();
         expect(posted.map(text => JSON.parse(text))).toEqual([
-            { kind: "system", id: 1, name: "get-config", data: "a.b" },
-            { kind: "system", id: 2, name: "set-config", data: { path: "a.b", value: 3 } },
-            { kind: "system", id: 3, name: "set-config", data: { path: "a.b", value: null } },
-            { kind: "system", id: 4, name: "get-state", data: "remembered" },
-            { kind: "system", id: 5, name: "set-state", data: { path: "remembered", value: null } },
-            { kind: "system", id: 6, name: "get-config-problem", data: null },
-            { kind: "system", id: 7, name: "get-system-theme", data: null },
+            { kind: "system", id: 1, name: "list-shortcuts", data: null },
+            { kind: "system", id: 2, name: "get-config", data: "a.b" },
+            { kind: "system", id: 3, name: "set-config", data: { path: "a.b", value: 3 } },
+            { kind: "system", id: 4, name: "set-config", data: { path: "a.b", value: null } },
+            { kind: "system", id: 5, name: "get-state", data: "remembered" },
+            { kind: "system", id: 6, name: "set-state", data: { path: "remembered", value: null } },
+            { kind: "system", id: 7, name: "get-config-problem", data: null },
+            { kind: "system", id: 8, name: "get-system-theme", data: null },
         ]);
-        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: null });
         fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: null });
         fakeWindow.__ziggyReceive!({ id: 3, ok: true, data: null });
-        fakeWindow.__ziggyReceive!({ id: 4, ok: true, data: "yes" });
-        fakeWindow.__ziggyReceive!({ id: 5, ok: true, data: null });
-        fakeWindow.__ziggyReceive!({ id: 6, ok: true, data: { path: "config.toml", line: 2, column: 1, reason: "bad" } });
-        fakeWindow.__ziggyReceive!({ id: 7, ok: true, data: "dark" });
+        fakeWindow.__ziggyReceive!({ id: 4, ok: true, data: null });
+        fakeWindow.__ziggyReceive!({ id: 5, ok: true, data: "yes" });
+        fakeWindow.__ziggyReceive!({ id: 6, ok: true, data: null });
+        fakeWindow.__ziggyReceive!({ id: 7, ok: true, data: { path: "config.toml", line: 2, column: 1, reason: "bad" } });
+        fakeWindow.__ziggyReceive!({ id: 8, ok: true, data: "dark" });
         expect(await config).toBeUndefined();
         await setConfig;
         await removedConfig;
@@ -413,18 +511,16 @@ describe("ziggy-inject", () => {
         const fakeWindow = windowWithWebkit(posted);
         inject(fakeWindow);
         expect(() => fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "missing" } })).toThrow("the action missing ran");
-        expect(posted.map(text => JSON.parse(text))).toEqual([
-            {
-                kind: "system",
-                name: "log",
-                data: {
-                    level: "error",
-                    message: "The action missing ran, and the frontend has no handler registered for it.",
-                    error: null,
-                    toolData: null,
-                },
+        expect(JSON.parse(posted[1])).toEqual({
+            kind: "system",
+            name: "log",
+            data: {
+                level: "error",
+                message: "The action missing ran, and the frontend has no handler registered for it.",
+                error: null,
+                toolData: null,
             },
-        ]);
+        });
     });
 
     test("a handler that throws an Error is logged as an exception naming the action, with the error and its stack, and does not throw", () => {
@@ -436,18 +532,16 @@ describe("ziggy-inject", () => {
             throw thrown;
         });
         fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "open-database" } });
-        expect(posted.map(text => JSON.parse(text))).toEqual([
-            {
-                kind: "system",
-                name: "log",
-                data: {
-                    level: "exception",
-                    message: "The handler of the action open-database failed.",
-                    error: "Error: the database is locked\n" + thrown.stack,
-                    toolData: null,
-                },
+        expect(JSON.parse(posted[1])).toEqual({
+            kind: "system",
+            name: "log",
+            data: {
+                level: "exception",
+                message: "The handler of the action open-database failed.",
+                error: "Error: the database is locked\n" + thrown.stack,
+                toolData: null,
             },
-        ]);
+        });
     });
 
     test("a handler that throws something that is not an Error logs it as text", () => {
@@ -458,7 +552,7 @@ describe("ziggy-inject", () => {
             throw "locked";
         });
         fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "open-database" } });
-        expect(JSON.parse(posted[0]).data.error).toBe("locked");
+        expect(JSON.parse(posted[1]).data.error).toBe("locked");
     });
 
     test("a handler whose promise rejects is logged as an exception naming the action", async () => {
@@ -468,7 +562,7 @@ describe("ziggy-inject", () => {
         fakeWindow.ziggy!.registerAction("open-database", () => Promise.reject(new Error("the database is locked")));
         fakeWindow.__ziggyReceive!({ kind: "system", name: "action", data: { action: "open-database" } });
         await new Promise(resolve => setTimeout(resolve, 0));
-        const logged = JSON.parse(posted[0]);
+        const logged = JSON.parse(posted[1]);
         expect(logged.data.level).toBe("exception");
         expect(logged.data.message).toBe("The handler of the action open-database failed.");
         expect(logged.data.error).toContain("Error: the database is locked");
@@ -543,7 +637,8 @@ describe("ziggy-inject", () => {
         const fakeWindow: IFakeWindow = { chrome: { webview: { postMessage: text => posted.push(text) } } };
         inject(fakeWindow);
         fakeWindow.ziggy!.send("notify", null);
-        expect(posted.length).toBe(1);
+        expect(posted.length).toBe(2);
+        expect(JSON.parse(posted[1])).toEqual({ kind: "app", name: "notify", data: null });
     });
 
     test("it posts through the Android interface object when that is what the web view has", () => {
@@ -551,7 +646,8 @@ describe("ziggy-inject", () => {
         const fakeWindow: IFakeWindow = { ZiggyAndroid: { postMessage: text => posted.push(text) } };
         inject(fakeWindow);
         fakeWindow.ziggy!.send("notify", null);
-        expect(posted.length).toBe(1);
+        expect(posted.length).toBe(2);
+        expect(JSON.parse(posted[1])).toEqual({ kind: "app", name: "notify", data: null });
     });
 
     test("it throws, naming the problem, when the web view has no native handle", () => {
@@ -607,5 +703,237 @@ describe("ziggy-inject", () => {
         const first = fakeWindow.ziggy;
         inject(fakeWindow);
         expect(fakeWindow.ziggy).toBe(first);
+    });
+
+    test("the script asks for the shortcuts when it runs", () => {
+        const posted: string[] = [];
+        inject(windowWithWebkit(posted));
+        expect(JSON.parse(posted[0])).toEqual({ kind: "system", id: 1, name: "list-shortcuts", data: null });
+    });
+
+    test("a shortcut runs outside a text box and keeps the browser from the key", async () => {
+        const posted: string[] = [];
+        const fakeWindow = await injectWithShortcuts(posted, [escapeShortcut]);
+        const event = makeKeyEvent([{ tagName: "BODY" }], { key: "Escape", code: "Escape" });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(true);
+        expect(JSON.parse(posted[1])).toEqual({ kind: "system", name: "menu-action", data: { action: "escape-action" } });
+    });
+
+    test("a standard menu item's shortcut posts run-action", async () => {
+        const posted: string[] = [];
+        const fakeWindow = await injectWithShortcuts(posted, [standardShortcut]);
+        const event = makeKeyEvent([{ tagName: "BODY" }], { key: "+", code: "Equal", ctrlKey: true });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(true);
+        expect(JSON.parse(posted[1])).toEqual({ kind: "system", name: "run-action", data: { action: "zoom-in" } });
+    });
+
+    test("a shortcut with Ctrl runs inside a text box", async () => {
+        const posted: string[] = [];
+        const fakeWindow = await injectWithShortcuts(posted, [controlShortcut]);
+        const event = makeKeyEvent([{ tagName: "TEXTAREA" }], { key: "o", code: "KeyO", ctrlKey: true });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(true);
+        expect(JSON.parse(posted[1])).toEqual({ kind: "system", name: "menu-action", data: { action: "open" } });
+    });
+
+    test("a text box keeps the key of a shortcut with no Ctrl, Alt or Cmd", async () => {
+        const textBoxes = [
+            { tagName: "TEXTAREA" },
+            { tagName: "TEXTAREA", isContentEditable: false },
+            { tagName: "INPUT", type: "text" },
+            { tagName: "INPUT", type: "number" },
+            { tagName: "INPUT", type: "radio" },
+            { tagName: "INPUT", type: "range" },
+            { tagName: "SELECT" },
+            { tagName: "DIV", isContentEditable: true },
+        ];
+        for (const element of textBoxes) {
+            const posted: string[] = [];
+            const fakeWindow = await injectWithShortcuts(posted, [escapeShortcut]);
+            const event = makeKeyEvent([element], { key: "Escape", code: "Escape" });
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(false);
+            expect(posted.length).toBe(1);
+        }
+    });
+
+    test("a key press the script did not handle itself runs no shortcut", async () => {
+        for (const element of [{ tagName: "INPUT", type: "checkbox" }, { tagName: "BUTTON" }, { tagName: "A" }]) {
+            const posted: string[] = [];
+            const fakeWindow = await injectWithShortcuts(posted, [escapeShortcut]);
+            const event = makeKeyEvent([element], { key: "Escape", code: "Escape" });
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(true);
+            expect(JSON.parse(posted[1])).toEqual({ kind: "system", name: "menu-action", data: { action: "escape-action" } });
+        }
+    });
+
+    test("a text box inside a shadow root keeps the key, though the event's target is the host", async () => {
+        const posted: string[] = [];
+        const fakeWindow = await injectWithShortcuts(posted, [escapeShortcut]);
+        const host = { tagName: "DIV" };
+        const input = { tagName: "INPUT", type: "text" };
+        const event = makeKeyEvent([input, host, { tagName: "BODY" }], { key: "Escape", code: "Escape" });
+        event.target = host;
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(false);
+        expect(posted.length).toBe(1);
+    });
+
+    test("a key another listener handled, an input method composing and an auto-repeated press run no shortcut", async () => {
+        const cases: Partial<IFakeKeyEvent>[] = [
+            { defaultPrevented: true },
+            { isComposing: true },
+            { repeat: true },
+        ];
+        for (const options of cases) {
+            const posted: string[] = [];
+            const fakeWindow = await injectWithShortcuts(posted, [escapeShortcut]);
+            const event = makeKeyEvent([{ tagName: "BODY" }], { key: "Escape", code: "Escape", ...options });
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(false);
+            expect(posted.length).toBe(1);
+        }
+    });
+
+    test("a shortcut whose modifiers do not match runs nothing", async () => {
+        const fakeWindow = await injectWithShortcuts([], [escapeShortcut]);
+        const event = makeKeyEvent([{ tagName: "BODY" }], { key: "Escape", code: "Escape", ctrlKey: true });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(false);
+    });
+
+    test("a Plus shortcut runs for + and for =, with Shift held or not, whatever the code", async () => {
+        const cases = [
+            { key: "+", code: "Equal", shiftKey: true },
+            { key: "+", code: "Equal", shiftKey: false },
+            { key: "=", code: "Equal", shiftKey: false },
+            { key: "=", code: "KeyX", shiftKey: true },
+        ];
+        for (const options of cases) {
+            const posted: string[] = [];
+            const fakeWindow = await injectWithShortcuts(posted, [plusShortcut]);
+            const event = makeKeyEvent([{ tagName: "BODY" }], options);
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(true);
+            expect(JSON.parse(posted[1])).toEqual({ kind: "system", name: "menu-action", data: { action: "zoom-in" } });
+        }
+    });
+
+    test("a letter shortcut runs for the character the key types, whatever the code", async () => {
+        for (const code of ["KeyJ", "KeyC"]) {
+            const posted: string[] = [];
+            const fakeWindow = await injectWithShortcuts(posted, [jShortcut]);
+            const event = makeKeyEvent([{ tagName: "BODY" }], { key: "j", code });
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(true);
+            expect(JSON.parse(posted[1])).toEqual({ kind: "system", name: "menu-action", data: { action: "j-action" } });
+        }
+        // A letter shortcut without Shift does not run with Shift held.
+        const fakeWindow = await injectWithShortcuts([], [jShortcut]);
+        const event = makeKeyEvent([{ tagName: "BODY" }], { key: "J", code: "KeyJ", shiftKey: true });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(false);
+    });
+
+    test("a Shift+letter shortcut runs for the shifted character with Shift held", async () => {
+        const posted: string[] = [];
+        const fakeWindow = await injectWithShortcuts(posted, [shiftJShortcut]);
+        const event = makeKeyEvent([{ tagName: "BODY" }], { key: "J", code: "KeyJ", shiftKey: true });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(true);
+        expect(JSON.parse(posted[1])).toEqual({ kind: "system", name: "menu-action", data: { action: "shift-j-action" } });
+    });
+
+    test("a digit shortcut runs with Shift held or not, as the layout gives it", async () => {
+        for (const shiftKey of [true, false]) {
+            const posted: string[] = [];
+            const fakeWindow = await injectWithShortcuts(posted, [fiveShortcut]);
+            const event = makeKeyEvent([{ tagName: "BODY" }], { key: "5", code: "Digit5", shiftKey });
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(true);
+        }
+    });
+
+    test("? runs the action from whichever key types it, and a text box keeps it", async () => {
+        const cases = [
+            { key: "?", code: "Slash", shiftKey: true },
+            { key: "?", code: "Comma", shiftKey: false },
+        ];
+        for (const options of cases) {
+            const posted: string[] = [];
+            const fakeWindow = await injectWithShortcuts(posted, [askShortcut]);
+            const event = makeKeyEvent([{ tagName: "BODY" }], options);
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(true);
+            expect(JSON.parse(posted[1])).toEqual({ kind: "system", name: "menu-action", data: { action: "ask" } });
+        }
+        for (const element of [{ tagName: "TEXTAREA" }, { tagName: "INPUT", type: "text" }]) {
+            const posted: string[] = [];
+            const fakeWindow = await injectWithShortcuts(posted, [askShortcut]);
+            const event = makeKeyEvent([element], { key: "?", code: "Slash", shiftKey: true });
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(false);
+            expect(posted.length).toBe(1);
+        }
+        for (const modifier of [{ ctrlKey: true }, { altKey: true }, { metaKey: true }]) {
+            const fakeWindow = await injectWithShortcuts([], [askShortcut]);
+            const event = makeKeyEvent([{ tagName: "BODY" }], { key: "?", code: "Slash", shiftKey: true, ...modifier });
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(false);
+        }
+        // A / press types no ?.
+        const fakeWindow = await injectWithShortcuts([], [askShortcut]);
+        const event = makeKeyEvent([{ tagName: "BODY" }], { key: "/", code: "Slash" });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(false);
+    });
+
+    test("a code-matched entry ignores the event's key", async () => {
+        const posted: string[] = [];
+        const fakeWindow = await injectWithShortcuts(posted, [escapeShortcut]);
+        const event = makeKeyEvent([{ tagName: "BODY" }], { key: "/", code: "Escape" });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(true);
+    });
+
+    test("a shortcut list the script cannot read is logged and leaves no shortcut working", async () => {
+        const badLists: object[] = [
+            { not: "an array" },
+            [{ action: "a", code: "Escape", ctrl: false, alt: false, shift: false, meta: false }],
+            [{ action: 1, code: "Escape", ctrl: false, alt: false, shift: false, meta: false, shiftOptional: false, key: "" }],
+            [{ action: "a", code: 1, ctrl: false, alt: false, shift: false, meta: false, shiftOptional: false, key: "" }],
+            [{ action: "a", code: "Escape", ctrl: false, alt: false, shift: false, meta: false, shiftOptional: false, key: 1 }],
+            [{ action: "a", code: "Escape", ctrl: "no", alt: false, shift: false, meta: false, shiftOptional: false, key: "" }],
+            [{ action: "a", code: "Escape", ctrl: false, alt: false, shift: false, meta: false, shiftOptional: "no", key: "" }],
+        ];
+        for (const badList of badLists) {
+            const posted: string[] = [];
+            const fakeWindow = windowForKeys(posted);
+            inject(fakeWindow);
+            fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: badList });
+            await new Promise(resolve => setTimeout(resolve, 0));
+            expect(JSON.parse(posted[1]).data.message).toBe("Ziggy got a shortcut list it cannot read, so no shortcut works in this page.");
+            expect(JSON.parse(posted[1]).data.error).toBe(JSON.stringify(badList));
+            const event = makeKeyEvent([{ tagName: "BODY" }], { key: "Escape", code: "Escape" });
+            fakeWindow.keyListeners[0](event);
+            expect(event.prevented).toBe(false);
+            expect(posted.length).toBe(2);
+        }
+    });
+
+    test("a shortcut request that fails is logged and leaves no shortcut working", async () => {
+        const posted: string[] = [];
+        const fakeWindow = windowForKeys(posted);
+        inject(fakeWindow);
+        fakeWindow.__ziggyReceive!({ id: 1, ok: false, error: "ExampleFailure" });
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(JSON.parse(posted[1]).data.message).toBe("Ziggy could not read the shortcuts, so no shortcut works in this page.");
+        expect(JSON.parse(posted[1]).data.error).toContain("ExampleFailure");
+        const event = makeKeyEvent([{ tagName: "BODY" }], { key: "Escape", code: "Escape" });
+        fakeWindow.keyListeners[0](event);
+        expect(event.prevented).toBe(false);
     });
 });
