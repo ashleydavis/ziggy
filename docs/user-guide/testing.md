@@ -37,6 +37,8 @@ Commands Ziggy handles itself:
 
 Every other command goes to the frontend as a `test-command` event, which the frontend hears through `window.ziggy.onTestCommand`, and the frontend replies with `window.ziggy.sendTestResult(requestId, result)`. The template's frontend handles `ready`, `click`, `type`, `get-value`, `get-text`, `exists`, `viewport`, `insert` and `drop-file`, finding elements by `data-id`.
 
+`32-external-links` checks that a link to an outside page reaches the system on every platform. On Linux it first runs with every URL handler hidden (`XDG_DATA_DIRS` narrowed and no session bus) and checks that the failed open reaches the app's log, then starts the app with a URL handler of the scenario's own, found through `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, which records each address the system is asked to open. On Android it reads the activity starts from the device log. Two of its links open 6 s after the click, so no user gesture is behind them. On Windows, macOS and iOS, where no hook reports the open, it checks that the app is still running five seconds after each open and, on Windows and macOS, that the frontend still holds its marker.
+
 ## See also
 
 - [Scripts](scripts.md): the scripts that run the tests.

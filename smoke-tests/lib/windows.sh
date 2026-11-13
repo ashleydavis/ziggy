@@ -163,3 +163,21 @@ ziggy_platform_restore_system_theme() {
         return 1
     fi
 }
+
+#
+# Waits until the app's log holds the text, and fails with the text when it never does.
+# Usage: ziggy_platform_wait_app_log <test_dir> <text>
+#
+ziggy_platform_wait_app_log() {
+    local test_dir="$1"
+    local text="$2"
+    local waited=0
+    while [ "$waited" -lt 30 ]; do
+        if grep -q -F -- "$text" "$test_dir/app.log"; then
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    fail "the app's log never held: $text"
+}

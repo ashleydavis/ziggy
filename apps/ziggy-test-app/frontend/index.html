@@ -38,9 +38,6 @@
                 <option value="system">System</option>
             </select>
         </label>
-        <button data-id="set-theme-light">Set the theme light</button>
-        <button data-id="set-theme-dark">Set the theme dark</button>
-        <button data-id="set-theme-system">Set the theme system</button>
     </section>
     <section>
         <div data-id="reply">Waiting for the Zig reply...</div>
@@ -121,6 +118,14 @@
         <div data-id="address-fetch"></div>
         <div data-id="address-xhr"></div>
         <div data-id="address-status"></div>
+    </section>
+    <section>
+        <h2>External links</h2>
+        <label>marker <input data-id="external-link-marker" type="text" /></label>
+        <p><a data-id="link-plain" href="https://plain.example.com/ziggy-external-link">A plain link</a></p>
+        <p><a data-id="link-new-window" target="_blank" href="https://new-window.example.com/ziggy-external-link">A link to a new window</a></p>
+        <button data-id="new-window-later">Follow the new-window link in 6 seconds</button>
+        <button data-id="open-window-later">Open a window in 6 seconds</button>
     </section>
     <section>
         <h2>Config and state files</h2>

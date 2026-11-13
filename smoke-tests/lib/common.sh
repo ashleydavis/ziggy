@@ -50,6 +50,20 @@
 #
 #   ziggy_platform_state_path <test_dir>
 #       Prints the path of the app's state file in this scenario, once the platform has copied the data out where it can be read.
+#
+#   ziggy_platform_hide_url_handlers <test_dir>   (Linux)
+#       Makes GIO find no handler for any scheme, so an open fails. GTK still finds its schemas and the frontend still loads.
+#
+#   ziggy_platform_watch_opened_urls <test_dir>   (Linux)
+#       Installs a URL handler of the scenario's own that records each address the system is asked to open. The app picks it up
+#       the next time it starts.
+#
+#   ziggy_platform_wait_app_log <test_dir> <text>   (Linux and Windows)
+#       Waits until the app's log holds the text, and fails with the text when it never does.
+#
+#   ziggy_platform_opened_urls <test_dir>   (Linux and Android)
+#       Prints the addresses the system was asked to open, or nothing when it was asked none. On Android the lines come from the
+#       device log, so call it only after the app has started, which cleared the log.
 
 set -u
 
@@ -411,6 +425,24 @@ wait_for_value() {
         waited=$((waited + 1))
     done
     fail "$1 never held \"$2\". It held: $shown"
+}
+
+#
+# Waits until the system was asked to open an address that holds the text, and fails with what was opened when it never was.
+# Usage: wait_for_opened_url <text>
+#
+wait_for_opened_url() {
+    local waited=0
+    local opened=""
+    while [ "$waited" -lt 30 ]; do
+        opened="$(ziggy_platform_opened_urls "$ZIGGY_TEST_DIR")" || fail "could not read the addresses the system was asked to open"
+        if printf '%s\n' "$opened" | grep -q -F -- "$1"; then
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    fail "the system was never asked to open $1. Opened: $opened"
 }
 
 #

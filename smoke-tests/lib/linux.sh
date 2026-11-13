@@ -39,11 +39,21 @@ ziggy_platform_start() {
     local app="$ZIGGY_SMOKE_RUN_DIR/app/ziggy-test-app"
     local log="$test_dir/app.log"
     mkdir -p "$test_dir/data"
+    # A scenario that hides the URL handlers gets a data directory list of its own and no session bus, so GIO finds no handler.
+    local optional_env=()
+    if [ -d "$test_dir/xdg-data-dirs" ]; then
+        optional_env+=(
+            XDG_DATA_DIRS="$test_dir/xdg-data-dirs"
+            DBUS_SESSION_BUS_ADDRESS="unix:path=$test_dir/no-session-bus"
+        )
+    fi
     local pgid
     read -r _ pgid < <(launch_in_process_group "$log" env \
         XDG_DATA_HOME="$test_dir/data" \
+        XDG_CONFIG_HOME="$test_dir/xdg-config" \
         ZIGGY_TEST_APP_CONFIG_DIR="$test_dir/config" \
         ZIGGY_TEST_APP_STATE_DIR="$test_dir/state" \
+        "${optional_env[@]}" \
         xvfb-run -a -s "-screen 0 1280x1024x24" "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
     echo "$pgid" > "$test_dir/$LINUX_PGID_FILE_NAME"
 }
@@ -65,6 +75,69 @@ ziggy_platform_config_path() {
 
 ziggy_platform_state_path() {
     printf '%s\n' "$1/state/state.json"
+}
+
+#
+# Makes GIO find no handler for any scheme, so an open fails. GTK still finds its schemas and the frontend still loads.
+# Usage: ziggy_platform_hide_url_handlers <test_dir>
+#
+ziggy_platform_hide_url_handlers() {
+    local test_dir="$1"
+    mkdir -p "$test_dir/xdg-data-dirs"
+    ln -s /usr/share/glib-2.0 "$test_dir/xdg-data-dirs/glib-2.0"
+    ln -s /usr/share/mime "$test_dir/xdg-data-dirs/mime"
+}
+
+#
+# Installs a URL handler of the scenario's own that records each address the system is asked to open, so the scenario can check
+# the handoff from outside the app. The app picks the handler up the next time it starts.
+# Usage: ziggy_platform_watch_opened_urls <test_dir>
+#
+ziggy_platform_watch_opened_urls() {
+    local test_dir="$1"
+    mkdir -p "$test_dir/data/applications" "$test_dir/xdg-config"
+    {
+        printf '%s\n' '[Desktop Entry]'
+        printf '%s\n' 'Type=Application'
+        printf '%s\n' 'Name=Ziggy test browser'
+        printf '%s\n' 'MimeType=x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/mailto;'
+        printf 'Exec="%s/lib/record-opened-url.sh" "%s/opened-urls.txt" %%u\n' "$ZIGGY_SMOKE_DIR" "$test_dir"
+    } > "$test_dir/data/applications/ziggy-test-browser.desktop"
+    {
+        printf '%s\n' '[Default Applications]'
+        printf '%s\n' 'x-scheme-handler/http=ziggy-test-browser.desktop'
+        printf '%s\n' 'x-scheme-handler/https=ziggy-test-browser.desktop'
+        printf '%s\n' 'x-scheme-handler/mailto=ziggy-test-browser.desktop'
+    } > "$test_dir/xdg-config/mimeapps.list"
+}
+
+#
+# Prints the addresses the system was asked to open, or nothing when it was asked none.
+# Usage: ziggy_platform_opened_urls <test_dir>
+#
+ziggy_platform_opened_urls() {
+    local test_dir="$1"
+    if [ -f "$test_dir/opened-urls.txt" ]; then
+        cat "$test_dir/opened-urls.txt"
+    fi
+}
+
+#
+# Waits until the app's log holds the text, and fails with the text when it never does.
+# Usage: ziggy_platform_wait_app_log <test_dir> <text>
+#
+ziggy_platform_wait_app_log() {
+    local test_dir="$1"
+    local text="$2"
+    local waited=0
+    while [ "$waited" -lt 30 ]; do
+        if grep -q -F -- "$text" "$test_dir/app.log"; then
+            return 0
+        fi
+        sleep 1
+        waited=$((waited + 1))
+    done
+    fail "the app's log never held: $text"
 }
 
 ziggy_platform_wait_exit() {

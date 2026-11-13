@@ -52,6 +52,10 @@ A frontend must not depend on which address it is served from. A Content-Securit
 
 The smoke test scenario `24-ui-address` checks on every platform that the frontend is served from that platform's address, that the page is a secure context and that `localStorage`, IndexedDB, and `fetch` and `XMLHttpRequest` of the frontend's own files work there.
 
+## Links to other pages
+
+Each native app asks the core's origin check (`ziggy_check_url`, from `origin-check.zig`) about every navigation and every request for a new window. The app's own frontend loads, an `http`, `https` or `mailto` address opens with the platform's opener and anything else is blocked. A request for a new window is opened with the opener or dropped, and never creates a second web view: Linux opens it in `onCreate` and `onDecidePolicy` with `gtk_show_uri_on_window`, Windows in `newWindowInvoke` with `ShellExecuteW`, macOS in `createWebViewWith` with `NSWorkspace.shared.open`, iOS in `createWebViewWith` with `UIApplication.shared.open`, and Android in `shouldOverrideUrlLoading` with an `ACTION_VIEW` intent. `window.open` and `target="_blank"` work with or without a click of the user's, because each native app lets the frontend open windows automatically (`javascript-can-open-windows-automatically` on Linux, `javaScriptCanOpenWindowsAutomatically` on macOS and iOS, and `setJavaScriptCanOpenWindowsAutomatically` on Android; WebView2 needs no setting). An address the system cannot open is written to standard error on Linux, macOS and iOS, written to the device log on Android, and ends the app on Windows. The smoke test scenario `32-external-links` checks this on every platform.
+
 ## The message bridge
 
 - The frontend talks to the backend through `window.ziggy`, which the native app injects into the page.

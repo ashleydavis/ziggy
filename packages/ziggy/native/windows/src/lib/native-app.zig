@@ -1969,6 +1969,10 @@ fn navigationInvoke(this: [*c]c.ICoreWebView2NavigationStartingEventHandler, sen
 fn newWindowInvoke(this: [*c]c.ICoreWebView2NewWindowRequestedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2NewWindowRequestedEventArgs) callconv(.c) c.HRESULT {
     _ = sender;
     const native_app = NewWindowHandler.fromInterface(this).native_app;
+    var user_initiated: c.BOOL = 0;
+    check("get_IsUserInitiated", args.*.lpVtbl.*.get_IsUserInitiated.?(args, &user_initiated));
+    const user_initiated_answer: []const u8 = if (user_initiated != 0) "yes" else "no";
+    std.debug.print("ziggy native app: a new window was requested, user initiated: {s}\n", .{user_initiated_answer});
     var wide: [*c]c.WCHAR = null;
     check("get_Uri", args.*.lpVtbl.*.get_Uri.?(args, &wide));
     const address = takeAddress(wide);

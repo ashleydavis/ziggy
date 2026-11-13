@@ -300,6 +300,9 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     const web_view: *c.WebKitWebView = @ptrCast(@alignCast(web_view_widget));
     native_app.web_view = web_view;
     c.webkit_settings_set_enable_developer_extras(c.webkit_web_view_get_settings(web_view), 1);
+    // The popup blocker drops a window.open or a target="_blank" that no click of the user's ran. onCreate and onDecidePolicy open
+    // each new window with the system's opener or drop it.
+    c.webkit_settings_set_javascript_can_open_windows_automatically(c.webkit_web_view_get_settings(web_view), 1);
     _ = c.g_signal_connect_data(c.webkit_web_view_get_inspector(web_view), "closed", @ptrCast(&onInspectorClosed), native_app, null, 0);
     const box_widget = c.gtk_box_new(c.GTK_ORIENTATION_VERTICAL, 0);
     c.gtk_container_add(window_widget, box_widget);
@@ -308,6 +311,9 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
         .theme => |theme| applyTheme(native_app, theme),
         else => return error.ThemeFailed,
     }
+    // The menu bar goes into the box before the window is shown, so the first frame holds it. A menu bar packed after
+    // gtk_widget_show_all stays hidden, because a widget is hidden until it is shown.
+    try buildMenu(native_app, box_widget, window);
     c.gtk_widget_show_all(window_widget);
     c.gtk_window_present(window);
 
@@ -322,10 +328,9 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     c.webkit_user_content_manager_add_script(content_manager, user_script);
     c.webkit_user_script_unref(user_script);
     _ = c.g_signal_connect_data(web_view, "decide-policy", @ptrCast(&onDecidePolicy), native_app, null, 0);
+    _ = c.g_signal_connect_data(web_view, "create", @ptrCast(&onCreate), native_app, null, 0);
     _ = c.g_signal_connect_data(window, "delete-event", @ptrCast(&onDeleteEvent), native_app, null, 0);
     _ = c.g_signal_connect_data(web_view, "drag-data-received", @ptrCast(&onDragDataReceived), native_app, null, 0);
-
-    try buildMenu(native_app, box_widget, window);
 
     // The app supplies the query unread, and the core names none of its parts.
     var query_length: usize = 0;
@@ -357,6 +362,36 @@ fn onScriptMessage(content_manager: *c.WebKitUserContentManager, result: *c.WebK
 }
 
 //
+// Opens the address of a window the frontend asked to open in the system's browser, and never creates a new web view: WebKitGTK
+// sends a window.open here instead of the decide-policy signal, and the core's origin check decides the address as it does every
+// other navigation.
+//
+fn onCreate(web_view: *c.WebKitWebView, navigation_action: *c.WebKitNavigationAction, user_data: ?*anyopaque) callconv(.c) ?*c.GtkWidget {
+    _ = web_view;
+    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
+    const request = c.webkit_navigation_action_get_request(navigation_action);
+    const uri = std.mem.span(@as([*:0]const u8, @ptrCast(c.webkit_uri_request_get_uri(request))));
+    const verdict = z.ziggy_check_url(native_app.core, uri.ptr, uri.len);
+    if (verdict == z.ZIGGY_URL_OPEN_EXTERNALLY) {
+        openExternally(uri);
+    }
+    return null;
+}
+
+//
+// Opens an address the core decided belongs outside the app with the system's browser, and reports a failure on standard error.
+//
+fn openExternally(uri: [:0]const u8) void {
+    var open_error: ?*c.GError = null;
+    if (c.gtk_show_uri_on_window(null, uri.ptr, c.GDK_CURRENT_TIME, &open_error) == 0) {
+        std.debug.print("ziggy native app: could not open {s} in the system browser\n", .{uri});
+        if (open_error) |error_value| {
+            c.g_error_free(error_value);
+        }
+    }
+}
+
+//
 // Decides every navigation with the core's origin check: the app's own frontend loads, external links open in the
 // system browser, and everything else is blocked.
 //
@@ -376,7 +411,7 @@ fn onDecidePolicy(web_view: *c.WebKitWebView, decision: *c.WebKitPolicyDecision,
         return 1;
     }
     if (verdict == z.ZIGGY_URL_OPEN_EXTERNALLY) {
-        _ = c.gtk_show_uri_on_window(null, uri.ptr, c.GDK_CURRENT_TIME, null);
+        openExternally(uri);
     }
     c.webkit_policy_decision_ignore(decision);
     return 1;

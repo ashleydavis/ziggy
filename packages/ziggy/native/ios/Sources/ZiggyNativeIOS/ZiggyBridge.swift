@@ -151,6 +151,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         self.destroyed = false
 
         let configuration = WKWebViewConfiguration()
+        // The popup blocker drops a window.open or a target="_blank" that no click of the user's ran, and decidePolicyFor decides
+        // every new window and opens it with the system's opener or drops it.
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         configuration.setURLSchemeHandler(uiHandler, forURLScheme: ZiggyBridge.uiScheme)
         let userScript = WKUserScript(source: injectScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(userScript)

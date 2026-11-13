@@ -3,3 +3,5 @@
 The Windows platform library of the smoke tests: it builds the app, starts it with `--remote-control` and, when `ZIGGY_THEME` is
 set, `--theme`, and stops it. It also changes the desktop's appearance in the registry for the workflows-only scenarios, putting the
 value it found back. Those scenarios run only in the workflow, or when one is named. `common.sh` sources it. See [run.md](../run.md) for the runner and the scenarios.
+
+`ziggy_platform_wait_app_log` waits for a line in the app's log, which holds the app's standard error.

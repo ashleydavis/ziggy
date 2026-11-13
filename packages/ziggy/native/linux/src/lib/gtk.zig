@@ -176,6 +176,7 @@ pub extern fn webkit_web_view_execute_editing_command(web_view: *WebKitWebView, 
 pub extern fn webkit_web_view_get_settings(web_view: *WebKitWebView) *WebKitSettings;
 pub extern fn webkit_web_view_get_inspector(web_view: *WebKitWebView) *WebKitWebInspector;
 pub extern fn webkit_settings_set_enable_developer_extras(settings: *WebKitSettings, enabled: gboolean) void;
+pub extern fn webkit_settings_set_javascript_can_open_windows_automatically(settings: *WebKitSettings, enabled: gboolean) void;
 pub extern fn webkit_web_inspector_show(inspector: *WebKitWebInspector) void;
 pub extern fn webkit_web_inspector_close(inspector: *WebKitWebInspector) void;
 pub extern fn gtk_box_reorder_child(box: *GtkWidget, child: *GtkWidget, position: c_int) void;

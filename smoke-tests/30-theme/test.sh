@@ -10,14 +10,14 @@ start_test_app
 wait_for_text theme-background "theme background: dark"
 wait_for_text theme "dark dark"
 
-click set-theme-light
+type_into theme-select light
 wait_for_text theme-background "theme background: light"
 wait_for_text theme "light light"
 
-click set-theme-dark
+type_into theme-select dark
 wait_for_text theme-background "theme background: dark"
 
-click set-theme-light
+type_into theme-select light
 wait_for_text theme-background "theme background: light"
 wait_for_text theme "light light"
 

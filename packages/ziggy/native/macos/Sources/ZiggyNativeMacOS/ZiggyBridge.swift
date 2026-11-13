@@ -156,6 +156,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         // Turns on the web inspector, and with it Inspect Element in the context menu. This key is not in the public API but
         // is how every WKWebView app on these SDKs does it. It is on in release builds too.
         configuration.preferences.setValue(true, forKey: "developerExtrasEnabled")
+        // The popup blocker drops a window.open or a target="_blank" that no click of the user's ran, and decidePolicyFor decides
+        // every new window and opens it with the system's opener or drops it.
+        configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
         self.webView = ZiggyWebView(frame: frame, configuration: configuration)
         #if swift(>=5.8)
         // The public switch for the same thing, which exists from macOS 13.3. It is compiled only by a toolchain whose SDK

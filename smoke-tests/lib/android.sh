@@ -273,3 +273,15 @@ ziggy_platform_process_alive() {
 ziggy_platform_keep_alive_service_running() {
     ziggy_adb shell dumpsys activity services "$ANDROID_APP_ID" | grep -q "ZiggyKeepAliveService"
 }
+
+#
+# Prints the lines of the device log that show the system was asked to open an address, or nothing when it was asked none. Call it
+# only after the app has started, which cleared the log: each line holds the scheme and host, with the path hidden.
+# Usage: ziggy_platform_opened_urls <test_dir>
+#
+ziggy_platform_opened_urls() {
+    local test_dir="$1"
+    local log
+    log="$(ziggy_adb logcat -d -v brief -s ActivityTaskManager:I ActivityManager:I)" || return 1
+    printf '%s\n' "$log" | grep -F -- "act=android.intent.action.VIEW" || true
+}

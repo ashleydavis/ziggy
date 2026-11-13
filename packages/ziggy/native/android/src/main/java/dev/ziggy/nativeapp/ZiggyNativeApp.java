@@ -334,6 +334,8 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         settings.setAllowContentAccess(false);
         settings.setGeolocationEnabled(false);
         settings.setSupportMultipleWindows(false);
+        // With multiple windows off, a new window loads in this web view as a navigation, and shouldOverrideUrlLoading decides it.
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         if ((activity.getApplicationInfo().flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             WebView.setWebContentsDebuggingEnabled(true);
