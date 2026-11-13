@@ -61,7 +61,7 @@ pub fn shortcut_list(comptime menu: []const menu_lib.Menu, comptime actions: []c
 //
 // One entry of the inject script's list, from the action and shortcut text.
 //
-fn makeShortcut(comptime action: []const u8, comptime shortcut: []const u8, comptime standard: bool) BrowserShortcut {
+pub fn makeShortcut(comptime action: []const u8, comptime shortcut: []const u8, comptime standard: bool) BrowserShortcut {
     const parsed = shortcut_lib.parse(shortcut) catch |err| {
         @compileError("ziggy: the shortcut \"" ++ shortcut ++ "\", which the build checked, does not parse: " ++ @errorName(err) ++ ".");
     };

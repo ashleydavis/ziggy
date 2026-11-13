@@ -26,6 +26,22 @@ test "an unknown key is an error" {
     try std.testing.expectError(error.UnknownKey, menu_keys.gdkKeyName(&buffer, "banana"));
 }
 
+test "a menu item shows its label, a tab and its shortcut" {
+    var buffer: [64]u8 = undefined;
+    try std.testing.expectEqualStrings("Open Database...\tCtrl+O", try menu_keys.menuLabel(&buffer, "Open Database...", "Ctrl+O"));
+    // A buffer too small for the text is an error, not a cut label.
+    var small: [4]u8 = undefined;
+    try std.testing.expectError(error.NoSpaceLeft, menu_keys.menuLabel(&small, "Open", "Ctrl+O"));
+}
+
+test "the masks before a modifier are OR'd" {
+    const control = menu_keys.gdk_control_mask;
+    const shift = menu_keys.gdk_shift_mask;
+    try std.testing.expectEqual(@as(c_uint, 0), menu_keys.modifier_mask_before(&.{ control, shift }, 0));
+    try std.testing.expectEqual(control, menu_keys.modifier_mask_before(&.{ control, shift }, 1));
+    try std.testing.expectEqual(control | shift, menu_keys.modifier_mask_before(&.{ control, shift }, 2));
+}
+
 test "? is the keysym question" {
     var buffer: [32]u8 = undefined;
     try std.testing.expectEqualStrings("question", try menu_keys.gdkKeyName(&buffer, "?"));

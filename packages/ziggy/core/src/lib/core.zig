@@ -498,7 +498,7 @@ const MainServices = struct {
 
     fn isPhone(ptr: *anyopaque) bool {
         const self: *MainServices = @ptrCast(@alignCast(ptr));
-        return self.config.has_native_call;
+        return self.config.is_phone;
     }
 
     fn nativeCallbacks(ptr: *anyopaque) services_lib.NativeCallbacks {

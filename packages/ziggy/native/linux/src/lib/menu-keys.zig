@@ -237,13 +237,21 @@ pub fn key_press_steps(buffer: *[10]KeyPressStep, modifier_masks: []const c_uint
 //
 // The masks of the modifiers before the one at the index, OR'd together.
 //
-fn modifier_mask_before(modifier_masks: []const c_uint, index: usize) c_uint {
+pub fn modifier_mask_before(modifier_masks: []const c_uint, index: usize) c_uint {
     std.debug.assert(index <= modifier_masks.len);
     var state: c_uint = 0;
     for (modifier_masks[0..index]) |mask| {
         state |= mask;
     }
     return state;
+}
+
+//
+// The text a menu item shows: its label, a tab, then its shortcut as the platform shows it. The text is written into the buffer, NUL
+// terminated, and fails when the buffer is too small.
+//
+pub fn menuLabel(buffer: []u8, label: []const u8, shortcut: []const u8) ![:0]const u8 {
+    return std.fmt.bufPrintZ(buffer, "{s}\t{s}", .{ label, shortcut });
 }
 
 //

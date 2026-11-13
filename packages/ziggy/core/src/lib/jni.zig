@@ -365,6 +365,8 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
         .has_menu_action = true,
         .has_keep_alive = true,
         .has_native_call = true,
+        // A phone has no menu and no shortcut.
+        .is_phone = true,
         // A phone's screenshot is taken from the computer with adb, so the app has no way of taking one itself.
         .has_screenshot = false,
         // A phone has no shortcuts.

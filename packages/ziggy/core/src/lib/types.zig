@@ -66,6 +66,8 @@ pub const ZiggyConfig = extern struct {
     has_keep_alive: bool,
     // Whether the native app does the things only the platform can do (a share sheet, a permission prompt, the keychain), by name.
     has_native_call: bool,
+    // Whether the native app is a phone's, Android or iOS, where there is no menu and no shortcut. False on a desktop.
+    is_phone: bool,
     // Whether the native app writes a PNG of its window to a file. Used only by the remote control connection; without it a screenshot
     // is taken from outside the app.
     has_screenshot: bool,

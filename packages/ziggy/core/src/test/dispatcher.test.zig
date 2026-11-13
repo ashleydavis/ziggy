@@ -481,8 +481,10 @@ test "a run-action message naming a standard action fails with StandardActionUna
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    // The fake native app gives a native call callback, as a phone's native app does.
-    try test_app.createCore(&native_app, 1, 1);
+    // A phone's core.
+    var phone_config = native_app.config(1, 1);
+    phone_config.is_phone = true;
+    try native_app.start(std.testing.io, std.testing.allocator, phone_config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"run-action\",\"data\":{\"action\":\"quit\"}}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"StandardActionUnavailable\"}");
@@ -503,8 +505,9 @@ test "a list-actions message answers every action and standard item with its lab
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
+    // A desktop app that does its own native calls, as Photosphere's does, still lists its shortcuts.
     var config = native_app.config(1, 1);
-    config.has_native_call = false;
+    config.has_native_call = true;
     try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-actions\"}");
@@ -527,7 +530,9 @@ test "a list-actions message on a phone answers no shortcuts" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try test_app.createCore(&native_app, 1, 1);
+    var config = native_app.config(1, 1);
+    config.is_phone = true;
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-actions\"}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":[{\"name\":\"say-hello\",\"label\":\"Say Hello\",\"shortcut\":null}," ++
@@ -539,8 +544,9 @@ test "a list-shortcuts message answers every shortcut of the menu and the action
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
+    // A desktop app that does its own native calls still gets its shortcuts.
     var config = native_app.config(1, 1);
-    config.has_native_call = false;
+    config.has_native_call = true;
     try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-shortcuts\"}");
@@ -568,7 +574,9 @@ test "a list-shortcuts message on a phone answers none" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    try test_app.createCore(&native_app, 1, 1);
+    var config = native_app.config(1, 1);
+    config.is_phone = true;
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"list-shortcuts\"}");
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":[]}");
@@ -742,10 +750,10 @@ test "the handler services reach the native app's quit and menu action callbacks
     // The data directory is only reported, never written to, by this app.
     var config = native_app.config(1, 1);
     config.data_dir = "/tmp";
+    config.is_phone = true;
     try native_app.start(std.testing.io, std.testing.allocator, config, native_services_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"native-services\"}");
-    // The fake native app gives a native call callback, as a phone's native app does.
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{\"isPhone\":true,\"dataDir\":\"/tmp\"}}");
     try std.testing.expect(native_app.quitCalled(std.testing.io, std.testing.allocator));
     const actions = try native_app.chosenActions(std.testing.io, std.testing.allocator);

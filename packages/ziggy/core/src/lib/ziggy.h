@@ -46,6 +46,8 @@ typedef struct ziggy_config {
     bool has_keep_alive;
     // Whether the native app does "native-call" calls, the app's own native calls.
     bool has_native_call;
+    // Whether the native app is a phone's, Android or iOS, where there is no menu and no shortcut. False on a desktop.
+    bool is_phone;
     // Whether the native app does "screenshot" calls. Used only by the remote control connection.
     bool has_screenshot;
     // Whether the native app does "key-press" calls. False on a platform with no shortcuts. Used only by the remote control connection.
@@ -189,7 +191,7 @@ typedef struct ziggy_menu_entry {
     // What an item runs, NUL terminated: a standard action's name, which the native app does itself, or a name it posts to the core in
     // the menu-action system message. NULL for any other entry.
     const char *action;
-    // An item's shortcut text, NUL terminated, which ziggy_parse_accelerator reads, or NULL for none.
+    // An item's shortcut as the platform shows it, NUL terminated, such as "Ctrl+Shift+I" or "⇧⌘H", or NULL for none.
     const char *shortcut;
 } ziggy_menu_entry;
 

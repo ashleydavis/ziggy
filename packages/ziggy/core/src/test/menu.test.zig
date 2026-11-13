@@ -233,8 +233,57 @@ test "menuEntries flattens every kind of item in order, with its depth, label, a
         try std.testing.expectEqual(wanted.depth, entry.depth);
         try expectCString(wanted.label, entry.label);
         try expectCString(wanted.action, entry.action);
-        try expectCString(wanted.shortcut, entry.shortcut);
+        // The entry shows the shortcut as the platform does, not as the menu writes it.
+        var display_buffer: [64]u8 = undefined;
+        const wanted_shortcut: ?[]const u8 = if (wanted.shortcut) |raw|
+            try ziggy.shortcut.writeDisplayText(&display_buffer, try ziggy.shortcut.parse(raw), builtin.os.tag)
+        else
+            null;
+        try expectCString(wanted_shortcut, entry.shortcut);
     }
+}
+
+test "sameKeyPressTexts compares parsed shortcuts" {
+    try std.testing.expect(comptime ziggy.menu.sameKeyPressTexts("CmdOrCtrl+Plus", "CmdOrCtrl+Equal") catch unreachable);
+    try std.testing.expect(!(comptime ziggy.menu.sameKeyPressTexts("Ctrl+Plus", "Alt+Equal") catch unreachable));
+}
+
+test "shortcutParseError names the first shortcut that does not parse" {
+    try std.testing.expectEqualStrings(
+        "ziggy.menu: the shortcut \"Banana\" does not parse: UnknownKey.",
+        comptime ziggy.menu.shortcutParseError(unparseable_menu, &.{}, error.UnknownKey),
+    );
+}
+
+test "firstUnparseableShortcut gives the first bad shortcut, or null" {
+    const bad = comptime ziggy.menu.firstUnparseableShortcut(unparseable_menu, &.{});
+    try std.testing.expectEqualStrings("Banana", bad.?);
+    try std.testing.expect((comptime ziggy.menu.firstUnparseableShortcut(every_kind, every_kind_actions)) == null);
+}
+
+test "actionShortcut gives an action's shortcut, or an empty string" {
+    try std.testing.expectEqualStrings("CmdOrCtrl+S", comptime ziggy.menu.actionShortcut(every_kind_actions, "save"));
+    try std.testing.expectEqualStrings("", comptime ziggy.menu.actionShortcut(every_kind_actions, "missing"));
+}
+
+test "displayShortcut writes a shortcut as the platform shows it" {
+    var buffer: [64]u8 = undefined;
+    try std.testing.expectEqualStrings(
+        try ziggy.shortcut.writeDisplayText(&buffer, try ziggy.shortcut.parse("CmdOrCtrl+Shift+H"), builtin.os.tag),
+        comptime ziggy.menu.displayShortcut("CmdOrCtrl+Shift+H"),
+    );
+    try std.testing.expectEqualStrings(
+        try ziggy.shortcut.writeDisplayText(&buffer, try ziggy.shortcut.parse("F11"), builtin.os.tag),
+        comptime ziggy.menu.displayShortcut("F11"),
+    );
+    try std.testing.expectEqualStrings(
+        try ziggy.shortcut.writeDisplayText(&buffer, try ziggy.shortcut.parse("CmdOrCtrl+Plus"), builtin.os.tag),
+        comptime ziggy.menu.displayShortcut("CmdOrCtrl+Plus"),
+    );
+    try std.testing.expectEqualStrings(
+        try ziggy.shortcut.writeDisplayText(&buffer, try ziggy.shortcut.parse("?"), builtin.os.tag),
+        comptime ziggy.menu.displayShortcut("?"),
+    );
 }
 
 test "menuEntries of an empty menu is empty" {

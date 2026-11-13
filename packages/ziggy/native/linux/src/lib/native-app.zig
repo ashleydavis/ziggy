@@ -730,7 +730,7 @@ fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget) !void {
 //
 fn shortcutLabel(label: [*:0]const u8, shortcut: [*:0]const u8) *c.GtkWidget {
     var buffer: [512]u8 = undefined;
-    const text = std.fmt.bufPrintZ(&buffer, "{s}\t{s}", .{ std.mem.span(label), std.mem.span(shortcut) }) catch @panic("the menu label and its shortcut are too long");
+    const text = menu_keys.menuLabel(&buffer, std.mem.span(label), std.mem.span(shortcut)) catch @panic("the menu label and its shortcut are too long");
     return c.gtk_menu_item_new_with_label(text.ptr);
 }
 

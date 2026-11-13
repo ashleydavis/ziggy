@@ -171,6 +171,7 @@ pub const FakeNativeApp = struct {
             .has_menu_action = true,
             .has_keep_alive = true,
             .has_native_call = true,
+            .is_phone = false,
             .has_screenshot = true,
             .has_key_press = true,
             .worker_threads = worker_threads,

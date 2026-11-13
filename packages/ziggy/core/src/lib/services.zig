@@ -211,8 +211,7 @@ pub const HandlerServices = struct {
     }
 
     //
-    // Whether the native app is a phone's: the native apps of Android and iOS give the core a native call callback, which no desktop
-    // native app has.
+    // Whether the native app is a phone's, Android or iOS, where there is no menu and no shortcut.
     //
     pub fn isPhone(self: HandlerServices) bool {
         return self.vtable.isPhone(self.ptr);

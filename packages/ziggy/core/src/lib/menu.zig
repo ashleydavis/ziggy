@@ -6,6 +6,7 @@
 //
 
 const std = @import("std");
+const builtin = @import("builtin");
 const services_lib = @import("services.zig");
 const timers_lib = @import("timers.zig");
 const shortcut_lib = @import("shortcut.zig");
@@ -189,7 +190,7 @@ pub fn rejectInvalidMenu(comptime menu: []const Menu, comptime actions: []const 
 //
 // Whether two shortcut texts are the same key press, or the parse error of the first that does not parse.
 //
-fn sameKeyPressTexts(comptime first: []const u8, comptime second: []const u8) shortcut_lib.ParseError!bool {
+pub fn sameKeyPressTexts(comptime first: []const u8, comptime second: []const u8) shortcut_lib.ParseError!bool {
     const first_parsed = try shortcut_lib.parse(first);
     const second_parsed = try shortcut_lib.parse(second);
     return shortcut_lib.is_same_key_press(first_parsed, second_parsed);
@@ -198,7 +199,7 @@ fn sameKeyPressTexts(comptime first: []const u8, comptime second: []const u8) sh
 //
 // The build failure for a shortcut that does not parse, naming the first one that does not.
 //
-fn shortcutParseError(comptime menu: []const Menu, comptime actions: []const action_lib.Action, comptime err: shortcut_lib.ParseError) []const u8 {
+pub fn shortcutParseError(comptime menu: []const Menu, comptime actions: []const action_lib.Action, comptime err: shortcut_lib.ParseError) []const u8 {
     const text = firstUnparseableShortcut(menu, actions) orelse "";
     return "ziggy.menu: the shortcut \"" ++ text ++ "\" does not parse: " ++ @errorName(err) ++ ".";
 }
@@ -206,7 +207,7 @@ fn shortcutParseError(comptime menu: []const Menu, comptime actions: []const act
 //
 // The first shortcut text in the menu or in the actions that are not on it that does not parse, or null when every one does.
 //
-fn firstUnparseableShortcut(comptime menu: []const Menu, comptime actions: []const action_lib.Action) ?[]const u8 {
+pub fn firstUnparseableShortcut(comptime menu: []const Menu, comptime actions: []const action_lib.Action) ?[]const u8 {
     comptime {
         for (allItems(menu)) |item| {
             const shortcut = menuItemShortcut(item, actions) orelse continue;
@@ -285,7 +286,7 @@ pub fn off_menu_key_press_clash(comptime menu: []const Menu, comptime actions: [
 //
 // The shortcut text of the action with the name, or an empty string when no action has the name.
 //
-fn actionShortcut(comptime actions: []const action_lib.Action, comptime name: []const u8) []const u8 {
+pub fn actionShortcut(comptime actions: []const action_lib.Action, comptime name: []const u8) []const u8 {
     comptime {
         for (actions) |action| {
             if (std.mem.eql(u8, action.name, name)) {
@@ -479,7 +480,8 @@ pub const MenuEntry = extern struct {
     // What an item runs: its standard action for a `.standard` item, its action's name for an `.action` item and its name otherwise.
     // Null for any other entry.
     action: ?[*:0]const u8,
-    // An item's shortcut text, its own or for an `.action` item its action's, or null for none.
+    // An item's shortcut as the platform shows it, such as "Ctrl+Shift+I" or "⇧⌘H", its own or for an `.action` item its
+    // action's, or null for none.
     shortcut: ?[*:0]const u8,
 };
 
@@ -545,10 +547,31 @@ fn menuItemEntries(comptime items: []const Item, comptime actions: []const actio
                 .depth = depth,
                 .label = cString(menuItemLabel(item, actions)),
                 .action = cString(action),
-                .shortcut = if (shortcut) |text| cString(text) else null,
+                .shortcut = if (shortcut) |text| cString(displayShortcut(text)) else null,
             }};
         }
         return entries;
+    }
+}
+
+//
+// The shortcut as the platform the core is built for shows it, such as "Ctrl+Shift+I" on Linux and Windows or "⇧⌘I" on macOS.
+//
+pub fn displayShortcut(comptime text: []const u8) []const u8 {
+    comptime {
+        const parsed = shortcut_lib.parse(text) catch |err| {
+            @compileError("ziggy.menu: the shortcut \"" ++ text ++ "\" does not parse: " ++ @errorName(err) ++ ".");
+        };
+        const written = blk: {
+            var storage: [64]u8 = undefined;
+            const text_written = shortcut_lib.writeDisplayText(&storage, parsed, builtin.os.tag) catch |err| {
+                @compileError("ziggy.menu: the shortcut \"" ++ text ++ "\" could not be written: " ++ @errorName(err) ++ ".");
+            };
+            var result: [text_written.len]u8 = undefined;
+            @memcpy(&result, text_written);
+            break :blk result;
+        };
+        return &written;
     }
 }
 

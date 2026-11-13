@@ -81,6 +81,16 @@ fn entryFor(entries: []const shortcuts_lib.BrowserShortcut, name: []const u8) !s
     return error.EntryMissing;
 }
 
+test "makeShortcut builds one entry from an action and its shortcut" {
+    const entry = comptime shortcuts_lib.makeShortcut("ask", "?", false);
+    try std.testing.expectEqualStrings("ask", entry.action);
+    try std.testing.expect(!entry.standard);
+    try std.testing.expect(entry.text_box);
+    try std.testing.expectEqualStrings("", entry.code);
+    try std.testing.expectEqualStrings("?", entry.key);
+    try std.testing.expect(entry.shiftOptional);
+}
+
 test "shortcut_list holds every shortcut of the actions, with Ctrl too" {
     const entries = comptime shortcuts_lib.shortcut_list(&.{}, actions);
     try std.testing.expectEqual(@as(usize, 11), entries.len);
