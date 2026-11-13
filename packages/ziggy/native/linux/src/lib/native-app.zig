@@ -15,6 +15,8 @@ const geometry_lib = @import("geometry.zig");
 const render_device = @import("render-device.zig");
 const native_message = @import("native-message");
 const remote_control_arguments = @import("remote-control-arguments");
+const system_theme = @import("system-theme.zig");
+const web_view_theme = @import("web-view-theme.zig");
 
 // The URL scheme the bundled frontend is served under. WebKitGTK calls the native app's scheme handler for each file instead of reading a directory.
 const app_scheme = "ziggy-app";
@@ -99,6 +101,10 @@ const NativeApp = struct {
     awake_holds: u32,
     // The cookie of the suspend inhibit, while there is one.
     inhibit_cookie: c_uint,
+    // The desktop portal's settings proxy, or null when it could not be made.
+    portal: ?*c.GDBusProxy,
+    // The desktop's GTK theme name before Ziggy changed it, which the light theme restores.
+    gtk_theme_name: ?[*:0]u8,
 };
 
 //
@@ -129,7 +135,11 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .fullscreen = false,
         .awake_holds = 0,
         .inhibit_cookie = 0,
+        .portal = null,
+        .gtk_theme_name = null,
     };
+    defer if (native_app.portal) |proxy| c.g_object_unref(proxy);
+    defer if (native_app.gtk_theme_name) |name| c.g_free(@ptrCast(name));
     _ = c.g_signal_connect_data(application, "activate", @ptrCast(&onActivate), &native_app, null, 0);
     _ = c.g_signal_connect_data(application, "shutdown", @ptrCast(&onShutdown), &native_app, null, 0);
     const status = c.g_application_run(@ptrCast(application), 0, null);
@@ -201,14 +211,14 @@ fn onActivate(application: *c.GtkApplication, user_data: ?*anyopaque) callconv(.
 // Creates the window and the web view, creates the core and loads the frontend.
 //
 fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
-    // The frontend's own scripts are classic scripts, but a frontend may also fetch its files, which needs the scheme to
-    // be allowed to make cross-origin style requests and to count as a secure context like https does.
-    const web_context = c.webkit_web_context_get_default();
-    c.webkit_web_context_register_uri_scheme(web_context, app_scheme, onUriSchemeRequest, native_app, null);
-    const security_manager = c.webkit_web_context_get_security_manager(web_context);
-    c.webkit_security_manager_register_uri_scheme_as_secure(security_manager, app_scheme);
-    c.webkit_security_manager_register_uri_scheme_as_cors_enabled(security_manager, app_scheme);
-
+    native_app.portal = c.g_dbus_proxy_new_for_bus_sync(c.G_BUS_TYPE_SESSION, c.G_DBUS_PROXY_FLAGS_NONE, null, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings", null, null);
+    if (c.gtk_settings_get_default()) |settings| {
+        var theme_name: [*c]u8 = null;
+        c.g_object_get(settings, "gtk-theme-name", &theme_name, @as(?*anyopaque, null));
+        if (theme_name != null) {
+            native_app.gtk_theme_name = @ptrCast(theme_name);
+        }
+    }
     const data_directory = c.g_build_filename(c.g_get_user_data_dir(), native_app.app_config.app_id.ptr, @as([*c]const u8, null));
     defer c.g_free(data_directory);
     if (c.g_mkdir_with_parents(data_directory, 0o755) != 0) {
@@ -235,29 +245,6 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     if (native_app.app_config.icon_png) |icon_png| {
         setWindowIcon(window, icon_png);
     }
-
-    const web_view_widget = c.webkit_web_view_new();
-    const web_view: *c.WebKitWebView = @ptrCast(@alignCast(web_view_widget));
-    native_app.web_view = web_view;
-    c.webkit_settings_set_enable_developer_extras(c.webkit_web_view_get_settings(web_view), 1);
-    _ = c.g_signal_connect_data(c.webkit_web_view_get_inspector(web_view), "closed", @ptrCast(&onInspectorClosed), native_app, null, 0);
-    const box_widget = c.gtk_box_new(c.GTK_ORIENTATION_VERTICAL, 0);
-    c.gtk_container_add(window_widget, box_widget);
-    c.gtk_box_pack_start(box_widget, web_view_widget, 1, 1, 0);
-
-    const content_manager = c.webkit_web_view_get_user_content_manager(web_view);
-    if (c.webkit_user_content_manager_register_script_message_handler(content_manager, "ziggy") == 0) {
-        return error.ScriptMessageHandlerFailed;
-    }
-    _ = c.g_signal_connect_data(content_manager, "script-message-received::ziggy", @ptrCast(&onScriptMessage), native_app, null, 0);
-    var inject_script_length: usize = 0;
-    const inject_script = z.ziggy_inject_script(&inject_script_length);
-    const user_script = c.webkit_user_script_new(@ptrCast(inject_script), c.WEBKIT_USER_CONTENT_INJECT_TOP_FRAME, c.WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START, null, null);
-    c.webkit_user_content_manager_add_script(content_manager, user_script);
-    c.webkit_user_script_unref(user_script);
-    _ = c.g_signal_connect_data(web_view, "decide-policy", @ptrCast(&onDecidePolicy), native_app, null, 0);
-    _ = c.g_signal_connect_data(window, "delete-event", @ptrCast(&onDeleteEvent), native_app, null, 0);
-    _ = c.g_signal_connect_data(web_view, "drag-data-received", @ptrCast(&onDragDataReceived), native_app, null, 0);
 
     var config = std.mem.zeroes(z.ziggy_config);
     // GLib hands the native app's address back to the main thread with the idle callback, unread.
@@ -286,9 +273,57 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     }
     config.arg_count = @intCast(argument_pointers.len);
     config.args = @ptrCast(argument_pointers.ptr);
+    config.system_theme = @intFromEnum(readSystemTheme(native_app));
     native_app.core = z.ziggy_create(&config) orelse {
         return error.CoreCreateFailed;
     };
+
+    var theme_arena_state = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer theme_arena_state.deinit();
+    var theme_length: usize = 0;
+    const theme_pointer = z.ziggy_theme(native_app.core, &theme_length) orelse {
+        return error.ThemeFailed;
+    };
+    const theme_call = try native_message.parse(theme_arena_state.allocator(), theme_pointer[0..theme_length]);
+    watchSystemTheme(native_app);
+
+    // The web context is made after the core, so the theme it gives is applied to the web view as it is created.
+    // The frontend's own scripts are classic scripts, but a frontend may also fetch its files, which needs the scheme to
+    // be allowed to make cross-origin style requests and to count as a secure context like https does.
+    const web_context = c.webkit_web_context_get_default();
+    c.webkit_web_context_register_uri_scheme(web_context, app_scheme, onUriSchemeRequest, native_app, null);
+    const security_manager = c.webkit_web_context_get_security_manager(web_context);
+    c.webkit_security_manager_register_uri_scheme_as_secure(security_manager, app_scheme);
+    c.webkit_security_manager_register_uri_scheme_as_cors_enabled(security_manager, app_scheme);
+
+    const web_view_widget = c.webkit_web_view_new();
+    const web_view: *c.WebKitWebView = @ptrCast(@alignCast(web_view_widget));
+    native_app.web_view = web_view;
+    c.webkit_settings_set_enable_developer_extras(c.webkit_web_view_get_settings(web_view), 1);
+    _ = c.g_signal_connect_data(c.webkit_web_view_get_inspector(web_view), "closed", @ptrCast(&onInspectorClosed), native_app, null, 0);
+    const box_widget = c.gtk_box_new(c.GTK_ORIENTATION_VERTICAL, 0);
+    c.gtk_container_add(window_widget, box_widget);
+    c.gtk_box_pack_start(box_widget, web_view_widget, 1, 1, 0);
+    switch (theme_call) {
+        .theme => |theme| applyTheme(native_app, theme),
+        else => return error.ThemeFailed,
+    }
+    c.gtk_widget_show_all(window_widget);
+    c.gtk_window_present(window);
+
+    const content_manager = c.webkit_web_view_get_user_content_manager(web_view);
+    if (c.webkit_user_content_manager_register_script_message_handler(content_manager, "ziggy") == 0) {
+        return error.ScriptMessageHandlerFailed;
+    }
+    _ = c.g_signal_connect_data(content_manager, "script-message-received::ziggy", @ptrCast(&onScriptMessage), native_app, null, 0);
+    var inject_script_length: usize = 0;
+    const inject_script = z.ziggy_inject_script(&inject_script_length);
+    const user_script = c.webkit_user_script_new(@ptrCast(inject_script), c.WEBKIT_USER_CONTENT_INJECT_TOP_FRAME, c.WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START, null, null);
+    c.webkit_user_content_manager_add_script(content_manager, user_script);
+    c.webkit_user_script_unref(user_script);
+    _ = c.g_signal_connect_data(web_view, "decide-policy", @ptrCast(&onDecidePolicy), native_app, null, 0);
+    _ = c.g_signal_connect_data(window, "delete-event", @ptrCast(&onDeleteEvent), native_app, null, 0);
+    _ = c.g_signal_connect_data(web_view, "drag-data-received", @ptrCast(&onDragDataReceived), native_app, null, 0);
 
     try buildMenu(native_app, box_widget, window);
 
@@ -302,8 +337,6 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     const ui_url = try std.fmt.allocPrintSentinel(std.heap.c_allocator, "{s}index.html{s}{s}", .{ app_url_prefix, query_separator, query }, 0);
     defer std.heap.c_allocator.free(ui_url);
     c.webkit_web_view_load_uri(web_view, ui_url.ptr);
-    c.gtk_widget_show_all(window_widget);
-    c.gtk_window_present(window);
 }
 
 //
@@ -496,6 +529,7 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .native_call => |native_call| runNativeCall(native_app, reply, native_call.method, native_call.request),
         .pick_paths => |pick| try showPickDialog(native_app, reply, pick),
         .screenshot => |output_path| try startScreenshot(native_app, reply, output_path),
+        .theme => |theme_call| applyTheme(native_app, theme_call),
         .keep_alive, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
 }
@@ -1024,4 +1058,141 @@ fn onSnapshot(source: c.gpointer, result: *c.GAsyncResult, user_data: c.gpointer
         return;
     }
     sendResult(native_app, taking.reply, true, "");
+}
+
+//
+// The system's theme, read from the desktop portal. A portal that does not answer prints why and gives light.
+//
+fn readSystemTheme(native_app: *NativeApp) system_theme.SystemTheme {
+    const proxy = native_app.portal orelse {
+        std.debug.print("ziggy native app: could not read the system theme from the desktop portal (the settings proxy could not be made), so it is light\n", .{});
+        return .light;
+    };
+    var error_pointer: ?*c.GError = null;
+    const parameters = c.g_variant_new("(ss)", @as([*:0]const u8, "org.freedesktop.appearance"), @as([*:0]const u8, "color-scheme"));
+    const result = c.g_dbus_proxy_call_sync(proxy, "org.freedesktop.portal.Settings.ReadOne", parameters, c.G_DBUS_CALL_FLAGS_NONE, -1, null, &error_pointer) orelse {
+        reportPortalError(error_pointer);
+        return .light;
+    };
+    defer c.g_variant_unref(result);
+    const child = c.g_variant_get_child_value(result, 0);
+    defer c.g_variant_unref(child);
+    const value = c.g_variant_get_variant(child);
+    defer c.g_variant_unref(value);
+    return system_theme.fromColorScheme(c.g_variant_get_uint32(value));
+}
+
+//
+// Prints why the portal call failed and frees the error.
+//
+fn reportPortalError(error_pointer: ?*c.GError) void {
+    const given = error_pointer orelse return;
+    const fields: *const c.GErrorFields = @ptrCast(@alignCast(given));
+    std.debug.print("ziggy native app: could not read the system theme from the desktop portal ({s}), so it is light\n", .{std.mem.span(fields.message)});
+    c.g_error_free(given);
+}
+
+//
+// Follows the desktop portal's colour scheme for the rest of the run.
+//
+fn watchSystemTheme(native_app: *NativeApp) void {
+    const proxy = native_app.portal orelse return;
+    _ = c.g_signal_connect_data(proxy, "g-signal", @ptrCast(&onPortalSettingChanged), native_app, null, 0);
+}
+
+//
+// The portal's SettingChanged signal: posts the new system theme when the appearance's colour scheme changes.
+//
+fn onPortalSettingChanged(proxy: *c.GDBusProxy, sender_name: ?[*:0]const u8, signal_name: [*:0]const u8, parameters: *c.GVariant, user_data: ?*anyopaque) callconv(.c) void {
+    _ = proxy;
+    _ = sender_name;
+    if (!std.mem.eql(u8, std.mem.span(signal_name), "SettingChanged")) {
+        return;
+    }
+    const namespace = c.g_variant_get_child_value(parameters, 0);
+    defer c.g_variant_unref(namespace);
+    const key = c.g_variant_get_child_value(parameters, 1);
+    defer c.g_variant_unref(key);
+    if (!std.mem.eql(u8, std.mem.span(c.g_variant_get_string(namespace, null)), "org.freedesktop.appearance")) {
+        return;
+    }
+    if (!std.mem.eql(u8, std.mem.span(c.g_variant_get_string(key, null)), "color-scheme")) {
+        return;
+    }
+    const value = c.g_variant_get_child_value(parameters, 2);
+    defer c.g_variant_unref(value);
+    const inner = c.g_variant_get_variant(value);
+    defer c.g_variant_unref(inner);
+    const theme = system_theme.fromColorScheme(c.g_variant_get_uint32(inner));
+    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
+    const core = native_app.core orelse {
+        return;
+    };
+    var buffer: [128]u8 = undefined;
+    const text = std.fmt.bufPrint(&buffer, "{{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"{s}\"}}", .{if (theme == .dark) "dark" else "light"}) catch return;
+    z.ziggy_send_message(core, text.ptr, text.len);
+}
+
+//
+// Applies a theme call: the web view's background and the GTK theme WebKitGTK reads for prefers-color-scheme.
+//
+fn applyTheme(native_app: *NativeApp, theme_call: native_message.ThemeCall) void {
+    const web_view = native_app.web_view orelse return;
+    const background = parseBackground(theme_call.background);
+    c.webkit_web_view_set_background_color(web_view, &background);
+    applyGtkTheme(native_app, theme_call);
+}
+
+//
+// Applies a theme call to the GTK settings WebKitGTK reads for prefers-color-scheme.
+//
+fn applyGtkTheme(native_app: *NativeApp, theme_call: native_message.ThemeCall) void {
+    const dark = std.mem.eql(u8, theme_call.theme, "dark");
+    const settings = c.gtk_settings_get_default() orelse return;
+    if (dark) {
+        c.g_object_set(settings, "gtk-application-prefer-dark-theme", @as(c.gboolean, 1), @as(?*anyopaque, null));
+        // WebKitGTK reads a theme name ending in -dark as well as the prefer-dark setting, and a light desktop's theme has no dark
+        // name to put back, so a dark theme is named here.
+        if (native_app.gtk_theme_name) |name| {
+            const name_slice = std.mem.span(name);
+            if (std.mem.endsWith(u8, name_slice, "-dark") or std.mem.endsWith(u8, name_slice, "-Dark")) {
+                c.g_object_set(settings, "gtk-theme-name", name, @as(?*anyopaque, null));
+            } else {
+                c.g_object_set(settings, "gtk-theme-name", @as([*:0]const u8, "Adwaita-dark"), @as(?*anyopaque, null));
+            }
+        } else {
+            c.g_object_set(settings, "gtk-theme-name", @as([*:0]const u8, "Adwaita-dark"), @as(?*anyopaque, null));
+        }
+        return;
+    }
+    c.g_object_set(settings, "gtk-application-prefer-dark-theme", @as(c.gboolean, 0), @as(?*anyopaque, null));
+    if (native_app.gtk_theme_name) |name| {
+        const name_slice = std.mem.span(name);
+        if (web_view_theme.lightThemeName(name_slice)) |light_name| {
+            var buffer: [256]u8 = undefined;
+            if (light_name.len < buffer.len) {
+                @memcpy(buffer[0..light_name.len], light_name);
+                buffer[light_name.len] = 0;
+                c.g_object_set(settings, "gtk-theme-name", @as([*:0]const u8, @ptrCast(&buffer)), @as(?*anyopaque, null));
+            }
+        }
+    }
+    if (c.g_getenv("GTK_THEME")) |gtk_theme_env| {
+        if (web_view_theme.forcesDark(std.mem.span(gtk_theme_env))) {
+            std.debug.print("ziggy native app: GTK_THEME={s} names a dark theme, so the page's prefers-color-scheme stays dark\n", .{std.mem.span(gtk_theme_env)});
+        }
+    }
+}
+
+//
+// The colour of a "#rrggbb" background.
+//
+fn parseBackground(text: []const u8) c.GdkRGBA {
+    const value = std.fmt.parseInt(u24, text[1..], 16) catch 0;
+    return .{
+        .red = @as(f64, @floatFromInt((value >> 16) & 0xff)) / 255.0,
+        .green = @as(f64, @floatFromInt((value >> 8) & 0xff)) / 255.0,
+        .blue = @as(f64, @floatFromInt(value & 0xff)) / 255.0,
+        .alpha = 1.0,
+    };
 }

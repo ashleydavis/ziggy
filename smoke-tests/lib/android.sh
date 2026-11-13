@@ -159,10 +159,44 @@ ziggy_platform_start() {
     ziggy_adb shell am start -W -n "$ANDROID_APP_ID/.MainActivity" \
         --es ZIGGY_TEST_APP_CONFIG_DIR "/data/data/$ANDROID_APP_ID/files/config" \
         --es ZIGGY_TEST_APP_STATE_DIR "/data/data/$ANDROID_APP_ID/files/state" \
-        ${ZIGGY_REMOTE_CONTROL:+--es ziggy.remoteControl "$ZIGGY_REMOTE_CONTROL"} > "$test_dir/am-start.log" 2>&1 || {
+        ${ZIGGY_REMOTE_CONTROL:+--es ziggy.remoteControl "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--es ziggy.theme "$ZIGGY_THEME"} > "$test_dir/am-start.log" 2>&1 || {
         cat "$test_dir/am-start.log" >&2
         return 1
     }
+}
+
+# Android can change the system's appearance.
+ziggy_platform_changes_appearance() {
+    return 0
+}
+
+# Sets the system's appearance and keeps the one to put back in the scenario's directory.
+ziggy_platform_set_system_theme() {
+    local test_dir="$1"
+    local theme="$2"
+    if [ ! -f "$test_dir/system-appearance.txt" ]; then
+        local current
+        current="$(ziggy_adb shell cmd uimode night)" || return 1
+        current="${current#Night mode: }"
+        current="$(printf '%s' "$current" | tr -d '\r')"
+        printf '%s\n' "$current" > "$test_dir/system-appearance.txt"
+    fi
+    if [ "$theme" = "dark" ]; then
+        ziggy_adb shell cmd uimode night yes > /dev/null || return 1
+    else
+        ziggy_adb shell cmd uimode night no > /dev/null || return 1
+    fi
+}
+
+# Puts the system's appearance back.
+ziggy_platform_restore_system_theme() {
+    local test_dir="$1"
+    local value
+    value="$(cat "$test_dir/system-appearance.txt")"
+    if ! ziggy_adb shell cmd uimode night "$value" > /dev/null; then
+        echo "could not set the device's appearance back to $value" >&2
+        return 1
+    fi
 }
 
 ziggy_platform_stop() {

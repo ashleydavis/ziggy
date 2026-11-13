@@ -58,9 +58,43 @@ ziggy_platform_start() {
         xcrun simctl install "$udid" "$app" || return 1
     fi
     local launched
-    launched="$(SIMCTL_CHILD_ZIGGY_TEST_APP_CONFIG_DIR="$test_dir/config" SIMCTL_CHILD_ZIGGY_TEST_APP_STATE_DIR="$test_dir/state" xcrun simctl launch "$udid" "$IOS_BUNDLE_ID" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"})" || return 1
+    launched="$(SIMCTL_CHILD_ZIGGY_TEST_APP_CONFIG_DIR="$test_dir/config" SIMCTL_CHILD_ZIGGY_TEST_APP_STATE_DIR="$test_dir/state" xcrun simctl launch "$udid" "$IOS_BUNDLE_ID" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"})" || return 1
     local pid="${launched##*: }"
     echo "$pid" > "$test_dir/$IOS_PID_FILE_NAME"
+}
+
+# The simulator can change the system's appearance.
+ziggy_platform_changes_appearance() {
+    return 0
+}
+
+# Sets the simulator's appearance and keeps the one to put back in the scenario's directory.
+ziggy_platform_set_system_theme() {
+    local test_dir="$1"
+    local theme="$2"
+    local udid
+    udid="$(cat "$test_dir/$IOS_UDID_FILE_NAME")"
+    if [ ! -f "$test_dir/system-appearance.txt" ]; then
+        xcrun simctl ui "$udid" appearance > "$test_dir/system-appearance.txt" || return 1
+    fi
+    if [ "$theme" = "dark" ]; then
+        xcrun simctl ui "$udid" appearance dark > /dev/null || return 1
+    else
+        xcrun simctl ui "$udid" appearance light > /dev/null || return 1
+    fi
+}
+
+# Puts the simulator's appearance back.
+ziggy_platform_restore_system_theme() {
+    local test_dir="$1"
+    local udid
+    udid="$(cat "$test_dir/$IOS_UDID_FILE_NAME")"
+    local value
+    value="$(cat "$test_dir/system-appearance.txt")"
+    if ! xcrun simctl ui "$udid" appearance "$value" > /dev/null; then
+        echo "could not set the device's appearance back to $value" >&2
+        return 1
+    fi
 }
 
 ziggy_platform_stop() {

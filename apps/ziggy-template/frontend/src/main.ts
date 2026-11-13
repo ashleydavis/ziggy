@@ -114,6 +114,42 @@ function listenForTheActionButton(): void {
 }
 
 //
+// Shows the theme setting in the dropdown and applies it to the page. The setting is Ziggy's, read and written through the config
+// system.
+//
+function listenForTheme(): void {
+    const mediaTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const select = element("theme-select") as HTMLSelectElement;
+    const showSetting = async (): Promise<void> => {
+        const setting = await window.ziggy.getConfig<string>("theme");
+        const current = setting === "light" || setting === "dark" ? setting : "system";
+        select.value = current;
+        const system = await window.ziggy.getSystemTheme();
+        const effective = current === "system" ? system : current;
+        document.documentElement.dataset.themeSetting = effective;
+        document.documentElement.style.colorScheme = effective;
+        element("theme-setting").textContent = current;
+    };
+    const showSettingOrError = (): void => {
+        showSetting().catch((error: Error) => {
+            element("theme-setting").textContent = `theme: ${error.message}`;
+        });
+    };
+    showSettingOrError();
+    mediaTheme.addEventListener("change", showSettingOrError);
+    window.ziggy.onConfigChanged(event => {
+        if (event.path === "theme") {
+            showSettingOrError();
+        }
+    });
+    select.addEventListener("change", () => {
+        window.ziggy.setConfig("theme", select.value).catch((error: Error) => {
+            element("theme-setting").textContent = `theme not set: ${error.message}`;
+        });
+    });
+}
+
+//
 // Handles the commands the remote control connection forwards, which the smoke tests send. It does nothing unless the native app
 // started the frontend in test mode, which it does only when the app was started with --remote-control, and it tells the backend when it is
 // listening so that no command is sent before it can be heard.
@@ -136,4 +172,5 @@ listenForTheTask();
 listenForTheMenu();
 registerActions();
 listenForTheActionButton();
+listenForTheme();
 listenForTestCommands();

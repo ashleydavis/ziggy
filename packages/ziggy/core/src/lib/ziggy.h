@@ -67,7 +67,17 @@ typedef struct ziggy_config {
     // The native app's command-line arguments after the program's name (NUL terminated), or NULL when arg_count is 0. The app reads them
     // through HandlerServices.arguments.
     const char *const *args;
+    // The system's theme, a ZIGGY_THEME_ value. The native app reads it before it creates the core.
+    int32_t system_theme;
 } ziggy_config;
+
+// The system's theme, as ziggy_config.system_theme gives it.
+enum {
+    // The system is in its light theme.
+    ZIGGY_THEME_LIGHT = 0,
+    // The system is in its dark theme.
+    ZIGGY_THEME_DARK = 1
+};
 
 // The kinds of message ziggy_take_native_message gives.
 enum {
@@ -92,6 +102,8 @@ enum {
     //                                                           the JSON text the method gives, and a failure's reason is in words the user
     //                                                           can act on
     //   {"type":"screenshot","outputPath":"..."}                write a PNG of the app's window to the file; the result is empty
+    //   {"type":"theme","setting":"system","theme":"dark","background":"#000000"}
+    //                                                           set the web view's colour scheme and background from the theme; no result
     // A call that has a result also carries "callId", which the native app ignores.
     ZIGGY_NATIVE_CALL = 1
 };
@@ -234,6 +246,11 @@ bool ziggy_files_dropped(void *handle, const char *paths_json, size_t paths_len)
 // frontend's address and passes it through unread. The length, not counting the terminator, is written to the pointer given. Returns
 // NULL, after printing why, when the app could not make it, and the native app then does not load the frontend.
 const char *ziggy_ui_query(void *handle, size_t *length);
+
+// The theme, as the JSON text of a "theme" call (see ZIGGY_NATIVE_CALL). The native app calls it after ziggy_create and before it
+// loads the frontend, reads it before its next call of ziggy_ui_query or ziggy_theme, and sets its web view's colour scheme and
+// background from it. The text stays valid until the next call of ziggy_ui_query or ziggy_theme, or until ziggy_destroy.
+const char *ziggy_theme(void *handle, size_t *length);
 
 #ifdef __cplusplus
 }

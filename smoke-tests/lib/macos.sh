@@ -36,7 +36,7 @@ ziggy_platform_start() {
         CFFIXED_USER_HOME="$test_dir/home" \
         ZIGGY_TEST_APP_CONFIG_DIR="$test_dir/config" \
         ZIGGY_TEST_APP_STATE_DIR="$test_dir/state" \
-        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
+        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
     echo "$pgid" > "$test_dir/$MACOS_PGID_FILE_NAME"
 }
 
@@ -103,4 +103,50 @@ ziggy_platform_process_alive() {
 ziggy_platform_print_stacks() {
     sample "$(cat "$1/$MACOS_PGID_FILE_NAME")" 2 -file "$1/app-stacks.txt" > /dev/null 2>&1
     head -n 400 "$1/app-stacks.txt"
+}
+
+#
+# Succeeds when the desktop's appearance can be set with System Events, which the appearance-only scenarios need.
+#
+ziggy_platform_changes_appearance() {
+    command -v osascript > /dev/null 2>&1
+}
+
+#
+# Sets the desktop's appearance and keeps the one to put back in the scenario's directory.
+# Usage: ziggy_platform_set_system_theme <test_dir> <light|dark>
+#
+ziggy_platform_set_system_theme() {
+    local test_dir="$1"
+    local theme="$2"
+    if [ ! -f "$test_dir/system-appearance.txt" ]; then
+        local current
+        current="$(defaults read -g AppleInterfaceStyle 2>/dev/null || true)"
+        printf '%s\n' "${current:-light}" > "$test_dir/system-appearance.txt"
+    fi
+    if [ "$theme" = "dark" ]; then
+        osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' > /dev/null || return 1
+    else
+        osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' > /dev/null || return 1
+    fi
+}
+
+#
+# Puts the desktop's appearance back. Usage: ziggy_platform_restore_system_theme <test_dir>
+#
+ziggy_platform_restore_system_theme() {
+    local test_dir="$1"
+    local value
+    value="$(cat "$test_dir/system-appearance.txt")"
+    if [ "$value" = "Dark" ]; then
+        if ! osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to true' > /dev/null; then
+            echo "could not set the desktop's appearance back to dark" >&2
+            return 1
+        fi
+    else
+        if ! osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to false' > /dev/null; then
+            echo "could not set the desktop's appearance back to light" >&2
+            return 1
+        fi
+    fi
 }

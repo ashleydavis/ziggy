@@ -44,11 +44,22 @@ interface IFakeKeyEvent {
 }
 
 //
+// A fake of a media query list, whose matches a test can change and fire.
+//
+interface IFakeMediaQueryList {
+    matches: boolean;
+    listeners: ((event: { matches: boolean }) => void)[];
+    addEventListener: (type: string, listener: (event: { matches: boolean }) => void) => void;
+    fire: (matches: boolean) => void;
+}
+
+//
 // A fake of the page's window, with what the script uses.
 //
 interface IFakeWindow {
     location: { host: string; reloads: number; reload: () => void };
     WebSocket: new (url: string) => IFakeSocket;
+    matchMedia: (query: string) => IFakeMediaQueryList;
     fetch: (url: string, options?: { method?: string; body?: unknown }) => Promise<IFakeResponse>;
     setTimeout: (callback: () => void, delay: number) => void;
     addEventListener: (type: string, listener: (event: IFakeKeyEvent) => void) => void;
@@ -59,18 +70,35 @@ interface IFakeWindow {
 
 const script = fs.readFileSync(path.join(__dirname, "../../../dev/src/lib/dev-client.js"), "utf8");
 
+// The system theme message the script posts once the socket opens in the light scheme.
+const lightThemeMessage = "{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"light\"}";
+
 //
 // A window for the script, with every request it makes handled by the function given, and the socket and listeners it creates. The
 // request for the shortcuts is answered with the text given and kept apart from the others.
 //
-function makeWindow(answer: (request: IFakeRequest) => IFakeResponse, shortcutsText = "[]") {
+function makeWindow(answer: (request: IFakeRequest) => IFakeResponse, shortcutsText = "[]", dark = false) {
     const sockets: IFakeSocket[] = [];
     const requests: IFakeRequest[] = [];
     const timers: (() => void)[] = [];
     const received: object[] = [];
     const shortcutRequests: IFakeRequest[] = [];
     const keyListeners: ((event: IFakeKeyEvent) => void)[] = [];
+    const colourScheme: IFakeMediaQueryList = {
+        matches: dark,
+        listeners: [],
+        addEventListener: (type, listener) => {
+            if (type === "change") {
+                colourScheme.listeners.push(listener);
+            }
+        },
+        fire: matches => {
+            colourScheme.matches = matches;
+            colourScheme.listeners.forEach(listener => listener({ matches }));
+        },
+    };
     const fakeWindow: IFakeWindow = {
+        matchMedia: () => colourScheme,
         location: {
             host: "127.0.0.1:4000",
             reloads: 0,
@@ -120,7 +148,7 @@ function makeWindow(answer: (request: IFakeRequest) => IFakeResponse, shortcutsT
             received.push(message);
         },
     };
-    return { fakeWindow, sockets, requests, timers, received, shortcutRequests, keyListeners };
+    return { fakeWindow, sockets, requests, timers, received, shortcutRequests, keyListeners, colourScheme };
 }
 
 function respond(ok: boolean, text: string): IFakeResponse {
@@ -171,7 +199,7 @@ describe("dev-client", () => {
         run(fakeWindow);
         sockets[0].fire("open", {});
         fakeWindow.webkit!.messageHandlers.ziggy.postMessage("{\"data\":\"x\"}");
-        expect(sockets[0].sent).toEqual(["{\"data\":\"x\"}"]);
+        expect(sockets[0].sent).toEqual([lightThemeMessage, "{\"data\":\"x\"}"]);
     });
 
     test("messages posted before the socket opens are sent, in order, once it does", () => {
@@ -182,7 +210,25 @@ describe("dev-client", () => {
         expect(sockets[0].sent).toEqual([]);
         sockets[0].fire("open", {});
         fakeWindow.webkit!.messageHandlers.ziggy.postMessage("three");
-        expect(sockets[0].sent).toEqual(["one", "two", "three"]);
+        expect(sockets[0].sent).toEqual(["one", "two", lightThemeMessage, "three"]);
+    });
+
+    test("the browser's colour scheme is posted as the system theme on open and on each change", () => {
+        const { fakeWindow, sockets, colourScheme } = makeWindow(() => respond(true, ""), "[]", false);
+        run(fakeWindow);
+        sockets[0].fire("open", {});
+        expect(sockets[0].sent).toEqual([lightThemeMessage]);
+        colourScheme.fire(true);
+        expect(sockets[0].sent).toEqual([
+            lightThemeMessage,
+            "{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"dark\"}",
+        ]);
+        colourScheme.fire(false);
+        expect(sockets[0].sent).toEqual([
+            lightThemeMessage,
+            "{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"dark\"}",
+            lightThemeMessage,
+        ]);
     });
 
     test("a message from the core is handed to window.__ziggyReceive as an object", () => {
@@ -231,7 +277,7 @@ describe("dev-client", () => {
         const files = [{ name: "a b.txt" }, { name: "c.txt" }];
         fakeWindow.chrome!.webview!.postMessageWithAdditionalObjects("ziggy-file", files);
         fakeWindow.webkit!.messageHandlers.ziggy.postMessage("get the drop's paths");
-        expect(sockets[0].sent).toEqual([]);
+        expect(sockets[0].sent).toEqual([lightThemeMessage]);
         await settle();
         expect(requests.map(request => request.url)).toEqual([
             "/__ziggy/dropped-file?name=a%20b.txt",
@@ -240,7 +286,7 @@ describe("dev-client", () => {
         ]);
         expect(requests[0].options!.body).toBe(files[0]);
         expect(JSON.parse(requests[2].options!.body as string)).toEqual(["/data/dropped/1/a b.txt", "/data/dropped/1/c.txt"]);
-        expect(sockets[0].sent).toEqual(["get the drop's paths"]);
+        expect(sockets[0].sent).toEqual([lightThemeMessage, "get the drop's paths"]);
     });
 
     test("a drop the dev host cannot save is recorded as an empty drop, so the page is not given an earlier drop's paths", async () => {
@@ -266,7 +312,7 @@ describe("dev-client", () => {
         ]);
         expect(requests[1].options!.body).toBe("[]");
         expect(String(errors[0])).toContain("could not save the dropped file a.txt: disk full");
-        expect(sockets[0].sent).toEqual(["get the drop's paths"]);
+        expect(sockets[0].sent).toEqual([lightThemeMessage, "get the drop's paths"]);
     });
 
     test("objects handed over with any message but a drop's are refused", () => {
@@ -303,6 +349,11 @@ describe("dev-client", () => {
         expect(sockets[0].sent.map(text => JSON.parse(text))).toEqual([
             {
                 kind: "system",
+                name: "system-theme",
+                data: "light",
+            },
+            {
+                kind: "system",
                 name: "menu-action",
                 data: {
                     action: "hello-from-action",
@@ -332,7 +383,7 @@ describe("dev-client", () => {
         keyListeners.forEach(listener => listener(otherKey));
         expect(missingShift.defaultPrevented).toBe(false);
         expect(otherKey.defaultPrevented).toBe(false);
-        expect(sockets[0].sent).toEqual([]);
+        expect(sockets[0].sent).toEqual([lightThemeMessage]);
     });
 
     test("it refuses to run in a page that already has a web view's handler", () => {

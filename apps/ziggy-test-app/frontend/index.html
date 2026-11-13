@@ -6,6 +6,10 @@
     <title>Ziggy test app</title>
     <style>
         :root { color-scheme: light dark; }
+        html { background: #ffffff; }
+        @media (prefers-color-scheme: dark) { html { background: #000000; } }
+        html[data-theme-setting="light"] { background: #ffffff; }
+        html[data-theme-setting="dark"] { background: #000000; }
         body { font-family: sans-serif; margin: 0 auto; padding: 16px; max-width: 900px; }
         h1 { margin-top: 0; }
         section { margin-bottom: 16px; }
@@ -15,9 +19,29 @@
         label { margin-left: 8px; }
         input[type=number] { width: 4em; }
     </style>
+    <script>
+        document.documentElement.dataset.firstMediaTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    </script>
 </head>
 <body>
     <h1 data-id="heading">Ziggy test app</h1>
+    <section>
+        <h2>Theme</h2>
+        <div data-id="first-media-theme"></div>
+        <div data-id="media-theme"></div>
+        <div data-id="theme"></div>
+        <div data-id="theme-background"></div>
+        <label>Theme:
+            <select data-id="theme-select">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="system">System</option>
+            </select>
+        </label>
+        <button data-id="set-theme-light">Set the theme light</button>
+        <button data-id="set-theme-dark">Set the theme dark</button>
+        <button data-id="set-theme-system">Set the theme system</button>
+    </section>
     <section>
         <div data-id="reply">Waiting for the Zig reply...</div>
     </section>

@@ -361,7 +361,7 @@ describe("ziggy-inject", () => {
         expect(await listed).toEqual([{ name: "open-database", label: "Open Database...", shortcut: "Ctrl+O" }]);
     });
 
-    test("the config and state calls post their system messages, turn null into undefined and send null for undefined", async () => {
+    test("the config, state and system theme calls post their system messages, turn null into undefined and send null for undefined", async () => {
         const posted: string[] = [];
         const fakeWindow = windowWithWebkit(posted);
         inject(fakeWindow);
@@ -371,6 +371,7 @@ describe("ziggy-inject", () => {
         const stateValue = fakeWindow.ziggy!.getState("remembered");
         const setState = fakeWindow.ziggy!.setState("remembered", undefined);
         const problem = fakeWindow.ziggy!.getConfigProblem();
+        const systemTheme = fakeWindow.ziggy!.getSystemTheme();
         expect(posted.map(text => JSON.parse(text))).toEqual([
             { kind: "system", id: 1, name: "get-config", data: "a.b" },
             { kind: "system", id: 2, name: "set-config", data: { path: "a.b", value: 3 } },
@@ -378,6 +379,7 @@ describe("ziggy-inject", () => {
             { kind: "system", id: 4, name: "get-state", data: "remembered" },
             { kind: "system", id: 5, name: "set-state", data: { path: "remembered", value: null } },
             { kind: "system", id: 6, name: "get-config-problem", data: null },
+            { kind: "system", id: 7, name: "get-system-theme", data: null },
         ]);
         fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: null });
         fakeWindow.__ziggyReceive!({ id: 2, ok: true, data: null });
@@ -385,12 +387,14 @@ describe("ziggy-inject", () => {
         fakeWindow.__ziggyReceive!({ id: 4, ok: true, data: "yes" });
         fakeWindow.__ziggyReceive!({ id: 5, ok: true, data: null });
         fakeWindow.__ziggyReceive!({ id: 6, ok: true, data: { path: "config.toml", line: 2, column: 1, reason: "bad" } });
+        fakeWindow.__ziggyReceive!({ id: 7, ok: true, data: "dark" });
         expect(await config).toBeUndefined();
         await setConfig;
         await removedConfig;
         expect(await stateValue).toEqual("yes");
         await setState;
         expect(await problem).toEqual({ path: "config.toml", line: 2, column: 1, reason: "bad" });
+        expect(await systemTheme).toEqual("dark");
     });
 
     test("an action system event runs the handler registered for the action", () => {
@@ -491,6 +495,7 @@ describe("ziggy-inject", () => {
             ["task-completed", "onTaskCompleted", "removeTaskCompletedListener"],
             ["core-error", "onCoreError", "removeCoreErrorListener"],
             ["test-command", "onTestCommand", "removeTestCommandListener"],
+            ["config-changed", "onConfigChanged", "removeConfigChangedListener"],
         ];
         const received = new Map<string, object[]>();
         const callbacks = new Map<string, (data: object) => void>();
@@ -565,9 +570,11 @@ describe("ziggy-inject", () => {
             "getPathForFile",
             "getPlatform",
             "getState",
+            "getSystemTheme",
             "invoke",
             "listActions",
             "log",
+            "onConfigChanged",
             "onCoreError",
             "onEvent",
             "onTaskCompleted",
@@ -575,6 +582,7 @@ describe("ziggy-inject", () => {
             "onTestCommand",
             "registerAction",
             "removeAction",
+            "removeConfigChangedListener",
             "removeCoreErrorListener",
             "removeEventListener",
             "removeTaskCompletedListener",

@@ -29,6 +29,7 @@ const web_socket_lib = @import("web-socket.zig");
 const proxy = @import("proxy.zig");
 const pickers = @import("pickers.zig");
 const native_message = @import("native-message");
+const theme_notice = @import("theme-notice.zig");
 const ThreadAllocator = @import("thread-allocator").ThreadAllocator;
 
 const MessageQueue = message_queue.MessageQueue;
@@ -567,6 +568,11 @@ fn takeNativeMessages(dev_host: *DevHost, io: std.Io, allocator: std.mem.Allocat
                     .initialName = pick.initial_name,
                 }, .{}) catch @panic("out of memory requesting a dialog");
                 dev_host.picks.post(io, 0, request) catch @panic("out of memory requesting a dialog");
+            },
+            .theme => |theme_call| {
+                if (theme_notice.themeNotice(arena, theme_call.setting) catch @panic("out of memory writing the theme notice")) |line| {
+                    std.debug.print("{s}\n", .{line});
+                }
             },
             else => std.debug.panic("ziggy dev host: the core sent a call the dev host does not do: {s}", .{text}),
         }

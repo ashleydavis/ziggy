@@ -1197,3 +1197,173 @@ fn expectLogLine(arena: std.mem.Allocator, logs_dir: []const u8, text: []const u
     }
     return error.LogLineMissing;
 }
+
+test "set-config with theme writes the config file, sends config-changed and sends the native call" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var map: std.process.Environ.Map = undefined;
+    const directories = try setUpFileDirectories(&tmp, &arena_state, &map);
+    defer map.deinit();
+    const arena = arena_state.allocator();
+
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), files_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try sendSystem(&native_app, 1, "set-config", "{\"path\":\"theme\",\"value\":\"dark\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"config-changed\",\"data\":{\"path\":\"theme\",\"value\":\"dark\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":null}");
+    const call = try native_app.lastCall(std.testing.io, std.testing.allocator, "theme");
+    defer if (call) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"type\":\"theme\",\"setting\":\"dark\",\"theme\":\"dark\",\"background\":\"#000000\"}", call.?);
+    const config_path = try std.fs.path.join(arena, &.{ directories.config_dir, "config.toml" });
+    const config_text = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, config_path, arena, .limited(1024 * 1024));
+    try std.testing.expect(std.mem.indexOf(u8, config_text, "theme = \"dark\"") != null);
+}
+
+test "set-config with theme in a core started with --theme dark applies the value and get-config gives it" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var map: std.process.Environ.Map = undefined;
+    const directories = try setUpFileDirectories(&tmp, &arena_state, &map);
+    defer map.deinit();
+    const arena = arena_state.allocator();
+
+    const arguments = [_][:0]const u8{ "--theme", "dark" };
+    var pointers: [arguments.len][*:0]const u8 = undefined;
+    for (arguments, 0..) |argument, index| {
+        pointers[index] = argument.ptr;
+    }
+    var config = native_app.config(1, 1);
+    config.arg_count = arguments.len;
+    config.args = &pointers;
+    try native_app.start(std.testing.io, std.testing.allocator, config, files_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try sendSystem(&native_app, 1, "set-config", "{\"path\":\"theme\",\"value\":\"light\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":null}");
+    try sendSystem(&native_app, 2, "get-config", "\"theme\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":true,\"data\":\"light\"}");
+    const config_path = try std.fs.path.join(arena, &.{ directories.config_dir, "config.toml" });
+    const config_text = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, config_path, arena, .limited(1024 * 1024));
+    try std.testing.expect(std.mem.indexOf(u8, config_text, "theme = \"light\"") != null);
+}
+
+test "set-config with theme in a core built for no app fails with AppNameMissing" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try sendSystem(&native_app, 1, "set-config", "{\"path\":\"theme\",\"value\":\"dark\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"AppNameMissing\"}");
+}
+
+test "set-config with theme in a bad config file fails with ConfigFileInvalid and leaves the file as it was" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var map: std.process.Environ.Map = undefined;
+    const directories = try setUpFileDirectories(&tmp, &arena_state, &map);
+    defer map.deinit();
+    const arena = arena_state.allocator();
+    const config_path = try std.fs.path.join(arena, &.{ directories.config_dir, "config.toml" });
+    try std.Io.Dir.cwd().createDirPath(std.testing.io, directories.config_dir);
+    const bad = "theme = \"dark\"\noops = = 1\n";
+    try std.Io.Dir.cwd().writeFile(std.testing.io, .{ .sub_path = config_path, .data = bad });
+
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), files_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try sendSystem(&native_app, 1, "set-config", "{\"path\":\"theme\",\"value\":\"light\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"ConfigFileInvalid\"}");
+    const after = try std.Io.Dir.cwd().readFileAlloc(std.testing.io, config_path, arena, .limited(1024 * 1024));
+    try std.testing.expectEqualStrings(bad, after);
+}
+
+test "get-system-theme answers the operating system's theme whatever the setting is" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var map: std.process.Environ.Map = undefined;
+    _ = try setUpFileDirectories(&tmp, &arena_state, &map);
+    defer map.deinit();
+
+    var config = native_app.config(1, 1);
+    config.system_theme = 0;
+    try native_app.start(std.testing.io, std.testing.allocator, config, files_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try sendSystem(&native_app, 1, "get-system-theme", "null");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":\"light\"}");
+
+    native_app.stop(std.testing.io, std.testing.allocator);
+    config.system_theme = 1;
+    try native_app.start(std.testing.io, std.testing.allocator, config, files_app);
+    try sendSystem(&native_app, 2, "get-system-theme", "null");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":true,\"data\":\"dark\"}");
+}
+
+test "system-theme sends the native call when the theme changes and none when it does not" {
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    var map: std.process.Environ.Map = undefined;
+    _ = try setUpFileDirectories(&tmp, &arena_state, &map);
+    defer map.deinit();
+
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), files_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try sendSystem(&native_app, 1, "system-theme", "\"dark\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":null}");
+    const call = try native_app.lastCall(std.testing.io, std.testing.allocator, "theme");
+    defer if (call) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"type\":\"theme\",\"setting\":\"system\",\"theme\":\"dark\",\"background\":\"#000000\"}", call.?);
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"config-changed\",\"data\":{\"path\":\"theme\",\"value\":\"system\"}}");
+
+    var light_app = files_app;
+    light_app.backgrounds = .{};
+    const light_arguments = [_][:0]const u8{ "--theme", "light" };
+    var light_pointers: [light_arguments.len][*:0]const u8 = undefined;
+    for (light_arguments, 0..) |argument, index| {
+        light_pointers[index] = argument.ptr;
+    }
+    var light_config = native_app.config(1, 1);
+    light_config.arg_count = light_arguments.len;
+    light_config.args = &light_pointers;
+    native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, light_config, light_app);
+    try sendSystem(&native_app, 2, "system-theme", "\"dark\"");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":true,\"data\":null}");
+    const none = try native_app.lastCall(std.testing.io, std.testing.allocator, "theme");
+    defer if (none) |text| std.testing.allocator.free(text);
+    try std.testing.expect(none == null);
+}
+

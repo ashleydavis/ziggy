@@ -212,7 +212,7 @@ ziggy_platform_start() {
 
     local pid pgid
     read -r pid pgid < <(launch_in_process_group "$test_dir/launch.log" node "$IOS_DEVICE_SCRIPTS_DIR/ios-device.ts" launch \
-        "$udid" "$IOS_DEVICE_BUNDLE_ID" "$test_dir/launch.json" -- --remote-control "$ZIGGY_REMOTE_CONTROL") || return 1
+        "$udid" "$IOS_DEVICE_BUNDLE_ID" "$test_dir/launch.json" -- --remote-control "$ZIGGY_REMOTE_CONTROL" ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
     echo "$pgid" > "$test_dir/launch.pgid"
     ziggy_ios_device_wait_file "$test_dir/launch.json" "$pid" "The device helper's launch" || {
         cat "$test_dir/launch.log" >&2

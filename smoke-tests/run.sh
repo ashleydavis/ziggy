@@ -82,6 +82,13 @@ list_scenarios() {
                 ls -d "$SMOKE_DIR"/desktop-only/[0-9]*
                 ;;
         esac
+        case "$PLATFORM" in
+            linux|windows|macos|android|ios)
+                if ziggy_platform_changes_appearance; then
+                    ls -d "$SMOKE_DIR"/appearance-only/[0-9]*
+                fi
+                ;;
+        esac
     } | while IFS= read -r directory; do
         printf '%s\t%s\n' "$(basename "$directory")" "$directory"
     done | sort -V | cut -f2

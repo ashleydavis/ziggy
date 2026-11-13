@@ -23,6 +23,9 @@
 //   { "kind": "system", "name", "data" }                             a system event, for Ziggy's listeners for that name
 //                                                                    (the action event, { "action" }, runs the handler registerAction
 //                                                                    registered for the action instead)
+//
+// A page styles itself with prefers-color-scheme, which the native app sets, and reads and writes the theme setting with
+// getConfig("theme") and setConfig("theme", setting).
 (function () {
     if (window.ziggy) {
         return;
@@ -205,6 +208,7 @@
     var taskCompleted = systemEvent("task-completed");
     var coreError = systemEvent("core-error");
     var testCommand = systemEvent("test-command");
+    var configChanged = systemEvent("config-changed");
 
     // Dropped files. A web view does not give the frontend the real paths of the files dropped on it: WebKitGTK lists file addresses
     // as a type of the drop and gives no way to read them, and no File objects, and the others give Files that have no path readable by
@@ -318,6 +322,10 @@
                     value: value === undefined ? null : value,
                 });
             },
+            // The operating system's theme: "light" or "dark", whatever the app's theme setting is.
+            getSystemTheme: function () {
+                return invokeSystem("get-system-theme", null);
+            },
             // The value at a dotted key path of the app's state file, or undefined when it is absent.
             getState: function (path) {
                 return invokeSystem("get-state", path).then(function (value) {
@@ -337,6 +345,9 @@
                     return problem === null ? undefined : problem;
                 });
             },
+            // The event every change of a config value sends: { path, value }.
+            onConfigChanged: configChanged.on,
+            removeConfigChangedListener: configChanged.remove,
             addTask: function (task) {
                 postSystem("add-task", task);
             },

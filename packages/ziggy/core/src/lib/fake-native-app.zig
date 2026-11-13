@@ -152,6 +152,13 @@ pub const FakeNativeApp = struct {
     }
 
     //
+    // The theme, as a native app's ziggy_theme gives it, allocated with the allocator, which the caller frees it with.
+    //
+    pub fn theme(self: *FakeNativeApp, allocator: std.mem.Allocator) ![:0]u8 {
+        return try core.theme(allocator, &self.queue);
+    }
+
+    //
     // The configuration to give a core: every call the native app can be made is given its result by the fake UI thread.
     //
     pub fn config(self: *FakeNativeApp, worker_threads: u32, max_children: u32) types.ZiggyConfig {
@@ -173,6 +180,7 @@ pub const FakeNativeApp = struct {
             .remote_control = null,
             .arg_count = 0,
             .args = null,
+            .system_theme = 0,
         };
     }
 
@@ -683,7 +691,7 @@ fn handleCall(io: std.Io, allocator: std.mem.Allocator, native: *NativeSide, rec
             recorded.screenshot_paths.appendSlice(allocator, path) catch @panic("out of memory");
             recorded.screenshot_paths.append(allocator, '\n') catch @panic("out of memory");
         },
-        .os_version, .pick_paths, .native_call, .stopped => {},
+        .os_version, .pick_paths, .native_call, .theme, .stopped => {},
     }
     if (reply == 0) {
         return;
@@ -733,6 +741,6 @@ fn defaultResult(arena: std.mem.Allocator, call: native_message.Call) !CallResul
                 .text = try arena.dupe(u8, ""),
             };
         },
-        .quit, .menu_action, .keep_alive, .stopped => std.debug.panic("a call that has no result was given a number for its result", .{}),
+        .quit, .menu_action, .keep_alive, .theme, .stopped => std.debug.panic("a call that has no result was given a number for its result", .{}),
     }
 }

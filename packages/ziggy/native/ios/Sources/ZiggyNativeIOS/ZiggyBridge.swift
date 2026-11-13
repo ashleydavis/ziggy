@@ -154,7 +154,11 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         configuration.setURLSchemeHandler(uiHandler, forURLScheme: ZiggyBridge.uiScheme)
         let userScript = WKUserScript(source: injectScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(userScript)
-        self.webView = WKWebView(frame: frame, configuration: configuration)
+        let createdWebView = ZiggyWebView(frame: frame, configuration: configuration)
+        createdWebView.onSystemStyleChange = { [weak self] _ in
+            self?.postSystemTheme()
+        }
+        self.webView = createdWebView
 
         super.init()
 
@@ -197,6 +201,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.has_native_call = nativeCallHandler != nil
         config.worker_threads = 5
         config.max_concurrent_child_tasks = 2
+        config.system_theme = ZiggyBridge.systemTheme()
 
         let prefixText = ZiggyBridge.duplicate(ZiggyBridge.appUrlPrefix)
         let dataText = ZiggyBridge.duplicate(dataDirectory.path)
@@ -212,12 +217,38 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             config.test_mode = true
             config.remote_control = UnsafePointer(remoteControlText)
         }
-        guard let created = ziggy_create(&config) else {
+        // The command-line arguments after the program's name, for the app to read its own options from, without --remote-control
+        // and its address. The core copies them during ziggy_create.
+        let argumentTexts = ZiggyBridge.argumentsWithoutRemoteControl(Array(CommandLine.arguments.dropFirst())).map { ZiggyBridge.duplicate($0) }
+        defer {
+            for text in argumentTexts {
+                free(text)
+            }
+        }
+        let argumentPointers: [UnsafePointer<CChar>?] = argumentTexts.map { UnsafePointer($0) }
+        config.arg_count = UInt32(argumentPointers.count)
+        let createdCore = argumentPointers.withUnsafeBufferPointer { (buffer: UnsafeBufferPointer<UnsafePointer<CChar>?>) -> UnsafeMutableRawPointer? in
+            config.args = buffer.baseAddress
+            return ziggy_create(&config)
+        }
+        guard let created = createdCore else {
             ZiggyBridge.fail("ziggy_create failed")
         }
         core = created
         uiHandler.core = created
 
+        var themeLength = 0
+        guard let themeText = ziggy_theme(created, &themeLength) else {
+            ZiggyBridge.fail("the core could not give the theme")
+        }
+        let themeData = Data(bytes: themeText, count: themeLength)
+        guard let themeCall = (try? JSONSerialization.jsonObject(with: themeData)) as? [String: Any] else {
+            ZiggyBridge.fail("the core gave a theme that cannot be read")
+        }
+        applyTheme(themeCall)
+        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            self?.postSystemTheme()
+        }
 
         // The app supplies the query, which is passed through unread.
         var queryLength = 0
@@ -314,6 +345,8 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
                 ZiggyBridge.fail("the core sent a keep-alive call with no keepRunning: \(text)")
             }
             setKeepsRunning(keepRunning)
+        case "theme":
+            applyTheme(call)
         case "os-version":
             let version = ProcessInfo.processInfo.operatingSystemVersion
             finishCall(reply, ok: true, text: "\"\(ZiggyBridge.operatingSystemName) \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)\"")
@@ -552,6 +585,79 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             ZiggyBridge.fail("--remote-control needs the remote control server's address after it")
         }
         return arguments[index + 1]
+    }
+
+    // The command-line arguments after the program's name without --remote-control and its address, so the app's own argument
+    // handling never sees them.
+    static func argumentsWithoutRemoteControl(_ arguments: [String]) -> [String] {
+        var kept: [String] = []
+        var index = 0
+        while index < arguments.count {
+            if arguments[index] == "--remote-control" {
+                index += 2
+                continue
+            }
+            kept.append(arguments[index])
+            index += 1
+        }
+        return kept
+    }
+
+    // The system's theme.
+    static func systemTheme() -> Int32 {
+        return UIScreen.main.traitCollection.userInterfaceStyle == .dark ? Int32(ZIGGY_THEME_DARK) : Int32(ZIGGY_THEME_LIGHT)
+    }
+
+    // Tells the core the system's theme.
+    private func postSystemTheme() {
+        guard let handle = core else {
+            return
+        }
+        let text = ZiggyBridge.systemTheme() == Int32(ZIGGY_THEME_DARK) ? "dark" : "light"
+        let message = "{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"\(text)\"}"
+        message.withCString { pointer in
+            ziggy_send_message(handle, pointer, Int(message.utf8.count))
+        }
+    }
+
+    // Applies a theme call: the web view's appearance and background, and the window's appearance.
+    private func applyTheme(_ call: [String: Any]) {
+        guard let setting = call["setting"] as? String, let theme = call["theme"] as? String, let background = call["background"] as? String else {
+            ZiggyBridge.fail("the core gave a theme with a missing field")
+        }
+        let style: UIUserInterfaceStyle
+        if setting == "system" {
+            style = .unspecified
+        }
+        else if theme == "dark" {
+            style = .dark
+        }
+        else {
+            style = .light
+        }
+        webView.overrideUserInterfaceStyle = style
+        webView.window?.overrideUserInterfaceStyle = style
+        webView.isOpaque = false
+        let colour = ZiggyBridge.colour(background)
+        webView.backgroundColor = colour
+        webView.scrollView.backgroundColor = colour
+        if setting == "system" {
+            postSystemTheme()
+        }
+    }
+
+    // A colour from a "#rrggbb" background.
+    private static func colour(_ text: String) -> UIColor {
+        let hex = text.hasPrefix("#") ? String(text.dropFirst()) : text
+        guard hex.count == 6, let value = UInt32(hex, radix: 16) else {
+            return .black
+        }
+        return UIColor(
+            red: CGFloat((value >> 16) & 0xff) / 255.0,
+            green: CGFloat((value >> 8) & 0xff) / 255.0,
+            blue: CGFloat(value & 0xff) / 255.0,
+            alpha: 1.0
+        )
     }
 
     // Copies text into a new NUL terminated C string, which the caller frees.

@@ -58,7 +58,7 @@ var main_thread: ?std.Thread = null;
 var app_url_prefix: ?[:0]u8 = null;
 
 //
-// The text the last call to ziggy_ui_query returned, or null before the first call.
+// The text the last call to ziggy_ui_query or ziggy_theme returned, or null before the first call.
 //
 var ui_query_text: ?[:0]u8 = null;
 
@@ -76,7 +76,7 @@ const UiFileResult = extern struct {
 
 //
 // Exports every function declared in ziggy.h (ziggy_create, ziggy_destroy, ziggy_send_message, ziggy_check_url, ziggy_menu, ziggy_standalone_action_shortcuts, ziggy_dev_shortcuts_json,
-// ziggy_ui_file, ziggy_inject_script, ziggy_parse_accelerator, ziggy_files_dropped, ziggy_ui_query,
+// ziggy_ui_file, ziggy_inject_script, ziggy_parse_accelerator, ziggy_files_dropped, ziggy_ui_query, ziggy_theme,
 // ziggy_take_native_message and ziggy_native_result) from the library
 // that calls this, serving the app registered with App. It is called once, from app-root.zig.
 //
@@ -298,6 +298,26 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
             length.* = text.len;
             return text.ptr;
         }
+
+        //
+        // ziggy_theme: gives the theme as the JSON text of a "theme" call, or null when the core could not make it. The text stays
+        // valid until the next call of ziggy_ui_query or ziggy_theme, or until the core is destroyed.
+        //
+        fn theme(queue: ?*MessageQueue, length: *usize) callconv(.c) ?[*:0]const u8 {
+            const given = queue orelse {
+                @panic("ziggy_theme called with a null pointer");
+            };
+            const text = core.theme(ui_allocator.allocator(), given) catch |err| {
+                std.debug.print("ziggy_theme failed: {s}\n", .{@errorName(err)});
+                return null;
+            };
+            if (ui_query_text) |old| {
+                ui_allocator.allocator().free(old);
+            }
+            ui_query_text = text;
+            length.* = text.len;
+            return text.ptr;
+        }
     };
     @export(&Api.create, .{
         .name = "ziggy_create",
@@ -334,6 +354,9 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
     });
     @export(&Api.uiQuery, .{
         .name = "ziggy_ui_query",
+    });
+    @export(&Api.theme, .{
+        .name = "ziggy_theme",
     });
     @export(&Api.takeNativeMessage, .{
         .name = "ziggy_take_native_message",

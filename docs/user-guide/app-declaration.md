@@ -43,6 +43,7 @@ The fields of `ziggy.core.App`:
 | `tasks` | Yes | Each field is a task type and its task handler, or `.{ .handler = ..., .kind = .keep_alive }` for a keep-alive task type. See [Tasks](tasks.md#registering-a-handler). |
 | `menu` | Yes | The desktop menu, a `[]const ziggy.menu.Menu`, `&.{}` for none. See [Menus](menus.md). |
 | `actions` | No | The app's actions, a `[]const ziggy.action.Action`. Optional. Each is a named piece of the app's functionality with its handler in the frontend. See [Actions](actions.md). |
+| `backgrounds` | No | The window's background colours for each theme, a `ziggy.theme.Backgrounds`. The default is white in the light theme and black in the dark one. See [Theme](theme.md). |
 | `ui_files` | Yes | The files of the app's built frontend, `&ui.files` from the `ui-files` module the build makes. |
 | `ui_query` | No | A function that gives the query the native app adds to the frontend's address, so the frontend's first render already holds what the backend tells it at start-up. |
 | `describe_error` | No | A function that turns an error a handler returned into the text of the error response (see [When a handler fails](messages.md#when-a-handler-fails)). |

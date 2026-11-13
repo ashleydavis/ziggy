@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The web view sets prefers-color-scheme from android:isLightTheme of the theme of the context it was created with. -->
+<resources>
+    <style name="ZiggyWebViewLight" parent="">
+        <item name="android:isLightTheme">true</item>
+    </style>
+    <style name="ZiggyWebViewDark" parent="">
+        <item name="android:isLightTheme">false</item>
+    </style>
+</resources>

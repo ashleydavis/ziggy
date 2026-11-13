@@ -37,10 +37,25 @@
         waiting = [];
     }
 
+    // The browser's own colour scheme is the page's prefers-color-scheme, so it is posted as the system theme once the socket opens
+    // and on each change.
+    var colourScheme = window.matchMedia("(prefers-color-scheme: dark)");
+
+    function postSystemTheme() {
+        postMessage(JSON.stringify({
+            kind: "system",
+            name: "system-theme",
+            data: colourScheme.matches ? "dark" : "light",
+        }));
+    }
+
     socket.addEventListener("open", function () {
         open = true;
+        postSystemTheme();
         sendWaiting();
     });
+
+    colourScheme.addEventListener("change", postSystemTheme);
 
     socket.addEventListener("message", function (event) {
         var message = JSON.parse(event.data);

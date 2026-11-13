@@ -15,7 +15,9 @@ final class ZiggyNative {
         int maxConcurrentChildTasks,
         String appUrlPrefix,
         String dataDir,
-        String remoteControl);
+        String remoteControl,
+        String theme,
+        int systemTheme);
 
     // The handle of the core's main thread's queue, which sendMessage takes. It is the only part of the core a thread other than the
     // main thread reaches.
@@ -51,6 +53,10 @@ final class ZiggyNative {
     // The query of the frontend's address as UTF-8, which the app supplies: the text after the question mark, empty when the app
     // has none. The native app appends it to the frontend's address unread. Throws when the app could not make it. On the main thread.
     static native byte[] uiQuery(long handle);
+
+    // The theme as the JSON text of a "theme" call, as UTF-8, which the native app applies before it loads the frontend. Throws when
+    // the core could not make it. On the main thread.
+    static native byte[] theme(long handle);
 
     // The bytes of the app's bundled frontend file for a request path as UTF-8 (such as "/index.html"), or null when the
     // frontend has no such file, from any thread.

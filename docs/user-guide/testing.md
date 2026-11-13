@@ -12,6 +12,7 @@ A smoke test cannot click a native file dialog, read what the web view shows or 
 - Test mode is on exactly when the app is started that way. The template's backend tells the frontend through the `testMode=1` query parameter.
 - A test sets up its state from outside the app, with config files and data placed on disk, wherever it can.
 - A smoke test sets `<NAME>_CONFIG_DIR` and `<NAME>_STATE_DIR` for the app's config and state files, on every platform, so one run's files are never another's. See [where the config file lives](config-file.md#where-it-lives) and [where the state file lives](state-file.md#where-it-lives).
+- A smoke test starts the app with `--theme light|dark|system` by setting `ZIGGY_THEME`, which the platform library adds to the command line (the `ziggy.theme` extra on Android). See [Theme](theme.md).
 - Add a hook of the app's own only where nothing outside the app can do the job.
 
 The native apps take `--remote-control` and its address out of the command line.

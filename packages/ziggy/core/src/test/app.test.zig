@@ -413,6 +413,29 @@ test "a reply that never sends a response is reported as a core-error event when
     try expectLastMessage(&native_app, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MessageNotAnswered: later\"}}");
 }
 
+test "App gives an app that sets .backgrounds its colours, and white and black otherwise" {
+    const with_backgrounds = ziggy.core.App(.{
+        .messages = .{},
+        .tasks = .{},
+        .menu = &.{},
+        .ui_files = &[_]ziggy.ui_files.UiFile{},
+        .backgrounds = .{
+            .light = 0x123456,
+            .dark = 0xabcdef,
+        },
+    });
+    try std.testing.expectEqual(@as(u24, 0x123456), with_backgrounds.backgrounds.light);
+    try std.testing.expectEqual(@as(u24, 0xabcdef), with_backgrounds.backgrounds.dark);
+    const without = ziggy.core.App(.{
+        .messages = .{},
+        .tasks = .{},
+        .menu = &.{},
+        .ui_files = &[_]ziggy.ui_files.UiFile{},
+    });
+    try std.testing.expectEqual(@as(u24, 0xffffff), without.backgrounds.light);
+    try std.testing.expectEqual(@as(u24, 0x000000), without.backgrounds.dark);
+}
+
 test "a handler that takes ziggy.core.Message gets the raw data, the name and the id" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();

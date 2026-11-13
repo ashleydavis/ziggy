@@ -27,6 +27,27 @@ pub const WebKitNavigationAction = opaque {};
 pub const WebKitURIRequest = opaque {};
 pub const JSCValue = opaque {};
 pub const WebKitJavascriptResult = opaque {};
+pub const GDBusProxy = opaque {};
+pub const GVariant = opaque {};
+pub const GtkSettings = opaque {};
+
+// GBusType: G_BUS_TYPE_SESSION is the user's session bus.
+pub const GBusType = c_int;
+pub const G_BUS_TYPE_SESSION: GBusType = 2;
+
+// GDBusProxyFlags: G_DBUS_PROXY_FLAGS_NONE.
+pub const G_DBUS_PROXY_FLAGS_NONE: c_uint = 0;
+
+// GDBusCallFlags: G_DBUS_CALL_FLAGS_NONE.
+pub const G_DBUS_CALL_FLAGS_NONE: c_uint = 0;
+
+// GdkRGBA: a colour as four doubles.
+pub const GdkRGBA = extern struct {
+    red: f64,
+    green: f64,
+    blue: f64,
+    alpha: f64,
+};
 
 // A GCallback: the signal handler's real type is cast to this when connecting.
 // A WebKitPolicyDecisionType.
@@ -238,3 +259,16 @@ pub extern fn webkit_web_view_get_snapshot_finish(web_view: *WebKitWebView, resu
 pub extern fn cairo_surface_write_to_png(surface: *CairoSurface, filename: [*:0]const u8) c_int;
 pub extern fn cairo_surface_destroy(surface: *CairoSurface) void;
 pub extern fn cairo_status_to_string(status: c_int) [*:0]const u8;
+
+pub extern fn g_dbus_proxy_new_for_bus_sync(bus_type: GBusType, flags: c_uint, info: ?*anyopaque, name: [*:0]const u8, object_path: [*:0]const u8, interface_name: [*:0]const u8, cancellable: ?*anyopaque, err: ?*?*GError) ?*GDBusProxy;
+pub extern fn g_dbus_proxy_call_sync(proxy: *GDBusProxy, method_name: [*:0]const u8, parameters: ?*GVariant, flags: c_uint, timeout_msec: c_int, cancellable: ?*anyopaque, err: ?*?*GError) ?*GVariant;
+pub extern fn g_variant_new(format_string: [*:0]const u8, ...) ?*GVariant;
+pub extern fn g_variant_get_child_value(value: *GVariant, index: usize) *GVariant;
+pub extern fn g_variant_get_variant(value: *GVariant) *GVariant;
+pub extern fn g_variant_get_uint32(value: *GVariant) u32;
+pub extern fn g_variant_get_string(value: *GVariant, length: ?*usize) [*:0]const u8;
+pub extern fn g_variant_unref(value: *GVariant) void;
+pub extern fn gtk_settings_get_default() ?*GtkSettings;
+pub extern fn g_object_set(object: ?*anyopaque, first_property_name: [*:0]const u8, ...) void;
+pub extern fn g_object_get(object: ?*anyopaque, first_property_name: [*:0]const u8, ...) void;
+pub extern fn webkit_web_view_set_background_color(web_view: *WebKitWebView, rgba: *const GdkRGBA) void;

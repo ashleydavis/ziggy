@@ -5,6 +5,8 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.ApplicationInfo;
+import android.content.res.Configuration;
+import android.graphics.Color;
 import android.content.ClipData;
 import android.database.Cursor;
 import android.graphics.Bitmap;
@@ -50,6 +52,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 // Ziggy's Android native app. It configures a WebView, injects window.ziggy before the frontend's own scripts, loads the
@@ -140,6 +143,10 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
     // What a picker returns when it is dismissed with no choice, or the native app is being destroyed under it.
     private static final Intent NOTHING_PICKED = new Intent();
 
+    // The night bit of the configuration when the core was created, so onConfigurationChanged can tell a change of the system's
+    // appearance from any other configuration change.
+    private int nightMode;
+
     public ZiggyNativeApp(Activity activity, WebView webView, String nativeLibraryName, int workerThreads, int maxConcurrentChildTasks) {
         this.activity = activity;
         this.webView = webView;
@@ -158,13 +165,18 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         setEnvironmentExtra(intent, "ZIGGY_TEST_APP_CONFIG_DIR");
         setEnvironmentExtra(intent, "ZIGGY_TEST_APP_STATE_DIR");
 
+        String theme = ThemeExtra.value(intent.getStringExtra(ThemeExtra.NAME));
+        nightMode = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        int systemTheme = nightMode == Configuration.UI_MODE_NIGHT_YES ? 1 : 0;
         long created = ZiggyNative.create(
             this,
             workerThreads,
             maxConcurrentChildTasks,
             APP_URL_PREFIX,
             activity.getFilesDir().getAbsolutePath(),
-            remoteControl);
+            remoteControl,
+            theme,
+            systemTheme);
         coreLock.writeLock().lock();
         try {
             handle = created;
@@ -175,8 +187,54 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         watchCore(created);
 
         configureWebView();
+        applyTheme(new String(ZiggyNative.theme(created), StandardCharsets.UTF_8));
         String query = new String(ZiggyNative.uiQuery(created), StandardCharsets.UTF_8);
         webView.loadUrl(APP_URL_PREFIX + "index.html" + (query.isEmpty() ? "" : "?" + query));
+    }
+
+    // Sets the web view's colour scheme and background from a theme call's JSON.
+    private void applyTheme(String json) {
+        try {
+            JSONObject call = new JSONObject(json);
+            String setting = call.getString("setting");
+            String theme = call.getString("theme");
+            String background = call.getString("background");
+            boolean dark = "dark".equals(theme);
+            int colour = Color.parseColor(background);
+            webView.setBackgroundColor(colour);
+            activity.getWindow().getDecorView().setBackgroundColor(colour);
+            if (Build.VERSION.SDK_INT >= 29) {
+                activity.getTheme().applyStyle(dark ? R.style.ZiggyWebViewDark : R.style.ZiggyWebViewLight, true);
+                webView.dispatchConfigurationChanged(activity.getResources().getConfiguration());
+            }
+        } catch (JSONException error) {
+            throw new RuntimeException("Ziggy: the theme call cannot be read: " + json, error);
+        }
+    }
+
+    // Applies a theme call the core sent after a change of the setting or the system's theme.
+    @Override
+    public void theme(byte[] callJson) {
+        applyTheme(new String(callJson, StandardCharsets.UTF_8));
+    }
+
+    // Posts the system's theme when the night bit of the configuration changes.
+    public void onConfigurationChanged(Configuration configuration) {
+        int newNightMode = configuration.uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        if (newNightMode == nightMode) {
+            return;
+        }
+        nightMode = newNightMode;
+        String message = "{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"" + (newNightMode == Configuration.UI_MODE_NIGHT_YES ? "dark" : "light") + "\"}";
+        byte[] bytes = message.getBytes(StandardCharsets.UTF_8);
+        coreLock.readLock().lock();
+        try {
+            if (handle != 0) {
+                ZiggyNative.sendMessage(queueHandle, bytes);
+            }
+        } finally {
+            coreLock.readLock().unlock();
+        }
     }
 
     // Sets a string extra of the launching Intent as an environment variable of the same name, when it is given.

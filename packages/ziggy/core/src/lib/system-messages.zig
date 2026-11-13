@@ -47,6 +47,11 @@ pub const config = @import("system-messages/config.zig");
 pub const state = @import("system-messages/state.zig");
 
 //
+// The system message of the theme (system-theme), which a native app sends when the system's theme changes.
+//
+pub const theme = @import("system-messages/theme.zig");
+
+//
 // The name of every system message the main thread handles, other than those of the remote control connection.
 //
 pub const names = [_][]const u8{
@@ -63,6 +68,7 @@ pub const names = [_][]const u8{
     "get-state",
     "set-state",
     "get-config-problem",
+    "system-theme",
 };
 
 //

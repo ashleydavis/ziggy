@@ -2,4 +2,6 @@
 test {
     _ = @import("test/menu-keys.test.zig");
     _ = @import("test/geometry.test.zig");
+    _ = @import("test/system-theme.test.zig");
+    _ = @import("test/web-view-theme.test.zig");
 }

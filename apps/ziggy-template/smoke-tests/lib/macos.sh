@@ -36,7 +36,7 @@ ziggy_platform_start() {
         CFFIXED_USER_HOME="$test_dir/home" \
         ZIGGY_TEMPLATE_CONFIG_DIR="$test_dir/config" \
         ZIGGY_TEMPLATE_STATE_DIR="$test_dir/state" \
-        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
+        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
     echo "$pgid" > "$test_dir/$MACOS_PGID_FILE_NAME"
 }
 

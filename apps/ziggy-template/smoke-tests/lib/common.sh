@@ -10,7 +10,8 @@
 #
 #   ziggy_platform_start <test_dir> [keep-data]
 #       Starts the app for one scenario with --remote-control "$ZIGGY_REMOTE_CONTROL" (the ziggy.remoteControl extra on Android),
-#       or without it when ZIGGY_REMOTE_CONTROL is empty,
+#       or without it when ZIGGY_REMOTE_CONTROL is empty, and with --theme "$ZIGGY_THEME" (the ziggy.theme extra on Android) when
+#       ZIGGY_THEME is set to "light", "dark" or "system",
 #       recording what it started through launch_in_process_group. The app connects to the remote control server that
 #       start_test_app started. Returns non-zero when the app did not start. With keep-data it starts the app again on the data the
 #       last run left, instead of fresh data, and on a phone on the same device and the same install.

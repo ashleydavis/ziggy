@@ -162,6 +162,17 @@ export interface IConfigProblem {
 }
 
 //
+// The event every change of a config value sends.
+//
+export interface IConfigChangedEvent {
+    // The dotted key path that changed.
+    path: string;
+
+    // The value written, or null when the key was removed.
+    value: IJsonValue;
+}
+
+//
 // The level of a line the frontend writes to the backend's log with log.
 //
 export type LogLevel = "info" | "verbose" | "error" | "exception" | "warn" | "debug" | "tool" | "event";
@@ -249,6 +260,11 @@ export interface IZiggyBridge {
     setConfig(path: string, value: IJsonValue | undefined): Promise<void>;
 
     //
+    // Resolves with the operating system's theme: "light" or "dark", whatever the app's theme setting is.
+    //
+    getSystemTheme(): Promise<"light" | "dark">;
+
+    //
     // Resolves with the value at a dotted key path of the app's state file, or undefined when it is absent.
     //
     getState<TValue extends IJsonValue>(path: string): Promise<TValue | undefined>;
@@ -262,6 +278,16 @@ export interface IZiggyBridge {
     // Resolves with the problem with a line of the app's config file, or undefined when it reads or is missing.
     //
     getConfigProblem(): Promise<IConfigProblem | undefined>;
+
+    //
+    // Registers a callback for every change of a config value.
+    //
+    onConfigChanged(callback: IMessageCallback<IConfigChangedEvent>): void;
+
+    //
+    // Removes a callback onConfigChanged registered.
+    //
+    removeConfigChangedListener(callback: IMessageCallback<IConfigChangedEvent>): void;
 
     //
     // Queues a task. There is no message response: the task's events report what became of it, and a task that could not be queued is

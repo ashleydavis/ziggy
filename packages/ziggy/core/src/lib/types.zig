@@ -24,6 +24,16 @@ pub const PickKind = enum(i32) {
 };
 
 //
+// The system's theme, matching ZIGGY_THEME_ in ziggy.h.
+//
+pub const Theme = enum(i32) {
+    // The system is in its light theme.
+    light = 0,
+    // The system is in its dark theme.
+    dark = 1,
+};
+
+//
 // What a native app returned for a native call.
 //
 pub const NativeCallResult = struct {
@@ -78,6 +88,8 @@ pub const ZiggyConfig = extern struct {
     // The native app's command-line arguments after the program's name (NUL terminated), or null when arg_count is 0. The app reads them
     // through `HandlerServices.arguments`.
     args: ?[*]const [*:0]const u8,
+    // The system's theme, a ZIGGY_THEME_ value. The native app reads it before it creates the core.
+    system_theme: i32,
 };
 
 //

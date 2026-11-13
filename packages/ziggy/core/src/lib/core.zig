@@ -37,6 +37,7 @@ const state_path = @import("state-path.zig");
 const ThreadAllocator = utils.thread_allocator.ThreadAllocator;
 const native_app = @import("native-app.zig");
 const native_message = @import("native-message.zig");
+const theme_lib = @import("theme.zig");
 const NativeApp = native_app.NativeApp;
 const native_side_lib = @import("native-side.zig");
 const NativeSide = native_side_lib.NativeSide;
@@ -839,6 +840,25 @@ pub fn uiQuery(allocator: std.mem.Allocator, queue: *MessageQueue) ![:0]u8 {
 }
 
 //
+// Has the main thread give the theme as the JSON text of a "theme" call, waits for it and returns the text allocated with the
+// allocator, which the caller frees it with. The native app calls it once the core exists, before it loads the frontend.
+//
+pub fn theme(allocator: std.mem.Allocator, queue: *MessageQueue) ![:0]u8 {
+    var threaded = ownIo(allocator);
+    defer threaded.deinit();
+    const call_io = threaded.io();
+    var replies = MessageQueue.init();
+    defer replies.deinit();
+    try queue.postReplyTo(call_io, from_core, "{\"type\":\"theme\"}", &replies);
+    var arena_state = std.heap.ArenaAllocator.init(allocator);
+    defer arena_state.deinit();
+    const reply = replies.take(call_io, arena_state.allocator(), .none) orelse {
+        @panic("the reply queue of theme closed");
+    };
+    return try allocator.dupeZ(u8, reply.text);
+}
+
+//
 // What the main thread is given when it starts: the queues it talks to the native side through, the native app's configuration with no
 // strings, and the app's registration, constants of the app's code. The strings come in the start message (see StartMessage).
 //
@@ -1079,7 +1099,37 @@ fn mainThread(given: MainStart) void {
             .set = MainServices.setKeepAlive,
         },
     });
+    // The run's theme, set inside the start block before on_create and read only once the block has succeeded.
+    var theme_state: theme_lib.ThemeState = undefined;
     const start_failure: ?anyerror = failed: {
+        const taken_theme = theme_lib.takeArgument(start_arena, start_data.arguments) catch |err| {
+            break :failed err;
+        };
+        const system_theme: theme_lib.Theme = switch (config.system_theme) {
+            @intFromEnum(types.Theme.light) => .light,
+            @intFromEnum(types.Theme.dark) => .dark,
+            else => break :failed error.UnknownSystemTheme,
+        };
+        var setting: theme_lib.Setting = taken_theme.setting orelse .system;
+        if (main_services.config_path) |theme_config_path| {
+            const stored = config_state.config.get(?[]const u8, start_arena, io, theme_config_path, "theme") catch |err| blk: {
+                main_services.log.@"error"(std.fmt.allocPrint(start_arena, "The config file's theme could not be read ({s}), so the theme setting is system.", .{@errorName(err)}) catch @panic("out of memory logging the theme"));
+                break :blk null;
+            };
+            if (stored) |value| {
+                if (theme_lib.parseSetting(value)) |parsed| {
+                    if (taken_theme.setting == null) {
+                        setting = parsed;
+                    }
+                } else |_| {
+                    main_services.log.@"error"(std.fmt.allocPrint(start_arena, "The config file's theme \"{s}\" is not light, dark or system, so the theme setting is system.", .{value}) catch @panic("out of memory logging the theme"));
+                }
+            }
+        }
+        theme_state = .{
+            .setting = setting,
+            .system = system_theme,
+        };
         if (config.remote_control != null) {
             tests.connection = remote_control.RemoteControl.start(allocator, io, config, frontend.native, queue) catch |err| {
                 break :failed err;
@@ -1088,7 +1138,7 @@ fn mainThread(given: MainStart) void {
         if (app.on_create) |on_create| {
             var arena_state = std.heap.ArenaAllocator.init(allocator);
             defer arena_state.deinit();
-            on_create(services, timers, io, arena_state.allocator(), start_data.arguments) catch |err| {
+            on_create(services, timers, io, arena_state.allocator(), taken_theme.remaining) catch |err| {
                 break :failed err;
             };
         }
@@ -1113,7 +1163,7 @@ fn mainThread(given: MainStart) void {
             switch (message.from) {
                 from_frontend => {
                     if (!stopping) {
-                        handleFrontendMessage(allocator, frontend, app, main_services.config_path, main_services.state_path, services, timers, io, queue, &later_replies, &pool, &dropped, &tests, &next_request_task, message.text);
+                        handleFrontendMessage(allocator, frontend, app, &theme_state, app.backgrounds, main_services.config_path, main_services.state_path, services, timers, io, queue, &later_replies, &pool, &dropped, &tests, &next_request_task, message.text);
                     }
                 },
                 from_core => {
@@ -1173,6 +1223,21 @@ fn mainThread(given: MainStart) void {
                         }) catch @panic("out of memory replying to ui-query");
                         reply_to.post(io, 0, reply) catch @panic("out of memory replying to ui-query");
                     }
+                    else if (std.mem.eql(u8, message_type, "theme")) {
+                        const reply_to = message.reply_to orelse {
+                            @panic("theme was sent with nowhere to reply");
+                        };
+                        const current_theme = theme_state.theme();
+                        const background = theme_lib.backgroundText(arena, app.backgrounds, current_theme) catch @panic("out of memory replying to theme");
+                        const reply = native_message.encode(arena, .{
+                            .theme = .{
+                                .setting = @tagName(theme_state.setting),
+                                .theme = @tagName(current_theme),
+                                .background = background,
+                            },
+                        }, null) catch @panic("out of memory replying to theme");
+                        reply_to.post(io, 0, reply) catch @panic("out of memory replying to theme");
+                    }
                     else {
                         std.debug.panic("the core sent the main thread a message of an unknown type: {s}", .{message.text});
                     }
@@ -1223,7 +1288,7 @@ fn runUiQuery(arena: std.mem.Allocator, ui_query: ?UiQuery, services: services_l
 // passes it on by its kind, "app" to runAppMessage and "system" to runSystemMessage, and does nothing else. A message that is not a
 // JSON object, or has no kind or any other kind, is refused as InvalidMessage, reported as a core-error system event.
 //
-fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, next_request_task: *u64, text: []const u8) void {
+fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, next_request_task: *u64, text: []const u8) void {
     var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -1241,7 +1306,7 @@ fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: 
         return;
     }
     if (kind == .string and std.mem.eql(u8, kind.string, "system")) {
-        runSystemMessage(allocator, arena, frontend, app, config_file_path, state_file_path, services, timers, io, pool, dropped, tests, parsed);
+        runSystemMessage(allocator, arena, frontend, app, theme_state, backgrounds, config_file_path, state_file_path, services, timers, io, pool, dropped, tests, parsed);
         return;
     }
     frontend.reportError(io, arena, null, "InvalidMessage");
@@ -1389,14 +1454,14 @@ const SystemOutcome = union(enum) {
 // It never reaches the app's handlers. A message with no name is InvalidMessage, and a name Ziggy has no system message of is
 // UnknownSystemMessage.
 //
-fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, parsed: std.json.Value) void {
+fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, parsed: std.json.Value) void {
     const request_id: ?std.json.Value = parsed.object.get("id");
     const name = messageName(parsed) orelse {
         frontend.reportError(io, arena, request_id, "InvalidMessage");
         return;
     };
     const data = parsed.object.get("data") orelse .null;
-    const outcome = runSystem(allocator, arena, name, data, app.menu_targets, app.actions, app.standard_menu_items, config_file_path, state_file_path, services, timers, io, pool, dropped, tests) catch |err| {
+    const outcome = runSystem(allocator, arena, frontend, name, data, theme_state, backgrounds, app.menu_targets, app.actions, app.standard_menu_items, config_file_path, state_file_path, services, timers, io, pool, dropped, tests) catch |err| {
         frontend.reportHandlerError(io, arena, app.describe_error, request_id, err);
         return;
     };
@@ -1417,7 +1482,7 @@ fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fron
 //
 // Runs the system message of the name with its data, giving its function only the piece of the main thread's state it uses.
 //
-fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []const u8, data: std.json.Value, menu_targets: menu_lib.MenuTargets, app_actions: []const action_lib.Action, standard_menu_items: []const menu_lib.StandardMenuItem, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
+fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, name: []const u8, data: std.json.Value, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, menu_targets: menu_lib.MenuTargets, app_actions: []const action_lib.Action, standard_menu_items: []const menu_lib.StandardMenuItem, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands) !SystemOutcome {
     if (std.mem.eql(u8, name, "add-task")) {
         const payload = switch (try handlers_lib.parsePayload(system_messages.tasks.AddTaskRequest, arena, data)) {
             .parsed => |value| value,
@@ -1491,7 +1556,14 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
                 .invalid_data = text,
             },
         };
+        // The theme setting is the run's setting, which --theme may override, rather than only what the config file holds.
+        if (std.mem.eql(u8, path, "theme")) {
+            return try respond(arena, @tagName(theme_state.setting));
+        }
         return try respond(arena, try system_messages.config.getConfig(arena, io, config_file_path, path));
+    }
+    if (std.mem.eql(u8, name, "get-system-theme")) {
+        return try respond(arena, system_messages.theme.getSystemTheme(theme_state.*));
     }
     if (std.mem.eql(u8, name, "set-config")) {
         const payload = switch (try handlers_lib.parsePayload(system_messages.config.SetValueRequest, arena, data)) {
@@ -1500,7 +1572,19 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
                 .invalid_data = text,
             },
         };
-        return try respond(arena, try system_messages.config.setConfig(arena, io, services.log, config_file_path, payload));
+        try system_messages.config.setConfig(arena, io, services.log, config_file_path, payload);
+        frontend.deliver(io, try json.stringify(arena, .{
+            .kind = "system",
+            .name = "config-changed",
+            .data = .{
+                .path = payload.path,
+                .value = payload.value,
+            },
+        }));
+        if (std.mem.eql(u8, payload.path, "theme")) {
+            try applyThemeSetting(arena, frontend, io, theme_state, backgrounds, payload.value, services.log);
+        }
+        return try respond(arena, null);
     }
     if (std.mem.eql(u8, name, "get-state")) {
         const path = switch (try handlers_lib.parsePayload([]const u8, arena, data)) {
@@ -1523,7 +1607,65 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, name: []con
     if (std.mem.eql(u8, name, "get-config-problem")) {
         return try respond(arena, try system_messages.config.getConfigProblem(arena, io, config_file_path));
     }
+    if (std.mem.eql(u8, name, "system-theme")) {
+        const system_text = switch (try handlers_lib.parsePayload([]const u8, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        const changed = try system_messages.theme.systemTheme(theme_state, system_text);
+        if (changed) {
+            try sendThemeToNative(arena, frontend, io, theme_state.*, backgrounds);
+            // The system's theme changed what the theme setting resolves to, so the page hears it through the config system's
+            // config-changed message and reads the new value with getSystemTheme.
+            frontend.deliver(io, try json.stringify(arena, .{
+                .kind = "system",
+                .name = "config-changed",
+                .data = .{
+                    .path = "theme",
+                    .value = @tagName(theme_state.setting),
+                },
+            }));
+        }
+        return try respond(arena, null);
+    }
     return .unknown;
+}
+
+//
+// Applies a value written to the config file's theme key. A string that is not a setting, or a value that is not a string, is logged
+// and leaves the setting system.
+//
+fn applyThemeSetting(arena: std.mem.Allocator, frontend: Frontend, io: std.Io, state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, value: std.json.Value, log: logging.ILog) !void {
+    var setting: theme_lib.Setting = .system;
+    if (value == .string) {
+        if (theme_lib.parseSetting(value.string)) |parsed| {
+            setting = parsed;
+        } else |_| {
+            log.@"error"(std.fmt.allocPrint(arena, "The config file's theme \"{s}\" is not light, dark or system, so the theme setting is system.", .{value.string}) catch @panic("out of memory logging the theme"));
+        }
+    } else if (value != .null) {
+        log.@"error"(std.fmt.allocPrint(arena, "The config file's theme is not a string, so the theme setting is system.", .{}) catch @panic("out of memory logging the theme"));
+    }
+    if (state.applySetting(setting)) {
+        try sendThemeToNative(arena, frontend, io, state.*, backgrounds);
+    }
+}
+
+//
+// Tells the native app the theme, which sets the web view's colour scheme and background.
+//
+fn sendThemeToNative(arena: std.mem.Allocator, frontend: Frontend, io: std.Io, state: theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds) !void {
+    const current_theme = state.theme();
+    const background = try theme_lib.backgroundText(arena, backgrounds, current_theme);
+    try frontend.native.call(io, arena, .{
+        .theme = .{
+            .setting = @tagName(state.setting),
+            .theme = @tagName(current_theme),
+            .background = background,
+        },
+    }, null);
 }
 
 //

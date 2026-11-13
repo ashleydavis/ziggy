@@ -10,10 +10,21 @@
 #
 #   ziggy_platform_start <test_dir> [keep-data]
 #       Starts the app for one scenario with --remote-control "$ZIGGY_REMOTE_CONTROL" (the ziggy.remoteControl extra on Android),
-#       or without it when ZIGGY_REMOTE_CONTROL is empty,
+#       or without it when ZIGGY_REMOTE_CONTROL is empty, and with --theme "$ZIGGY_THEME" (the ziggy.theme extra on Android) when
+#       ZIGGY_THEME is set to "light", "dark" or "system",
 #       recording what it started through launch_in_process_group. The app connects to the remote control server that
 #       start_test_app started. Returns non-zero when the app did not start. With keep-data it starts the app again on the data the
 #       last run left, instead of fresh data, and on a phone on the same device and the same install.
+#
+#   ziggy_platform_changes_appearance   (Linux, Windows, macOS, Android and the iOS simulator)
+#       Succeeds when the platform can change the system's appearance, so the appearance-only scenarios run there. A connected iPhone
+#       or iPad cannot, and ios-device.sh defines it returning non-zero.
+#
+#   ziggy_platform_set_system_theme <test_dir> <light|dark>
+#       Changes the system's appearance, keeping the appearance to put back in <test_dir>/system-appearance.txt on its first call.
+#
+#   ziggy_platform_restore_system_theme <test_dir>
+#       Puts the appearance in <test_dir>/system-appearance.txt back. A failure prints what could not be set and returns non-zero.
 #
 #   ziggy_platform_stop <test_dir> [keep-device]
 #       Stops the app and everything it started. With keep-device a phone stays claimed, so a restart finds its data.
@@ -58,6 +69,13 @@ fail() {
 # Stops the app and the remote control server when the scenario ends, however it ends.
 #
 stop_app_on_exit() {
+    if [ -f "$ZIGGY_TEST_DIR/system-appearance.txt" ]; then
+        if ! ziggy_platform_restore_system_theme "$ZIGGY_TEST_DIR"; then
+            ziggy_platform_stop "$ZIGGY_TEST_DIR" || true
+            stop_remote_control_server
+            exit 1
+        fi
+    fi
     ziggy_platform_stop "$ZIGGY_TEST_DIR" || true
     stop_remote_control_server
 }

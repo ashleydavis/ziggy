@@ -219,6 +219,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.has_screenshot = true
         config.worker_threads = UInt32(ProcessInfo.processInfo.activeProcessorCount)
         config.max_concurrent_child_tasks = 10
+        config.system_theme = ZiggyBridge.systemTheme()
 
         let prefixText = ZiggyBridge.duplicate(ZiggyBridge.appUrlPrefix)
         let dataText = ZiggyBridge.duplicate(dataDirectory.path)
@@ -264,6 +265,19 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             ZiggyBridge.fail("the core has no standalone action shortcuts")
         }
         actionShortcuts = ZiggyActionShortcuts(bridge: self, shortcuts: UnsafeBufferPointer(start: shortcuts, count: shortcutCount))
+
+        var themeLength = 0
+        guard let themeText = ziggy_theme(created, &themeLength) else {
+            ZiggyBridge.fail("the core could not give the theme")
+        }
+        let themeData = Data(bytes: themeText, count: themeLength)
+        guard let themeCall = (try? JSONSerialization.jsonObject(with: themeData)) as? [String: Any] else {
+            ZiggyBridge.fail("the core gave a theme that cannot be read")
+        }
+        applyTheme(themeCall)
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { [weak self] _ in
+            self?.postSystemTheme()
+        }
 
         // The app supplies the query, which is passed through unread.
         var queryLength = 0
@@ -339,6 +353,8 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
                 ZiggyBridge.fail("the core chose the menu action \(action) before there was a menu")
             }
             menu.perform(action: action)
+        case "theme":
+            applyTheme(call)
         case "os-version":
             let version = ProcessInfo.processInfo.operatingSystemVersion
             finishCall(reply, ok: true, text: "\"\(ZiggyBridge.operatingSystemName) \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)\"")
@@ -527,6 +543,58 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             index += 1
         }
         return kept
+    }
+
+    // The system's theme: dark when the AppleInterfaceStyle default is "Dark".
+    static func systemTheme() -> Int32 {
+        return UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" ? Int32(ZIGGY_THEME_DARK) : Int32(ZIGGY_THEME_LIGHT)
+    }
+
+    // Tells the core the system's theme.
+    private func postSystemTheme() {
+        guard let handle = core else {
+            return
+        }
+        let text = ZiggyBridge.systemTheme() == Int32(ZIGGY_THEME_DARK) ? "dark" : "light"
+        let message = "{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"\(text)\"}"
+        message.withCString { pointer in
+            ziggy_send_message(handle, pointer, Int(message.utf8.count))
+        }
+    }
+
+    // Applies a theme call: the app's appearance, the window's background and the web view's under-page background.
+    private func applyTheme(_ call: [String: Any]) {
+        guard let setting = call["setting"] as? String, let theme = call["theme"] as? String, let background = call["background"] as? String else {
+            ZiggyBridge.fail("the core gave a theme with a missing field")
+        }
+        if setting == "system" {
+            NSApp.appearance = nil
+        }
+        else if theme == "dark" {
+            NSApp.appearance = NSAppearance(named: .darkAqua)
+        }
+        else {
+            NSApp.appearance = NSAppearance(named: .aqua)
+        }
+        let colour = ZiggyBridge.colour(background)
+        webView.window?.backgroundColor = colour
+        if #available(macOS 12.0, *) {
+            webView.underPageBackgroundColor = colour
+        }
+    }
+
+    // A colour from a "#rrggbb" background.
+    private static func colour(_ text: String) -> NSColor {
+        let hex = text.hasPrefix("#") ? String(text.dropFirst()) : text
+        guard hex.count == 6, let value = UInt32(hex, radix: 16) else {
+            return .black
+        }
+        return NSColor(
+            srgbRed: CGFloat((value >> 16) & 0xff) / 255.0,
+            green: CGFloat((value >> 8) & 0xff) / 255.0,
+            blue: CGFloat(value & 0xff) / 255.0,
+            alpha: 1.0
+        )
     }
 
     // Copies text into a new NUL terminated C string, which the caller frees.

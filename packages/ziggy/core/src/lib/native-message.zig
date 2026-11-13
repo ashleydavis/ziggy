@@ -46,6 +46,18 @@ pub const NativeCall = struct {
 };
 
 //
+// What a theme call tells the native app: the setting, the theme it resolves to and the window's background colour.
+//
+pub const ThemeCall = struct {
+    // The setting: "light", "dark" or "system".
+    setting: []const u8,
+    // The theme the setting resolves to: "light" or "dark".
+    theme: []const u8,
+    // The window's background colour for the theme, as "#rrggbb".
+    background: []const u8,
+};
+
+//
 // A call: what the native app is to do.
 //
 pub const Call = union(enum) {
@@ -63,6 +75,8 @@ pub const Call = union(enum) {
     native_call: NativeCall,
     // Write a PNG of the app's window to the file at the path: the result is empty.
     screenshot: []const u8,
+    // Set the web view's colour scheme and background from the theme. No result.
+    theme: ThemeCall,
     // The core's main thread has stopped and sends nothing more. Only the core's own side of the queue reads it (see NativeSide).
     stopped,
 };
@@ -81,6 +95,9 @@ const Wire = struct {
     method: ?[]const u8 = null,
     request: ?[]const u8 = null,
     outputPath: ?[]const u8 = null,
+    setting: ?[]const u8 = null,
+    theme: ?[]const u8 = null,
+    background: ?[]const u8 = null,
 };
 
 //
@@ -106,6 +123,11 @@ pub fn encode(allocator: std.mem.Allocator, call: Call, call_id: ?u64) ![]u8 {
             wire.request = native_call.request;
         },
         .screenshot => |output_path| wire.outputPath = output_path,
+        .theme => |theme_call| {
+            wire.setting = theme_call.setting;
+            wire.theme = theme_call.theme;
+            wire.background = theme_call.background;
+        },
     }
     return try std.json.Stringify.valueAlloc(allocator, wire, .{
         .emit_null_optional_fields = false,
@@ -155,6 +177,15 @@ pub fn parse(arena: std.mem.Allocator, text: []const u8) !Call {
             .screenshot = wire.outputPath orelse return error.InvalidCall,
         };
     }
+    if (std.mem.eql(u8, wire.type, "theme")) {
+        return .{
+            .theme = .{
+                .setting = wire.setting orelse return error.InvalidCall,
+                .theme = wire.theme orelse return error.InvalidCall,
+                .background = wire.background orelse return error.InvalidCall,
+            },
+        };
+    }
     if (std.mem.eql(u8, wire.type, "stopped")) {
         return .stopped;
     }
@@ -201,6 +232,7 @@ fn typeName(call: Call) []const u8 {
         .pick_paths => "pick-paths",
         .native_call => "native-call",
         .screenshot => "screenshot",
+        .theme => "theme",
         .stopped => "stopped",
     };
 }

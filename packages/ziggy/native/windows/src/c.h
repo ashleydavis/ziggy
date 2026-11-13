@@ -8,5 +8,6 @@
 #include <shlobj.h>
 #include <shobjidl.h>
 #include <objbase.h>
+#include <dwmapi.h>
 #include "WebView2.h"
 #include "ziggy.h"

@@ -110,4 +110,4 @@ A write keeps the file's comments and layout. A key of a table is written under 
 
 ## Ziggy's own settings
 
-Ziggy keeps its own settings as top-level config keys of the same config file an app uses. It has none yet; the theme work adds `theme`. An app's own settings use other config keys.
+Ziggy keeps its own settings as top-level config keys of the same config file an app uses. It keeps `theme`: `light`, `dark` or `system`, described in [Theme](theme.md). An app's own settings use other config keys.

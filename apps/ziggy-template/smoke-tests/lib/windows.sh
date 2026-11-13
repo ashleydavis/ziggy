@@ -47,7 +47,7 @@ ziggy_platform_start() {
         LOCALAPPDATA="$(windows_native_path "$test_dir/data")" \
         ZIGGY_TEMPLATE_CONFIG_DIR="$(windows_native_path "$test_dir/config")" \
         ZIGGY_TEMPLATE_STATE_DIR="$(windows_native_path "$test_dir/state")" \
-        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
+        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
     echo "$pgid" > "$test_dir/$WINDOWS_PGID_FILE_NAME"
 }
 

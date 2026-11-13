@@ -904,6 +904,8 @@ pub fn addWindowsNativeApp(
     native_app.linkSystemLibrary("uuid", .{});
     // The WebView2 static loader reads the registry and writes event traces, which live in advapi32.
     native_app.linkSystemLibrary("advapi32", .{});
+    // The window's title bar follows the theme with DwmSetWindowAttribute.
+    native_app.linkSystemLibrary("dwmapi", .{});
     // The remote control's WebSocket client (websocket.zig) uses Windows sockets, which live in ws2_32. It can also open a TLS
     // connection, and Zig's TLS client reads the Windows certificate store, which lives in crypt32.
     native_app.linkSystemLibrary("ws2_32", .{});

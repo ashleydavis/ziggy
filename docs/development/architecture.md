@@ -55,7 +55,7 @@ The smoke test scenario `24-ui-address` checks on every platform that the fronte
 ## The message bridge
 
 - The frontend talks to the backend through `window.ziggy`, which the native app injects into the page.
-- The native app passes messages to the backend through a C interface, declared and documented in `ziggy.h`. Every native app hands every message to the one entry point, `ziggy_send_message` (`sendMessage` in `core.zig`), which posts it to the core's main thread's queue and returns at once. `ziggy_create` returns that queue, and every other function of the C interface is given it.
+- The native app passes messages to the backend through a C interface, declared and documented in `ziggy.h`. Every native app hands every message to the one entry point, `ziggy_send_message` (`sendMessage` in `core.zig`), which posts it to the core's main thread's queue and returns at once. `ziggy_create` returns that queue, and every other function of the C interface is given it. `ziggy_ui_query` gives the page's query and `ziggy_theme` gives the theme, both before the page loads.
 - There are two kinds of message, kept apart from end to end. An app message belongs to the app: the backend handles it by calling the Zig handler the app registered for its name. A system message belongs to Ziggy itself (tasks, the platform, menu actions, dropped files and the remote control connection): the backend handles it with Ziggy's own handlers.
 - What the app's handler returns is sent back to the frontend as the message response.
 
@@ -117,6 +117,8 @@ The system messages, each handled by Ziggy's core library and never by the app:
 | `list-actions` | `window.ziggy.listActions()` | Answers with the `name`, `label` and `shortcut` of every action of the app and every `.standard` item of its menu. `shortcut` is as the platform shows it, or null. |
 | `test-result` | `window.ziggy.sendTestResult(requestId, result)` | The frontend's result for a `test-command`. Fails with `RemoteControlNotRunning` when the app was started without `--remote-control`. |
 | `test-ui-ready` | `window.ziggy.testUiReady()` | Reports that the frontend is listening for test commands. Fails with `RemoteControlNotRunning` when the app was started without `--remote-control`. |
+| `get-system-theme` | `window.ziggy.getSystemTheme()` | Answers with the operating system's theme, `light` or `dark`, whatever the app's theme setting is. |
+| `system-theme` | The native app | Reports the system's theme, `light` or `dark`, when it changes. The core applies it and sends the native app a `theme` call. |
 
 A system message with a name no part of Ziggy has registered gets the error `UnknownSystemMessage`.
 
@@ -129,6 +131,7 @@ The system events, each with its own listener on `window.ziggy`:
 | `core-error` | `onCoreError` | A message failed with no message response to carry the error: `error`. With no listener it is logged to the console. |
 | `action` | The handler registered with `registerAction` | Runs the frontend handler of the action named in `action`. With no handler registered, the frontend logs an error naming the action and throws. |
 | `test-command` | `onTestCommand` | A command from the remote control connection: `requestId` and `command`. Sent only when the app was started with `--remote-control`. |
+| `config-changed` | `onConfigChanged` | A config value changed: `path` and `value`. `set-config` sends it, and the core applies the theme when the path is `theme`. |
 
 ## Tasks
 
@@ -143,7 +146,7 @@ The system events, each with its own listener on `window.ziggy`:
 
 ## Native calls
 
-- A native call is how the backend has the native app do something only native code can do: show a file dialog, read the operating system's version, quit, run a menu action, keep a mobile app running or take a screenshot.
+- A native call is how the backend has the native app do something only native code can do: show a file dialog, read the operating system's version, quit, run a menu action, keep a mobile app running, take a screenshot or set the web view's theme.
 - An app can add native calls of its own, which its own native code handles.
 - The [Native calls](../user-guide/native-calls.md) guide explains how to use them.
 

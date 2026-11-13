@@ -21,6 +21,9 @@ public interface ZiggyNativeCalls {
     // of an array of path strings, which is [] when the user cancelled, or a failure when the picker could not be shown.
     void pickPaths(int kind, String title, String initialName, long reply);
 
+    // Sets the web view's colour scheme and background from the theme call's JSON: the setting, the theme and the background colour.
+    void theme(byte[] callJson);
+
     // Has the app's own code do one thing only it can do, named by method, and returns at once. Both arguments are UTF-8 text as bytes
     // (the method name and the JSON text of its argument). The result goes to ZiggyNative.nativeResult with the number reply, on the
     // main thread: the JSON text of the result, or a failure with the reason.

@@ -623,6 +623,47 @@ function listenForTestCommands(): void {
 // Wires the buttons that read and write the app's config and state files, through window.ziggy and through the backend's own message and
 // task.
 //
+function startTheme(): void {
+    element("first-media-theme").textContent = `first media theme: ${document.documentElement.dataset.firstMediaTheme ?? "unknown"}`;
+    const mediaTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const select = element("theme-select") as HTMLSelectElement;
+    const showMediaTheme = () => {
+        element("media-theme").textContent = `media theme: ${mediaTheme.matches ? "dark" : "light"}`;
+        showSetting().catch((error: Error) => {
+            element("theme").textContent = `setting theme: ${error.message}`;
+        });
+    };
+    const showSetting = async () => {
+        const setting = await window.ziggy.getConfig<string>("theme");
+        const current = setting === "light" || setting === "dark" ? setting : "system";
+        select.value = current;
+        const system = await window.ziggy.getSystemTheme();
+        const effective = current === "system" ? system : current;
+        document.documentElement.dataset.themeSetting = effective;
+        document.documentElement.style.colorScheme = effective;
+        element("theme").textContent = `setting theme: ${setting ?? "system"} ${effective}`;
+        element("theme-background").textContent = `theme background: ${effective}`;
+    };
+    showMediaTheme();
+    mediaTheme.addEventListener("change", showMediaTheme);
+    window.ziggy.onConfigChanged(event => {
+        if (event.path === "theme") {
+            showSetting().catch((error: Error) => {
+                element("theme").textContent = `setting theme: ${error.message}`;
+            });
+        }
+    });
+    const setTheme = (setting: string) => {
+        window.ziggy.setConfig("theme", setting).catch((error: Error) => {
+            element("theme").textContent = `theme not set: ${error.message}`;
+        });
+    };
+    element("set-theme-light").addEventListener("click", () => setTheme("light"));
+    element("set-theme-dark").addEventListener("click", () => setTheme("dark"));
+    element("set-theme-system").addEventListener("click", () => setTheme("system"));
+    select.addEventListener("change", () => setTheme(select.value));
+}
+
 function startConfig(): void {
     const input = element("config-input") as HTMLInputElement;
     const result = element("config-result");
@@ -661,6 +702,7 @@ listenForEvents();
 listenForMenuEvents();
 listenForTestCommands();
 startConfig();
+startTheme();
 startTasks();
 startEdgeChecks();
 startAppOwnCode();

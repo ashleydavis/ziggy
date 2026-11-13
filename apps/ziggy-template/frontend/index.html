@@ -6,6 +6,10 @@
     <title>Ziggy template</title>
     <style>
         :root { color-scheme: light dark; }
+        html { background: #ffffff; }
+        @media (prefers-color-scheme: dark) { html { background: #000000; } }
+        html[data-theme-setting="light"] { background: #ffffff; }
+        html[data-theme-setting="dark"] { background: #000000; }
         html, body { height: 100%; }
         body { font-family: sans-serif; margin: 0; padding: 16px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; }
         h1 { margin: 0; }
@@ -19,6 +23,16 @@
         <button data-id="send-message">Send the hello world message</button>
         <button data-id="start-task">Start the hello world task</button>
         <button data-id="run-hello-action">Say hello from an action</button>
+    </div>
+    <div>
+        <label>Theme:
+            <select data-id="theme-select">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="system">System</option>
+            </select>
+        </label>
+        <span data-id="theme-setting"></span>
     </div>
     <pre data-id="log"></pre>
     <script type="module" src="/src/main.ts"></script>

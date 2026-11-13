@@ -20,6 +20,7 @@ const menu_lib = @import("menu.zig");
 const pickers_lib = @import("pickers.zig");
 const native_message = @import("native-message");
 const remote_control_arguments = @import("remote-control-arguments");
+const system_theme = @import("system-theme.zig");
 
 //
 // The URL prefix the bundled frontend is served under, with a trailing slash. The host name is under .invalid, which can
@@ -282,6 +283,8 @@ const NativeApp = struct {
     screenshot_path: ?[:0]u16,
     // The stream the capture in progress is written to, or null when none is.
     screenshot_stream: ?*c.IStream,
+    // The brush the window procedure paints the background with, or null before the theme is applied.
+    background_brush: ?c.HBRUSH,
 };
 
 //
@@ -328,10 +331,14 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .screenshot_reply = null,
         .screenshot_path = null,
         .screenshot_stream = null,
+        .background_brush = null,
     };
     initHandlers(&native_app);
     const exit_code = try start(&native_app, allocator);
     destroyCore(&native_app);
+    if (native_app.background_brush) |brush| {
+        _ = c.DeleteObject(brush);
+    }
     for (native_app.menu_actions.items) |menu_action| {
         allocator.free(menu_action.action);
     }
@@ -570,11 +577,6 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
     ) orelse {
         return error.WindowCreateFailed;
     };
-    _ = c.ShowWindow(native_app.window, c.SW_SHOW);
-    if (c.UpdateWindow(native_app.window) == 0) {
-        return error.WindowCreateFailed;
-    }
-
     check("CreateCoreWebView2EnvironmentWithOptions", c.CreateCoreWebView2EnvironmentWithOptions(null, wide_user_data_folder.ptr, null, &native_app.environment_handler.interface));
 
     var message: c.MSG = undefined;
@@ -639,6 +641,32 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
             const suggested: *const c.RECT = @ptrFromInt(@as(usize, @intCast(lparam)));
             if (c.SetWindowPos(window, null, suggested.left, suggested.top, suggested.right - suggested.left, suggested.bottom - suggested.top, c.SWP_NOZORDER | c.SWP_NOACTIVATE) == 0) {
                 fatal("SetWindowPos failed after a DPI change, error {d}", .{c.GetLastError()});
+            }
+            return 0;
+        },
+        c.WM_ERASEBKGND => {
+            if (native_app.background_brush) |brush| {
+                var rect: c.RECT = undefined;
+                _ = c.GetClientRect(window, &rect);
+                const device_context: c.HDC = @ptrFromInt(@as(usize, @intCast(wparam)));
+                _ = c.FillRect(device_context, &rect, brush);
+                return 1;
+            }
+            return c.DefWindowProcW(window, message, wparam, lparam);
+        },
+        c.WM_SETTINGCHANGE => {
+            if (lparam != 0) {
+                const text: [*:0]const u16 = @ptrFromInt(@as(usize, @intCast(lparam)));
+                if (std.mem.eql(u16, std.mem.span(text), std.unicode.utf8ToUtf16LeStringLiteral("ImmersiveColorSet")[0..])) {
+                    const theme = readSystemTheme();
+                    var buffer: [128]u8 = undefined;
+                    const message_text = std.fmt.bufPrint(&buffer, "{{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"{s}\"}}", .{if (theme == .dark) "dark" else "light"}) catch {
+                        return 0;
+                    };
+                    if (native_app.core) |core| {
+                        c.ziggy_send_message(core, message_text.ptr, message_text.len);
+                    }
+                }
             }
             return 0;
         },
@@ -813,6 +841,7 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         },
         .pick_paths => |pick| try askForPick(native_app, reply, pick),
         .screenshot => |output_path| startScreenshot(native_app, reply, output_path),
+        .theme => |theme_call| applyTheme(native_app, theme_call),
         .keep_alive, .native_call, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
 }
@@ -916,9 +945,24 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     }
     config.arg_count = @intCast(argument_pointers.len);
     config.args = @ptrCast(argument_pointers.ptr);
+    config.system_theme = @intFromEnum(readSystemTheme());
     native_app.core = c.ziggy_create(&config) orelse {
         fatal("the core could not be created", .{});
     };
+
+    var theme_arena_state = std.heap.ArenaAllocator.init(std.heap.c_allocator);
+    defer theme_arena_state.deinit();
+    var theme_length: usize = 0;
+    const theme_pointer = c.ziggy_theme(native_app.core, &theme_length) orelse {
+        fatal("the core could not give the theme", .{});
+    };
+    const theme_call = native_message.parse(theme_arena_state.allocator(), theme_pointer[0..theme_length]) catch {
+        fatal("the core gave a theme that cannot be read", .{});
+    };
+    switch (theme_call) {
+        .theme => |theme_value| applyTheme(native_app, theme_value),
+        else => fatal("the core gave a call that is not the theme", .{}),
+    }
 
     // The app supplies the query unread, and the core names none of its parts.
     var query_length: usize = 0;
@@ -955,6 +999,10 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     check("add_NavigationStarting", created_web_view.lpVtbl.*.add_NavigationStarting.?(created_web_view, &native_app.navigation_handler.interface, &token));
     check("add_NewWindowRequested", created_web_view.lpVtbl.*.add_NewWindowRequested.?(created_web_view, &native_app.new_window_handler.interface, &token));
     check("AddScriptToExecuteOnDocumentCreated", created_web_view.lpVtbl.*.AddScriptToExecuteOnDocumentCreated.?(created_web_view, native_app.inject_script.ptr, &native_app.script_added_handler.interface));
+    _ = c.ShowWindow(native_app.window, c.SW_SHOW);
+    if (c.UpdateWindow(native_app.window) == 0) {
+        fatal("UpdateWindow failed", .{});
+    }
 }
 
 //
@@ -2177,3 +2225,98 @@ const capture_vtable = c.struct_ICoreWebView2CapturePreviewCompletedHandlerVtbl{
     .Release = CapturePreviewHandler.release,
     .Invoke = capturePreviewInvoke,
 };
+
+//
+// HKEY_CURRENT_USER, which the translated header cannot make on this Zig version: the handle is an odd number and the translated
+// pointer type is aligned, so the value is made here with the alignment check off.
+//
+fn hkeyCurrentUser() c.HKEY {
+    return hkeyFromValue(0x80000001);
+}
+
+//
+// A registry handle from its value, with the alignment check off.
+//
+fn hkeyFromValue(value: usize) c.HKEY {
+    @setRuntimeSafety(false);
+    return @ptrFromInt(value);
+}
+
+//
+// The system's theme, read from the registry.
+//
+fn readSystemTheme() system_theme.SystemTheme {
+    var value: u32 = 0;
+    var size: u32 = @sizeOf(u32);
+    const result = c.RegGetValueW(hkeyCurrentUser(), std.unicode.utf8ToUtf16LeStringLiteral("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"), std.unicode.utf8ToUtf16LeStringLiteral("AppsUseLightTheme"), c.RRF_RT_REG_DWORD, null, &value, &size);
+    if (result != c.ERROR_SUCCESS) {
+        return system_theme.fromAppsUseLightTheme(null);
+    }
+    return system_theme.fromAppsUseLightTheme(value);
+}
+
+//
+// Applies a theme call: the window's title bar and background, and the web view's background and colour scheme.
+//
+fn applyTheme(native_app: *NativeApp, theme_call: native_message.ThemeCall) void {
+    const dark = std.mem.eql(u8, theme_call.theme, "dark");
+    const background = parseBackground(theme_call.background);
+    var use_dark: c.BOOL = if (dark) 1 else 0;
+    _ = c.DwmSetWindowAttribute(native_app.window, 20, &use_dark, @sizeOf(c.BOOL));
+    if (native_app.background_brush) |old| {
+        _ = c.DeleteObject(old);
+    }
+    native_app.background_brush = c.CreateSolidBrush(@as(u32, background.red) | (@as(u32, background.green) << 8) | (@as(u32, background.blue) << 16));
+    if (native_app.controller) |controller| {
+        var controller2: ?*c.ICoreWebView2Controller2 = null;
+        if (controller.lpVtbl.*.QueryInterface.?(controller, &c.IID_ICoreWebView2Controller2, @ptrCast(&controller2)) == c.S_OK) {
+            if (controller2) |given| {
+                const colour = c.COREWEBVIEW2_COLOR{
+                    .A = 255,
+                    .R = background.red,
+                    .G = background.green,
+                    .B = background.blue,
+                };
+                _ = given.lpVtbl.*.put_DefaultBackgroundColor.?(given, colour);
+                _ = given.lpVtbl.*.Release.?(given);
+            }
+        }
+    }
+    if (native_app.web_view) |web_view| {
+        var web_view13: ?*c.ICoreWebView2_13 = null;
+        if (web_view.lpVtbl.*.QueryInterface.?(web_view, &c.IID_ICoreWebView2_13, @ptrCast(&web_view13)) == c.S_OK) {
+            if (web_view13) |given| {
+                var profile: ?*c.ICoreWebView2Profile = null;
+                if (given.lpVtbl.*.get_Profile.?(given, @ptrCast(&profile)) == c.S_OK) {
+                    if (profile) |profile_value| {
+                        const scheme: c.COREWEBVIEW2_PREFERRED_COLOR_SCHEME = @intCast(system_theme.preferredColorScheme(theme_call.setting, theme_call.theme));
+                        _ = profile_value.lpVtbl.*.put_PreferredColorScheme.?(profile_value, scheme);
+                        _ = profile_value.lpVtbl.*.Release.?(profile_value);
+                    }
+                }
+                _ = given.lpVtbl.*.Release.?(given);
+            }
+        }
+    }
+}
+
+//
+// The red, green and blue of a "#rrggbb" background.
+//
+const Background = struct {
+    red: u8,
+    green: u8,
+    blue: u8,
+};
+
+//
+// The colour of a "#rrggbb" background.
+//
+fn parseBackground(text: []const u8) Background {
+    const value = std.fmt.parseInt(u24, text[1..], 16) catch 0;
+    return .{
+        .red = @intCast((value >> 16) & 0xff),
+        .green = @intCast((value >> 8) & 0xff),
+        .blue = @intCast(value & 0xff),
+    };
+}

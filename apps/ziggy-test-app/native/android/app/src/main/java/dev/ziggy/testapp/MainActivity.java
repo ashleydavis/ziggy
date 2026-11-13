@@ -2,6 +2,7 @@ package dev.ziggy.testapp;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.os.Bundle;
 import android.webkit.WebView;
 import dev.ziggy.nativeapp.ZiggyNativeApp;
@@ -31,6 +32,12 @@ public final class MainActivity extends Activity {
         if (!nativeApp.onActivityResult(requestCode, resultCode, data)) {
             super.onActivityResult(requestCode, resultCode, data);
         }
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        nativeApp.onConfigurationChanged(configuration);
     }
 
     @Override

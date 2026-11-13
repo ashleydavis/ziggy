@@ -17,6 +17,7 @@ const ui_files = @import("ui-files.zig");
 const services_lib = @import("services.zig");
 const timers_lib = @import("timers.zig");
 const task_queue_types = @import("task-queue.zig").types;
+const theme_lib = @import("theme.zig");
 
 const HandlerServices = services_lib.HandlerServices;
 const Timers = timers_lib.Timers;
@@ -65,6 +66,9 @@ pub const RegisteredApp = struct {
     // Gives the query text the native app appends to the address of the frontend, after the question mark, so the frontend's
     // first render already holds what the app tells it at start-up. Null for an app whose frontend needs no query. See `UiQuery`.
     ui_query: ?UiQuery = null,
+    // The window background colours for each theme, so the window matches the page before the page draws. White and black by
+    // default.
+    backgrounds: theme_lib.Backgrounds = .{},
     // Called once on the main thread when it starts, before any message or task can reach the app, so the app can make what its
     // handlers and tasks need, and configure its log (`HandlerServices.configureLog`) from its command line. An error stops the main
     // thread, after it has released what it made, and the core's start fails with that error. Null for an app with nothing to do then.
@@ -189,6 +193,10 @@ const app_fields = [_]AppField{
         .name = "actions",
         .required = false,
     },
+    .{
+        .name = "backgrounds",
+        .required = false,
+    },
 };
 
 //
@@ -200,6 +208,7 @@ const app_fields = [_]AppField{
 //   .menu             the desktop menu, a []const ziggy.menu.Menu (see menu.zig), checked when the app is built
 //   .actions          optional: the app's actions, a []const ziggy.action.Action (see action.zig), checked when the app is built
 //   .ui_files         the files of the app's bundled frontend
+//   .backgrounds      optional: the window background colours for each theme (see theme.Backgrounds)
 //   .describe_error, .on_task_end, .on_task_event, .on_create, .on_destroy, .ui_query   optional, as RegisteredApp describes them
 //
 // Every field and every handler is checked when the app is built: a field App does not know, a missing one or a handler of the wrong
@@ -220,7 +229,7 @@ pub fn App(comptime definition: anytype) RegisteredApp {
         }
         for (@typeInfo(Definition).@"struct".fields) |field| {
             if (!isAppField(field.name)) {
-                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, actions, ui_files, describe_error, on_task_end, on_task_event, on_create, on_destroy, ui_query.");
+                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, actions, backgrounds, ui_files, describe_error, on_task_end, on_task_event, on_create, on_destroy, ui_query.");
             }
         }
         for (app_fields) |field| {
@@ -247,6 +256,10 @@ pub fn App(comptime definition: anytype) RegisteredApp {
         .on_create = if (@hasField(Definition, "on_create")) definition.on_create else null,
         .on_destroy = if (@hasField(Definition, "on_destroy")) definition.on_destroy else null,
         .ui_query = if (@hasField(Definition, "ui_query")) definition.ui_query else null,
+        .backgrounds = if (@hasField(Definition, "backgrounds")) theme_lib.Backgrounds{
+            .light = definition.backgrounds.light,
+            .dark = definition.backgrounds.dark,
+        } else .{},
         .name = build_options.app_name,
         .title = build_options.app_title,
         .version = build_options.app_version,

@@ -6,4 +6,5 @@ test {
     _ = @import("test/web-socket.test.zig");
     _ = @import("test/proxy.test.zig");
     _ = @import("test/pickers.test.zig");
+    _ = @import("test/theme-notice.test.zig");
 }

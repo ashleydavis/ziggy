@@ -47,7 +47,7 @@ ziggy_platform_start() {
         LOCALAPPDATA="$(windows_native_path "$test_dir/data")" \
         ZIGGY_TEST_APP_CONFIG_DIR="$(windows_native_path "$test_dir/config")" \
         ZIGGY_TEST_APP_STATE_DIR="$(windows_native_path "$test_dir/state")" \
-        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
+        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
     echo "$pgid" > "$test_dir/$WINDOWS_PGID_FILE_NAME"
 }
 
@@ -123,4 +123,43 @@ ziggy_platform_leave_app() {
 
 ziggy_platform_process_alive() {
     ziggy_platform_is_running "$1"
+}
+
+#
+# Succeeds when the desktop's appearance can be read and set in the registry, which the appearance-only scenarios need.
+#
+ziggy_platform_changes_appearance() {
+    reg query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' /v AppsUseLightTheme > /dev/null 2>&1
+}
+
+#
+# Sets the desktop's appearance and keeps the one to put back in the scenario's directory.
+# Usage: ziggy_platform_set_system_theme <test_dir> <light|dark>
+#
+ziggy_platform_set_system_theme() {
+    local test_dir="$1"
+    local theme="$2"
+    if [ ! -f "$test_dir/system-appearance.txt" ]; then
+        local current
+        current="$(reg query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' /v AppsUseLightTheme 2>/dev/null | grep -o '0x[0-9a-fA-F]*' | tail -1)" || return 1
+        printf '%s\n' "$current" > "$test_dir/system-appearance.txt"
+    fi
+    if [ "$theme" = "dark" ]; then
+        reg add 'HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' /v AppsUseLightTheme /t REG_DWORD /d 0 /f > /dev/null || return 1
+    else
+        reg add 'HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' /v AppsUseLightTheme /t REG_DWORD /d 1 /f > /dev/null || return 1
+    fi
+}
+
+#
+# Puts the desktop's appearance back. Usage: ziggy_platform_restore_system_theme <test_dir>
+#
+ziggy_platform_restore_system_theme() {
+    local test_dir="$1"
+    local value
+    value="$(cat "$test_dir/system-appearance.txt")"
+    if ! reg add 'HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' /v AppsUseLightTheme /t REG_DWORD /d "$((value))" /f > /dev/null; then
+        echo "could not set the desktop's appearance back to $value" >&2
+        return 1
+    fi
 }

@@ -56,6 +56,8 @@ const Bridge = struct {
     quit_method: c.jmethodID,
     // ZiggyNativeCalls.keepAlive(boolean).
     keep_alive_method: c.jmethodID,
+    // ZiggyNativeCalls.theme(byte[]).
+    theme_method: c.jmethodID,
     // ZiggyNativeCalls.pickPaths(int, String, String, long).
     pick_paths_method: c.jmethodID,
     // ZiggyNativeCalls.nativeCall(byte[], byte[], long).
@@ -264,6 +266,10 @@ const CreateArguments = struct {
     // The remote control server's address, "host:port", from the ziggy.remoteControl extra, or null when the app was started
     // without it.
     remote_control: c.jstring,
+    // The theme setting from the ziggy.theme extra, or null when it is absent.
+    theme: c.jstring,
+    // The system's theme, a ZIGGY_THEME_ value.
+    system_theme: i32,
 };
 
 //
@@ -297,6 +303,9 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
     bridge.keep_alive_method = envTable(env).GetMethodID.?(env, native_calls_class, "keepAlive", "(Z)V") orelse {
         return error.JavaException;
     };
+    bridge.theme_method = envTable(env).GetMethodID.?(env, native_calls_class, "theme", "([B)V") orelse {
+        return error.JavaException;
+    };
     bridge.pick_paths_method = envTable(env).GetMethodID.?(env, native_calls_class, "pickPaths", "(ILjava/lang/String;Ljava/lang/String;J)V") orelse {
         return error.JavaException;
     };
@@ -320,6 +329,17 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
     defer allocator.free(data_dir);
     const remote_control = try dupeJavaString(env, allocator, arguments.remote_control);
     defer if (remote_control) |address| allocator.free(address);
+    const theme = try dupeJavaString(env, allocator, arguments.theme);
+    defer if (theme) |value| allocator.free(value);
+    var theme_args: [2][*:0]const u8 = undefined;
+    var arg_count: u32 = 0;
+    var args_pointer: ?[*]const [*:0]const u8 = null;
+    if (theme) |value| {
+        theme_args[0] = "--theme";
+        theme_args[1] = value.ptr;
+        arg_count = 2;
+        args_pointer = &theme_args;
+    }
 
     var pipe: [2]std.posix.fd_t = undefined;
     if (std.c.pipe2(&pipe, .{
@@ -353,9 +373,10 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
         .data_dir = data_dir.ptr,
         .test_mode = remote_control != null,
         .remote_control = if (remote_control) |address| address.ptr else null,
-        // A phone app has no command line.
-        .arg_count = 0,
-        .args = null,
+        // A phone app has no command line, other than the theme extra, which is passed as --theme.
+        .arg_count = arg_count,
+        .args = args_pointer,
+        .system_theme = arguments.system_theme,
     };
     bridge.main_queue = try std.heap.page_allocator.create(MessageQueue);
     errdefer std.heap.page_allocator.destroy(bridge.main_queue);
@@ -434,6 +455,20 @@ fn doCall(env: *c.JNIEnv, bridge: *Bridge, arena: std.mem.Allocator, call: nativ
             };
             envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.keep_alive_method, &arguments);
             failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.keepAlive threw");
+        },
+        .theme => |theme_call| {
+            const text = native_message.encode(arena, .{
+                .theme = theme_call,
+            }, null) catch @panic("Ziggy JNI: out of memory encoding the theme call");
+            const array = newJavaBytes(env, text, "Ziggy JNI: could not copy the theme call into a byte array");
+            defer envTable(env).DeleteLocalRef.?(env, array);
+            var arguments = [1]c.jvalue{
+                .{
+                    .l = array,
+                },
+            };
+            envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.theme_method, &arguments);
+            failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.theme threw");
         },
         .menu_action => |action| {
             const message = std.json.Stringify.valueAlloc(arena, .{
@@ -544,6 +579,8 @@ pub fn exportJni(comptime app: core.RegisteredApp) void {
             app_url_prefix: c.jstring,
             data_dir: c.jstring,
             remote_control: c.jstring,
+            theme_setting: c.jstring,
+            system_theme: c.jint,
         ) callconv(.c) c.jlong {
             _ = class;
             const bridge = createBridge(env, .{
@@ -553,6 +590,8 @@ pub fn exportJni(comptime app: core.RegisteredApp) void {
                 .app_url_prefix = app_url_prefix,
                 .data_dir = data_dir,
                 .remote_control = remote_control,
+                .theme = theme_setting,
+                .system_theme = @intCast(system_theme),
             }, app) catch |err| {
                 if (err != error.JavaException) {
                     var buffer: [128]u8 = undefined;
@@ -719,6 +758,22 @@ pub fn exportJni(comptime app: core.RegisteredApp) void {
         }
 
         //
+        // The theme as the JSON text of a "theme" call, as UTF-8 bytes, or null with a Java exception pending when the core could not
+        // make it. Called on the main thread.
+        //
+        fn theme(env: *c.JNIEnv, class: c.jclass, handle: c.jlong) callconv(.c) c.jbyteArray {
+            _ = class;
+            const bridge: *Bridge = @ptrFromInt(@as(usize, @intCast(handle)));
+            const allocator = ui_allocator.allocator();
+            const text = core.theme(allocator, bridge.main_queue) catch |err| {
+                throwJava(env, "java/lang/IllegalStateException", @errorName(err));
+                return null;
+            };
+            defer allocator.free(text);
+            return newJavaBytes(env, text, "Ziggy JNI: could not copy the theme into a byte array");
+        }
+
+        //
         // Gives the bytes of a file of the bundled frontend, or null when the frontend has no such file.
         //
         fn uiFileContent(env: *c.JNIEnv, class: c.jclass, path: c.jbyteArray) callconv(.c) c.jbyteArray {
@@ -777,6 +832,9 @@ pub fn exportJni(comptime app: core.RegisteredApp) void {
     });
     @export(&Exports.uiQuery, .{
         .name = "Java_dev_ziggy_nativeapp_ZiggyNative_uiQuery",
+    });
+    @export(&Exports.theme, .{
+        .name = "Java_dev_ziggy_nativeapp_ZiggyNative_theme",
     });
     @export(&Exports.uiFileContent, .{
         .name = "Java_dev_ziggy_nativeapp_ZiggyNative_uiFileContent",

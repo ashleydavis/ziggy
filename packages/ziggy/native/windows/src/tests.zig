@@ -9,4 +9,5 @@ test {
     _ = @import("test/actions.test.zig");
     _ = @import("test/menu.test.zig");
     _ = @import("test/pickers.test.zig");
+    _ = @import("test/system-theme.test.zig");
 }

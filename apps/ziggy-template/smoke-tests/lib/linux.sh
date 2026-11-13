@@ -44,7 +44,7 @@ ziggy_platform_start() {
         XDG_DATA_HOME="$test_dir/data" \
         ZIGGY_TEMPLATE_CONFIG_DIR="$test_dir/config" \
         ZIGGY_TEMPLATE_STATE_DIR="$test_dir/state" \
-        xvfb-run -a -s "-screen 0 1280x1024x24" "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"}) || return 1
+        xvfb-run -a -s "-screen 0 1280x1024x24" "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
     echo "$pgid" > "$test_dir/$LINUX_PGID_FILE_NAME"
 }
 
