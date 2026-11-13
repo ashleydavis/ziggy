@@ -106,7 +106,7 @@ ziggy_platform_print_stacks() {
 }
 
 #
-# Succeeds when the desktop's appearance can be set with System Events, which the appearance-only scenarios need.
+# Succeeds when the desktop's appearance can be set with System Events, which the workflows-only scenarios need.
 #
 ziggy_platform_changes_appearance() {
     command -v osascript > /dev/null 2>&1

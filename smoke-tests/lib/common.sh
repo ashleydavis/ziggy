@@ -17,8 +17,9 @@
 #       last run left, instead of fresh data, and on a phone on the same device and the same install.
 #
 #   ziggy_platform_changes_appearance   (Linux, Windows, macOS, Android and the iOS simulator)
-#       Succeeds when the platform can change the system's appearance, so the appearance-only scenarios run there. A connected iPhone
-#       or iPad cannot, and ios-device.sh defines it returning non-zero.
+#       Succeeds when the platform can change the system's appearance, so the workflows-only scenarios can run there. A connected
+#       iPhone or iPad cannot, and ios-device.sh defines it returning non-zero. Those scenarios change a desktop's appearance, so the
+#       runner lists them only in the workflow, or when one is named.
 #
 #   ziggy_platform_set_system_theme <test_dir> <light|dark>
 #       Changes the system's appearance, keeping the appearance to put back in <test_dir>/system-appearance.txt on its first call.

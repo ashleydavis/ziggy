@@ -50,6 +50,22 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mob
 - `29-config-files`: a config file with a bad line is reported by its line, the app runs on its defaults and the file is left alone; an unreadable state file is logged and the app starts with an empty state; a write keeps the file's comment and its other key; and a menu item's Zig function reads the config file.
 
 
+The scenarios in `workflows-only` change the system's appearance, which on a desktop is the developer's own screen. They run only in the workflow, and locally only when named with `ZIGGY_SMOKE_SCENARIO` or the runner's second argument, so an unfiltered local run never changes it:
+
+- `30-system-theme`: with the setting `system`, a change of the system's appearance reaches the page while the app stays in front. It puts the appearance it found back at the end. A connected iPhone or iPad cannot change its appearance, and the scenario exits with the skipped code.
+
+To run it locally:
+
+```
+ZIGGY_SMOKE_SCENARIO=30-system-theme bun run test:smoke
+```
+
+To run every scenario, including the `workflows-only` ones, set `CI`, which is how the workflow runs them. This changes the desktop's appearance while the run lasts and puts it back at the end:
+
+```
+CI=true bun run test:smoke
+```
+
 Toggle Full Screen is not smoke tested. The Linux suite runs on a virtual display with no window manager, and nothing honours a request for full screen there, so there is nothing to see change.
 
 ## Building on Android

@@ -84,8 +84,12 @@ list_scenarios() {
         esac
         case "$PLATFORM" in
             linux|windows|macos|android|ios)
-                if ziggy_platform_changes_appearance; then
-                    ls -d "$SMOKE_DIR"/appearance-only/[0-9]*
+                # These change the system's appearance, which on a desktop is the developer's own screen. They run in the
+                # workflow, and locally only when named with ZIGGY_SMOKE_SCENARIO or as the runner's second argument.
+                if [ -n "${CI:-}" ] || [ -n "$SCENARIO_FILTER" ]; then
+                    if ziggy_platform_changes_appearance; then
+                        ls -d "$SMOKE_DIR"/workflows-only/[0-9]*
+                    fi
                 fi
                 ;;
         esac
