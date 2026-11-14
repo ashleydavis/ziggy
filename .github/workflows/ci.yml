@@ -1082,8 +1082,10 @@ jobs:
       - name: Install the web view's runtime libraries and the display tools (Linux)
         uses: ./.github/actions/install-apt-packages
         with:
-          packages: libgtk-3-0 libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good gstreamer1.0-libav xvfb x11-utils
-          verify: Xvfb xvfb-run xwininfo
+          # The Linux app reads the system theme from the desktop portal over the session bus, and the theme scenarios change it
+          # with gsettings, so the job needs a session bus, the portal, its GTK backend (which implements Settings) and dconf.
+          packages: libgtk-3-0 libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good gstreamer1.0-libav xvfb x11-utils dbus-daemon xdg-desktop-portal xdg-desktop-portal-gtk dconf-service gsettings-desktop-schemas
+          verify: Xvfb xvfb-run xwininfo dbus-run-session gsettings
 
       - name: Install dependencies
         uses: ./.github/actions/retry-install
@@ -1115,10 +1117,15 @@ jobs:
       # A step that hits its own timeout fails normally and keeps its log, so a hang shows up in the log.
       # Each smoke step is capped at 20 minutes, a little above the slowest passing one (iOS, about 18): the dev mode step of the
       # Windows smoke job of CI run 40484807194 hung for over 30 minutes after it passed in 5 in the Release run of the same commit.
+      # Run inside a session bus, as on a desktop. With none, the app's portal proxy took 25 seconds at every start before it
+      # failed (the gap between SPLASH-EVENT started and app-started), which ran the step out of time, and the theme scenarios
+      # had no portal. XDG_CURRENT_DESKTOP=GNOME makes the portal use the GTK backend, which gtk.portal limits to GNOME.
       - name: Run the smoke tests (desktop)
         timeout-minutes: 20
         shell: bash
-        run: bun run test:smoke
+        env:
+          XDG_CURRENT_DESKTOP: GNOME
+        run: dbus-run-session -- bun run test:smoke
 
   smoke-tests-windows:
     # The test app's smoke tests on every platform, driving the build app-build made through the remote control server: Linux on a
