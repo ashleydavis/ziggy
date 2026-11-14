@@ -171,6 +171,7 @@ pub extern fn gdk_seat_get_keyboard(seat: *GdkSeat) ?*GdkDevice;
 
 pub extern fn gtk_main_do_event(event: *GdkEvent) void;
 pub extern fn gtk_window_is_active(window: *GtkWindow) gboolean;
+pub extern fn gtk_widget_grab_focus(widget: *GtkWidget) void;
 
 pub extern fn g_strdup(text: [*:0]const u8) [*:0]u8;
 
