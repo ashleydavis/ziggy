@@ -338,7 +338,9 @@ final class ZiggyMenu: NSObject {
             }
             window.performClose(nil)
         case "quit":
-            bridge?.quit()
+            // bridge is unwrapped by the guard at the top of this method. The New Window change wrote "bridge?.quit()" here,
+            // which failed CI's app-build-macos with "cannot use optional chaining on non-optional value of type 'ZiggyBridge'".
+            bridge.quit()
         case "reload":
             webView.reload()
         case "toggle-devtools":
