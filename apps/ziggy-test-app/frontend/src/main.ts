@@ -571,11 +571,22 @@ function sayFromAction(): void {
 }
 
 //
+// The handler of the test app's action new-window: opens another window at the size its action gives it, and writes why when it does
+// not open.
+//
+function openNewWindow(): Promise<void> {
+    return window.ziggy.newWindow(["-geometry=640x480"]).catch((error: Error) => {
+        element("action-result").textContent = `the new window did not open: ${error.message}`;
+    });
+}
+
+//
 // Registers the handler of say-action, has the "Run the say action" button run it by name, and has the "List the actions" button
 // show every action listActions gives.
 //
 function startActions(): void {
     window.ziggy.registerAction("say-action", sayFromAction);
+    window.ziggy.registerAction("new-window", openNewWindow);
     element("run-say-action").addEventListener("click", () => {
         window.ziggy.runAction("say-action").catch((error: Error) => {
             element("action-result").textContent = `the action did not run: ${error.message}`;

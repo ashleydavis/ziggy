@@ -530,6 +530,86 @@ test "a list-actions message on a phone answers no shortcuts" {
         "{\"name\":\"shortcut-only\",\"label\":\"Shortcut Only\",\"shortcut\":null},{\"name\":\"quit\",\"label\":\"Quit\",\"shortcut\":null}]}");
 }
 
+//
+// Describes a thrown error with the message it recorded, as an app whose errors carry a reason does.
+//
+fn describeThrownError(err: anyerror) ?[]const u8 {
+    if (err == error.Thrown) {
+        return ziggy.utils.errors.errorMessage(err);
+    }
+    return null;
+}
+
+test "a new-window message sends the native app the call with its arguments and responds with an empty object" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[\"-geometry=640x480\"]}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    const call = try native_app.lastCall(std.testing.io, std.testing.allocator, "new-window");
+    defer if (call) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"type\":\"new-window\",\"callId\":0,\"arguments\":[\"-geometry=640x480\"]}", call.?);
+}
+
+test "a new-window answer that is not a process id fails with the text the native app gave" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var described_app = test_app.app;
+    described_app.describe_error = describeThrownError;
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.setResult(std.testing.io, std.testing.allocator, "new-window", true, "0");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[]}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"The native app answered new-window with 0\"}");
+    native_app.setResult(std.testing.io, std.testing.allocator, "new-window", true, "x");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":2,\"name\":\"new-window\",\"data\":{\"arguments\":[]}}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":false,\"error\":\"The native app answered new-window with x\"}");
+}
+
+test "a failed new-window call fails with the native app's reason" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var described_app = test_app.app;
+    described_app.describe_error = describeThrownError;
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    native_app.setResult(std.testing.io, std.testing.allocator, "new-window", false, "StartFailed");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[]}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"A new window could not start: StartFailed\"}");
+}
+
+test "a new-window message to a native app without the call fails with NewWindowUnavailable and sends no call" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var config = native_app.config(1, 1);
+    config.has_new_window = false;
+    try native_app.start(std.testing.io, std.testing.allocator, config, test_app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[]}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"NewWindowUnavailable\"}");
+    const call = try native_app.lastCall(std.testing.io, std.testing.allocator, "new-window");
+    defer if (call) |text| std.testing.allocator.free(text);
+    try std.testing.expect(call == null);
+}
+
+test "a new-window argument of --remote-control fails with RemoteControlArgument and sends no call" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[\"--remote-control\",\"127.0.0.1:1\"]}}");
+    try expectLastMessage(&native_app, "{\"id\":1,\"ok\":false,\"error\":\"RemoteControlArgument\"}");
+    const call = try native_app.lastCall(std.testing.io, std.testing.allocator, "new-window");
+    defer if (call) |text| std.testing.allocator.free(text);
+    try std.testing.expect(call == null);
+}
+
 test "a handler's services.runAction sends the frontend the action system event" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();

@@ -39,6 +39,16 @@ Every other command goes to the frontend as a `test-command` event, which the fr
 
 `32-external-links` checks that a link to an outside page reaches the system on every platform. On Linux it first runs with every URL handler hidden (`XDG_DATA_DIRS` narrowed and no session bus) and checks that the failed open reaches the app's log, then starts the app with a URL handler of the scenario's own, found through `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, which records each address the system is asked to open. On Android it reads the activity starts from the device log. Two of its links open 6 s after the click, so no user gesture is behind them. On Windows, macOS and iOS, where no hook reports the open, it checks that the app is still running five seconds after each open and, on Windows and macOS, that the frontend still holds its marker.
 
+### Several windows
+
+Each app started with the same `--remote-control` address is a window of its own, numbered from 1 in the order it connects. A closed window's number goes to the next app that connects once the server has seen the closed window's connection end.
+
+A command goes to window `<n>` with `"window": <n>` added to its JSON object, and to window 1 without it. A command for a window that has not connected yet waits for it, so a test sends the command straight after starting the app. A `window` that is not a whole number from 1 to the server's window limit (`WINDOW_COUNT_MAX` in `tools/remote-control-server/src/lib/remote-control-server.ts`) gets `InvalidWindow`.
+
+A scenario that restarts the app starts a new remote control server for it, so the restarted app is window 1. The test app's `restart_test_app` does this.
+
+The Linux smoke library starts Xvfb on its own, in a process group apart from the app's, so the display outlives window 1 and every other window keeps its display. On Windows the smoke library ends each window by the process id the app's log records, in the `Started a new window, process <pid>.` line and in the window's own log file name.
+
 ## See also
 
 - [Scripts](scripts.md): the scripts that run the tests.

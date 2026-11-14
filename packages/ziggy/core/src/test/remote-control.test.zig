@@ -553,6 +553,24 @@ test "the screenshot command on a native app with no screenshot callback reports
     try std.testing.expectEqualStrings("{\"error\":\"NativeCallMissing\"}", client.response.?);
 }
 
+test "a new-window message under remote control passes the connection's address to the new window" {
+    var server: RemoteControlServer = undefined;
+    try server.start();
+    defer server.stop();
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try startControlledCore(&native_app, &server);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[\"a\"]}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    const call = try native_app.lastCall(std.testing.io, std.testing.allocator, "new-window");
+    defer if (call) |text| std.testing.allocator.free(text);
+    const expected = try std.fmt.allocPrint(std.testing.allocator, "{{\"type\":\"new-window\",\"callId\":0,\"arguments\":[\"a\",\"--remote-control\",\"{s}\"]}}", .{std.mem.span(server.address())});
+    defer std.testing.allocator.free(expected);
+    try std.testing.expectEqualStrings(expected, call.?);
+}
+
 //
 // Sends one line to the core's remote control connection and returns its reply, allocated with the testing allocator.
 //

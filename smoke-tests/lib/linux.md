@@ -1,11 +1,5 @@
 # linux.sh
 
-The Linux platform library of the smoke tests: it builds the app, starts it on a virtual display with `--remote-control` and, when
-`ZIGGY_THEME` is set, `--theme`, and stops it. It also changes the desktop's colour scheme with `gsettings` for the workflows-only
-scenarios, putting the value it found back. Those scenarios run only in the workflow, or when one is named. `common.sh` sources it. See [run.md](../run.md) for the runner and the scenarios.
+The Linux platform library of the smoke tests: it builds the app, starts it on a virtual display with `--remote-control` and, when `ZIGGY_THEME` is set, `--theme`, and stops it. The display runs in a process group of its own, apart from the app's, so it outlives window 1 and every other window keeps its display. It also changes the desktop's colour scheme with `gsettings` for the workflows-only scenarios, putting the value it found back. Those scenarios run only in the workflow, or when one is named. `common.sh` sources it. See [run.md](../run.md) for the runner and the scenarios.
 
-It starts the app with its own `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `ZIGGY_TEST_APP_CONFIG_DIR` and `ZIGGY_TEST_APP_STATE_DIR`, so a
-value of the developer's own never reaches it. A scenario that hides the URL handlers first (`ziggy_platform_hide_url_handlers`)
-also gets `XDG_DATA_DIRS` and a `DBUS_SESSION_BUS_ADDRESS` that reaches no bus. `ziggy_platform_watch_opened_urls` installs a URL
-handler of the scenario's own that records each address the system is asked to open, `ziggy_platform_opened_urls` prints those
-addresses and `ziggy_platform_wait_app_log` waits for a line in the app's log.
+It starts the app with its own `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, `ZIGGY_TEST_APP_CONFIG_DIR` and `ZIGGY_TEST_APP_STATE_DIR`, so a value of the developer's own never reaches it. A scenario that hides the URL handlers first (`ziggy_platform_hide_url_handlers`) also gets `XDG_DATA_DIRS` and a `DBUS_SESSION_BUS_ADDRESS` that reaches no bus. `ziggy_platform_watch_opened_urls` installs a URL handler of the scenario's own that records each address the system is asked to open, `ziggy_platform_opened_urls` prints those addresses and `ziggy_platform_wait_app_log` waits for a line in the app's log. `ziggy_platform_quit_ends_every_window` succeeds here, where Quit ends every window of the app, and `ziggy_platform_os_process_alive` checks a process id directly.

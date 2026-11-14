@@ -36,10 +36,31 @@ const rule_line = "=" ** 80;
 const log_start_marker = "--- Log Start ---";
 
 //
+// The Windows API functions this file calls that std.os.windows does not declare.
+//
+const kernel32 = struct {
+    // Gets the id of the calling process.
+    extern "kernel32" fn GetCurrentProcessId() callconv(.winapi) std.os.windows.DWORD;
+};
+
+//
+// This process's id. Both file names carry it, so two windows started in the same second write their own files.
+//
+fn process_id() u64 {
+    const id: u64 = switch (builtin.os.tag) {
+        .windows => kernel32.GetCurrentProcessId(),
+        .macos, .ios => @intCast(std.c.getpid()),
+        else => @intCast(std.os.linux.getpid()),
+    };
+    std.debug.assert(id > 0);
+    return id;
+}
+
+//
 // How a program configures its file log.
 //
 pub const IFileLogConfig = struct {
-    // The start of both file names: <file_prefix>-<start time>.log and <file_prefix>-<start time>-errors.log.
+    // The start of both file names: <file_prefix>-<start time>-<pid>.log and <file_prefix>-<start time>-<pid>-errors.log.
     file_prefix: []const u8,
     // The first line of the log file's header. The error file's is this followed by " (errors)".
     title: []const u8,
@@ -81,6 +102,9 @@ pub const FileLog = struct {
     // the caller passes `ilog()` to whatever logs to it. The log and its paths are allocated with the allocator, which stop frees them
     // with.
     //
+    // Both names carry this process's id, because two windows started in the same second are two processes that write and truncate
+    // their own files.
+    //
     pub fn start(allocator: std.mem.Allocator, io: std.Io, config: IFileLogConfig) !*FileLog {
         const start_ms = std.Io.Clock.real.now(io).toMilliseconds();
         try std.Io.Dir.cwd().createDirPath(io, config.logs_dir);
@@ -91,9 +115,10 @@ pub const FileLog = struct {
         const file_timestamp = try arena.dupe(u8, start_iso[0..19]);
         std.mem.replaceScalar(u8, file_timestamp, ':', '-');
         std.mem.replaceScalar(u8, file_timestamp, '.', '-');
-        const log_file = try std.fs.path.join(allocator, &.{ config.logs_dir, try std.mem.concat(arena, u8, &.{ config.file_prefix, "-", file_timestamp, ".log" }) });
+        const pid_text = try std.fmt.allocPrint(arena, "{d}", .{process_id()});
+        const log_file = try std.fs.path.join(allocator, &.{ config.logs_dir, try std.mem.concat(arena, u8, &.{ config.file_prefix, "-", file_timestamp, "-", pid_text, ".log" }) });
         errdefer allocator.free(log_file);
-        const error_log_file = try std.fs.path.join(allocator, &.{ config.logs_dir, try std.mem.concat(arena, u8, &.{ config.file_prefix, "-", file_timestamp, "-errors.log" }) });
+        const error_log_file = try std.fs.path.join(allocator, &.{ config.logs_dir, try std.mem.concat(arena, u8, &.{ config.file_prefix, "-", file_timestamp, "-", pid_text, "-errors.log" }) });
         errdefer allocator.free(error_log_file);
         const logger = try allocator.create(FileLog);
         errdefer allocator.destroy(logger);

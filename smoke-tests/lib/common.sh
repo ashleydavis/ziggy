@@ -13,8 +13,9 @@
 #       or without it when ZIGGY_REMOTE_CONTROL is empty, and with --theme "$ZIGGY_THEME" (the ziggy.theme extra on Android) when
 #       ZIGGY_THEME is set to "light", "dark" or "system",
 #       recording what it started through launch_in_process_group. The app connects to the remote control server that
-#       start_test_app started. Returns non-zero when the app did not start. With keep-data it starts the app again on the data the
-#       last run left, instead of fresh data, and on a phone on the same device and the same install.
+#       start_test_app, or restart_test_app for a restart, started. Returns non-zero when the app did not start. With keep-data it
+#       starts the app again on the data the last run left, instead of fresh data, and on a phone on the same device and the same
+#       install.
 #
 #   ziggy_platform_changes_appearance   (Linux, Windows, macOS, Android and the iOS simulator)
 #       Succeeds when the platform can change the system's appearance, so the workflows-only scenarios can run there. A connected
@@ -41,6 +42,12 @@
 #
 #   ziggy_platform_process_alive <test_dir>
 #       Succeeds when the app's process is running, whether or not its window or activity is in sight.
+#
+#   ziggy_platform_quit_ends_every_window
+#       Succeeds when Quit ends every window of the app: on Linux and macOS, where each window's own Quit does, and not on Windows.
+#
+#   ziggy_platform_os_process_alive <pid>
+#       Succeeds when a process with the id is running, whether or not it is one of the app's. A zombie answers it too.
 #
 #   ziggy_platform_data_dir <test_dir>
 #       Prints the directory the app uses for its private data in this scenario, when the host can read it, or nothing.
@@ -162,9 +169,15 @@ start_test_app() {
 # Stops the app and starts it again on the data it kept, then opens the control connection to the new run. A scenario uses it to
 # check what survives a restart.
 #
+# It starts a new remote control server for the new run, because the old server frees window 1 only once it has seen the old
+# app's connection end, and no event orders that before the new app connects. A new server holds no app, so the new app is
+# window 1.
+#
 restart_test_app() {
     exec 3>&-
     ziggy_platform_stop "$ZIGGY_TEST_DIR" keep-device || fail "the app did not stop cleanly before it was started again"
+    stop_remote_control_server
+    start_remote_control_server
     ziggy_platform_start "$ZIGGY_TEST_DIR" keep-data || fail "the app did not start again"
     open_control_connection
     wait_for_ready
@@ -217,13 +230,39 @@ control() {
 }
 
 #
-# Waits until the frontend replies to commands, which means it has loaded and the bridge works.
+# Sends one command line on the control connection with a window added, and prints the reply line. Usage: window_control <window> <json>
+#
+# The window goes in as a JSON number, so a command reaches a window other than 1. Called inside $( ), where a fail exits only
+# that subshell, so its control call ends with `|| exit 1` and every caller ends the scenario with `|| exit 1` too, so a jq
+# failure or a dead connection ends the scenario instead of being swallowed.
+#
+window_control() {
+    local command
+    command="$(printf '%s' "$2" | jq -c --argjson window "$1" '. + {window: $window}')" || fail "could not add window $1 to the command: $2"
+    control "$command" || exit 1
+}
+
+#
+# Waits until the frontend replies to commands, which means it has loaded and the bridge works. Usage: wait_for_ready [window]
+#
+# The server holds a line for a window that is not connected until it connects, so this also waits for that window's app to
+# connect. With a window it gives up when the server answers AppNotConnected, because that window has had the server's whole
+# wait to connect. A window that never connects fails the scenario either here or in control, when control's read times out
+# before the server's reply arrives, and both failures name the command.
 #
 wait_for_ready() {
+    local window="${1:-}"
     local waited=0
     local answer
     while [ "$waited" -lt "$WAIT_TIMEOUT_SECONDS" ]; do
-        answer="$(control '{"command":"ready"}')" || exit 1
+        if [ -n "$window" ]; then
+            answer="$(window_control "$window" '{"command":"ready"}')" || exit 1
+            if [ "$(printf '%s' "$answer" | jq -r '.error')" = "AppNotConnected" ]; then
+                fail "window $window did not connect: $answer"
+            fi
+        else
+            answer="$(control '{"command":"ready"}')" || exit 1
+        fi
         if [ "$(printf '%s' "$answer" | jq -r '.ok')" = "true" ]; then
             return 0
         fi
@@ -231,6 +270,74 @@ wait_for_ready() {
         waited=$((waited + 1))
     done
     fail "the UI never answered a ready command"
+}
+
+#
+# Waits until a process with the id is not running, and fails naming what it was. Usage: wait_for_process_exit <pid> <what>
+#
+wait_for_process_exit() {
+    local pid="$1"
+    local what="$2"
+    local waited=0
+    while ziggy_platform_os_process_alive "$pid"; do
+        if [ "$waited" -ge "$((WAIT_TIMEOUT_SECONDS * 10))" ]; then
+            fail "$what was still running $WAIT_TIMEOUT_SECONDS seconds later"
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+}
+
+#
+# Waits until the log file holds the line the core's file log writes as the window's core stops, and fails with the file's last
+# lines when it never does. Usage: wait_for_log_end <file> <what>
+#
+wait_for_log_end() {
+    local file="$1"
+    local what="$2"
+    local waited=0
+    while ! grep -q -F -- "--- Log End ---" "$file"; do
+        if [ "$waited" -ge "$((WAIT_TIMEOUT_SECONDS * 10))" ]; then
+            tail -n 20 "$file" >&2
+            fail "$what did not end within $WAIT_TIMEOUT_SECONDS seconds"
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+}
+
+#
+# Prints the window log files, the ones that are not the error log files, under the scenario's logs directory, one per line, sorted.
+# Usage: window_log_files <test_dir>
+#
+window_log_files() {
+    local logs_dir
+    logs_dir="$(ziggy_platform_data_dir "$1")/logs"
+    find "$logs_dir" -maxdepth 1 -type f -name "*.log" ! -name "*-errors.log" | sort
+}
+
+#
+# Waits until the log file holds at least the number of "Started a new window, process <pid>." lines, and prints the pid of the
+# nth. Fails with the file's last lines when it never does. Usage: started_window_pid <log file> <n>
+#
+started_window_pid() {
+    local file="$1"
+    local n="$2"
+    local waited=0
+    local pid=""
+    while true; do
+        pid="$(grep -o -- "Started a new window, process [0-9]*" "$file" | sed -n "${n}p" | grep -o "[0-9]*$")"
+        if [ -n "$pid" ]; then
+            printf '%s\n' "$pid"
+            return 0
+        fi
+        if [ "$waited" -ge "$((WAIT_TIMEOUT_SECONDS * 10))" ]; then
+            tail -n 20 "$file" >&2
+            fail "the log never recorded window $n"
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
 }
 
 #

@@ -24,6 +24,7 @@ interface IFakeWindow {
         removeAction: (name: string) => void;
         runAction: (name: string) => Promise<object>;
         listActions: () => Promise<object>;
+        newWindow: (args: string[]) => Promise<object>;
         [listenerCall: string]: any;
     };
     __ziggyReceive?: (message: object) => void;
@@ -538,6 +539,18 @@ describe("ziggy-inject", () => {
         }
     });
 
+    test("newWindow posts the arguments as a system message and resolves with the response", async () => {
+        const posted: string[] = [];
+        const fakeWindow = windowWithWebkit(posted);
+        inject(fakeWindow);
+        const opened = fakeWindow.ziggy!.newWindow(["a", "b"]);
+        expect(posted.map(text => JSON.parse(text))).toEqual([
+            { kind: "system", id: 1, name: "new-window", data: { arguments: ["a", "b"] } },
+        ]);
+        fakeWindow.__ziggyReceive!({ id: 1, ok: true, data: {} });
+        expect(await opened).toEqual({});
+    });
+
     test("it posts through WebView2's handle when that is what the web view has", () => {
         const posted: string[] = [];
         const fakeWindow: IFakeWindow = { chrome: { webview: { postMessage: text => posted.push(text) } } };
@@ -574,6 +587,7 @@ describe("ziggy-inject", () => {
             "invoke",
             "listActions",
             "log",
+            "newWindow",
             "onConfigChanged",
             "onCoreError",
             "onEvent",

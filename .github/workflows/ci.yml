@@ -1083,7 +1083,7 @@ jobs:
         uses: ./.github/actions/install-apt-packages
         with:
           packages: libgtk-3-0 libwebkit2gtk-4.1-0 gstreamer1.0-plugins-good gstreamer1.0-libav xvfb x11-utils
-          verify: xvfb-run xwininfo
+          verify: Xvfb xvfb-run xwininfo
 
       - name: Install dependencies
         uses: ./.github/actions/retry-install

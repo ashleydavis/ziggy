@@ -93,6 +93,7 @@ An app can build its own command palette from this list and run the chosen entry
 
 - **iOS and Android:** no menu and no shortcuts. Actions run only through `runAction`.
 - **Dev mode:** there is no menu, but action shortcuts work in the browser, except those the browser keeps for itself, such as Ctrl+W and Ctrl+T (see [Dev mode](dev-mode.md)).
+- **Linux, Windows and macOS:** the template's File > New Window item runs an action whose handler opens another window of the app (see [New windows](new-windows.md)).
 
 ## Testing actions
 

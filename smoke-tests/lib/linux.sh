@@ -2,7 +2,8 @@
 
 # The Linux platform library of the Ziggy test app's smoke tests. See common.sh for what it implements.
 #
-# The app runs on a virtual display of its own, so a run shows no window and two runs never share a display.
+# The app runs on a virtual display of its own, started here in a process group apart from the app's, so a run shows no window, two
+# runs never share a display and the display outlives the window that started first.
 
 LINUX_SHELL_DIR="$ZIGGY_SMOKE_APP_DIR/native/linux"
 LINUX_EXAMPLE_DIR="$ZIGGY_SMOKE_APP_DIR"
@@ -47,14 +48,31 @@ ziggy_platform_start() {
             DBUS_SESSION_BUS_ADDRESS="unix:path=$test_dir/no-session-bus"
         )
     fi
+    # The display runs on its own, in a group recorded apart from the app's. xvfb-run ends its display as soon as the process it
+    # started exits, which would take every other window with it when window 1 closes.
+    local display_pgid
+    read -r _ display_pgid < <(launch_in_process_group "$test_dir/xvfb.log" bash -c 'exec Xvfb -displayfd 3 -nolisten tcp -screen 0 1280x1024x24 3>"$1"' _ "$test_dir/xvfb.display") || return 1
+    echo "$display_pgid" > "$test_dir/xvfb.pgid"
+    local waited=0
+    while [ ! -s "$test_dir/xvfb.display" ]; do
+        if [ "$waited" -ge "$((WAIT_TIMEOUT_SECONDS * 10))" ]; then
+            tail -n 20 "$test_dir/xvfb.log" >&2
+            return 1
+        fi
+        sleep 0.1
+        waited=$((waited + 1))
+    done
+    local display
+    display="$(cat "$test_dir/xvfb.display")"
     local pgid
     read -r _ pgid < <(launch_in_process_group "$log" env \
+        DISPLAY=":$display" \
         XDG_DATA_HOME="$test_dir/data" \
         XDG_CONFIG_HOME="$test_dir/xdg-config" \
         ZIGGY_TEST_APP_CONFIG_DIR="$test_dir/config" \
         ZIGGY_TEST_APP_STATE_DIR="$test_dir/state" \
         "${optional_env[@]}" \
-        xvfb-run -a -s "-screen 0 1280x1024x24" "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
+        "$app" ${ZIGGY_REMOTE_CONTROL:+--remote-control "$ZIGGY_REMOTE_CONTROL"} ${ZIGGY_THEME:+--theme "$ZIGGY_THEME"}) || return 1
     echo "$pgid" > "$test_dir/$LINUX_PGID_FILE_NAME"
 }
 
@@ -62,6 +80,9 @@ ziggy_platform_stop() {
     local test_dir="$1"
     if [ -f "$test_dir/$LINUX_PGID_FILE_NAME" ]; then
         kill_process_group "$(cat "$test_dir/$LINUX_PGID_FILE_NAME")" || true
+    fi
+    if [ -f "$test_dir/xvfb.pgid" ]; then
+        kill_process_group "$(cat "$test_dir/xvfb.pgid")" || true
     fi
 }
 
@@ -175,6 +196,21 @@ ziggy_platform_leave_app() {
 
 ziggy_platform_process_alive() {
     ziggy_platform_is_running "$1"
+}
+
+#
+# Succeeds: on Linux, Quit ends every window of the app.
+#
+ziggy_platform_quit_ends_every_window() {
+    return 0
+}
+
+#
+# Succeeds when a process with the id is running, whether or not it is one of the app's. A zombie answers it too.
+# Usage: ziggy_platform_os_process_alive <pid>
+#
+ziggy_platform_os_process_alive() {
+    kill -0 "$1" 2>/dev/null
 }
 
 #

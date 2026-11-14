@@ -16,6 +16,13 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 - **The template's `index.html` sets the page's background from `prefers-color-scheme`,** so the first paint has the right colour.
 - **The Android web view must be created with the activity as its context,** which the template's `MainActivity` already does, so the activity's theme sets the page's colour scheme.
 - **New, and optional:** `.backgrounds` on the app's `App`, the window colours each theme is painted in. The default is white and black.
+- **The remote control server holds every app that connects, each as a numbered window.** A command names its window with a `window` field; a command for a window that has not connected waits for it. A smoke test that stops the app and starts it again starts a new remote control server for the new run, as the test app's `restart_test_app` does, so the new app is window 1.
+- **`HandlerServices.VTable` has `new_window`.** Code of the app's that builds its own handler services vtable, such as a test, adds a `new_window` entry.
+- **`window.ziggy` has `newWindow`.** A fake of `IZiggyBridge` in the app's tests adds it.
+- **`ziggy_config` has `has_new_window`.** Native code of the app's own that fills a `ziggy_config` field by field sets it.
+- **Log file names carry the process id: `<name>-<start time>-<pid>.log`.** A test or script of the app's that matches the file name exactly allows for it.
+- **On Linux and macOS, Quit ends every window of the app, and SIGTERM ends a window as its Quit does.** Each window records itself under `windows` in the app's data directory.
+- **New, and optional:** a new window, opened with `window.ziggy.newWindow(arguments)` or `HandlerServices.new_window` (see [New windows](user-guide/new-windows.md)).
 
 ## v0.0.23
 

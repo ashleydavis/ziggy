@@ -1,9 +1,13 @@
 //
-// The remote control server: it listens on two loopback ports and relays between a test script and a Ziggy app started with
-// `--remote-control <host:port>`. The app port is an Express server whose WebSocket endpoint the app connects out to. The
-// script port is a plain TCP server, because a bash script connects with /dev/tcp and speaks in lines. Each line from the
-// script goes to the app as one WebSocket text message, and each text message from the app goes back to the script as one
-// line. The server keeps running when the app goes away, so a scenario that restarts the app keeps the same server.
+// The remote control server: it listens on two loopback ports and relays between a test script and the Ziggy apps started
+// with `--remote-control <host:port>`. The app port is an Express server whose WebSocket endpoint the app connects out to.
+// The script port is a plain TCP server, because a bash script connects with /dev/tcp and speaks in lines. Each line from
+// the script goes to the window its `window` field names, or window 1 when it has none, as one WebSocket text message, and
+// each text message from the app goes back to the script as one line.
+//
+// The server takes many app connections at once and numbers each with the lowest number from 1 that no connected app has,
+// so numbers follow connect order while no window closes. A number is free again once the server has seen that app's
+// connection end. A line for a window that is not connected waits for it, as a line waits for the first app.
 //
 
 import assert from "node:assert";
@@ -33,8 +37,8 @@ export interface IRemoteControlServerOptions {
     scriptPort: number;
 
     //
-    // How long a script line waits for an app to connect before it is answered with AppNotConnected. The app connects only
-    // once it has started, which on a phone or a busy CI machine takes many seconds.
+    // How long a script line waits for the window it names to connect before it is answered with AppNotConnected. A window
+    // connects only once its process has started, which on a phone or a busy CI machine takes many seconds.
     //
     appWaitTimeoutMs: number;
 
@@ -59,7 +63,7 @@ export interface IRemoteControlServer {
     scriptPort: number;
 
     //
-    // Stops listening, ends both connections and resolves once both ports are closed.
+    // Stops listening, ends every app connection and the script connection, and resolves once both ports are closed.
     //
     close(): Promise<void>;
 }
@@ -111,7 +115,7 @@ export type StartError = IPortInUseError | IListenFailedError;
 const LOOPBACK_HOST = "127.0.0.1";
 
 //
-// A script line that came while no app was connected, waiting for one.
+// A script line that came while its window was not connected, waiting for that window's app.
 //
 export interface IWaitingLine {
     //
@@ -120,14 +124,45 @@ export interface IWaitingLine {
     script: Socket;
 
     //
-    // The line, without its newline.
+    // The window the line waits for.
+    //
+    window: number;
+
+    //
+    // The text to send the app, without its newline, with the `window` field taken off.
     //
     text: string;
 
     //
-    // Answers the line with AppNotConnected when no app has connected in time.
+    // The line as the script sent it, which the AppNotConnected error names.
+    //
+    line: string;
+
+    //
+    // Answers the line with AppNotConnected when its window has not connected in time.
     //
     timer: NodeJS.Timeout;
+}
+
+//
+// An app connected to the server, which is one window of the app.
+//
+export interface IConnectedApp {
+    //
+    // The number the server gave the app, which a line names to reach it.
+    //
+    window: number;
+
+    //
+    // The app's connection.
+    //
+    socket: WebSocket;
+
+    //
+    // For each line sent to this app and not yet answered, oldest first, the script connection it came on. The app answers
+    // in order, so each reply goes to the connection at the head.
+    //
+    owed: Socket[];
 }
 
 //
@@ -135,9 +170,9 @@ export interface IWaitingLine {
 //
 export interface IRelayState {
     //
-    // The app's connection, while an app is connected.
+    // The connected apps, by window number.
     //
-    app: WebSocket | undefined;
+    apps: Map<number, IConnectedApp>;
 
     //
     // The script's connection, while a script is connected.
@@ -145,19 +180,13 @@ export interface IRelayState {
     script: Socket | undefined;
 
     //
-    // Lines that came while no app was connected, oldest first.
+    // Lines waiting for a window that is not connected, oldest first.
     //
     waiting: IWaitingLine[];
-
-    //
-    // For each line sent to the app and not yet answered, oldest first, the script connection it came on. The app answers
-    // in order, so each reply goes to the connection at the head.
-    //
-    owed: Socket[];
 }
 
 //
-// The most lines a script may have waiting for the app. A test script sends one command and reads its reply before the
+// The most lines a script may have waiting for a window. A test script sends one command and reads its reply before the
 // next, so more than this means the script is not speaking the protocol.
 //
 const WAITING_LINES_MAX = 1000;
@@ -177,10 +206,9 @@ export async function startRemoteControlServer(options: IRemoteControlServerOpti
         ...options,
     };
     const state: IRelayState = {
-        app: undefined,
+        apps: new Map(),
         script: undefined,
         waiting: [],
-        owed: [],
     };
 
     const httpServer = createHttpServer(express());
@@ -231,9 +259,10 @@ export async function startRemoteControlServer(options: IRemoteControlServerOpti
                 clearTimeout(line.timer);
             }
             state.waiting = [];
-            if (state.app) {
-                state.app.terminate();
+            for (const connected of state.apps.values()) {
+                connected.socket.terminate();
             }
+            state.apps.clear();
             if (state.script) {
                 state.script.destroy();
             }
@@ -313,48 +342,74 @@ export function describeStartError(error: StartError): string {
 }
 
 //
-// Takes an app's connection and sends it every line that was waiting for one. A new app replaces the one before it: an app
-// that restarts connects again, and the server may not yet have seen the old connection end.
+// The lowest number from 1 to WINDOW_COUNT_MAX that no connected app holds, or undefined when every one of them is held.
+// It is generic over the connected app so a test can fill a map with plain values instead of WebSocket connections.
+//
+export function lowestFreeWindow<TApp>(apps: Map<number, TApp>): number | undefined {
+    for (let window = 1; window <= WINDOW_COUNT_MAX; window++) {
+        if (!apps.has(window)) {
+            assert(!apps.has(window), "the window a new app takes is free");
+            return window;
+        }
+    }
+    return undefined;
+}
+
+//
+// Takes an app's connection as the lowest free window and sends it every line that was waiting for that window. Lines
+// waiting for other windows keep their timers. An app beyond WINDOW_COUNT_MAX is turned away, because a test that starts
+// that many apps is starting them in a loop.
 //
 export function acceptApp(state: IRelayState, options: IRemoteControlServerOptions, app: WebSocket): void {
-    const previous = state.app;
-    if (previous) {
-        releaseApp(state, previous);
-        previous.terminate();
+    const window = lowestFreeWindow(state.apps);
+    if (window === undefined) {
+        options.writeError(`More than ${WINDOW_COUNT_MAX} apps connected to the remote control server on port ${options.appPort}, so this one was closed.`);
+        app.terminate();
+        return;
     }
-    assert(state.app === undefined, "the earlier app is forgotten before the new one is taken");
-    state.app = app;
+    assert(!state.apps.has(window), "the window is free before the app is taken");
+    const connected: IConnectedApp = {
+        window,
+        socket: app,
+        owed: [],
+    };
+    state.apps.set(window, connected);
     app.on("message", (data, isBinary) => {
-        receiveReply(state, options, app, data, isBinary);
+        receiveReply(state, options, window, app, data, isBinary);
     });
     app.on("close", () => {
-        releaseApp(state, app);
+        releaseApp(state, window, app);
     });
     app.on("error", error => {
-        options.writeError(`The app's connection to the remote control server on port ${options.appPort} failed: ${error.message}`);
+        options.writeError(`The app's connection to the remote control server on port ${options.appPort} as window ${window} failed: ${error.message}`);
     });
 
-    const waiting = state.waiting;
-    state.waiting = [];
-    for (const line of waiting) {
-        clearTimeout(line.timer);
-        sendToApp(state, app, line.script, line.text);
+    const remaining: IWaitingLine[] = [];
+    for (const line of state.waiting) {
+        if (line.window === window) {
+            clearTimeout(line.timer);
+            sendToApp(connected, line.script, line.text);
+        }
+        else {
+            remaining.push(line);
+        }
     }
-    assert(state.waiting.length === 0, "every waiting line went to the app");
+    state.waiting = remaining;
+    assert(state.apps.has(window), "the app is held under the window it took");
+    assert(state.waiting.every(line => line.window !== window), "no waiting line is for the window that just connected");
 }
 
 //
 // Forgets the app once its connection has ended. Every line it was sent and did not answer gets AppDisconnected, so the
-// script hears at once instead of waiting out its own timeout.
+// script hears at once instead of waiting out its own timeout. Its number is free for the next app.
 //
-export function releaseApp(state: IRelayState, app: WebSocket): void {
-    if (state.app !== app) {
+export function releaseApp(state: IRelayState, window: number, app: WebSocket): void {
+    const connected = state.apps.get(window);
+    if (connected?.socket !== app) {
         return;
     }
-    state.app = undefined;
-    const owed = state.owed;
-    state.owed = [];
-    for (const script of owed) {
+    state.apps.delete(window);
+    for (const script of connected.owed) {
         writeToScript(state, script, '{"ok":false,"error":"AppDisconnected"}');
     }
 }
@@ -362,31 +417,32 @@ export function releaseApp(state: IRelayState, app: WebSocket): void {
 //
 // Sends a line to the app and remembers that its reply goes to the script connection it came on.
 //
-export function sendToApp(state: IRelayState, app: WebSocket, script: Socket, text: string): void {
-    assert(state.app === app, "lines go only to the connected app");
-    state.owed.push(script);
-    app.send(text);
+export function sendToApp(connected: IConnectedApp, script: Socket, text: string): void {
+    assert(!text.includes("\n"), "a line sent to the app holds no newline");
+    connected.owed.push(script);
+    connected.socket.send(text);
 }
 
 //
 // Passes a reply from the app back to the script connection the line it answers came on. A reply whose script has gone is
 // reported and dropped.
 //
-export function receiveReply(state: IRelayState, options: IRemoteControlServerOptions, app: WebSocket, data: RawData, isBinary: boolean): void {
+export function receiveReply(state: IRelayState, options: IRemoteControlServerOptions, window: number, app: WebSocket, data: RawData, isBinary: boolean): void {
+    const connected = state.apps.get(window);
+    assert(connected?.socket === app, "replies come only from a connected app, under its own number");
     if (isBinary) {
         options.writeError("The app sent the remote control server a binary message. It sends text only, so the message was dropped.");
         return;
     }
     const text = data.toString();
-    const script = state.owed.shift();
+    const script = connected.owed.shift();
     if (!script) {
-        options.writeError(`The app sent the remote control server a reply to no line it was sent, so it was dropped: ${text}`);
+        options.writeError(`The app connected as window ${window} sent the remote control server a reply to no line it was sent, so it was dropped: ${text}`);
         return;
     }
     if (!writeToScript(state, script, text)) {
         options.writeError(`The script that sent a line had gone when the app's reply came, so the reply was dropped: ${text}`);
     }
-    assert(state.app === app, "replies come only from the connected app");
 }
 
 //
@@ -450,21 +506,31 @@ export function releaseScript(state: IRelayState, script: Socket): void {
 }
 
 //
-// Sends a line from the script to the app, or, when no app is connected, keeps it until one connects or the wait runs out.
+// Sends a line from the script to the window it names, or, when that window is not connected, keeps it until the window
+// connects or the wait runs out. A line whose `window` no app could ever have is answered at once with InvalidWindow.
 //
 export function receiveLine(state: IRelayState, options: IRemoteControlServerOptions, script: Socket, text: string): void {
-    if (state.app) {
-        sendToApp(state, state.app, script, text);
+    const target = readTarget(text);
+    if (!target.ok) {
+        options.writeError(`The script sent a line whose window is not a whole number from 1 to ${WINDOW_COUNT_MAX}, so it got InvalidWindow: ${text}`);
+        writeToScript(state, script, '{"ok":false,"error":"InvalidWindow"}');
+        return;
+    }
+    const connected = state.apps.get(target.value.window);
+    if (connected) {
+        sendToApp(connected, script, target.value.text);
         return;
     }
     if (state.waiting.length >= WAITING_LINES_MAX) {
-        options.writeError(`The script sent more than ${WAITING_LINES_MAX} lines while no app was connected, so this one was answered at once: ${text}`);
+        options.writeError(`The script sent more than ${WAITING_LINES_MAX} lines for windows that were not connected, so this one was answered at once: ${text}`);
         writeToScript(state, script, '{"ok":false,"error":"AppNotConnected"}');
         return;
     }
     const line: IWaitingLine = {
         script,
-        text,
+        window: target.value.window,
+        text: target.value.text,
+        line: text,
         timer: setTimeout(() => {
             expireLine(state, options, line);
         }, options.appWaitTimeoutMs),
@@ -473,13 +539,14 @@ export function receiveLine(state: IRelayState, options: IRemoteControlServerOpt
 }
 
 //
-// Answers a line no app connected in time for with AppNotConnected.
+// Answers a line whose window did not connect in time with AppNotConnected, naming the window and the line as the script
+// sent it.
 //
 export function expireLine(state: IRelayState, options: IRemoteControlServerOptions, line: IWaitingLine): void {
     const index = state.waiting.indexOf(line);
     assert(index >= 0, "a line that expires is still waiting");
     state.waiting.splice(index, 1);
-    options.writeError(`No app connected to port ${options.appPort} within ${options.appWaitTimeoutMs} ms, so this line got AppNotConnected: ${line.text}`);
+    options.writeError(`No app connected to port ${options.appPort} as window ${line.window} within ${options.appWaitTimeoutMs} ms, so this line got AppNotConnected: ${line.line}`);
     writeToScript(state, line.script, '{"ok":false,"error":"AppNotConnected"}');
 }
 
@@ -492,4 +559,136 @@ export function listeningPort(server: HttpServer | TcpServer): number {
     assert(typeof address !== "string", "the server listens on a TCP port, not a pipe");
     assert(address.port > 0, "a listening server has a port");
     return address.port;
+}
+
+//
+// The most windows a server holds and the highest window number a line may name. A smoke test opens a few windows, so more
+// than this many apps means a test is starting apps in a loop. It limits both the window numbers a line may name and the
+// apps the server holds, so every window number a line can name is one an app can have.
+//
+export const WINDOW_COUNT_MAX = 100;
+
+//
+// The window a script line goes to and the text the app is sent.
+//
+export interface ILineTarget {
+    //
+    // The number of the window the line is for.
+    //
+    window: number;
+
+    //
+    // The text to send the app.
+    //
+    text: string;
+}
+
+//
+// A script line whose `window` is not a whole number from 1 to WINDOW_COUNT_MAX.
+//
+export interface IInvalidWindowError {
+    //
+    // Which error this is.
+    //
+    name: "InvalidWindow";
+
+    //
+    // The line as the script sent it, for the error.
+    //
+    text: string;
+}
+
+//
+// What `JSON.parse` can return: a plain object, a string, a number, a boolean or null. Named so the parsed value is typed
+// without `any`, `unknown` or a cast.
+//
+type JsonValue = object | string | number | boolean | null;
+
+//
+// Reads the window a script line is for and the text to send that app. A line that is not a plain object, or is a plain
+// object with no `window` key, goes to window 1 with its text unchanged, byte for byte, so the app answers it as it does
+// today. A line that names a whole number from 1 to WINDOW_COUNT_MAX goes to that window, with the `window` key taken off.
+// Any other `window` value gets InvalidWindow at once, because no app can ever connect as that window.
+//
+// The text sent for a line that names a window is the parsed value written again, so it can differ from the script's bytes:
+// an integer beyond 2^53 comes out rounded, a number spelling (`1.0`, `1e2`) comes out as `JSON.stringify` writes the
+// number (`1`, `100`), a string escape comes out as `JSON.stringify` writes it, a key given twice comes out once with its
+// last value, a number outside the double range (`1e999`) becomes `Infinity` and is written as `null`, and a key whose name
+// is an integer-like string comes out before the other keys. Taking the key out of the text needs a JSON parser, and
+// `JSON.parse` with `JSON.stringify` is the one the server has. The app's commands read no such value, and no existing
+// script sends a line that names a window.
+//
+export function readTarget(text: string): Result<ILineTarget, IInvalidWindowError> {
+    assert(!text.includes("\n"), "a script line holds no newline");
+    let parsed: JsonValue;
+    try {
+        parsed = JSON.parse(text);
+    }
+    catch {
+        return ok({
+            window: 1,
+            text,
+        });
+    }
+    if (typeof parsed !== "object") {
+        return ok({
+            window: 1,
+            text,
+        });
+    }
+    if (parsed === null) {
+        return ok({
+            window: 1,
+            text,
+        });
+    }
+    if (Array.isArray(parsed)) {
+        return ok({
+            window: 1,
+            text,
+        });
+    }
+    const fields: Map<string, JsonValue> = new Map(Object.entries(parsed));
+    if (!fields.has("window")) {
+        return ok({
+            window: 1,
+            text,
+        });
+    }
+    const windowValue: JsonValue | undefined = fields.get("window");
+    if (typeof windowValue !== "number") {
+        return err({
+            name: "InvalidWindow",
+            text,
+        });
+    }
+    if (!Number.isInteger(windowValue)) {
+        return err({
+            name: "InvalidWindow",
+            text,
+        });
+    }
+    if (windowValue < 1) {
+        return err({
+            name: "InvalidWindow",
+            text,
+        });
+    }
+    if (windowValue > WINDOW_COUNT_MAX) {
+        return err({
+            name: "InvalidWindow",
+            text,
+        });
+    }
+    fields.delete("window");
+    const targetText: string | undefined = JSON.stringify(Object.fromEntries(fields));
+    assert(targetText !== undefined, "a line that names a window has text to send");
+    const target: ILineTarget = {
+        window: windowValue,
+        text: targetText,
+    };
+    assert(Number.isInteger(target.window), "a line's window is a whole number");
+    assert(target.window >= 1, "a line's window is from 1");
+    assert(target.window <= WINDOW_COUNT_MAX, "a line's window is within the count");
+    return ok(target);
 }

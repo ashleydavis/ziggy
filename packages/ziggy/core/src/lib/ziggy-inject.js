@@ -402,6 +402,12 @@
             listActions: function () {
                 return invokeSystem("list-actions", null);
             },
+            // Starts another window of the app with the arguments, and resolves once its process has started.
+            newWindow: function (args) {
+                return invokeSystem("new-window", {
+                    arguments: args,
+                });
+            },
         }),
     });
     Object.defineProperty(window, "__ziggyReceive", { value: receive });

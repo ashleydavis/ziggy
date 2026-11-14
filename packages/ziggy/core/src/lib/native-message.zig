@@ -75,6 +75,9 @@ pub const Call = union(enum) {
     native_call: NativeCall,
     // Write a PNG of the app's window to the file at the path: the result is empty.
     screenshot: []const u8,
+    // Start another window of the app, a process of its own, with these arguments after the program's name: the result is the
+    // new process's id, a number.
+    new_window: []const []const u8,
     // Set the web view's colour scheme and background from the theme. No result.
     theme: ThemeCall,
     // The core's main thread has stopped and sends nothing more. Only the core's own side of the queue reads it (see NativeSide).
@@ -95,6 +98,7 @@ const Wire = struct {
     method: ?[]const u8 = null,
     request: ?[]const u8 = null,
     outputPath: ?[]const u8 = null,
+    arguments: ?[]const []const u8 = null,
     setting: ?[]const u8 = null,
     theme: ?[]const u8 = null,
     background: ?[]const u8 = null,
@@ -123,6 +127,7 @@ pub fn encode(allocator: std.mem.Allocator, call: Call, call_id: ?u64) ![]u8 {
             wire.request = native_call.request;
         },
         .screenshot => |output_path| wire.outputPath = output_path,
+        .new_window => |arguments| wire.arguments = arguments,
         .theme => |theme_call| {
             wire.setting = theme_call.setting;
             wire.theme = theme_call.theme;
@@ -175,6 +180,11 @@ pub fn parse(arena: std.mem.Allocator, text: []const u8) !Call {
     if (std.mem.eql(u8, wire.type, "screenshot")) {
         return .{
             .screenshot = wire.outputPath orelse return error.InvalidCall,
+        };
+    }
+    if (std.mem.eql(u8, wire.type, "new-window")) {
+        return .{
+            .new_window = wire.arguments orelse return error.InvalidCall,
         };
     }
     if (std.mem.eql(u8, wire.type, "theme")) {
@@ -232,6 +242,7 @@ fn typeName(call: Call) []const u8 {
         .pick_paths => "pick-paths",
         .native_call => "native-call",
         .screenshot => "screenshot",
+        .new_window => "new-window",
         .theme => "theme",
         .stopped => "stopped",
     };

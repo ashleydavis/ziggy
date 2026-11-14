@@ -992,6 +992,12 @@ pub const actions: []const ziggy.action.Action = &.{
         .label = "Say From an Action",
         .shortcut = "CmdOrCtrl+5",
     },
+    // Opens another window of the test app, at the size its action gives it.
+    .{
+        .name = "new-window",
+        .label = "New Window",
+        .shortcut = "CmdOrCtrl+Shift+N",
+    },
 };
 
 //
@@ -1001,6 +1007,12 @@ pub const menu: []const ziggy.menu.Menu = &.{
     .{
         .label = "File",
         .items = &.{
+            // Runs the test app's action New Window, whose label and shortcut the item shows.
+            .{
+                .run = .{
+                    .action = "new-window",
+                },
+            },
             .{
                 .label = "Close Window",
                 .shortcut = "CmdOrCtrl+W",

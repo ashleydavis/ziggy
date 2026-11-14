@@ -18,6 +18,8 @@ const ui_files = @import("ui-files.zig");
 const origin_check = @import("origin-check.zig");
 const inject_script = @import("inject-script.zig");
 const native_side_lib = @import("native-side.zig");
+const new_instance = @import("new_instance.zig");
+const app_windows = @import("app_windows.zig");
 const ThreadAllocator = @import("utils").thread_allocator.ThreadAllocator;
 
 const MessageQueue = core.MessageQueue;
@@ -280,6 +282,91 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
         }
 
         //
+        // ziggy_start_instance: starts the running program again, as a process of its own in this process's group, with the
+        // arguments after the program's name, and writes the new process's id. Returns false on Android and iOS, where an app has
+        // one window, and when the process could not start.
+        //
+        fn startInstance(arguments_ptr: [*]const [*:0]const u8, argument_count: usize, process_id: *i64) callconv(.c) bool {
+            var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer arena_state.deinit();
+            const arena = arena_state.allocator();
+            // The single threaded Io has no allocator of its own, and spawn builds the arguments and the environment block with
+            // it, so it gets the arena's.
+            var threaded: std.Io.Threaded = .init_single_threaded;
+            threaded.allocator = arena;
+            defer threaded.deinit();
+            const io = threaded.io();
+            const executable = std.process.executablePathAlloc(io, arena) catch |err| {
+                std.debug.print("ziggy_start_instance failed: {s}\n", .{@errorName(err)});
+                return false;
+            };
+            const arguments = arena.alloc([]const u8, argument_count) catch |err| {
+                std.debug.print("ziggy_start_instance failed: {s}\n", .{@errorName(err)});
+                return false;
+            };
+            for (arguments, 0..) |*argument, index| {
+                argument.* = std.mem.span(arguments_ptr[index]);
+            }
+            const id = new_instance.start_program(io, arena, executable, arguments) catch |err| {
+                std.debug.print("ziggy_start_instance failed: {s}\n", .{@errorName(err)});
+                return false;
+            };
+            process_id.* = @intCast(id);
+            return true;
+        }
+
+        //
+        // ziggy_window_opened: records this process as a window of the app, under the windows directory of the data directory.
+        //
+        fn windowOpened(data_dir_ptr: [*]const u8, data_dir_len: usize) callconv(.c) bool {
+            var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer arena_state.deinit();
+            const arena = arena_state.allocator();
+            var threaded: std.Io.Threaded = .init_single_threaded;
+            threaded.allocator = arena;
+            defer threaded.deinit();
+            app_windows.window_opened(threaded.io(), data_dir_ptr[0..data_dir_len]) catch |err| {
+                std.debug.print("ziggy_window_opened failed: {s}\n", .{@errorName(err)});
+                return false;
+            };
+            return true;
+        }
+
+        //
+        // ziggy_window_closed: removes this process's record as a window of the app.
+        //
+        fn windowClosed(data_dir_ptr: [*]const u8, data_dir_len: usize) callconv(.c) bool {
+            var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer arena_state.deinit();
+            const arena = arena_state.allocator();
+            var threaded: std.Io.Threaded = .init_single_threaded;
+            threaded.allocator = arena;
+            defer threaded.deinit();
+            app_windows.window_closed(threaded.io(), data_dir_ptr[0..data_dir_len]) catch |err| {
+                std.debug.print("ziggy_window_closed failed: {s}\n", .{@errorName(err)});
+                return false;
+            };
+            return true;
+        }
+
+        //
+        // ziggy_end_other_windows: sends SIGTERM to every other window of the app, which each handles as its own quit.
+        //
+        fn endOtherWindows(data_dir_ptr: [*]const u8, data_dir_len: usize) callconv(.c) bool {
+            var arena_state = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+            defer arena_state.deinit();
+            const arena = arena_state.allocator();
+            var threaded: std.Io.Threaded = .init_single_threaded;
+            threaded.allocator = arena;
+            defer threaded.deinit();
+            _ = app_windows.end_other_windows(threaded.io(), arena, data_dir_ptr[0..data_dir_len]) catch |err| {
+                std.debug.print("ziggy_end_other_windows failed: {s}\n", .{@errorName(err)});
+                return false;
+            };
+            return true;
+        }
+
+        //
         // ziggy_ui_query: gives the query of the frontend's address, or null when the app could not make it. The text stays valid until
         // the next call or until the core is destroyed.
         //
@@ -351,6 +438,18 @@ pub fn exportApi(comptime app: core.RegisteredApp) void {
     });
     @export(&Api.filesDropped, .{
         .name = "ziggy_files_dropped",
+    });
+    @export(&Api.startInstance, .{
+        .name = "ziggy_start_instance",
+    });
+    @export(&Api.windowOpened, .{
+        .name = "ziggy_window_opened",
+    });
+    @export(&Api.windowClosed, .{
+        .name = "ziggy_window_closed",
+    });
+    @export(&Api.endOtherWindows, .{
+        .name = "ziggy_end_other_windows",
     });
     @export(&Api.uiQuery, .{
         .name = "ziggy_ui_query",

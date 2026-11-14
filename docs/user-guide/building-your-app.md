@@ -180,7 +180,7 @@ Every app has an `app.zon` beside its `build.zig`, which gives Ziggy the app's d
 
 | Field | Required | What it is for |
 |---|---|---|
-| `name` | Yes | The app's name: its log files are `my-app-<start time>.log`. |
+| `name` | Yes | The app's name: its log files are `my-app-<start time>-<pid>.log` and `my-app-<start time>-<pid>-errors.log`. |
 | `title` | Yes | The app's name as people read it, which heads its log files. |
 | `version` | No | The app's version, which its log files give. A release build writes the release's version here before building. |
 

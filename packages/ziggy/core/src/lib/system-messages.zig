@@ -52,6 +52,11 @@ pub const state = @import("system-messages/state.zig");
 pub const theme = @import("system-messages/theme.zig");
 
 //
+// The system message of new windows (new-window).
+//
+pub const window = @import("system-messages/window.zig");
+
+//
 // The name of every system message the main thread handles, other than those of the remote control connection.
 //
 pub const names = [_][]const u8{
@@ -61,6 +66,7 @@ pub const names = [_][]const u8{
     "menu-action",
     "run-action",
     "list-actions",
+    "new-window",
     "get-dropped-paths",
     "log",
     "get-config",

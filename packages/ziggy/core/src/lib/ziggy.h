@@ -48,6 +48,8 @@ typedef struct ziggy_config {
     bool has_native_call;
     // Whether the native app does "screenshot" calls. Used only by the remote control connection.
     bool has_screenshot;
+    // Whether the native app does "new-window" calls: starts another window of the app.
+    bool has_new_window;
     // The number of worker threads.
     uint32_t worker_threads;
     // The limit on child tasks in flight for any one parent task.
@@ -102,6 +104,9 @@ enum {
     //                                                           the JSON text the method gives, and a failure's reason is in words the user
     //                                                           can act on
     //   {"type":"screenshot","outputPath":"..."}                write a PNG of the app's window to the file; the result is empty
+    //   {"type":"new-window","arguments":["..."]}               start another window of the app as a process of its own with the
+    //                                                           arguments as its command line, usually with ziggy_start_instance; the
+    //                                                           result is the new process's id as a JSON number
     //   {"type":"theme","setting":"system","theme":"dark","background":"#000000"}
     //                                                           set the web view's colour scheme and background from the theme; no result
     // A call that has a result also carries "callId", which the native app ignores.
@@ -240,6 +245,24 @@ bool ziggy_parse_accelerator(const char *text, size_t text_len, ziggy_accelerato
 // of strings, checked on the calling thread: it returns false, after logging why, when a path is not a readable file or the text is
 // not such an array. The core's main thread records the drop, and reads it before any message sent after this returns.
 bool ziggy_files_dropped(void *handle, const char *paths_json, size_t paths_len);
+
+// Starts the running program again, as a process of its own in this process's group, with the arguments after its name, and writes
+// the new process's id. It returns as soon as the process has started. On Linux and macOS the caller reaps the process when it
+// ends. Called on the UI thread. Returns false on Android and iOS and when the process could not start.
+bool ziggy_start_instance(const char *const *arguments, size_t argument_count, int64_t *process_id);
+
+// Records this process as a window of the app, as an empty file named by its process id in the windows directory of the data
+// directory. On Linux and macOS, where Quit ends every window of the app; returns false on Windows, Android and iOS. Called on
+// the UI thread.
+bool ziggy_window_opened(const char *data_dir, size_t data_dir_length);
+
+// Removes this process's record as a window of the app. On Linux and macOS; returns false on Windows, Android and iOS. Called on
+// the UI thread.
+bool ziggy_window_closed(const char *data_dir, size_t data_dir_length);
+
+// Sends SIGTERM to every other window of the app recorded in the data directory's windows directory, which each handles as its
+// own quit. On Linux and macOS; returns false on Windows, Android and iOS. Called on the UI thread.
+bool ziggy_end_other_windows(const char *data_dir, size_t data_dir_length);
 
 // Returns the query of the frontend's address, which the app supplies on the core's main thread, as the text after the question mark
 // (NUL terminated, empty when the app has none), valid until the next call or ziggy_destroy. The native app appends a question mark and this text to the

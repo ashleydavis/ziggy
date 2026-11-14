@@ -738,7 +738,7 @@ test "the observers the test app gives the core tell the UI of each task that en
 // The desktop menu.
 //
 
-test "the menu has the .ui items the UI handles, the zig-event item and the say-action action; toggle-devtools and quit are standard items" {
+test "the menu has the .ui items the UI handles, the zig-event item and the say-action and new-window actions; toggle-devtools and quit are standard items" {
     for ([_][]const u8{ "start-short", "start-long", "start-many", "cancel-long", "about" }) |name| {
         const target = template.app.menu_targets.get(name) orelse return error.MenuItemMissing;
         try std.testing.expect(target == .ui);
@@ -749,7 +749,9 @@ test "the menu has the .ui items the UI handles, the zig-event item and the say-
     }
     const say_action = template.app.menu_targets.get("say-action") orelse return error.MenuItemMissing;
     try std.testing.expect(say_action == .action);
-    try std.testing.expectEqual(@as(usize, 8), template.app.menu_targets.keys().len);
+    const new_window = template.app.menu_targets.get("new-window") orelse return error.MenuItemMissing;
+    try std.testing.expect(new_window == .action);
+    try std.testing.expectEqual(@as(usize, 9), template.app.menu_targets.keys().len);
     for ([_][]const u8{ "toggle-devtools", "quit" }) |action| {
         try std.testing.expect(template.app.menu_targets.get(action) == null);
         var found = false;
