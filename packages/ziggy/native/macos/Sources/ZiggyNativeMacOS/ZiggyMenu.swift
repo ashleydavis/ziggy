@@ -209,8 +209,9 @@ final class ZiggyMenu: NSObject {
 
     // Shows the shortcut after the item's title. The frontend runs the shortcut, so the item carries no key equivalent, which AppKit
     // would match itself.
+    // The text is the shortcut as MacOS shows it, such as "⌘Q", which ziggy_parse_accelerator cannot read. Parsing it here stopped
+    // the app at start ("Quit ZiggyTestApp has a shortcut the core cannot read: ⌘Q") and failed every test of CI's smoke-tests-macos.
     private func apply(accelerator text: String, to item: NSMenuItem) {
-        _ = ZiggyMenu.parseShortcut(text, owner: item.title)
         item.title = item.title + "\t" + text
     }
 
