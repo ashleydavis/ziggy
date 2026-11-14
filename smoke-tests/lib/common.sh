@@ -469,7 +469,9 @@ choose_menu_item() {
 #
 press_key() {
     local line
-    line="$(jq -nc --arg key "$1" '{command: "press-key", key: $key}')"
+    # The key goes to jq on its standard input, not as an argument: given "?" as an argument, the native jq.exe on CI's Windows
+    # runner wrote the line "null" and 34-question-mark-shortcut got InvalidCommand.
+    line="$(printf '%s' "$1" | jq -Rc '{command: "press-key", key: .}')"
     local answer
     answer="$(control "$line")" || exit 1
     if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
