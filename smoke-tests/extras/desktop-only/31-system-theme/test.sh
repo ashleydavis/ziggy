@@ -58,6 +58,8 @@ system_theme() {
     esac
 }
 
+# The scenario is about the setting system, not the light theme every other scenario runs in.
+export ZIGGY_THEME=system
 expected="$(system_theme)" || fail "the operating system's theme could not be read"
 start_test_app
 wait_for_text theme-background "theme background: $expected" 10

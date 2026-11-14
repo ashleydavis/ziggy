@@ -78,6 +78,11 @@ SCENARIO_NAME="$(basename "$(dirname "${BASH_SOURCE[1]}")")"
 source "$ZIGGY_SMOKE_DIR/lib/process-control.sh"
 source "$ZIGGY_SMOKE_DIR/lib/$ZIGGY_SMOKE_PLATFORM.sh"
 
+# Every scenario's app runs in the light theme unless the scenario sets ZIGGY_THEME, or unsets it to use the config file, so no scenario
+# depends on the system's theme. The app reads ZIGGY_THEME from its environment as well as being given --theme, so a window it starts
+# takes the same theme. With the setting system the Linux app connects to the session bus, which with none, as on a CI runner, blocks
+# its start for 25 seconds; only the extras use system.
+export ZIGGY_THEME="${ZIGGY_THEME-light}"
 
 # Seconds the frontend has to show something before a wait gives up.
 WAIT_TIMEOUT_SECONDS=60

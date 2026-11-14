@@ -1160,7 +1160,12 @@ fn mainThread(given: MainStart) void {
             @intFromEnum(types.Theme.dark) => .dark,
             else => break :failed error.UnknownSystemTheme,
         };
-        var setting: theme_lib.Setting = taken_theme.setting orelse .system;
+        // An option on the command line sets the run's setting first, then the environment variable, then the config file.
+        const environment_setting = theme_lib.environmentSetting(utils.process_env.getEnv(theme_lib.environment_variable)) catch |err| {
+            break :failed err;
+        };
+        const given_setting: ?theme_lib.Setting = taken_theme.setting orelse environment_setting;
+        var setting: theme_lib.Setting = given_setting orelse .system;
         if (main_services.config_path) |theme_config_path| {
             const stored = config_state.config.get(?[]const u8, start_arena, io, theme_config_path, "theme") catch |err| blk: {
                 main_services.log.@"error"(std.fmt.allocPrint(start_arena, "The config file's theme could not be read ({s}), so the theme setting is system.", .{@errorName(err)}) catch @panic("out of memory logging the theme"));
@@ -1168,7 +1173,7 @@ fn mainThread(given: MainStart) void {
             };
             if (stored) |value| {
                 if (theme_lib.parseSetting(value)) |parsed| {
-                    if (taken_theme.setting == null) {
+                    if (given_setting == null) {
                         setting = parsed;
                     }
                 } else |_| {

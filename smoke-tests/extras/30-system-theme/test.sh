@@ -5,6 +5,9 @@
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 
+# The scenario is about the setting system, not the light theme every other scenario runs in.
+export ZIGGY_THEME=system
+
 start_test_app
 wait_for_text theme "system"
 

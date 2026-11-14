@@ -60,17 +60,29 @@ pub const TakenTheme = struct {
 };
 
 //
-// Takes --theme and the setting after it out of the argument list, which has no program name. Fails with ThemeValueMissing when
-// --theme is the last argument, ThemeGivenTwice when it is given more than once and UnknownTheme for a value that is not a setting.
-// The caller frees `remaining` with the allocator.
+// Takes the theme options out of the argument list, which has no program name: --theme and the setting after it, or --light, --dark
+// or --system, each short for --theme and that setting. Fails with ThemeValueMissing when --theme is the last argument,
+// ThemeGivenTwice when more than one of them is given and UnknownTheme for a value that is not a setting. The caller frees
+// `remaining` with the allocator.
 //
 pub fn takeArgument(allocator: std.mem.Allocator, arguments: []const []const u8) !TakenTheme {
     var setting: ?Setting = null;
+    var taken: usize = 0;
     var remaining: std.ArrayList([]const u8) = try .initCapacity(allocator, arguments.len);
     errdefer remaining.deinit(allocator);
     var index: usize = 0;
     while (index < arguments.len) : (index += 1) {
         const argument = arguments[index];
+        if (std.mem.startsWith(u8, argument, "--")) {
+            if (parseSetting(argument["--".len..])) |short| {
+                if (setting != null) {
+                    return error.ThemeGivenTwice;
+                }
+                setting = short;
+                taken += 1;
+                continue;
+            } else |_| {}
+        }
         if (!std.mem.eql(u8, argument, "--theme")) {
             remaining.appendAssumeCapacity(argument);
             continue;
@@ -82,16 +94,34 @@ pub fn takeArgument(allocator: std.mem.Allocator, arguments: []const []const u8)
             return error.ThemeGivenTwice;
         }
         setting = try parseSetting(arguments[index + 1]);
+        taken += 2;
         index += 1;
     }
-    std.debug.assert(remaining.items.len <= arguments.len);
-    if (setting != null) {
-        std.debug.assert(remaining.items.len + 2 == arguments.len);
-    }
+    std.debug.assert(remaining.items.len + taken == arguments.len);
     return .{
         .setting = setting,
         .remaining = try remaining.toOwnedSlice(allocator),
     };
+}
+
+//
+// The name of the environment variable that sets the theme setting for a run, as --theme does, when the command line has no theme
+// option.
+//
+pub const environment_variable = "ZIGGY_THEME";
+
+//
+// The setting the environment variable's value gives, or null when it is not set or empty. Fails with UnknownTheme for a value that
+// is not a setting.
+//
+pub fn environmentSetting(value: ?[]const u8) !?Setting {
+    const given = value orelse {
+        return null;
+    };
+    if (given.len == 0) {
+        return null;
+    }
+    return try parseSetting(given);
 }
 
 //
