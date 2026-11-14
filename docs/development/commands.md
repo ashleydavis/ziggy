@@ -22,7 +22,7 @@ Run from the root of Ziggy's repository.
 | `bun run <command>:ziggy-template:<platform>` | Runs the template's `<command>:<platform>`, for `sync`, `build`, `run`, `open`, `package` and `clean`. |
 | `bun run distribute:ziggy-template:android` | Runs the template's `distribute:android`. |
 | `bun run dev:ziggy-template` | Runs the template's `dev`. |
-| `bun run test:smoke` | Ziggy's smoke tests, which drive its test app (`apps/ziggy-test-app`), on this machine's desktop platform. `test:smoke:android` and `test:smoke:ios` run them on an attached Android device or emulator (the ones `ZIGGY_ANDROID_DEVICES` names when it is set, else a plugged-in device in preference to an emulator) and on a connected iPhone or iPad or else the iOS simulator. `-- <number\|name>` after any of them runs one scenario. |
+| `bun run test:smoke` | Ziggy's smoke tests, which drive its test app (`apps/ziggy-test-app`), on this machine's desktop platform. `test:smoke:android` and `test:smoke:ios` run them on an attached Android device or emulator (the ones `ZIGGY_ANDROID_DEVICES` names when it is set, else a plugged-in device in preference to an emulator) and on a connected iPhone or iPad or else the iOS simulator. `-- <number\|name>` after any of them runs one scenario. `-- --extras` also runs the optional scenarios that check the system's theme, which never run without it (see `smoke-tests/run.md`). |
 
 Any other command of the template runs from the root with `bun run --filter=ziggy-template <command>`.
 

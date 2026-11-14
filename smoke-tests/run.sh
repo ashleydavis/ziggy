@@ -14,16 +14,39 @@ source "$SMOKE_DIR/lib/process-control.sh"
 
 
 PLATFORM="${1:-}"
-SCENARIO_FILTER="${2:-}"
+SCENARIO_FILTER=""
+EXTRAS=""
+
+usage() {
+    echo "Usage: run.sh <linux|windows|macos|android|ios> [--extras] [scenario number or name]" >&2
+    exit 2
+}
 
 case "$PLATFORM" in
     linux|windows|macos|android|ios)
         ;;
     *)
-        echo "Usage: run.sh <linux|windows|macos|android|ios> [scenario number or name]" >&2
-        exit 2
+        usage
         ;;
 esac
+shift
+
+for argument in "$@"; do
+    case "$argument" in
+        --extras)
+            EXTRAS="yes"
+            ;;
+        -*)
+            usage
+            ;;
+        *)
+            if [ -n "$SCENARIO_FILTER" ]; then
+                usage
+            fi
+            SCENARIO_FILTER="$argument"
+            ;;
+    esac
+done
 
 if [ ! -f "$SMOKE_DIR/lib/$PLATFORM.sh" ]; then
     echo "There is no platform library for $PLATFORM: $SMOKE_DIR/lib/$PLATFORM.sh" >&2
@@ -67,7 +90,7 @@ fi
 #
 # Prints the scenario directories this platform runs, one per line, in numeric order: the ones every platform runs, in
 # a native app the ones about what only a native app has (such as the address it serves the frontend from), on a desktop
-# platform the ones about desktop features such as the menu.
+# platform the ones about desktop features such as the menu, and with --extras the ones that check the system's theme.
 #
 list_scenarios() {
     {
@@ -82,17 +105,18 @@ list_scenarios() {
                 ls -d "$SMOKE_DIR"/desktop-only/[0-9]*
                 ;;
         esac
-        case "$PLATFORM" in
-            linux|windows|macos|android|ios)
-                # These change the system's appearance, which on a desktop is the developer's own screen. They run in the
-                # workflow, and locally only when named with ZIGGY_SMOKE_SCENARIO or as the runner's second argument.
-                if [ -n "${CI:-}" ] || [ -n "$SCENARIO_FILTER" ]; then
-                    if ziggy_platform_changes_appearance; then
-                        ls -d "$SMOKE_DIR"/workflows-only/[0-9]*
-                    fi
-                fi
-                ;;
-        esac
+        # The extras check the system's theme, which depends on the machine's desktop and, for 30-system-theme, changes it.
+        # They run only when --extras is given.
+        if [ -n "$EXTRAS" ]; then
+            if ziggy_platform_changes_appearance; then
+                ls -d "$SMOKE_DIR"/extras/[0-9]*
+            fi
+            case "$PLATFORM" in
+                linux|windows|macos)
+                    ls -d "$SMOKE_DIR"/extras/desktop-only/[0-9]*
+                    ;;
+            esac
+        fi
     } | while IFS= read -r directory; do
         printf '%s\t%s\n' "$(basename "$directory")" "$directory"
     done | sort -V | cut -f2

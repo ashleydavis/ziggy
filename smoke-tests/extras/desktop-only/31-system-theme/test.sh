@@ -2,7 +2,7 @@
 
 # With the setting system, the page's theme is the operating system's theme.
 
-source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../../../lib/common.sh"
 
 #
 # The operating system's theme: "light" or "dark".

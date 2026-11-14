@@ -214,7 +214,7 @@ ziggy_platform_os_process_alive() {
 }
 
 #
-# Succeeds when the desktop's appearance can be read and set with gsettings, which the workflows-only scenarios need.
+# Succeeds when the desktop's appearance can be read and set with gsettings, which the extras scenarios need.
 #
 ziggy_platform_changes_appearance() {
     command -v gsettings > /dev/null 2>&1 && gsettings get org.gnome.desktop.interface color-scheme > /dev/null 2>&1

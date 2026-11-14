@@ -4,8 +4,8 @@ Proves that with the setting `system`, the page's theme is the operating system'
 it is dark. It reads the system's theme on Linux with `gsettings`, on macOS with `defaults read -g AppleInterfaceStyle` and on Windows
 with the `AppsUseLightTheme` registry value.
 
-`run.sh` runs it on a desktop platform. To run it alone:
+It is an extra: `run.sh` runs it only when given `--extras`, and only on a desktop platform. To run it alone:
 
 ```
-ZIGGY_SMOKE_SCENARIO=31-system-theme bun run test:smoke
+bun run test:smoke -- --extras 31-system-theme
 ```
