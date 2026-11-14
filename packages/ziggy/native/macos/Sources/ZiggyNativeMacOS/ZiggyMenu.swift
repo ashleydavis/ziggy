@@ -9,6 +9,16 @@ import AppKit
 import WebKit
 import CZiggy
 
+// A shortcut as AppKit uses it: the key equivalent's text and the modifier keys held with it. It lived in ZiggyActionShortcuts.swift,
+// and deleting that file left parseShortcut without it, which failed CI's app-build-macos with "cannot find type 'ZiggyShortcutKey'".
+struct ZiggyShortcutKey {
+    // The key equivalent, as a menu item's keyEquivalent is written.
+    let keyEquivalent: String
+
+    // The modifier keys held with the key.
+    let modifiers: NSEvent.ModifierFlags
+}
+
 // Builds the main menu from the core's menu entries and carries out the actions the native app owns. Every other action is sent to
 // the core as a menu-action message.
 final class ZiggyMenu: NSObject {
