@@ -538,7 +538,9 @@ wait_for_value() {
     local shown=""
     while [ "$waited" -lt 30 ]; do
         shown="$(control "{\"command\":\"get-value\",\"dataId\":\"$1\"}")" || exit 1
-        shown="$(printf '%s' "$shown" | jq -r '.value')"
+        # -b keeps a native jq.exe from writing each newline as CRLF, so a value with a newline compares as it is. Without it
+        # CI's 32-text-box-keys on Windows printed the value as "hello" and "x" on two lines, as expected, and still did not match.
+        shown="$(printf '%s' "$shown" | jq -rb '.value')"
         if [ "$shown" = "$2" ]; then
             return 0
         fi
