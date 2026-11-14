@@ -246,7 +246,7 @@ final class ZiggyMenu: NSObject {
 
     // The key equivalent text for the core's key name: the character itself for a letter or digit, and the character AppKit
     // uses for a named key. "plus" is "+", the character a Command and plus shortcut is written with in a menu.
-    private static func keyEquivalent(forKeyName name: String) -> String {
+    static func keyEquivalent(forKeyName name: String) -> String {
         if name.count == 1 {
             return name
         }
