@@ -185,13 +185,15 @@ enum ZiggyKeyPress {
             return nil
         }
         let layout = Unmanaged<CFData>.fromOpaque(rawLayout).takeUnretainedValue() as Data
+        // The local "character" hides the method of the same name, so the method is called through the type. Calling it bare failed
+        // CI's app-build-macos with "cannot call value of non-function type 'String'".
         for code in 0..<128 {
-            if character(for: UInt16(code), layout: layout, flags: [], keyboardType: keyboardType) == character {
+            if ZiggyKeyPress.character(for: UInt16(code), layout: layout, flags: [], keyboardType: keyboardType) == character {
                 return (code, false)
             }
         }
         for code in 0..<128 {
-            if character(for: UInt16(code), layout: layout, flags: [.shift], keyboardType: keyboardType) == character {
+            if ZiggyKeyPress.character(for: UInt16(code), layout: layout, flags: [.shift], keyboardType: keyboardType) == character {
                 return (code, true)
             }
         }
