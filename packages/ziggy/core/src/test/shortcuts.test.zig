@@ -3,6 +3,7 @@
 //
 
 const std = @import("std");
+const builtin = @import("builtin");
 const ziggy = @import("ziggy");
 
 const shortcuts_lib = ziggy.shortcuts;
@@ -97,10 +98,11 @@ test "shortcut_list holds every shortcut of the actions, with Ctrl too" {
     const command = try entryFor(entries, "command");
     try std.testing.expectEqualStrings("", command.code);
     try std.testing.expectEqualStrings("o", command.key);
-    try std.testing.expect(command.ctrl);
+    // CmdOrCtrl is Command on MacOS and Control elsewhere. Expecting Control everywhere failed CI's unit-tests-macos.
+    try std.testing.expectEqual(builtin.os.tag != .macos, command.ctrl);
     try std.testing.expect(command.shift);
     try std.testing.expect(!command.alt);
-    try std.testing.expect(!command.meta);
+    try std.testing.expectEqual(builtin.os.tag == .macos, command.meta);
     try std.testing.expect(!command.shiftOptional);
     try std.testing.expect(!command.standard);
     try std.testing.expect(!command.text_box);
