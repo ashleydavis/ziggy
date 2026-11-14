@@ -115,7 +115,9 @@ enum ZiggyKeyPress {
 
         var monitor: Any?
         monitor = NSEvent.addLocalMonitorForEvents(matching: .applicationDefined) { event in
-            guard event.subtype == ZiggyKeyPress.sentinelSubtype else {
+            // subtype is an NSEvent.EventSubtype, so its raw Int16 is compared. Comparing the enum with the Int16 failed CI's
+            // app-build-macos with "cannot convert value of type 'NSEvent.EventSubtype' to expected argument type 'Int16'".
+            guard event.subtype.rawValue == ZiggyKeyPress.sentinelSubtype else {
                 return event
             }
             if let monitor = monitor {
