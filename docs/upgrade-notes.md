@@ -4,6 +4,8 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 
 ## v0.0.24
 
+- **`ziggy_config` has `has_key_press` and `is_mobile`.** Native code of the app's own that fills a `ziggy_config` field by field sets both.
+- **New, and optional:** the remote control command `press-key` and the smoke test helper `press_key`. Copy `press_key` from the template's `smoke-tests/lib/common.sh` into the app's own to use it.
 - **Every shortcut runs in the frontend.** A native app of the app's own registers no accelerator, key equivalent or key monitor: it shows each item's shortcut and runs the action the frontend posts.
 - **`ziggy_standalone_action_shortcuts` returns no shortcut.** A native app that read it registers nothing.
 - **A menu item with a shortcut a text box keeps fails the build,** so move the shortcut to an action with no menu item. Two shortcuts that are the same key press fail the build, which covers `Plus` and `Equal`, and on Linux and Windows `Ctrl+<key>` beside `CmdOrCtrl+<key>`. Two actions that are not on the menu and have the same shortcut also fail the build.

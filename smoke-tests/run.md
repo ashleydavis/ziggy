@@ -38,7 +38,7 @@ The scenarios in `native-only` run in a native app on every platform:
 - `24-ui-address`: the frontend is served from the platform's address (`ziggy-app://app/` on Linux, macOS and iOS, `https://ziggy-app.invalid/` on Windows and Android), the page is a secure context, and `localStorage`, IndexedDB, and `fetch` and `XMLHttpRequest` of the frontend's own files work there.
 - `32-external-links`: a plain link, a `target="_blank"` link followed 6 s after a click and a `window.open` 6 s after a click, so no user gesture is behind the last two. On Linux a failed open is first checked to reach the app's log, then each link reaches the system's handler for `https` (a URL handler of the scenario's own); on Android each reaches it through the device log. On Windows, macOS and iOS the app is still running five seconds after each open, and on Windows the app's log shows the new window request; on Linux, Windows and macOS the frontend still holds the marker it was given. On Windows, macOS and iOS nothing checks that the system was asked to open the address, because no test hook reports it and the system's handler there cannot be replaced without changing a machine-wide setting.
 
-The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mobile device, because the menu is a desktop feature. They choose menu items through the remote control connection's `menu` command, which calls the native app's own function for the item, the one a click runs, so the native app's actions really happen:
+The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mobile device, because the menu is a desktop feature. They choose menu items through the remote control connection's `menu` command, which calls the native app's own function for the item, the one a click runs, so the native app's actions really happen, and they press shortcuts through `press-key`, which the native app delivers as a user's key press:
 
 - `11-menu-ui-actions`: About, and the items that start and cancel tasks, do what their buttons do.
 - `12-menu-view`: Reload starts the frontend afresh, and the zoom items change the size of the area the frontend is drawn in.
@@ -52,6 +52,7 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mob
 - `32-text-box-keys`: a shortcut with no Ctrl, Alt or Cmd runs its action outside a text box, and a focused text area keeps Escape, Enter, Down and `?`, so Enter types a newline and `?` a question mark.
 - `33-browser-keys`: Ctrl+= and Ctrl+Plus zoom in by one step, Ctrl+Minus zooms out and Ctrl+0 resets, and a key the app does not define, F5, does nothing to the page.
 - `34-question-mark-shortcut`: `listActions` reports `?`, `?` runs its action outside a text box, and a focused text area types a question mark instead.
+- `35-zoom-keys`: pressing the zoom shortcuts through `press-key` changes the size of the area the frontend is drawn in, and Ctrl+0 puts it back.
 
 
 The scenarios in `workflows-only` change the system's appearance, which on a desktop is the developer's own screen. They run only in the workflow, and locally only when named with `ZIGGY_SMOKE_SCENARIO` or the runner's second argument, so an unfiltered local run never changes it:

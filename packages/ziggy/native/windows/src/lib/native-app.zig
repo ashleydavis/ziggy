@@ -15,6 +15,7 @@ const builtin = @import("builtin");
 const c = @import("c");
 const geometry_lib = @import("geometry.zig");
 const accelerator_lib = @import("accelerator.zig");
+const press_key_events = @import("press-key-events.zig");
 const actions_lib = @import("actions.zig");
 const menu_lib = @import("menu.zig");
 const pickers_lib = @import("pickers.zig");
@@ -283,6 +284,16 @@ const NativeApp = struct {
     screenshot_path: ?[:0]u16,
     // The stream the capture in progress is written to, or null when none is.
     screenshot_stream: ?*c.IStream,
+    // The reply of the key press under way, or null when none is.
+    key_press_reply: ?u64,
+    // The Input.dispatchKeyEvent parameters of a key press, each UTF-16 and NUL terminated.
+    key_press_events: [3][256]u16,
+    // How many of key_press_events the press has.
+    key_press_event_count: u32,
+    // The index of the next event to send.
+    key_press_next_event: u32,
+    // Receives the end of each Input.dispatchKeyEvent the press makes.
+    key_press_handler: DevToolsCallHandler,
     // The brush the window procedure paints the background with, or null before the theme is applied.
     background_brush: ?c.HBRUSH,
 };
@@ -331,6 +342,11 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .screenshot_reply = null,
         .screenshot_path = null,
         .screenshot_stream = null,
+        .key_press_reply = null,
+        .key_press_events = undefined,
+        .key_press_event_count = 0,
+        .key_press_next_event = 0,
+        .key_press_handler = undefined,
         .background_brush = null,
     };
     initHandlers(&native_app);
@@ -441,6 +457,12 @@ fn initHandlers(native_app: *NativeApp) void {
     native_app.paste_handler = .{
         .interface = .{
             .lpVtbl = @constCast(&paste_vtable),
+        },
+        .native_app = native_app,
+    };
+    native_app.key_press_handler = .{
+        .interface = .{
+            .lpVtbl = @constCast(&press_key_vtable),
         },
         .native_app = native_app,
     };
@@ -838,8 +860,9 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         },
         .pick_paths => |pick| try askForPick(native_app, reply, pick),
         .screenshot => |output_path| startScreenshot(native_app, reply, output_path),
+        .key_press => |key| press_key(native_app, reply, key),
         .theme => |theme_call| applyTheme(native_app, theme_call),
-        .keep_alive, .native_call, .key_press, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
+        .keep_alive, .native_call, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
 }
 
@@ -923,6 +946,7 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     config.has_pick_paths = true;
     config.has_menu_action = true;
     config.has_screenshot = true;
+    config.has_key_press = true;
     var system_info: c.SYSTEM_INFO = undefined;
     c.GetSystemInfo(&system_info);
     config.worker_threads = system_info.dwNumberOfProcessors;
@@ -1445,6 +1469,163 @@ fn pasteInvoke(this: [*c]c.ICoreWebView2CallDevToolsProtocolMethodCompletedHandl
     _ = this;
     _ = result;
     check("pasting", error_code);
+    return c.S_OK;
+}
+
+//
+// The character the key name types, for a key whose key is a character rather than a fixed virtual key, or null for any other key.
+//
+fn press_key_character(key_name: []const u8) ?u16 {
+    if (key_name.len == 1) {
+        return key_name[0];
+    }
+    if (std.mem.eql(u8, key_name, "plus")) {
+        return '+';
+    }
+    if (std.mem.eql(u8, key_name, "minus")) {
+        return '-';
+    }
+    if (std.mem.eql(u8, key_name, "equal")) {
+        return '=';
+    }
+    return null;
+}
+
+//
+// Sends the core the result of a key press that failed, with the reason built from the format and its arguments.
+//
+fn press_key_fail(native_app: *NativeApp, reply: u64, comptime format: []const u8, arguments: anytype) void {
+    var buffer: [512]u8 = undefined;
+    const text = std.fmt.bufPrint(&buffer, format, arguments) catch "the key press failed";
+    sendResult(native_app, reply, false, text);
+}
+
+//
+// Presses and releases a key through the web view, for the remote control's press-key command. The native app handles no shortcut
+// itself, so every press goes to the page, where the frontend's listener runs the shortcut, and to Chromium's own editing keys.
+//
+fn press_key(native_app: *NativeApp, reply: u64, key: []const u8) void {
+    if (native_app.key_press_reply != null) {
+        sendResult(native_app, reply, false, "a key press is already in progress");
+        return;
+    }
+    if (native_app.web_view == null or native_app.controller == null) {
+        sendResult(native_app, reply, false, "the web view is not ready");
+        return;
+    }
+    var parsed: c.ziggy_accelerator = undefined;
+    if (!c.ziggy_parse_accelerator(key.ptr, key.len, &parsed)) {
+        press_key_fail(native_app, reply, "the native app cannot press {s}", .{key});
+        return;
+    }
+    const key_name = std.mem.sliceTo(&parsed.key, 0);
+    var binding: accelerator_lib.Binding = undefined;
+    if (accelerator_lib.bindingFor(parsed.modifiers, key_name)) |found| {
+        binding = found;
+    }
+    else if (std.mem.eql(u8, key_name, "?")) {
+        const scan = c.VkKeyScanExW('?', c.GetKeyboardLayout(0));
+        if (scan == -1) {
+            press_key_fail(native_app, reply, "the keyboard has no key for {s}", .{key});
+            return;
+        }
+        const scan_value: u16 = @bitCast(scan);
+        binding = .{
+            .modifiers = parsed.modifiers,
+            .virtual_key = @as(u8, @truncate(scan_value)),
+            .alternate_virtual_key = 0,
+            .shift_optional = true,
+        };
+    }
+    else {
+        press_key_fail(native_app, reply, "the native app has no key for {s}", .{key});
+        return;
+    }
+    var layout_shift = false;
+    if (press_key_character(key_name)) |character| {
+        const scan = c.VkKeyScanExW(character, c.GetKeyboardLayout(0));
+        if (scan == -1) {
+            press_key_fail(native_app, reply, "the keyboard has no key for {s}", .{key});
+            return;
+        }
+        const scan_value: u16 = @bitCast(scan);
+        layout_shift = scan_value & 0x0100 != 0;
+    }
+    var modifiers = binding.modifiers;
+    if (layout_shift) {
+        modifiers |= accelerator_lib.modifier_shift;
+    }
+    var buffers: [3][256]u8 = undefined;
+    var parameter_texts: [3][]const u8 = undefined;
+    var count: u32 = 0;
+    parameter_texts[count] = press_key_events.key_event_params(&buffers[count], .raw_key_down, binding, key_name, layout_shift) catch |err| {
+        press_key_fail(native_app, reply, "the key press could not be written: {s}", .{@errorName(err)});
+        return;
+    };
+    count += 1;
+    if (press_key_events.has_char_event(modifiers, key_name)) {
+        parameter_texts[count] = press_key_events.key_event_params(&buffers[count], .char, binding, key_name, layout_shift) catch |err| {
+            press_key_fail(native_app, reply, "the key press could not be written: {s}", .{@errorName(err)});
+            return;
+        };
+        count += 1;
+    }
+    parameter_texts[count] = press_key_events.key_event_params(&buffers[count], .key_up, binding, key_name, layout_shift) catch |err| {
+        press_key_fail(native_app, reply, "the key press could not be written: {s}", .{@errorName(err)});
+        return;
+    };
+    count += 1;
+    for (parameter_texts[0..count], 0..) |text, index| {
+        const written = std.unicode.utf8ToUtf16Le(&native_app.key_press_events[index], text) catch {
+            press_key_fail(native_app, reply, "the key press could not be written as UTF-16", .{});
+            return;
+        };
+        native_app.key_press_events[index][written] = 0;
+    }
+    native_app.key_press_event_count = count;
+    native_app.key_press_next_event = 0;
+    native_app.key_press_reply = reply;
+    send_key_press_event(native_app);
+}
+
+//
+// Sends the next Input.dispatchKeyEvent of the press under way.
+//
+fn send_key_press_event(native_app: *NativeApp) void {
+    const web_view = native_app.web_view.?;
+    const parameters: [*c]const c.WCHAR = @ptrCast(&native_app.key_press_events[native_app.key_press_next_event]);
+    check("CallDevToolsProtocolMethod", web_view.lpVtbl.*.CallDevToolsProtocolMethod.?(
+        web_view,
+        std.unicode.utf8ToUtf16LeStringLiteral("Input.dispatchKeyEvent"),
+        parameters,
+        &native_app.key_press_handler.interface,
+    ));
+}
+
+//
+// The web view has sent one of the press's events: sends the next, or gives the core the press's result after the last.
+//
+fn press_key_callback(this: [*c]c.ICoreWebView2CallDevToolsProtocolMethodCompletedHandler, error_code: c.HRESULT, result: [*c]const c.WCHAR) callconv(.c) c.HRESULT {
+    _ = result;
+    const handler = DevToolsCallHandler.fromInterface(this);
+    const native_app = handler.native_app;
+    const reply = native_app.key_press_reply orelse {
+        return c.S_OK;
+    };
+    if (error_code < 0) {
+        native_app.key_press_reply = null;
+        var buffer: [128]u8 = undefined;
+        const text = std.fmt.bufPrint(&buffer, "Input.dispatchKeyEvent failed, HRESULT {d}", .{error_code}) catch "Input.dispatchKeyEvent failed";
+        sendResult(native_app, reply, false, text);
+        return c.S_OK;
+    }
+    native_app.key_press_next_event += 1;
+    if (native_app.key_press_next_event >= native_app.key_press_event_count) {
+        native_app.key_press_reply = null;
+        sendResult(native_app, reply, true, "");
+        return c.S_OK;
+    }
+    send_key_press_event(native_app);
     return c.S_OK;
 }
 
@@ -2220,6 +2401,16 @@ const paste_vtable = c.struct_ICoreWebView2CallDevToolsProtocolMethodCompletedHa
     .AddRef = DevToolsCallHandler.addRef,
     .Release = DevToolsCallHandler.release,
     .Invoke = pasteInvoke,
+};
+
+//
+// The table of functions of the key press handler.
+//
+const press_key_vtable = c.struct_ICoreWebView2CallDevToolsProtocolMethodCompletedHandlerVtbl{
+    .QueryInterface = DevToolsCallHandler.queryInterface,
+    .AddRef = DevToolsCallHandler.addRef,
+    .Release = DevToolsCallHandler.release,
+    .Invoke = press_key_callback,
 };
 
 //

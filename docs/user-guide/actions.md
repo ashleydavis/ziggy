@@ -103,6 +103,8 @@ click run-hello-action
 wait_for_text log "Hello from an action" 30
 ```
 
+The template's [`smoke-tests/desktop-only/hello-shortcut/test.sh`](../../apps/ziggy-template/smoke-tests/desktop-only/hello-shortcut/test.sh) presses the action's shortcut instead, through the native app, with `press_key`. It runs on Linux, Windows and macOS, because a mobile has no shortcuts.
+
 and [`smoke-tests/desktop-only/hello-menu/test.sh`](../../apps/ziggy-template/smoke-tests/desktop-only/hello-menu/test.sh) chooses the menu item, on desktop platforms only:
 
 ```bash

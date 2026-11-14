@@ -16,6 +16,7 @@ Puts the built app in place once for the platform, then runs each `test.sh`, one
 ## Smoke tests
 
 - `hello-world-app`: hello world example. Pressing each button logs the backend's message response to the hello-world message, and the hello-world task's output and how it ended. Change it into your own smoke test, or delete it.
+- `desktop-only/hello-shortcut`: hello world example, run only on Linux, Windows and macOS because a mobile has no shortcuts. Pressing Ctrl+Shift+H (Cmd+Shift+H on macOS) runs the template's action, which writes its line to the log. Change it into your own smoke test, or delete it.
 - `desktop-only/hello-menu`: hello world example, run only on Linux, Windows and macOS because a mobile has no menu. Choosing Say Hello From Zig and Say Hello From the UI each writes its line to the log. Change it into your own smoke test, or delete it.
 
 To add one, make a directory here with a `test.sh` that sources `../lib/common.sh`.

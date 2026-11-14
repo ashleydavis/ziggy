@@ -219,6 +219,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.has_pick_paths = true
         config.has_menu_action = true
         config.has_screenshot = true
+        config.has_key_press = true
         config.worker_threads = UInt32(ProcessInfo.processInfo.activeProcessorCount)
         config.max_concurrent_child_tasks = 10
         config.system_theme = ZiggyBridge.systemTheme()
@@ -376,6 +377,18 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
                 ZiggyBridge.fail("the core sent a screenshot call with no path: \(text)")
             }
             ZiggyScreenshot.take(webView: webView, path: path) { [weak self] failure in
+                if let failure = failure {
+                    self?.finishCall(reply, ok: false, text: failure)
+                }
+                else {
+                    self?.finishCall(reply, ok: true, text: "")
+                }
+            }
+        case "key-press":
+            guard let key = call["key"] as? String else {
+                ZiggyBridge.fail("the core sent a key press with no key: \(text)")
+            }
+            ZiggyKeyPress.press(key, webView: webView) { [weak self] failure in
                 if let failure = failure {
                     self?.finishCall(reply, ok: false, text: failure)
                 }

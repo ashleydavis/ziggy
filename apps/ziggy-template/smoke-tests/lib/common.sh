@@ -239,6 +239,20 @@ choose_menu_item() {
 }
 
 #
+# Presses a key as a user does, through the native app, so a shortcut that is broken for a user fails. The key is written as a
+# shortcut, such as CmdOrCtrl+Shift+H. Usage: press_key <key>
+#
+press_key() {
+    local line
+    line="$(jq -nc --arg key "$1" '{command: "press-key", key: $key}')"
+    local answer
+    answer="$(control "$line")"
+    if [ "$(printf '%s' "$answer" | jq -r '.ok')" != "true" ]; then
+        fail "pressing the key $1 failed: $answer"
+    fi
+}
+
+#
 # Prints the size in pixels of the area the frontend is drawn in, as <width>x<height>. Zooming, docking the developer tools and
 # going full screen change it.
 #

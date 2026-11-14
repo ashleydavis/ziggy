@@ -1,9 +1,7 @@
 # common.sh
 
-The helpers every smoke scenario sources. It defines functions only, and it sources the platform library the runner chose. The
-interface the platform libraries implement is the comment at the top of the file. It also documents `ZIGGY_THEME`, which starts the
-app with `--theme` (the `ziggy.theme` extra on Android).
+The helpers every scenario sources: starting and stopping the test app, talking to the remote control connection, waiting for text, clicking elements and pressing keys. It takes no arguments.
 
-A scenario starts with `source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"`, then calls `start_test_app` and the helpers it
-needs. `wait_for_opened_url` waits until the system was asked to open an address that holds the text. See [run.md](../run.md) for
-the runner and the scenarios.
+A scenario sources it with `source "$(dirname "${BASH_SOURCE[0]}")/../lib/common.sh"`, or `../../lib/common.sh` from a scenario in `desktop-only` or `native-only`. Each helper has a comment above it giving its usage.
+
+See [the run documentation](../run.md) for how the scenarios are run.
