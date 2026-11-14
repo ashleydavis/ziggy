@@ -317,7 +317,9 @@ fn renameRefusedOnWindows() !void {
         &handle,
         .{
             .GENERIC = .{ .READ = true },
-            .STANDARD = .{ .RIGHTS = .{ .SYNCHRONIZE = true } },
+            // SYNCHRONIZE is a field of Zig's ACCESS_MASK.Standard, beside RIGHTS. Putting it inside RIGHTS failed CI's
+            // unit-tests-windows with "no field named 'SYNCHRONIZE' in struct 'os.windows.ACCESS_MASK.Standard.Rights'".
+            .STANDARD = .{ .SYNCHRONIZE = true },
         },
         &.{
             .RootDirectory = if (std.fs.path.isAbsoluteWindowsWtf16(path_wide)) null else cwd_handle,
