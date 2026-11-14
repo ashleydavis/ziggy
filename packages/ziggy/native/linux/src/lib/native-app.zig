@@ -551,6 +551,9 @@ fn revealAppView(native_app: *NativeApp) void {
     }
     if (native_app.web_view) |web_view| {
         c.gtk_widget_show(@ptrCast(web_view));
+        // The window was shown while the web view was hidden, so GTK gave no widget the focus and showing the web view later
+        // does not either. Without this no key reached the page: the smoke tests 32 to 35 failed with the key log empty.
+        c.gtk_widget_grab_focus(@ptrCast(web_view));
         splashEvent("app-web-view-visible");
     }
     destroySplashPicture(native_app);
@@ -1161,8 +1164,7 @@ fn press_key(native_app: *NativeApp, reply: u64, key: []const u8) void {
     };
     const gdk_window = c.gtk_widget_get_window(@ptrCast(window)) orelse {
         return press_key_result(native_app, reply, "the window is not shown", .{});
-    };
-    const display = c.gdk_display_get_default() orelse {
+    };    const display = c.gdk_display_get_default() orelse {
         return press_key_result(native_app, reply, "there is no display", .{});
     };
     const seat = c.gdk_display_get_default_seat(display);
