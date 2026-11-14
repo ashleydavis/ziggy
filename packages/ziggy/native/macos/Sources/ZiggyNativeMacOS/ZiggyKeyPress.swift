@@ -223,7 +223,9 @@ enum ZiggyKeyPress {
                 return OSStatus(paramErr)
             }
             let keyboardLayout = base.assumingMemoryBound(to: UCKeyboardLayout.self)
-            return UCKeyTranslate(keyboardLayout, keyCode, UInt16(kUCKeyActionDown), modifierState, keyboardType, OptionBits(kUCKeyTranslateNoDeadKeysMask), &deadKeyState, characters.count, &length, &characters)
+            // UCKeyTranslate takes the Carbon modifier bits shifted right by 8. Given them unshifted it applied no Shift, so a key
+            // typed with Shift was never found: CI's 34-question-mark-shortcut failed with "the keyboard has no key for ?".
+            return UCKeyTranslate(keyboardLayout, keyCode, UInt16(kUCKeyActionDown), (modifierState >> 8) & 0xFF, keyboardType, OptionBits(kUCKeyTranslateNoDeadKeysMask), &deadKeyState, characters.count, &length, &characters)
         }
         if status != noErr || length == 0 {
             return nil
