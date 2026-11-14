@@ -634,6 +634,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // the app is showing so it can fade its overlay.
     private func revealAppView() {
         webView.isHidden = false
+        // The web view was hidden while the window became key, so it was not the first responder and no key reached the page:
+        // CI's smoke tests 32 to 35 failed with the key log empty, as the Linux app did before its web view took the focus.
+        webView.window?.makeFirstResponder(webView)
         splashWebView?.removeFromSuperview()
         backdrop.isHidden = true
         deliverToUi("{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}")
