@@ -756,8 +756,10 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
             if (native_app.background_brush) |brush| {
                 var rect: c.RECT = undefined;
                 _ = c.GetClientRect(window, &rect);
-                const device_context: c.HDC = @ptrFromInt(@as(usize, @intCast(wparam)));
-                _ = c.FillRect(device_context, &rect, brush);
+                // The device context is a handle, not a pointer, so its value need not be a multiple of 4. Cast to c.HDC, a pointer
+                // to a 4-byte aligned struct, an unaligned one panicked with "incorrect alignment" in every test but the first of CI's
+                // smoke-tests-windows, so it goes to FillRect untyped.
+                _ = FillRect(@ptrFromInt(@as(usize, @intCast(wparam))), &rect, brush);
                 return 1;
             }
             return c.DefWindowProcW(window, message, wparam, lparam);
@@ -854,6 +856,11 @@ fn paintSplash(native_app: *NativeApp, window: c.HWND) void {
 // StretchDIBits with untyped pointers: the embedded BMP's bytes are not aligned to the BITMAPINFO the translated header
 // expects, and its pixels and info header are slices of the same embedded bytes.
 //
+//
+// FillRect with an untyped device context, for a handle that arrives as an integer and may not be aligned to c.HDC's struct.
+//
+extern "user32" fn FillRect(device_context: ?*anyopaque, rect: *const c.RECT, brush: c.HBRUSH) callconv(.winapi) c_int;
+
 extern "gdi32" fn StretchDIBits(device_context: c.HDC, x_dest: c_int, y_dest: c_int, dest_width: c_int, dest_height: c_int, x_src: c_int, y_src: c_int, src_width: c_int, src_height: c_int, bits: ?*const anyopaque, info: ?*const anyopaque, usage: c.UINT, rop: c.DWORD) callconv(.winapi) c_int;
 
 //
