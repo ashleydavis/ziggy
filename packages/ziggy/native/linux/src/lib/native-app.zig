@@ -115,8 +115,10 @@ const NativeApp = struct {
     awake_holds: u32,
     // The cookie of the suspend inhibit, while there is one.
     inhibit_cookie: c_uint,
-    // The desktop portal's settings proxy, or null when it could not be made.
+    // The desktop portal's settings proxy, or null before the theme setting was first system or when it could not be made.
     portal: ?*c.GDBusProxy,
+    // Whether the app has connected to the portal, or tried to, which it does once, the first time the theme setting is system.
+    portal_tried: bool,
     // The desktop's GTK theme name before Ziggy changed it, which the light theme restores.
     gtk_theme_name: ?[*:0]u8,
 };
@@ -160,6 +162,7 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .awake_holds = 0,
         .inhibit_cookie = 0,
         .portal = null,
+        .portal_tried = false,
         .gtk_theme_name = null,
     };
     defer if (native_app.portal) |proxy| c.g_object_unref(proxy);
@@ -268,7 +271,6 @@ fn splashEvent(name: []const u8) void {
 //
 fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     splashEvent("started");
-    native_app.portal = c.g_dbus_proxy_new_for_bus_sync(c.G_BUS_TYPE_SESSION, c.G_DBUS_PROXY_FLAGS_NONE, null, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings", null, null);
     if (c.gtk_settings_get_default()) |settings| {
         var theme_name: [*c]u8 = null;
         c.g_object_get(settings, "gtk-theme-name", &theme_name, @as(?*anyopaque, null));
@@ -345,19 +347,21 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     }
     config.arg_count = @intCast(argument_pointers.len);
     config.args = @ptrCast(argument_pointers.ptr);
-    config.system_theme = @intFromEnum(readSystemTheme(native_app));
+    // The system's theme is read only once the setting is system (see followSystemTheme), so the core starts with light until then.
+    config.system_theme = @intFromEnum(system_theme.SystemTheme.light);
     native_app.core = z.ziggy_create(&config) orelse {
         return error.CoreCreateFailed;
     };
 
     var theme_arena_state = std.heap.ArenaAllocator.init(std.heap.c_allocator);
     defer theme_arena_state.deinit();
-    var theme_length: usize = 0;
-    const theme_pointer = z.ziggy_theme(native_app.core, &theme_length) orelse {
-        return error.ThemeFailed;
-    };
-    const theme_call = try native_message.parse(theme_arena_state.allocator(), theme_pointer[0..theme_length]);
-    watchSystemTheme(native_app);
+    var theme_call = try queryTheme(native_app, theme_arena_state.allocator());
+    if (theme_call == .theme and std.mem.eql(u8, theme_call.theme.setting, "system")) {
+        // The core takes the system's theme before it answers the next query, which goes to it on the same queue, so the web view is
+        // made in the system's theme.
+        followSystemTheme(native_app);
+        theme_call = try queryTheme(native_app, theme_arena_state.allocator());
+    }
 
     // The web context is made after the core, so the theme it gives is applied to the web view as it is created.
     // The frontend's own scripts are classic scripts, but a frontend may also fetch its files, which needs the scheme to
@@ -796,7 +800,12 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .screenshot => |output_path| try startScreenshot(native_app, reply, output_path),
         .key_press => |key| press_key(native_app, reply, key),
         .new_window => |arguments| start_new_window(native_app, reply, arguments),
-        .theme => |theme_call| applyTheme(native_app, theme_call),
+        .theme => |theme_call| {
+            applyTheme(native_app, theme_call);
+            if (std.mem.eql(u8, theme_call.setting, "system")) {
+                followSystemTheme(native_app);
+            }
+        },
         .frontend_ready => {
             splashEvent("frontend-ready-received");
             revealAppView(native_app);
@@ -1524,6 +1533,45 @@ fn onSnapshot(source: c.gpointer, result: *c.GAsyncResult, user_data: c.gpointer
 }
 
 //
+// The core's theme call, parsed with the allocator.
+//
+fn queryTheme(native_app: *NativeApp, allocator: std.mem.Allocator) !native_message.Call {
+    var theme_length: usize = 0;
+    const theme_pointer = z.ziggy_theme(native_app.core, &theme_length) orelse {
+        return error.ThemeFailed;
+    };
+    return try native_message.parse(allocator, theme_pointer[0..theme_length]);
+}
+
+//
+// Follows the system's theme, the first time the theme setting is system: connects to the desktop portal, sends the core the system's
+// theme and follows its changes for the rest of the run. Until then the app never connects to the session bus. Connecting at every
+// start blocked it for 25 seconds before it failed when there was no session bus, as on a CI runner, even when the setting was light
+// or dark.
+//
+fn followSystemTheme(native_app: *NativeApp) void {
+    if (native_app.portal_tried) {
+        return;
+    }
+    native_app.portal_tried = true;
+    native_app.portal = c.g_dbus_proxy_new_for_bus_sync(c.G_BUS_TYPE_SESSION, c.G_DBUS_PROXY_FLAGS_NONE, null, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings", null, null);
+    sendSystemTheme(native_app, readSystemTheme(native_app));
+    watchSystemTheme(native_app);
+}
+
+//
+// Sends the core the system's theme as a system-theme message.
+//
+fn sendSystemTheme(native_app: *NativeApp, theme: system_theme.SystemTheme) void {
+    const core = native_app.core orelse {
+        return;
+    };
+    var buffer: [128]u8 = undefined;
+    const text = std.fmt.bufPrint(&buffer, "{{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"{s}\"}}", .{if (theme == .dark) "dark" else "light"}) catch unreachable;
+    z.ziggy_send_message(core, text.ptr, text.len);
+}
+
+//
 // The system's theme, read from the desktop portal. A portal that does not answer prints why and gives light.
 //
 fn readSystemTheme(native_app: *NativeApp) system_theme.SystemTheme {
@@ -1586,14 +1634,8 @@ fn onPortalSettingChanged(proxy: *c.GDBusProxy, sender_name: ?[*:0]const u8, sig
     defer c.g_variant_unref(value);
     const inner = c.g_variant_get_variant(value);
     defer c.g_variant_unref(inner);
-    const theme = system_theme.fromColorScheme(c.g_variant_get_uint32(inner));
     const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
-    const core = native_app.core orelse {
-        return;
-    };
-    var buffer: [128]u8 = undefined;
-    const text = std.fmt.bufPrint(&buffer, "{{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"{s}\"}}", .{if (theme == .dark) "dark" else "light"}) catch return;
-    z.ziggy_send_message(core, text.ptr, text.len);
+    sendSystemTheme(native_app, system_theme.fromColorScheme(c.g_variant_get_uint32(inner)));
 }
 
 //

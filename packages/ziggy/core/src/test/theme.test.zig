@@ -59,6 +59,39 @@ test "--theme with a value that is not a setting is an error" {
     try std.testing.expectError(error.UnknownTheme, theme.takeArgument(std.testing.allocator, &.{ "--theme", "night" }));
 }
 
+test "--light, --dark and --system are taken out as the setting, and the rest pass through in order" {
+    const cases = [_]struct { option: []const u8, setting: theme.Setting }{
+        .{ .option = "--light", .setting = .light },
+        .{ .option = "--dark", .setting = .dark },
+        .{ .option = "--system", .setting = .system },
+    };
+    for (cases) |case| {
+        const taken = try theme.takeArgument(std.testing.allocator, &.{ "--open", case.option, "a.txt" });
+        defer std.testing.allocator.free(taken.remaining);
+        try std.testing.expectEqual(case.setting, taken.setting.?);
+        try std.testing.expectEqual(@as(usize, 2), taken.remaining.len);
+        try std.testing.expectEqualStrings("--open", taken.remaining[0]);
+        try std.testing.expectEqualStrings("a.txt", taken.remaining[1]);
+    }
+}
+
+test "two theme options together are an error" {
+    try std.testing.expectError(error.ThemeGivenTwice, theme.takeArgument(std.testing.allocator, &.{ "--light", "--dark" }));
+    try std.testing.expectError(error.ThemeGivenTwice, theme.takeArgument(std.testing.allocator, &.{ "--theme", "light", "--system" }));
+    try std.testing.expectError(error.ThemeGivenTwice, theme.takeArgument(std.testing.allocator, &.{ "--dark", "--theme", "dark" }));
+}
+
+test "environmentSetting reads a setting and gives null for a missing or empty value" {
+    try std.testing.expectEqual(@as(?theme.Setting, .dark), try theme.environmentSetting("dark"));
+    try std.testing.expectEqual(@as(?theme.Setting, .system), try theme.environmentSetting("system"));
+    try std.testing.expectEqual(@as(?theme.Setting, null), try theme.environmentSetting(null));
+    try std.testing.expectEqual(@as(?theme.Setting, null), try theme.environmentSetting(""));
+}
+
+test "environmentSetting rejects a value that is not a setting" {
+    try std.testing.expectError(error.UnknownTheme, theme.environmentSetting("night"));
+}
+
 test "running out of memory taking --theme fails cleanly" {
     try std.testing.checkAllAllocationFailures(std.testing.allocator, takeAndFree, .{});
 }

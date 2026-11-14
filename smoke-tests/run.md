@@ -58,7 +58,13 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mob
 - `37-new-window`: the menu item starts window 2 as a process of its own with the arguments its action gives; window 2 runs its own frontend and backend; on Linux and macOS closing window 4 ends its process, closing window 1 leaves windows 2 and 3 running, and Quit in window 3 ends window 2 and window 3 and writes every window's log footer; on Windows closing window 1 ends its process and leaves window 2, and Quit in window 2 ends only its process.
 
 
-The scenarios in `extras` check the system's theme. They are optional: they run only when the runner is given `--extras`, locally or in a workflow, and the workflows do not give it. What they see depends on the machine's desktop (on Linux, a session bus with the desktop portal), and `30-system-theme` changes the system's appearance, which on a desktop is the developer's own screen:
+Every other scenario runs the app in the light theme: `lib/common.sh` sets `ZIGGY_THEME=light` unless the scenario sets it, so no scenario depends on the system's theme and the Linux app never connects to the session bus (see [Theme](../docs/user-guide/theme.md)).
+
+The scenarios in `extras` check the system's theme, and set `ZIGGY_THEME=system`. They are optional: they run only when the runner is given `--extras`.
+
+They are not run in the workflows. The app reads the system's theme from the desktop, and on Linux that is the desktop portal over a session bus. The CI runner has no session bus and no portal. Giving it them would mean installing and configuring a desktop session in the workflow for these two scenarios alone, and without them every start of an app with the setting `system` waits 25 seconds and the job runs out of time.
+
+They are not run in a plain local run either. `30-system-theme` changes the system's appearance, which on a desktop is the developer's own screen, while the run lasts. Both scenarios also depend on the developer's own desktop, so a plain run would pass or fail by how that machine is set up rather than by Ziggy's code. Run them on purpose, with `--extras`:
 
 - `30-system-theme`: with the setting `system`, a change of the system's appearance reaches the page while the app stays in front. It puts the appearance it found back at the end. It runs where the platform library can change the appearance (`ziggy_platform_changes_appearance`), which a connected iPhone or iPad cannot.
 - `desktop-only/31-system-theme`: on Linux, Windows and macOS, with the setting `system`, the page's theme is the operating system's theme.
