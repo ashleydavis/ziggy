@@ -171,9 +171,6 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         let userScript = WKUserScript(source: injectScript, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         configuration.userContentController.addUserScript(userScript)
         let createdWebView = ZiggyWebView(frame: frame, configuration: configuration)
-        createdWebView.onSystemStyleChange = { [weak self] _ in
-            self?.postSystemTheme()
-        }
         self.webView = createdWebView
 
         // The app's own web view stays hidden until its navigation finishes, so the splash shows first.
@@ -209,6 +206,11 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
 
         super.init()
 
+        // Set after super.init because the closure captures self. Setting it before failed CI's app-build-ios with "'self' used
+        // before 'super.init' call".
+        createdWebView.onSystemStyleChange = { [weak self] _ in
+            self?.postSystemTheme()
+        }
         configuration.userContentController.add(self, name: ZiggyBridge.handlerName)
         self.webView.navigationDelegate = self
         self.webView.uiDelegate = self
