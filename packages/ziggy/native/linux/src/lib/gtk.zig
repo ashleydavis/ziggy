@@ -90,8 +90,8 @@ pub const GTK_STATE_FLAG_NORMAL: c_uint = 0;
 // GDK_CURRENT_TIME.
 pub const GDK_CURRENT_TIME: u32 = 0;
 
-// Opaque types the key press uses, declared only as pointers.
-pub const GdkWindow = opaque {};
+// Opaque types the key press uses, declared only as pointers. GdkWindow, gtk_widget_get_window and g_object_ref are declared
+// once with the other types and functions: a second copy here failed CI's app-build-linux with "duplicate struct member name".
 pub const GdkDisplay = opaque {};
 pub const GdkSeat = opaque {};
 pub const GdkDevice = opaque {};
@@ -171,9 +171,7 @@ pub extern fn gdk_seat_get_keyboard(seat: *GdkSeat) ?*GdkDevice;
 
 pub extern fn gtk_main_do_event(event: *GdkEvent) void;
 pub extern fn gtk_window_is_active(window: *GtkWindow) gboolean;
-pub extern fn gtk_widget_get_window(widget: *GtkWidget) ?*GdkWindow;
 
-pub extern fn g_object_ref(object: gpointer) gpointer;
 pub extern fn g_strdup(text: [*:0]const u8) [*:0]u8;
 
 pub extern fn g_object_unref(object: gpointer) void;
