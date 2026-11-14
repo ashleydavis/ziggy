@@ -1282,12 +1282,12 @@ fn appendMenuItem(native_app: *NativeApp, allocator: std.mem.Allocator, win32_me
     defer allocator.free(escaped);
     var text = try allocator.dupe(u8, escaped);
     defer allocator.free(text);
+    // The core gives the shortcut as Windows shows it, such as "Ctrl++", which the core's parser cannot read, so it is shown as it
+    // is. Parsing it stopped the app building its menu ("Zoom In" has a shortcut that is not valid: Ctrl++) and failed every test
+    // of CI's smoke-tests-windows.
     if (entry.shortcut != null) {
-        const parsed = try parseShortcut(label, std.mem.span(entry.shortcut));
-        var shortcut_buffer: [64]u8 = undefined;
-        const shortcut = try accelerator_lib.formatShortcut(&shortcut_buffer, parsed.modifiers, std.mem.sliceTo(&parsed.key, 0));
         allocator.free(text);
-        text = try std.mem.concat(allocator, u8, &.{ escaped, "\t", shortcut });
+        text = try std.mem.concat(allocator, u8, &.{ escaped, "\t", std.mem.span(entry.shortcut) });
     }
     const wide_text = try std.unicode.utf8ToUtf16LeAllocZ(allocator, text);
     defer allocator.free(wide_text);
