@@ -504,6 +504,11 @@
             testUiReady: function () {
                 postSystem("test-ui-ready", null);
             },
+            // Tells the native app the frontend has painted its own splash overlay, so it shows the app's web view and then sends
+            // the frontend-visible app event, which the splash overlay listens for to fade itself out.
+            frontendReady: function () {
+                postSystem("frontend-ready", null);
+            },
             getPathForFile: getPathForFile,
             // Registers the frontend's handler of one of the app's actions. A name that already has a handler throws.
             registerAction: function (name, handler) {

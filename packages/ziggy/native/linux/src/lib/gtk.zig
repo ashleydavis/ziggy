@@ -17,6 +17,13 @@ pub const GError = opaque {};
 pub const GdkPixbuf = opaque {};
 pub const GdkPixbufLoader = opaque {};
 pub const GtkSelectionData = opaque {};
+pub const GtkOverlay = opaque {};
+pub const GtkDrawingArea = opaque {};
+pub const Cairo = opaque {};
+pub const GdkWindow = opaque {};
+pub const GdkVisual = opaque {};
+pub const Display = opaque {};
+pub const Visual = opaque {};
 pub const GdkDragContext = opaque {};
 pub const WebKitWebView = opaque {};
 pub const WebKitUserContentManager = opaque {};
@@ -69,6 +76,16 @@ pub const WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START: c_uint = 0;
 // WebKitPolicyDecisionType.
 pub const WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION: c_uint = 0;
 pub const WEBKIT_POLICY_DECISION_TYPE_NEW_WINDOW_ACTION: c_uint = 1;
+
+// WebKitLoadEvent: WEBKIT_LOAD_FINISHED is the event after the page and its resources have loaded.
+pub const WebKitLoadEvent = c_uint;
+pub const WEBKIT_LOAD_FINISHED: WebKitLoadEvent = 3;
+
+// GtkAlign: GTK_ALIGN_FILL makes a widget take the whole space it is given.
+pub const GTK_ALIGN_FILL: c_int = 0;
+
+// GtkStateFlags: GTK_STATE_FLAG_NORMAL is a widget's normal state.
+pub const GTK_STATE_FLAG_NORMAL: c_uint = 0;
 
 // GDK_CURRENT_TIME.
 pub const GDK_CURRENT_TIME: u32 = 0;
@@ -160,10 +177,13 @@ pub extern fn g_object_ref(object: gpointer) gpointer;
 pub extern fn g_strdup(text: [*:0]const u8) [*:0]u8;
 
 pub extern fn g_object_unref(object: gpointer) void;
+pub extern fn g_object_ref(object: gpointer) gpointer;
 pub extern fn g_signal_connect_data(instance: gpointer, detailed_signal: [*:0]const u8, handler: GCallback, data: gpointer, destroy_data: gpointer, connect_flags: c_uint) c_ulong;
 pub extern fn g_application_run(application: *GApplication, argc: c_int, argv: ?[*]?[*:0]u8) c_int;
 pub extern fn g_application_quit(application: *GApplication) void;
 pub extern fn g_idle_add(function: GSourceFunc, data: gpointer) c_uint;
+pub extern fn g_get_real_time() i64;
+pub extern fn g_timeout_add(interval: c_uint, function: GSourceFunc, data: gpointer) c_uint;
 pub extern fn g_getenv(variable: [*:0]const u8) ?[*:0]const u8;
 pub extern fn g_file_read_link(filename: [*:0]const u8, err: ?*?*GError) ?[*:0]u8;
 pub extern fn g_path_get_dirname(file_name: [*:0]const u8) [*:0]u8;
@@ -382,3 +402,40 @@ pub extern fn gtk_settings_get_default() ?*GtkSettings;
 pub extern fn g_object_set(object: ?*anyopaque, first_property_name: [*:0]const u8, ...) void;
 pub extern fn g_object_get(object: ?*anyopaque, first_property_name: [*:0]const u8, ...) void;
 pub extern fn webkit_web_view_set_background_color(web_view: *WebKitWebView, rgba: *const GdkRGBA) void;
+
+pub extern fn gtk_overlay_new() *GtkWidget;
+pub extern fn gtk_overlay_add_overlay(overlay: *GtkWidget, widget: *GtkWidget) void;
+pub extern fn gtk_widget_set_hexpand(widget: *GtkWidget, expand: gboolean) void;
+pub extern fn gtk_widget_set_vexpand(widget: *GtkWidget, expand: gboolean) void;
+pub extern fn gtk_widget_set_halign(widget: *GtkWidget, alignment: c_int) void;
+pub extern fn gtk_widget_set_valign(widget: *GtkWidget, alignment: c_int) void;
+pub extern fn gtk_widget_set_no_show_all(widget: *GtkWidget, no_show_all: gboolean) void;
+pub extern fn gtk_widget_show(widget: *GtkWidget) void;
+pub extern fn gtk_widget_hide(widget: *GtkWidget) void;
+pub extern fn gtk_widget_destroy(widget: *GtkWidget) void;
+pub extern fn gtk_widget_override_background_color(widget: *GtkWidget, state: c_uint, color: *const GdkRGBA) void;
+
+// The part of cairo the splash picture draws with, and the drawing area it draws into. GTK 3 has no GtkPicture, so the
+// image is scaled to cover the window here.
+pub extern fn gtk_drawing_area_new() *GtkWidget;
+pub extern fn gtk_widget_get_allocated_width(widget: *GtkWidget) c_int;
+pub extern fn gtk_widget_get_allocated_height(widget: *GtkWidget) c_int;
+pub extern fn gdk_pixbuf_get_width(pixbuf: *GdkPixbuf) c_int;
+pub extern fn gdk_pixbuf_get_height(pixbuf: *GdkPixbuf) c_int;
+pub extern fn gdk_cairo_set_source_pixbuf(cr: *Cairo, pixbuf: *GdkPixbuf, pixbuf_x: f64, pixbuf_y: f64) void;
+pub extern fn cairo_paint(cr: *Cairo) void;
+pub extern fn cairo_scale(cr: *Cairo, sx: f64, sy: f64) void;
+pub extern fn cairo_translate(cr: *Cairo, dx: f64, dy: f64) void;
+pub extern fn cairo_create(surface: *CairoSurface) *Cairo;
+pub extern fn cairo_destroy(cr: *Cairo) void;
+pub extern fn cairo_xlib_surface_create(display: *Display, drawable: c_ulong, visual: *Visual, width: c_int, height: c_int) *CairoSurface;
+pub extern fn gtk_widget_realize(widget: *GtkWidget) void;
+pub extern fn gtk_widget_get_window(widget: *GtkWidget) ?*GdkWindow;
+pub extern fn gdk_x11_get_default_xdisplay() ?*Display;
+pub extern fn gdk_x11_window_get_xid(window: *GdkWindow) c_ulong;
+pub extern fn gdk_window_get_visual(window: *GdkWindow) ?*GdkVisual;
+pub extern fn gdk_x11_visual_get_xvisual(visual: *GdkVisual) ?*Visual;
+pub extern fn gdk_visual_get_depth(visual: *GdkVisual) c_int;
+pub extern fn XCreatePixmap(display: *Display, drawable: c_ulong, width: c_uint, height: c_uint, depth: c_uint) c_ulong;
+pub extern fn XSetWindowBackgroundPixmap(display: *Display, window: c_ulong, pixmap: c_ulong) c_int;
+pub extern fn XFreePixmap(display: *Display, pixmap: c_ulong) c_int;

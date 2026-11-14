@@ -15,6 +15,8 @@
         h1 { margin: 0; }
         button { padding: 6px 10px; }
         pre { flex: 1; min-height: 0; overflow: auto; margin: 0; border: 1px solid #8888; padding: 8px; white-space: pre-wrap; word-break: break-word; }
+        /* The splash overlay does not cover the scrollbar gutter, so the page's scrollbar is hidden while it is present. */
+        html:has([data-id="ziggy-splash"]), html:has([data-id="ziggy-splash"]) * { overflow: hidden !important; }
     </style>
 </head>
 <body>

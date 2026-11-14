@@ -17,12 +17,16 @@ const native_message = @import("native-message");
 const remote_control_arguments = @import("remote-control-arguments");
 const system_theme = @import("system-theme.zig");
 const web_view_theme = @import("web-view-theme.zig");
+const splash = @import("splash");
 
 // The URL scheme the bundled frontend is served under. WebKitGTK calls the native app's scheme handler for each file instead of reading a directory.
 const app_scheme = "ziggy-app";
 
 // The URL prefix of the bundled frontend, with a trailing slash. It is what the core allows the web view to navigate to.
 const app_url_prefix = app_scheme ++ "://app/";
+
+// The address of the splash page in the core's UI files.
+const splash_url = app_url_prefix ++ "ziggy-splash.html";
 
 //
 // What a native call handler can call on the native app.
@@ -84,6 +88,14 @@ const NativeApp = struct {
     args: []const [:0]const u8,
     // The web view, once the window exists.
     web_view: ?*c.WebKitWebView,
+    // The overlay the splash picture is added to, once it exists.
+    overlay: ?*c.GtkWidget,
+    // The drawing area that paints the splash image, or null when it is gone.
+    splash_picture: ?*c.GtkWidget,
+    // The pixbuf the splash picture draws. Owned while the picture exists.
+    splash_pixbuf: ?*c.GdkPixbuf,
+    // Whether the app's own frontend has loaded.
+    main_loaded: bool,
     // The core's handle, until it is destroyed.
     core: ?*anyopaque,
     // The file dialog that is showing, or null.
@@ -134,6 +146,10 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .application = application,
         .args = taken.arguments,
         .web_view = null,
+        .overlay = null,
+        .splash_picture = null,
+        .splash_pixbuf = null,
+        .main_loaded = false,
         .core = null,
         .open_pick = null,
         .open_screenshot = null,
@@ -171,17 +187,32 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
 // Sets the window's icon from the bytes of a PNG file.
 //
 fn setWindowIcon(window: *c.GtkWindow, icon_png: []const u8) void {
+    const pixbuf = pixbufFromPng(icon_png) orelse {
+        fatal("could not read the window icon", .{});
+    };
+    defer c.g_object_unref(pixbuf);
+    c.gtk_window_set_icon(window, pixbuf);
+}
+
+//
+// Decodes a PNG into a pixbuf the caller releases with g_object_unref, or null when the loader made no pixbuf. A PNG that
+// cannot be read ends the program, naming what failed.
+//
+fn pixbufFromPng(png: []const u8) ?*c.GdkPixbuf {
     const loader = c.gdk_pixbuf_loader_new_with_type("png", null) orelse {
-        fatal("could not create the icon loader", .{});
+        fatal("could not create the PNG loader", .{});
     };
     defer c.g_object_unref(loader);
-    if (c.gdk_pixbuf_loader_write(loader, icon_png.ptr, icon_png.len, null) == 0) {
-        fatal("could not read the window icon", .{});
+    if (c.gdk_pixbuf_loader_write(loader, png.ptr, png.len, null) == 0) {
+        fatal("could not read the PNG", .{});
     }
     if (c.gdk_pixbuf_loader_close(loader, null) == 0) {
-        fatal("could not finish reading the window icon", .{});
+        fatal("could not finish reading the PNG", .{});
     }
-    c.gtk_window_set_icon(window, c.gdk_pixbuf_loader_get_pixbuf(loader));
+    const pixbuf = c.gdk_pixbuf_loader_get_pixbuf(loader) orelse {
+        return null;
+    };
+    return @ptrCast(@alignCast(c.g_object_ref(pixbuf).?));
 }
 
 //
@@ -226,9 +257,17 @@ fn onActivate(application: *c.GtkApplication, user_data: ?*anyopaque) callconv(.
 }
 
 //
+// Prints a splash event with its wall-clock time, so a recording can be annotated.
+//
+fn splashEvent(name: []const u8) void {
+    std.debug.print("SPLASH-EVENT {s} {d}\n", .{ name, @divTrunc(c.g_get_real_time(), 1000) });
+}
+
+//
 // Creates the window and the web view, creates the core and loads the frontend.
 //
 fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
+    splashEvent("started");
     native_app.portal = c.g_dbus_proxy_new_for_bus_sync(c.G_BUS_TYPE_SESSION, c.G_DBUS_PROXY_FLAGS_NONE, null, "org.freedesktop.portal.Desktop", "/org/freedesktop/portal/desktop", "org.freedesktop.portal.Settings", null, null);
     if (c.gtk_settings_get_default()) |settings| {
         var theme_name: [*c]u8 = null;
@@ -258,6 +297,23 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     c.gtk_window_set_position(window, c.GTK_WIN_POS_CENTER);
     if (native_app.app_config.icon_png) |icon_png| {
         setWindowIcon(window, icon_png);
+    }
+
+    // The window shows the splash picture before the core is created, so the first frame the user sees is the art. The image
+    // is the window's X background too, so X paints it before GTK or the compositor draws any child: no solid colour comes
+    // before the image.
+    const box_widget = c.gtk_box_new(c.GTK_ORIENTATION_VERTICAL, 0);
+    const overlay_widget = c.gtk_overlay_new();
+    c.gtk_container_add(overlay_widget, box_widget);
+    c.gtk_container_add(window_widget, overlay_widget);
+    native_app.overlay = overlay_widget;
+    addSplashPicture(native_app, overlay_widget, width, height);
+    applySplashBackground(window_widget);
+    if (splash.configured) {
+        configureSplashWindow(window_widget, width, height);
+        c.gtk_widget_show_all(window_widget);
+        c.gtk_window_present(window);
+        splashEvent("app-started");
     }
 
     var config = std.mem.zeroes(z.ziggy_config);
@@ -315,23 +371,23 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     const web_view_widget = c.webkit_web_view_new();
     const web_view: *c.WebKitWebView = @ptrCast(@alignCast(web_view_widget));
     native_app.web_view = web_view;
+    splashEvent("app-web-view-created");
     c.webkit_settings_set_enable_developer_extras(c.webkit_web_view_get_settings(web_view), 1);
     // The popup blocker drops a window.open or a target="_blank" that no click of the user's ran. onCreate and onDecidePolicy open
     // each new window with the system's opener or drop it.
     c.webkit_settings_set_javascript_can_open_windows_automatically(c.webkit_web_view_get_settings(web_view), 1);
     _ = c.g_signal_connect_data(c.webkit_web_view_get_inspector(web_view), "closed", @ptrCast(&onInspectorClosed), native_app, null, 0);
-    const box_widget = c.gtk_box_new(c.GTK_ORIENTATION_VERTICAL, 0);
-    c.gtk_container_add(window_widget, box_widget);
     c.gtk_box_pack_start(box_widget, web_view_widget, 1, 1, 0);
+    _ = c.g_signal_connect_data(web_view, "load-changed", @ptrCast(&onMainLoadChanged), native_app, null, 0);
     switch (theme_call) {
         .theme => |theme| applyTheme(native_app, theme),
         else => return error.ThemeFailed,
     }
-    // The menu bar goes into the box before the window is shown, so the first frame holds it. A menu bar packed after
-    // gtk_widget_show_all stays hidden, because a widget is hidden until it is shown.
     try buildMenu(native_app, box_widget);
-    c.gtk_widget_show_all(window_widget);
-    c.gtk_window_present(window);
+    if (splash.configured) {
+        // The app's web view stays out of the window until the frontend says it is ready.
+        c.gtk_widget_hide(web_view_widget);
+    }
 
     const content_manager = c.webkit_web_view_get_user_content_manager(web_view);
     if (c.webkit_user_content_manager_register_script_message_handler(content_manager, "ziggy") == 0) {
@@ -358,6 +414,161 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     const ui_url = try std.fmt.allocPrintSentinel(std.heap.c_allocator, "{s}index.html{s}{s}", .{ app_url_prefix, query_separator, query }, 0);
     defer std.heap.c_allocator.free(ui_url);
     c.webkit_web_view_load_uri(web_view, ui_url.ptr);
+}
+
+//
+// Adds the splash picture over the app's own web view when the app declares a splash. The picture is the only thing on
+// screen until it has drawn its first frame; the splash web view is not made until then, so nothing the web view does can
+// hold up the picture.
+//
+fn addSplashPicture(native_app: *NativeApp, overlay_widget: *c.GtkWidget, width: c_int, height: c_int) void {
+    if (!splash.configured) {
+        return;
+    }
+    const png = if (width < height) splash.portrait_png else splash.landscape_png;
+    const pixbuf = pixbufFromPng(png) orelse {
+        fatal("could not read the splash image", .{});
+    };
+    const picture = c.gtk_drawing_area_new();
+    applySplashBackground(picture);
+    c.gtk_widget_set_hexpand(picture, 1);
+    c.gtk_widget_set_vexpand(picture, 1);
+    c.gtk_widget_set_halign(picture, c.GTK_ALIGN_FILL);
+    c.gtk_widget_set_valign(picture, c.GTK_ALIGN_FILL);
+    native_app.splash_pixbuf = pixbuf;
+    native_app.splash_picture = picture;
+    _ = c.g_signal_connect_data(picture, "draw", @ptrCast(&onSplashPictureDraw), native_app, null, 0);
+    c.gtk_overlay_add_overlay(overlay_widget, picture);
+}
+
+//
+// Sets the splash image as the window's X background pixmap, scaled to cover it, so the first frame the window maps is the
+// art. X paints the pixmap itself, before GTK or the compositor has drawn any child, so no solid colour comes first.
+//
+fn configureSplashWindow(window_widget: *c.GtkWidget, width: c_int, height: c_int) void {
+    if (width <= 0 or height <= 0) {
+        return;
+    }
+    const png = if (width < height) splash.portrait_png else splash.landscape_png;
+    const pixbuf = pixbufFromPng(png) orelse {
+        return;
+    };
+    defer c.g_object_unref(pixbuf);
+    c.gtk_widget_realize(window_widget);
+    const gdk_window = c.gtk_widget_get_window(window_widget) orelse {
+        return;
+    };
+    const display = c.gdk_x11_get_default_xdisplay() orelse {
+        return;
+    };
+    const visual = c.gdk_window_get_visual(gdk_window) orelse {
+        return;
+    };
+    const xvisual = c.gdk_x11_visual_get_xvisual(visual) orelse {
+        return;
+    };
+    const depth = c.gdk_visual_get_depth(visual);
+    const xid = c.gdk_x11_window_get_xid(gdk_window);
+    const pixmap = c.XCreatePixmap(display, xid, @intCast(width), @intCast(height), @intCast(depth));
+    if (pixmap == 0) {
+        return;
+    }
+    const surface = c.cairo_xlib_surface_create(display, pixmap, xvisual, width, height);
+    const cairo = c.cairo_create(surface);
+    const image_width = c.gdk_pixbuf_get_width(pixbuf);
+    const image_height = c.gdk_pixbuf_get_height(pixbuf);
+    if (image_width > 0 and image_height > 0) {
+        const scale = @max(
+            @as(f64, @floatFromInt(width)) / @as(f64, @floatFromInt(image_width)),
+            @as(f64, @floatFromInt(height)) / @as(f64, @floatFromInt(image_height)),
+        );
+        c.cairo_scale(cairo, scale, scale);
+        c.cairo_translate(cairo, (@as(f64, @floatFromInt(width)) / scale - @as(f64, @floatFromInt(image_width))) / 2.0, (@as(f64, @floatFromInt(height)) / scale - @as(f64, @floatFromInt(image_height))) / 2.0);
+        c.gdk_cairo_set_source_pixbuf(cairo, pixbuf, 0.0, 0.0);
+        c.cairo_paint(cairo);
+    }
+    c.cairo_destroy(cairo);
+    c.cairo_surface_destroy(surface);
+    _ = c.XSetWindowBackgroundPixmap(display, xid, pixmap);
+    _ = c.XFreePixmap(display, pixmap);
+}
+
+//
+// Draws the splash image into its drawing area, scaled to cover it and centred, as the CSS object-fit: cover does.
+//
+fn onSplashPictureDraw(widget: *c.GtkWidget, cairo: *c.Cairo, user_data: ?*anyopaque) callconv(.c) c.gboolean {
+    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
+    const pixbuf = native_app.splash_pixbuf orelse {
+        return 0;
+    };
+    const width = c.gtk_widget_get_allocated_width(widget);
+    const height = c.gtk_widget_get_allocated_height(widget);
+    const image_width = c.gdk_pixbuf_get_width(pixbuf);
+    const image_height = c.gdk_pixbuf_get_height(pixbuf);
+    if (width <= 0 or height <= 0 or image_width <= 0 or image_height <= 0) {
+        return 0;
+    }
+    const scale = @max(
+        @as(f64, @floatFromInt(width)) / @as(f64, @floatFromInt(image_width)),
+        @as(f64, @floatFromInt(height)) / @as(f64, @floatFromInt(image_height)),
+    );
+    const drawn_width = @as(f64, @floatFromInt(image_width)) * scale;
+    const drawn_height = @as(f64, @floatFromInt(image_height)) * scale;
+    c.cairo_translate(cairo, (@as(f64, @floatFromInt(width)) - drawn_width) / 2.0, (@as(f64, @floatFromInt(height)) - drawn_height) / 2.0);
+    c.cairo_scale(cairo, scale, scale);
+    c.gdk_cairo_set_source_pixbuf(cairo, pixbuf, 0.0, 0.0);
+    c.cairo_paint(cairo);
+    return 1;
+}
+
+//
+// The app's own frontend has loaded. With no splash it is shown at once. With one it stays hidden behind the native picture
+// until the frontend sends frontend-ready, which is the frontend saying its own splash overlay has painted over the real UI.
+//
+fn onMainLoadChanged(web_view: *c.WebKitWebView, load_event: c.WebKitLoadEvent, user_data: ?*anyopaque) callconv(.c) void {
+    _ = web_view;
+    if (load_event != c.WEBKIT_LOAD_FINISHED) {
+        return;
+    }
+    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
+    native_app.main_loaded = true;
+    if (!splash.configured) {
+        // With no splash to cover it, the window waits for the app's own page, so the blank web view is never shown.
+        if (native_app.window) |window| {
+            c.gtk_widget_show_all(@ptrCast(window));
+            c.gtk_window_present(window);
+        }
+    }
+}
+
+//
+// The frontend's frontend-ready message: the app's web view, with the frontend's own splash overlay painted in it, is shown,
+// the native picture goes, and the frontend is told the app is showing so it can fade its overlay.
+//
+fn revealAppView(native_app: *NativeApp) void {
+    if (!splash.configured) {
+        return;
+    }
+    if (native_app.web_view) |web_view| {
+        c.gtk_widget_show(@ptrCast(web_view));
+        splashEvent("app-web-view-visible");
+    }
+    destroySplashPicture(native_app);
+    deliverToWebView(native_app, "{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}");
+}
+
+//
+// Destroys the picture and releases the pixbuf it draws.
+//
+fn destroySplashPicture(native_app: *NativeApp) void {
+    if (native_app.splash_picture) |picture| {
+        native_app.splash_picture = null;
+        c.gtk_widget_destroy(picture);
+    }
+    if (native_app.splash_pixbuf) |pixbuf| {
+        native_app.splash_pixbuf = null;
+        c.g_object_unref(pixbuf);
+    }
 }
 
 //
@@ -583,6 +794,10 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .key_press => |key| press_key(native_app, reply, key),
         .new_window => |arguments| start_new_window(native_app, reply, arguments),
         .theme => |theme_call| applyTheme(native_app, theme_call),
+        .frontend_ready => {
+            splashEvent("frontend-ready-received");
+            revealAppView(native_app);
+        },
         .keep_alive, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
 }
@@ -793,6 +1008,8 @@ fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget) !void {
     }
     c.gtk_box_pack_start(box_widget, menu_bar, 0, 0, 0);
     c.gtk_box_reorder_child(box_widget, menu_bar, 0);
+    // The box was shown before the menu existed, so the menu bar is shown here.
+    c.gtk_widget_show(menu_bar);
 }
 
 //
@@ -1426,6 +1643,17 @@ fn applyGtkTheme(native_app: *NativeApp, theme_call: native_message.ThemeCall) v
             std.debug.print("ziggy native app: GTK_THEME={s} names a dark theme, so the page's prefers-color-scheme stays dark\n", .{std.mem.span(gtk_theme_env)});
         }
     }
+}
+
+//
+// Gives the widget the splash background as its own, so no frame shows the GTK theme's colour before the splash paints.
+//
+fn applySplashBackground(widget: *c.GtkWidget) void {
+    if (!splash.configured) {
+        return;
+    }
+    const background = parseBackground(splash.background);
+    c.gtk_widget_override_background_color(widget, c.GTK_STATE_FLAG_NORMAL, &background);
 }
 
 //

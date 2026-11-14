@@ -675,6 +675,7 @@ describe("ziggy-inject", () => {
         expect(Object.keys(fakeWindow.ziggy!).sort()).toEqual([
             "addTask",
             "cancelTasks",
+            "frontendReady",
             "getConfig",
             "getConfigProblem",
             "getPathForFile",

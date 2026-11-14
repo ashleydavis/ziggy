@@ -18,6 +18,8 @@
         ul { margin: 0; padding-left: 20px; }
         label { margin-left: 8px; }
         input[type=number] { width: 4em; }
+        /* The splash overlay does not cover the scrollbar gutter, so the page's scrollbar is hidden while it is present. */
+        html:has([data-id="ziggy-splash"]), html:has([data-id="ziggy-splash"]) * { overflow: hidden !important; }
     </style>
     <script>
         document.documentElement.dataset.firstMediaTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";

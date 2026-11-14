@@ -14,7 +14,7 @@ final class ViewController: UIViewController {
     override func loadView() {
         let newBridge = ZiggyBridge(frame: UIScreen.main.bounds)
         bridge = newBridge
-        view = newBridge.webView
+        view = newBridge.view
     }
 
     // Starts Ziggy once the web view is the controller's view.

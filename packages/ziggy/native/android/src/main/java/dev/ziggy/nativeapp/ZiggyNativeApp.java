@@ -21,8 +21,10 @@ import android.system.ErrnoException;
 import android.system.Os;
 import android.graphics.Insets;
 import android.util.Log;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.widget.FrameLayout;
 import android.webkit.ConsoleMessage;
 import android.webkit.JavascriptInterface;
 import android.webkit.RenderProcessGoneDetail;
@@ -101,6 +103,18 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
 
     // True once the frontend has finished loading, so window.__ziggyReceive exists. Only the main thread reads or writes it.
     private boolean uiReady;
+
+    // The splash web view, while the splash is showing, or null when the app has no splash or it has ended.
+    private WebView splashWebView;
+
+    // The container that holds the app's web view and the splash web view, or null when the app has no splash.
+    private FrameLayout splashContainer;
+
+    // Whether the app's own page has finished loading. Only the main thread reads or writes it.
+    private boolean mainPageFinished;
+
+    // Whether the splash page has finished loading. Only the main thread reads or writes it.
+    private boolean splashPageFinished;
 
     // The messages the core sent before the frontend finished loading, held for the main thread to deliver when it has.
     private final ArrayList<String> beforeUi = new ArrayList<String>();
@@ -187,9 +201,56 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         watchCore(created);
 
         configureWebView();
+        addSplashIfConfigured();
         applyTheme(new String(ZiggyNative.theme(created), StandardCharsets.UTF_8));
         String query = new String(ZiggyNative.uiQuery(created), StandardCharsets.UTF_8);
         webView.loadUrl(APP_URL_PREFIX + "index.html" + (query.isEmpty() ? "" : "?" + query));
+    }
+
+    // Adds the splash web view over the app's own web view when the core's UI files have a splash page. The app's web view
+    // stays invisible until its own page has loaded, and the splash is destroyed then.
+    private void addSplashIfConfigured() {
+        if (ZiggyNative.uiFileContent("/ziggy-splash.html".getBytes(StandardCharsets.UTF_8)) == null) {
+            return;
+        }
+        splashContainer = new FrameLayout(activity);
+        activity.setContentView(splashContainer);
+        ViewGroup parent = (ViewGroup) webView.getParent();
+        if (parent != null) {
+            parent.removeView(webView);
+        }
+        webView.setVisibility(View.INVISIBLE);
+        splashContainer.addView(webView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        WebView splash = new WebView(activity);
+        splash.getSettings().setJavaScriptEnabled(false);
+        splash.setWebViewClient(new SplashWebViewClient());
+        splashContainer.addView(splash, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        splashWebView = splash;
+        splash.loadUrl(APP_URL_PREFIX + "ziggy-splash.html");
+    }
+
+    // Shows the app's own web view and destroys the splash, once the app's page has loaded.
+    private void showMainAndRemoveSplash() {
+        webView.setVisibility(View.VISIBLE);
+        mainPageFinished = true;
+        if (splashWebView != null) {
+            if (splashContainer != null) {
+                splashContainer.removeView(splashWebView);
+            }
+            splashWebView.destroy();
+            splashWebView = null;
+        }
+        webView.evaluateJavascript("window.__ziggyReceive({\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}});", null);
+    }
+
+    // The app's frontend has painted its own splash overlay, so the splash goes and the app's web view is revealed. It then tells the
+    // frontend the app is showing, so the frontend fades its own overlay out.
+    @Override
+    public void frontendReady() {
+        if (splashWebView != null) {
+            showMainAndRemoveSplash();
+        }
     }
 
     // Sets the web view's colour scheme and background from a theme call's JSON.
@@ -274,6 +335,10 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
             coreLock.writeLock().unlock();
         }
         nativeCallThread.shutdown();
+        if (splashWebView != null) {
+            splashWebView.destroy();
+            splashWebView = null;
+        }
         webView.destroy();
     }
 
@@ -830,6 +895,26 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         }
     }
 
+    // Serves the splash page and its images from the core, and shows the splash when its page has finished.
+    private final class SplashWebViewClient extends WebViewClient {
+        @Override
+        public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+            String url = request.getUrl().toString();
+            if (url.startsWith(APP_URL_PREFIX)) {
+                return uiResponse(url);
+            }
+            return null;
+        }
+
+        @Override
+        public void onPageFinished(WebView view, String url) {
+            splashPageFinished = true;
+            if (!mainPageFinished && view.getParent() != null) {
+                view.setVisibility(View.VISIBLE);
+            }
+        }
+    }
+
     // Decides every navigation and request with the core's origin check: the app's own frontend loads, http, https and mailto
     // links open in the system browser, and everything else is blocked.
     private final class ZiggyWebViewClient extends WebViewClient {
@@ -847,6 +932,9 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
                 webView.evaluateJavascript("window.__ziggyReceive(" + text + ");", null);
             }
             beforeUi.clear();
+            if (splashWebView == null) {
+                showMainAndRemoveSplash();
+            }
         }
 
         @Override

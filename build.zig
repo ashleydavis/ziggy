@@ -1,5 +1,6 @@
 const std = @import("std");
 const android_libc = @import("build/android-libc.zig");
+const splash_lib = @import("packages/ziggy/core/src/lib/splash.zig");
 
 //
 // Builds Ziggy and registers its tests. As a dependency of an app's build it gives the app the
@@ -321,6 +322,19 @@ pub fn dependency(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std
 }
 
 //
+// The splash screen an app declares in its app.zon: the background colour and the two images the native apps and the
+// frontend show while the app's UI loads.
+//
+pub const ISplash = struct {
+    // The CSS colour of the splash background.
+    background: []const u8,
+    // The portrait image, a PNG, relative to the app's build root. A matching .bmp sits beside it for Windows.
+    portrait: []const u8,
+    // The landscape image, a PNG, relative to the app's build root. A matching .bmp sits beside it for Windows.
+    landscape: []const u8,
+};
+
+//
 // An app's details, as its app.zon gives them.
 //
 const IAppDetails = struct {
@@ -330,6 +344,8 @@ const IAppDetails = struct {
     title: []const u8,
     // The app's version, which its log files give, or null for an app that gives none. A release build writes it into app.zon.
     version: ?[]const u8 = null,
+    // The splash screen the app declares, or null for an app with none.
+    splash: ?ISplash = null,
 };
 
 //
@@ -345,6 +361,36 @@ fn readAppDetails(b: *std.Build) IAppDetails {
         error.OutOfMemory => @panic("out of memory reading the app's app.zon"),
         error.ParseZon => std.debug.panic("the app's app.zon is not valid:\n{f}", .{diagnostics}),
     };
+}
+
+//
+// The Windows BMP that sits beside a splash PNG, which the Windows native app paints the window with.
+//
+fn splashBmpPath(b: *std.Build, png_path: []const u8) []const u8 {
+    std.debug.assert(std.mem.endsWith(u8, png_path, ".png"));
+    return b.fmt("{s}.bmp", .{png_path[0 .. png_path.len - ".png".len]});
+}
+
+//
+// Opens every file an app's splash needs, so a missing one fails the build with the path and the file that names it,
+// rather than a compile error inside a generated module.
+//
+fn checkSplashFiles(b: *std.Build, details: IAppDetails) void {
+    const splash_details = details.splash orelse {
+        return;
+    };
+    const paths = [_][]const u8{
+        splash_details.portrait,
+        splash_details.landscape,
+        splashBmpPath(b, splash_details.portrait),
+        splashBmpPath(b, splash_details.landscape),
+    };
+    for (paths) |path| {
+        const file = b.build_root.handle.openFile(b.graph.io, path, .{}) catch |err| {
+            std.debug.panic("Ziggy could not open the splash file {s} named in the app's app.zon: {s}", .{ path, @errorName(err) });
+        };
+        file.close(b.graph.io);
+    }
 }
 
 //
@@ -476,6 +522,8 @@ fn appPath(b: *std.Build, directory: []const u8, sub_path: []const u8) []const u
 // not use the frontend is not affected.
 //
 pub fn embedUi(b: *std.Build, native_app: *std.Build.Module, native_app_import_name: []const u8, ui_directory: []const u8) !*std.Build.Module {
+    const details = readAppDetails(b);
+    checkSplashFiles(b, details);
     const io = b.graph.io;
     var source: std.ArrayList(u8) = .empty;
     var embedded_names: std.ArrayList([]const u8) = .empty;
@@ -503,6 +551,9 @@ pub fn embedUi(b: *std.Build, native_app: *std.Build.Module, native_app_import_n
                 has_index = true;
             }
         }
+        if (details.splash != null) {
+            try source.appendSlice(b.allocator, "    .{\n        .path = \"ziggy-splash-portrait.png\",\n        .content = @embedFile(\"splash-portrait\"),\n    },\n    .{\n        .path = \"ziggy-splash-landscape.png\",\n        .content = @embedFile(\"splash-landscape\"),\n    },\n    .{\n        .path = \"ziggy-splash.html\",\n        .content = @embedFile(\"splash-html\"),\n    },\n");
+        }
         try source.appendSlice(b.allocator, "};\n");
     } else |err| {
         // A frontend directory that is missing means the frontend was not built, which the compile error below reports. Any
@@ -528,6 +579,19 @@ pub fn embedUi(b: *std.Build, native_app: *std.Build.Module, native_app_import_n
     for (embedded_names.items, embedded_paths.items) |import_name, file_path| {
         module.addAnonymousImport(import_name, .{
             .root_source_file = b.path(file_path),
+        });
+    }
+    if (details.splash) |splash_details| {
+        module.addAnonymousImport("splash-portrait", .{
+            .root_source_file = b.path(splash_details.portrait),
+        });
+        module.addAnonymousImport("splash-landscape", .{
+            .root_source_file = b.path(splash_details.landscape),
+        });
+        const generated_html = b.addWriteFiles();
+        const html_file = generated_html.add("ziggy-splash.html", try splash_lib.html(b.allocator, splash_details.background, "ziggy-splash-portrait.png", "ziggy-splash-landscape.png"));
+        module.addAnonymousImport("splash-html", .{
+            .root_source_file = html_file,
         });
     }
     return module;
@@ -732,6 +796,7 @@ const linux_runtime_libraries = [_][]const u8{
     "libcairo.so.2",
     "libgbm.so.1",
     "libEGL.so.1",
+    "libX11.so.6",
 };
 
 //
@@ -751,6 +816,36 @@ pub const INativeApp = struct {
     // The Windows resource script of the app's executable icon, or null for none.
     windows_resource: ?[]const u8,
 };
+
+//
+// Makes the module the native app imports as "splash": the app's splash configuration and images, or an unconfigured
+// module for an app that declares no splash in its app.zon.
+//
+fn addSplashModule(b: *std.Build, details: IAppDetails) !*std.Build.Module {
+    const generated = b.addWriteFiles();
+    const splash_details = details.splash orelse {
+        return b.createModule(.{
+            .root_source_file = generated.add("splash.zig", "pub const configured = false;\npub const background = \"#000000\";\npub const portrait_png = \"\";\npub const landscape_png = \"\";\npub const portrait_bmp = \"\";\npub const landscape_bmp = \"\";\n"),
+        });
+    };
+    const source = try std.fmt.allocPrint(b.allocator, "pub const configured = true;\npub const background = \"{f}\";\npub const portrait_png = @embedFile(\"splash-portrait-png\");\npub const landscape_png = @embedFile(\"splash-landscape-png\");\npub const portrait_bmp = @embedFile(\"splash-portrait-bmp\");\npub const landscape_bmp = @embedFile(\"splash-landscape-bmp\");\n", .{std.zig.fmtString(splash_details.background)});
+    const module = b.createModule(.{
+        .root_source_file = generated.add("splash.zig", source),
+    });
+    module.addAnonymousImport("splash-portrait-png", .{
+        .root_source_file = b.path(splash_details.portrait),
+    });
+    module.addAnonymousImport("splash-landscape-png", .{
+        .root_source_file = b.path(splash_details.landscape),
+    });
+    module.addAnonymousImport("splash-portrait-bmp", .{
+        .root_source_file = b.path(splashBmpPath(b, splash_details.portrait)),
+    });
+    module.addAnonymousImport("splash-landscape-bmp", .{
+        .root_source_file = b.path(splashBmpPath(b, splash_details.landscape)),
+    });
+    return module;
+}
 
 //
 // Builds an app's Linux native app, installed to zig-out/bin/<name> by the `<name>-linux` step. The native app is Zig that talks to GTK 3 and
@@ -805,6 +900,7 @@ pub fn addLinuxNativeApp(
         .target = target,
         .optimize = optimize,
     }));
+    native_app.addImport("splash", try addSplashModule(b, readAppDetails(b)));
     for (runtime_library_paths.items) |path| {
         native_app.addObjectFile(.{
             .cwd_relative = path,
@@ -897,6 +993,7 @@ pub fn addWindowsNativeApp(
         .target = target,
         .optimize = optimize,
     }));
+    native_app.addImport("splash", try addSplashModule(b, readAppDetails(b)));
     native_app.linkSystemLibrary("user32", .{});
     native_app.linkSystemLibrary("kernel32", .{});
     native_app.linkSystemLibrary("ole32", .{});

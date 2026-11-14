@@ -1611,6 +1611,10 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: F
     if (std.mem.eql(u8, name, "test-ui-ready")) {
         return try respond(arena, try system_messages.remote_control.testUiReady(tests, io, allocator, timers));
     }
+    if (std.mem.eql(u8, name, "frontend-ready")) {
+        try frontend.native.call(io, allocator, .frontend_ready, null);
+        return try respond(arena, {});
+    }
     if (std.mem.eql(u8, name, "get-config")) {
         const path = switch (try handlers_lib.parsePayload([]const u8, arena, data)) {
             .parsed => |value| value,

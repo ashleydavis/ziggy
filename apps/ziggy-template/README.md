@@ -34,4 +34,8 @@ bun run dev         # Runs the frontend in your browser with dev mode, which rel
 - `smoke-tests/`: the smoke tests, which drive the real app.
 - `.github/workflows/`: the GitHub Actions workflows that test the app and publish a release for each platform.
 
+## Icons and splash screens
+
+The app's icon and splash art are the SVGs in `assets/`, named by `assets.json`. `.splash` in `app.zon` gives every native app and the frontend the background colour and the portrait and landscape splash images. Regenerate the icons and splash images for every platform with `bash scripts/generate-app-assets.sh --app apps/ziggy-template --assets assets` from the root of this repository. See Ziggy's [App icons and splash screens](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide/app-icons-and-splash.md).
+
 Everything else is in Ziggy's [user guide](https://github.com/ashleydavis/ziggy/blob/main/docs/user-guide.md).

@@ -28,6 +28,7 @@ pub const menu = @import("lib/menu.zig");
 pub const action = @import("lib/action.zig");
 pub const shortcuts = @import("lib/shortcuts.zig");
 pub const inject_script = @import("lib/inject-script.zig");
+pub const splash = @import("lib/splash.zig");
 pub const ui_files = @import("lib/ui-files.zig");
 pub const dropped_files = @import("lib/dropped-files.zig");
 pub const task_queue = @import("lib/task-queue.zig");

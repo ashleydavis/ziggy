@@ -83,6 +83,9 @@ pub const Call = union(enum) {
     new_window: []const []const u8,
     // Set the web view's colour scheme and background from the theme. No result.
     theme: ThemeCall,
+    // The app's frontend has loaded and painted its own splash overlay: the native app reveals the app's web view and tells the
+    // frontend it has. No result.
+    frontend_ready,
     // The core's main thread has stopped and sends nothing more. Only the core's own side of the queue reads it (see NativeSide).
     stopped,
 };
@@ -118,7 +121,7 @@ pub fn encode(allocator: std.mem.Allocator, call: Call, call_id: ?u64) ![]u8 {
         .callId = call_id,
     };
     switch (call) {
-        .quit, .os_version, .stopped => {},
+        .quit, .os_version, .frontend_ready, .stopped => {},
         .menu_action => |action| wire.action = action,
         .keep_alive => |keep_running| wire.keepRunning = keep_running,
         .pick_paths => |pick| {
@@ -206,6 +209,9 @@ pub fn parse(arena: std.mem.Allocator, text: []const u8) !Call {
             },
         };
     }
+    if (std.mem.eql(u8, wire.type, "frontend-ready")) {
+        return .frontend_ready;
+    }
     if (std.mem.eql(u8, wire.type, "stopped")) {
         return .stopped;
     }
@@ -255,6 +261,7 @@ fn typeName(call: Call) []const u8 {
         .key_press => "key-press",
         .new_window => "new-window",
         .theme => "theme",
+        .frontend_ready => "frontend-ready",
         .stopped => "stopped",
     };
 }

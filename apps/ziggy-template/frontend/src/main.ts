@@ -1,6 +1,18 @@
 import type { IJsonValue } from "ziggy";
 import { greetingLine, IAppEvent, IHelloWorldResponse, logLineForEvent } from "./lib/hello-world";
+import { installSplashScreen } from "./lib/splash";
 import { ITestCommand, performTestCommand, testResultToJson } from "./lib/test-commands";
+
+const splash = installSplashScreen(document, {
+    background: "#FFFFFF",
+    minimumDisplayMilliseconds: 2000,
+    fadeDurationMilliseconds: 2000,
+});
+window.ziggy.onEvent((event: { type?: string } | null) => {
+    if (event !== null && event.type === "frontend-visible") {
+        splash.remove();
+    }
+});
 
 //
 // The event the hello-world task sends while it runs.
@@ -185,3 +197,4 @@ registerActions();
 listenForTheActionButton();
 listenForTheme();
 listenForTestCommands();
+window.ziggy.frontendReady();

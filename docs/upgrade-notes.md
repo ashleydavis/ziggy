@@ -13,6 +13,8 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 - **A shortcut on a letter, a digit, `Plus`, `Minus`, `Equal` or `?` runs from the key that types its character.** One that holds Shift with a digit, `Plus`, `Minus` or `Equal` fails the build, so add Ctrl, Alt or Cmd.
 - **WebView2's browser accelerator keys are off on Windows,** so an app that relied on F5 or Ctrl+F adds a menu item or an action.
 - **New, and optional:** a shortcut can be `?` (see [Menus](user-guide/menus.md#keyboard-shortcuts)).
+- **`ZiggyBridge.view` is the window or controller content for macOS and iOS apps.** Put `newBridge.view` on screen; `ZiggyBridge.webView` remains the app's own web view.
+- **New, and optional:** `.splash` on `app.zon`. The frontend's matching overlay is app code; the template's `frontend/src/lib/splash.ts` is the copy to take. See [App icons and splash screens](user-guide/app-icons-and-splash.md).
 - **`HandlerServices.VTable` has `configPath` and `statePath`.** Code of the app's that builds its own handler services vtable, such as a test, adds both.
 - **`ITaskContext` has `configPath` and `statePath`,** and the task context constructor takes them. Code of the app's that builds a task context passes the two paths, or empty strings when the code it runs reads neither file.
 - **`window.ziggy` has `getConfig`, `setConfig`, `getState`, `setState` and `getConfigProblem`.** A fake of `IZiggyBridge` in the app's tests adds the five.

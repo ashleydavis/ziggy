@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1290" height="2796" viewBox="0 0 1290 2796">
+  <defs>
+    <linearGradient id="ziggy-gradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#8B5CF6"/>
+      <stop offset="100%" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <rect width="1290" height="2796" fill="#1B1035"/>
+  <g transform="translate(387 1140) scale(0.516)">
+    <path d="M 80 80 L 920 80 L 920 220 L 278 780 L 920 780 L 920 920 L 80 920 L 80 780 L 722 220 L 80 220 Z" fill="#FFFFFF"/>
+    <circle cx="950" cy="950" r="50" fill="#FBBF24"/>
+  </g>
+</svg>

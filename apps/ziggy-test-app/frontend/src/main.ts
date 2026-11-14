@@ -6,6 +6,18 @@ import { crc32 } from "./lib/crc32";
 import { ITestCommand, performDropFileCommand, performInsertCommand, performTestCommand, performViewportCommand, testResultToJson } from "./lib/test-commands";
 import { aboutText, buttonForMenuAction, formatActionList, sayActionText } from "./lib/menu-actions";
 import { formatPicked } from "./lib/picked-paths";
+import { installSplashScreen } from "./lib/splash";
+
+const splash = installSplashScreen(document, {
+    background: "#FFFFFF",
+    minimumDisplayMilliseconds: 2000,
+    fadeDurationMilliseconds: 2000,
+});
+window.ziggy.onEvent((event: { type?: string } | null) => {
+    if (event !== null && event.type === "frontend-visible") {
+        splash.remove();
+    }
+});
 
 //
 // An event that tells the frontend the media server is listening.
@@ -757,6 +769,7 @@ startStorage();
 startAddressCheck();
 startDrop();
 startActions();
+window.ziggy.frontendReady();
 showReply().catch(error => {
     element("reply").textContent = `The Zig core did not answer: ${(error as Error).message}`;
 });

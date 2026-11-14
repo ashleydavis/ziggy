@@ -60,11 +60,24 @@ final class ZiggyUiSchemeHandler: NSObject, WKURLSchemeHandler {
 }
 
 
-// Hosts one web view and one Ziggy core for the app. The app creates it, puts webView on screen, calls start, and calls
+// Hosts one web view and one Ziggy core for the app. The app creates it, puts view on screen, calls start, and calls
 // shutdown when the app is ending.
 public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
-    // The web view that shows the app's frontend. The app puts it on screen.
+    // The container the app puts on screen. Its subviews are the splash backdrop, the splash web view and the app's own
+    // web view, in that order.
+    public let view: UIView
+
+    // The web view that shows the app's frontend.
     public let webView: WKWebView
+
+    // The splash web view, or nil when the app has no splash art in its bundle.
+    private let splashWebView: WKWebView?
+
+    // Serves the splash web view's requests from the core, as the app's own web view's handler does.
+    private let splashUiHandler = ZiggyUiSchemeHandler()
+
+    // The splash image behind the splash web view, shown until the splash web view has loaded it.
+    private let backdrop: UIImageView
 
     // The core's handle, from start until shutdown.
     private var core: UnsafeMutableRawPointer?
@@ -163,6 +176,37 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
         self.webView = createdWebView
 
+        // The app's own web view stays hidden until its navigation finishes, so the splash shows first.
+        let container = UIView(frame: frame)
+        createdWebView.frame = container.bounds
+        createdWebView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        createdWebView.isHidden = true
+
+        let splashImage = UIImage(named: "Splash")
+        let backdropView = UIImageView(frame: container.bounds)
+        backdropView.image = splashImage
+        backdropView.contentMode = .scaleAspectFill
+        backdropView.clipsToBounds = true
+        backdropView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        backdropView.isHidden = splashImage == nil
+        container.addSubview(backdropView)
+        self.backdrop = backdropView
+
+        var createdSplashWebView: ZiggyWebView?
+        if splashImage != nil {
+            // The splash page needs no injected script and no message handler: it only shows the app's art.
+            let splashConfiguration = WKWebViewConfiguration()
+            splashConfiguration.setURLSchemeHandler(splashUiHandler, forURLScheme: ZiggyBridge.uiScheme)
+            let splashView = ZiggyWebView(frame: container.bounds, configuration: splashConfiguration)
+            splashView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            splashView.isHidden = true
+            container.addSubview(splashView)
+            createdSplashWebView = splashView
+        }
+        self.splashWebView = createdSplashWebView
+        container.addSubview(createdWebView)
+        self.view = container
+
         super.init()
 
         configuration.userContentController.add(self, name: ZiggyBridge.handlerName)
@@ -241,6 +285,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
         core = created
         uiHandler.core = created
+        splashUiHandler.core = created
 
         var themeLength = 0
         guard let themeText = ziggy_theme(created, &themeLength) else {
@@ -268,6 +313,14 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         guard let uiURL = components?.url else {
             ZiggyBridge.fail("could not build the UI address")
         }
+        webView.isHidden = true
+        if let splashWebView = splashWebView {
+            guard let splashURL = URL(string: ZiggyBridge.appUrlPrefix + "ziggy-splash.html") else {
+                ZiggyBridge.fail("could not build the splash address")
+            }
+            splashWebView.navigationDelegate = self
+            splashWebView.load(URLRequest(url: splashURL))
+        }
         webView.load(URLRequest(url: uiURL))
     }
 
@@ -282,6 +335,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         destroyed = true
         core = nil
         uiHandler.core = nil
+        splashUiHandler.core = nil
         webView.configuration.userContentController.removeScriptMessageHandler(forName: ZiggyBridge.handlerName)
         ziggy_destroy(handle)
     }
@@ -384,6 +438,8 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
                     self?.finishCall(reply, ok: result.succeeded, text: result.text)
                 }
             }
+        case "frontend-ready":
+            revealAppView()
         default:
             ZiggyBridge.fail("the core sent a call the native app does not do: \(text)")
         }
@@ -528,6 +584,34 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     public func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
         _ = shouldLoad(navigationAction.request.url, isNewWindow: true)
         return nil
+    }
+
+    // A page has finished loading: the splash page is shown over the backdrop, and the app's own page replaces both once the
+    // frontend says its own overlay has painted.
+    public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if webView === splashWebView {
+            webView.isHidden = false
+            backdrop.isHidden = true
+            if !self.webView.isHidden {
+                splashWebView?.removeFromSuperview()
+            }
+            return
+        }
+        // The app's page is loaded, but it stays behind the splash until the frontend sends frontend-ready. With no splash it is
+        // shown now.
+        if splashWebView == nil {
+            webView.isHidden = false
+            backdrop.isHidden = true
+        }
+    }
+
+    // The frontend has painted its own splash overlay, so the app's web view is shown, the splash goes, and the frontend is told
+    // the app is showing so it can fade its overlay.
+    private func revealAppView() {
+        webView.isHidden = false
+        splashWebView?.removeFromSuperview()
+        backdrop.isHidden = true
+        deliverToUi("{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}")
     }
 
     // Reports a frontend that failed to load.

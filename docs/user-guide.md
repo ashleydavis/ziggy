@@ -45,6 +45,7 @@ Read the guides in this order:
 14. [The state file](user-guide/state-file.md): where an app keeps what it remembers, and the typed key-path API that reads and writes it.
 15. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the remote control connection.
 16. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
+17. [App icons and splash screens](user-guide/app-icons-and-splash.md): the icon and splash art every platform needs, the `.splash` field and the frontend's splash overlay.
 
 Also:
 

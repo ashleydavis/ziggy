@@ -2,4 +2,9 @@
 .{
     .name = "ziggy-test-app",
     .title = "Ziggy test app",
+    .splash = .{
+        .background = "#FFFFFF",
+        .portrait = "assets/splash-portrait.png",
+        .landscape = "assets/splash-landscape.png",
+    },
 }

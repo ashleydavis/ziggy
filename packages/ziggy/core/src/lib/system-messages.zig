@@ -76,6 +76,7 @@ pub const names = [_][]const u8{
     "set-state",
     "get-config-problem",
     "system-theme",
+    "frontend-ready",
 };
 
 //

@@ -10,4 +10,5 @@ test {
     _ = @import("test/menu.test.zig");
     _ = @import("test/pickers.test.zig");
     _ = @import("test/system-theme.test.zig");
+    _ = @import("test/splash-windows.test.zig");
 }

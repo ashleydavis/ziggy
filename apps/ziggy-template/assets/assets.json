@@ -1,0 +1,11 @@
+{
+    "name": "Ziggy template",
+    "prefix": "app-icon",
+    "icon": "app-icon.svg",
+    "foreground": "app-icon-foreground.svg",
+    "portrait": "splash-portrait.svg",
+    "landscape": "splash-landscape.svg",
+    "background": "#1B1035",
+    "macosTarget": "ZiggyTemplate",
+    "iosTarget": "ZiggyTemplate"
+}

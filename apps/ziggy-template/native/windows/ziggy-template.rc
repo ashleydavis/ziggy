@@ -1,0 +1,3 @@
+// The icon of the Ziggy template's executable. The id is even because Ziggy's native app passes it to
+// LoadIconW as an integer resource id.
+2 ICON "../../assets/app-icon.ico"

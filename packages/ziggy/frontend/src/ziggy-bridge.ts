@@ -360,6 +360,12 @@ export interface IZiggyBridge {
     testUiReady(): void;
 
     //
+    // Tells the native app the frontend has painted its own splash overlay, so it shows the app's web view. The native app then
+    // sends the frontend-visible app event, which the splash overlay listens for to fade itself out.
+    //
+    frontendReady(): void;
+
+    //
     // Returns the absolute path of a file from the drop event of a file dropped on the window, or undefined for a File that was not dropped. The same as
     // Electron's webUtils.getPathForFile, and synchronous like it.
     //

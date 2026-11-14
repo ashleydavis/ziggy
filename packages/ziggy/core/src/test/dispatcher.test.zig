@@ -258,6 +258,19 @@ test "a message with no kind, or a kind that is neither app nor system, is refus
     try std.testing.expectEqual(@as(usize, 0), native_app.countContaining(std.testing.io, std.testing.allocator, "the app's message handler was called"));
 }
 
+test "frontend-ready sends the native app a frontend-ready call and answers null" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try sendSystem(&native_app, 1, "frontend-ready", "null");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true");
+    const call = try native_app.lastCall(std.testing.io, std.testing.allocator, "frontend-ready");
+    defer if (call) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"type\":\"frontend-ready\"}", call.?);
+}
+
 test "a message without an id gets no reply" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();

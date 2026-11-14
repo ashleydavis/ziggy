@@ -714,7 +714,7 @@ fn handleCall(io: std.Io, allocator: std.mem.Allocator, native: *NativeSide, rec
             recorded.pressed_keys.appendSlice(allocator, key) catch @panic("out of memory");
             recorded.pressed_keys.append(allocator, '\n') catch @panic("out of memory");
         },
-        .os_version, .pick_paths, .native_call, .new_window, .theme, .stopped => {},
+        .os_version, .pick_paths, .native_call, .new_window, .theme, .frontend_ready, .stopped => {},
     }
     if (reply == 0) {
         return;
@@ -781,6 +781,6 @@ fn defaultResult(arena: std.mem.Allocator, call: native_message.Call) !CallResul
             .succeeded = true,
             .text = try arena.dupe(u8, "4242"),
         },
-        .quit, .menu_action, .keep_alive, .theme, .stopped => std.debug.panic("a call that has no result was given a number for its result", .{}),
+        .quit, .menu_action, .keep_alive, .theme, .frontend_ready, .stopped => std.debug.panic("a call that has no result was given a number for its result", .{}),
     }
 }

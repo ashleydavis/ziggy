@@ -2,4 +2,9 @@
 .{
     .name = "ziggy-template",
     .title = "Ziggy template",
+    .splash = .{
+        .background = "#FFFFFF",
+        .portrait = "assets/splash-portrait.png",
+        .landscape = "assets/splash-landscape.png",
+    },
 }

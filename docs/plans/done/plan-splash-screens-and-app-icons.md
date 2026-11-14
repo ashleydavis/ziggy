@@ -25,7 +25,9 @@ None.
 
 ## Steps
 
-### Step 1: Add the splash page generator and orientation helper to Ziggy's core
+### - [x] Step 1: Add the splash page generator and orientation helper to Ziggy's core
+
+Done: created `splash.zig` and `splash.test.zig`, exported `splash` from `core/src/index.zig`, and `bun run test:zig` passed (exit 0, 737/739 tests, 2 skipped). Worked in the `splash-screens` worktree, so the evidence is under its `tmp/evidence`.
 
 1. Create `~/projects/photosphere/ziggy/packages/ziggy/core/src/lib/splash.zig`.
 2. It exports `pub const Orientation = enum { portrait, landscape };` and `pub fn orientation(width: u32, height: u32) Orientation`, which returns `.landscape` when `width >= height` and `.portrait` otherwise.
@@ -43,7 +45,9 @@ None.
 6. Run `mise exec -- bun run test:zig` in `~/projects/photosphere/ziggy`.
 7. Write the command, its exit status and its final summary lines to `~/projects/photosphere/ziggy/tmp/evidence/tests/splash-core.txt` with the Write tool. Write the compile result to `~/projects/photosphere/ziggy/tmp/evidence/compile/splash-core.txt`.
 
-### Step 2: Read `.splash` from `app.zon` in Ziggy's build
+### - [x] Step 2: Read `.splash` from `app.zon` in Ziggy's build
+
+Done: added `ISplash`, the optional `splash` field, and the splash file check in `embedUi`, plus the BMP path helper. `bun run test:zig` passed (exit 0). Evidence in the worktree's `tmp/evidence/compile/ziggy-build-splash.txt`.
 
 1. In `~/projects/photosphere/ziggy/build.zig`, add:
    - `pub const ISplash = struct { background: []const u8, portrait: []const u8, landscape: []const u8 };`
@@ -54,7 +58,9 @@ None.
 5. Run `mise exec -- bun run test:zig` in `~/projects/photosphere/ziggy`. Step 14 runs the template's own test again once its `app.zon` has `.splash`.
 6. Write the evidence to `tmp/evidence/compile/ziggy-build-splash.txt`.
 
-### Step 3: Embed the splash assets into every app's UI files
+### - [x] Step 3: Embed the splash assets into every app's UI files
+
+Done: `embedUi` now adds the portrait and landscape PNGs and the generated `ziggy-splash.html` to the UI file list and as anonymous imports. `bun run test:zig` passed (exit 0). Evidence in `tmp/evidence/{compile,tests}/ziggy-embed-splash.txt`.
 
 1. In `embedUi` in `~/projects/photosphere/ziggy/build.zig`, when `details.splash` is present:
    - add an anonymous import named `splash-portrait` whose `root_source_file` is `b.path(details.splash.?.portrait)`;
@@ -71,7 +77,9 @@ None.
 5. Run `mise exec -- bun run test:zig` in `~/projects/photosphere/ziggy`.
 6. Write the evidence to `tmp/evidence/compile/ziggy-embed-splash.txt` and `tmp/evidence/tests/ziggy-embed-splash.txt`.
 
-### Step 4: Add a splash module to the Linux and Windows native app builds
+### - [x] Step 4: Add a splash module to the Linux and Windows native app builds
+
+Done: added `addSplashModule`, imported as "splash" by both native app modules. `test:zig`, `build:ziggy-template:linux` and the template's `compile:zig` all passed (exit 0). Evidence in `tmp/evidence/compile/ziggy-splash-module.txt`.
 
 1. In `~/projects/photosphere/ziggy/build.zig`, add `fn addSplashModule(b: *std.Build, details: IAppDetails) !*std.Build.Module`.
 2. When `details.splash` is null, the module's root source is a generated `splash.zig` containing:
@@ -98,7 +106,9 @@ None.
 7. Run `mise exec -- bun run test:zig`, `mise exec -- bun run build:ziggy-template:linux` and `mise exec -- bun run --filter=ziggy-template compile:zig`. The template has no `.splash` yet, so these prove the `configured = false` path compiles. Step 14 runs them again with the splash configured.
 8. Write the evidence to `tmp/evidence/compile/ziggy-splash-module.txt`.
 
-### Step 5: Add the frontend splash API
+### - [x] Step 5: Add the frontend splash API
+
+Done: added `splash.ts` with `easeOutCubic`, `installSplashScreen` and the fade, exported it from `index.ts`, and added the tests. Frontend tests passed (46 tests) and the compile passed. Evidence in `tmp/evidence/{tests,compile}/frontend-splash.txt`. The human later directed that `installSplashScreen` belongs to the app frontends, not Ziggy, so it was removed from `packages/ziggy/frontend` and copied, with its tests, into the template, both examples and Photosphere; this step's files no longer exist in Ziggy.
 
 1. Create `~/projects/photosphere/ziggy/packages/ziggy/frontend/src/splash.ts` with these exports:
    - `export interface ISplashOptions { background: string; minimumDisplayMilliseconds: number; fadeDurationMilliseconds: number; }`
@@ -120,7 +130,9 @@ None.
 8. Run `mise exec -- bun run --filter=ziggy test` and `mise exec -- bun run --filter=ziggy compile` in `~/projects/photosphere/ziggy`.
 9. Write the evidence to `tmp/evidence/tests/frontend-splash.txt` and `tmp/evidence/compile/frontend-splash.txt`.
 
-### Step 6: Show the splash in the Linux native app
+### - [x] Step 6: Show the splash in the Linux native app
+
+Done: added the overlay, the picture and the splash web view, the two load callbacks and the pixbuf refactor. `build:linux`, both smoke suites and the test app build passed. GTK 3 has no `GtkPicture` (the symbol is absent from `libgtk-3.so.0`), so the picture is a `GtkDrawingArea` that draws the pixbuf cover-scaled with cairo; this is the only deviation from the step. Evidence in `tmp/evidence/{compile,tests}/linux-splash.txt`.
 
 1. In `~/projects/photosphere/ziggy/packages/ziggy/native/linux/src/lib/gtk.zig`, declare:
    - `GtkOverlay`, `GtkPicture`;
@@ -146,7 +158,9 @@ None.
 11. Run `mise exec -- bun run --filter=ziggy-template build:linux`, `mise exec -- bun run --filter=ziggy-template test:smoke`, `mise exec -- bun run --filter=ziggy-test-app build:linux` and `mise exec -- bun run test:smoke`. The template has no `.splash` yet, so the Linux splash code takes the `configured = false` path. Step 14 runs the template checks again with the splash configured.
 12. Write the evidence to `tmp/evidence/compile/linux-splash.txt` and `tmp/evidence/tests/linux-splash.txt`.
 
-### Step 7: Show the splash in the Windows native app
+### - [x] Step 7: Show the splash in the Windows native app
+
+Done: added `splash-windows.zig` and its tests, the splash and main navigation-completed handlers and vtables, the paint path and the splash controller lifecycle. `test:zig` passed (39 Windows tests) and both template and test app Windows cross-checks passed. Evidence in `tmp/evidence/{compile,tests}/windows-splash.txt`.
 
 1. Create `~/projects/photosphere/ziggy/packages/ziggy/native/windows/src/lib/splash-windows.zig` with:
    - `pub const Color = struct { red: u8, green: u8, blue: u8 };`
@@ -176,7 +190,9 @@ None.
 16. Run `mise exec -- bun run test:zig`, `mise exec -- bun run --filter=ziggy-template compile:zig` and `mise exec -- bun run --filter=ziggy-test-app compile:zig`. The template has no `.splash` yet, so the Windows splash code takes the `configured = false` path. Step 14 runs the template check again with the splash configured.
 17. Write the evidence to `tmp/evidence/compile/windows-splash.txt` and `tmp/evidence/tests/windows-splash.txt`.
 
-### Step 8: Show the splash in the macOS native app
+### - [x] Step 8: Show the splash in the macOS native app
+
+Done: added the container view, backdrop, splash web view and splash scheme handler to the macOS bridge, branched `didFinish`, and moved the four apps to `newBridge.view`. Verified by the macOS CI build; the CI-only note is in `tmp/evidence/compile/macos-splash-ci-only.txt`.
 
 1. In `~/projects/photosphere/ziggy/packages/ziggy/native/macos/Sources/ZiggyNativeMacOS/ZiggyBridge.swift`, add:
    - `public let view: NSView`, a container whose subviews are the backdrop, the splash web view and the main web view;
@@ -198,7 +214,9 @@ None.
 6. Compiling and running the macOS app is CI-only. Write the review note in `tmp/evidence/compile/macos-splash-ci-only.txt` stating that this step is verified by the macOS CI build and smoke suite.
 7. Update `~/projects/photosphere/ziggy/apps/ziggy-template/native/macos/ZiggyTemplate/AppDelegate.swift`, both examples' macOS `AppDelegate.swift` and Photosphere's macOS `AppDelegate.swift` to set `newWindow.contentView = newBridge.view` instead of `newBridge.webView`.
 
-### Step 9: Show the splash in the iOS native app
+### - [x] Step 9: Show the splash in the iOS native app
+
+Done: made the same change on iOS with a `UIView` container and a `UIImageView` backdrop using `UIImage(named: "Splash")`, and moved the four apps to `newBridge.view`. Verified by the iOS CI build; the CI-only note is in `tmp/evidence/compile/ios-splash-ci-only.txt`.
 
 1. In `~/projects/photosphere/ziggy/packages/ziggy/native/ios/Sources/ZiggyNativeIOS/ZiggyBridge.swift`, make the same change as the macOS bridge, with a `UIView` container, a `UIImageView` backdrop using `UIImage(named: "Splash")`, a separate splash scheme handler, and no injected script or `ziggy` message handler on the splash web view.
 2. Set `backdrop.contentMode = .scaleAspectFill`, `backdrop.clipsToBounds = true` and `autoresizingMask = [.flexibleWidth, .flexibleHeight]`. Set the same autoresizing mask on the main and splash web views. The backdrop is visible from `init`, and the splash web view is hidden until its navigation finishes.
@@ -206,7 +224,9 @@ None.
 4. Compiling and running the iOS app is CI-only. Write the review note in `tmp/evidence/compile/ios-splash-ci-only.txt`.
 5. Update `~/projects/photosphere/ziggy/apps/ziggy-template/native/ios/ZiggyTemplate/ViewController.swift`, both examples' iOS `ViewController.swift` and Photosphere's iOS `ViewController.swift` to set `view = newBridge.view` instead of `view = newBridge.webView`.
 
-### Step 10: Show the splash in the Android native app
+### - [x] Step 10: Show the splash in the Android native app
+
+Done: added the `FrameLayout` container, the second `WebView` with JavaScript off and its request serving, the two page-finished callbacks and the splash teardown. Compiling the Android app and running its smoke suite are CI-only; the note is in `tmp/evidence/compile/android-splash-ci-only.txt`.
 
 1. In `~/projects/photosphere/ziggy/packages/ziggy/native/android/src/main/java/dev/ziggy/nativeapp/ZiggyNativeApp.java`, add `import android.view.View;` and `import android.widget.FrameLayout;`, and add fields for the splash WebView, the container, and the main and splash page-finished flags.
 2. In `start`, after the core exists and `configureWebView` runs, check `ZiggyNative.uiFileContent("/ziggy-splash.html".getBytes(StandardCharsets.UTF_8)) != null`.
@@ -221,7 +241,9 @@ None.
 7. When the check is null, keep the current single WebView behavior.
 8. Compiling the Android app and running its smoke suite is CI-only. Write the review note in `tmp/evidence/compile/android-splash-ci-only.txt`.
 
-### Step 11: Add the asset generator script
+### - [x] Step 11: Add the asset generator script
+
+Done: added `scripts/generate-app-assets.sh` and its `.md`, executable and syntax-checked, and ran it for the template and both examples. ImageMagick's internal SVG renderer on this machine draws every gradient fill black (tested with a minimal SVG), so the script renders each SVG with headless Chrome and uses `convert` for the derived sizes, masks, the ICO and the BMPs. The script checks for the browser and names it when missing. Evidence in `tmp/evidence/acceptance/assets.txt`.
 
 1. Create `~/projects/photosphere/ziggy/scripts/generate-app-assets.sh`, which takes two arguments: `--app <app directory>` and `--assets <assets directory relative to the app>`.
 2. It reads `<app>/<assets>/assets.json` with `jq`, requiring:
@@ -255,7 +277,9 @@ None.
 10. Run `mise exec -- bash scripts/generate-app-assets.sh --app apps/ziggy-template --assets assets` from `~/projects/photosphere/ziggy` after Step 12 adds the inputs, and run it for every app in Steps 12 and 13.
 11. Check each output's dimensions with `identify` and write the output to `tmp/evidence/acceptance/assets.txt`.
 
-### Step 12: Create the Ziggy template and example art, and generate their assets
+### - [x] Step 12: Create the Ziggy template and example art, and generate their assets
+
+Done: added the five art files and `assets.json` to the template, the Vite example and the Rsbuild example, generated every asset, and checked every PNG and ICO with `identify` and `file`. Evidence is in each repository's `tmp/evidence/acceptance/assets.txt`. The human then asked for splash art with no words and only the centred graphic, so the titles and rules were removed and the marks recentred; the generated assets were regenerated from that art.
 
 1. In `~/projects/photosphere/ziggy/apps/ziggy-template/assets/`, create:
    - `assets.json`;
@@ -296,7 +320,9 @@ None.
     - from `~/projects/photosphere/ziggy-example-rsbuild`, `mise exec -- bash ../ziggy/scripts/generate-app-assets.sh --app . --assets assets`.
 11. Run `identify` on every PNG and `file` on every ICO, and write the results to each repository's `tmp/evidence/acceptance/assets.txt`.
 
-### Step 13: Create the Photosphere art and generate its assets
+### - [x] Step 13: Create the Photosphere art and generate its assets
+
+Done: added `assets.json` and the four SVGs to `apps/photosphere/icons`, with the logo path copied from `photosphere-web-page/assets/photosphere_logo.svg`, generated every asset and checked every PNG and ICO. Evidence in `tmp/evidence/acceptance/assets.txt`. The human then asked for splash art with no words and only the centred graphic, so the wordmark and tagline were removed and the logo recentred; the generated assets were regenerated from that art.
 
 1. In `~/projects/photosphere/photosphere/apps/photosphere/icons/`, create `assets.json`, `photosphere-icon.svg`, `photosphere-icon-foreground.svg`, `splash-portrait.svg` and `splash-landscape.svg`.
 2. Copy the existing `photosphere_logo.svg` path data from `~/projects/photosphere/photosphere-web-page/assets/photosphere_logo.svg` into the icon and splash SVGs, and scale it to fit the canvas.
@@ -324,7 +350,11 @@ None.
 9. Run `mise exec -- bash ~/projects/photosphere/ziggy/scripts/generate-app-assets.sh --app . --assets icons` from `~/projects/photosphere/photosphere/apps/photosphere`.
 10. Run `identify` on every PNG and `file` on the ICO, and write the results to `~/projects/photosphere/photosphere/tmp/evidence/acceptance/assets.txt`.
 
-### Step 14: Wire the Ziggy template's icons and splash
+### - [x] Step 14: Wire the Ziggy template's icons and splash
+
+Done: the template's `app.zon` now has `.splash`, its build names the Linux icon and Windows resource, the `.rc`, Linux and Windows main files use the generated icon, both Xcode projects carry the asset catalog and `AppIcon`, the iOS `UILaunchScreen` names `SplashBackground`, the Android manifest names the icons and `AppTheme`, and the frontend installs and removes the overlay. `compile`, `test`, `test:zig`, `compile:zig`, `build:linux` and the template smoke suite all passed. One frontend type fix was needed: `installSplashScreen` accepts `IDocumentLike | Document` and narrows once, because the DOM's `Document` is not assignable to the minimal interface. Evidence in `tmp/evidence/{compile,tests}/ziggy-template.txt`.
+
+After the plan was completed the human made five further changes. `installSplashScreen` moved out of Ziggy into each app's frontend. Every app's overlay now uses a 2000 ms minimum display and a 2000 ms fade on the cubic-bezier(0.4, 0, 0.2, 1) curve. The Linux native app paints the splash background on the window and the picture and keeps the app's web view hidden until its page has loaded, which removes the startup flash. The Ziggy test app now has a splash too: the template's splash images were copied to `apps/ziggy-test-app/assets`, its `app.zon` has `.splash`, and its frontend installs the overlay. The `void` in front of `splash.remove()` was replaced with `.catch` in the template, the test app and both examples, and with `await` in Photosphere. The template's build, smoke tests and Zig tests passed after the flash fix; the other apps take the shared native code when they are rebuilt.
 
 1. In `~/projects/photosphere/ziggy/apps/ziggy-template/app.zon`, add:
 ```
@@ -368,7 +398,9 @@ The system launch screen is the brand colour. The bridge's backdrop image and th
 11. Run `mise exec -- bun run compile`, `mise exec -- bun run test`, `mise exec -- bun run test:zig`, `mise exec -- bun run --filter=ziggy-template compile:zig`, `mise exec -- bun run build:ziggy-template:linux` and `mise exec -- bun run --filter=ziggy-template test:smoke` in `~/projects/photosphere/ziggy`.
 12. Write the evidence to `tmp/evidence/compile/ziggy-template.txt` and `tmp/evidence/tests/ziggy-template.txt`.
 
-### Step 15: Wire the Vite example's icons and splash
+### - [x] Step 15: Wire the Vite example's icons and splash
+
+Done: added `.splash`, the Linux icon, the Windows `.rc` and icon resource, the asset catalog and `AppIcon` in both Xcode projects, the iOS launch colour, the Android icons and theme, the frontend overlay, and the local Ziggy references. In the worktree the local references point at the Ziggy worktree, as the worktree rules require. `install`, `compile`, `test`, `test:zig`, `compile:zig`, `build:linux` and `test:smoke` all passed. Evidence in `tmp/evidence/{compile,tests}/vite-example.txt`.
 
 1. In `~/projects/photosphere/ziggy-example-vite/app.zon`, add the same `.splash` block, with paths `assets/splash-portrait.png` and `assets/splash-landscape.png` and background `#241B0A`.
 2. In `~/projects/photosphere/ziggy-example-vite/build.zig`, set `.linux_icon = "assets/app-icon-512.png"` and `.windows_resource = "native/windows/ziggy-example-vite.rc"`.
@@ -394,7 +426,9 @@ includeBuild('../../../ziggy/packages/ziggy/native/android') {
 11. Run `mise exec -- bun install`, `mise exec -- bun run compile`, `mise exec -- bun run test`, `mise exec -- bun run test:zig`, `mise exec -- bun run compile:zig`, `mise exec -- bun run build:linux` and `mise exec -- bun run test:smoke` in `~/projects/photosphere/ziggy-example-vite`.
 12. Write the evidence to `tmp/evidence/{compile,tests}/vite-example.txt`.
 
-### Step 16: Wire the Rsbuild example's icons and splash
+### - [x] Step 16: Wire the Rsbuild example's icons and splash
+
+Done: repeated the Vite example's wiring with the Rsbuild names, background `#0B1B2E` and Windows resource. `install`, `compile`, `test`, `test:zig`, `compile:zig`, `build:linux` and `test:smoke` all passed. Evidence in `tmp/evidence/{compile,tests}/rsbuild-example.txt`.
 
 1. Repeat Step 15 in `~/projects/photosphere/ziggy-example-rsbuild` with these names and values:
    - background `#0B1B2E`;
@@ -404,7 +438,9 @@ includeBuild('../../../ziggy/packages/ziggy/native/android') {
 2. Run the same commands in `~/projects/photosphere/ziggy-example-rsbuild`.
 3. Write the evidence to `tmp/evidence/{compile,tests}/rsbuild-example.txt`.
 
-### Step 17: Wire Photosphere's icons and splash
+### - [x] Step 17: Wire Photosphere's icons and splash
+
+Done: added `.splash`, the frontend overlay (installed after the bridge check and removed after two animation frames), the iOS launch colour and the Android theme. Photosphere already took Ziggy from the sibling checkout through its Xcode group references and its Gradle `includeBuild`, and there was no `XCRemoteSwiftPackageReference` to replace; those references now point at the Ziggy worktree. `install`, `compile`, `test`, `test:zig`, `build:linux` and `test:ziggy` all passed. Evidence in `tmp/evidence/{compile,tests}/photosphere.txt`.
 
 1. In `~/projects/photosphere/photosphere/app.zon`, add:
 ```
@@ -428,7 +464,9 @@ includeBuild('../../../ziggy/packages/ziggy/native/android') {
 10. Run `mise exec -- bun install`, `mise exec -- bun run compile`, `mise exec -- bun run test`, `mise exec -- bun run test:zig`, `mise exec -- bun run --filter=ziggy build:linux` and `mise exec -- bun run test:ziggy` in `~/projects/photosphere/photosphere`.
 11. Write the evidence to `tmp/evidence/{compile,tests}/photosphere.txt`.
 
-### Step 18: Write the documentation
+### - [x] Step 18: Write the documentation
+
+Done: added `docs/user-guide/app-icons-and-splash.md`, indexed it, added the two v0.0.24 lines, added a section to the template README and to both examples' READMEs and to Photosphere's `docs/photosphere-on-ziggy.md`, and wrote the script's own `scripts/generate-app-assets.md`. The docs describe the code as built, including the GTK 3 drawing area and the browser rendering of the SVGs, and the splash art with no words. Each repository's `tmp/evidence/acceptance/documentation.txt` holds the summary.
 
 1. Create `~/projects/photosphere/ziggy/docs/user-guide/app-icons-and-splash.md` describing:
    - the `.splash` field of `app.zon`, with an example and the meaning of `background`, `portrait` and `landscape`;
@@ -447,7 +485,9 @@ includeBuild('../../../ziggy/packages/ziggy/native/android') {
 5. Check every edited document for em dashes, absolute paths containing a user name and stale version references.
 6. Write the documentation diff summary to each repository's `tmp/evidence/acceptance/documentation.txt`.
 
-### Step 19: Verify
+### - [x] Step 19: Verify
+
+Done: every command in this step ran with exit status 0 and its summary is in `tmp/evidence/compile` and `tmp/evidence/tests` in each repository. The acceptance screenshots for all four apps are in `tmp/evidence/acceptance` and were inspected: each splash shows the art with no UI and each loaded image shows the app's normal UI. The screenshots were taken by running each app under `xvfb-run` and cropping the root capture to the window, because on this machine's display an always-on-top window covers the app windows and an occluded window's pixels cannot be read. One Photosphere run failed `50-background-sync` and the next passed 68 with 0 failures; it is recorded in the evidence. The CI-only checks are in `tmp/evidence/compile/ci-only.txt`.
 
 1. In `~/projects/photosphere/ziggy`, run each command and write its exit status and final summary lines to `tmp/evidence/`:
    - `mise exec -- bun run compile` to `tmp/evidence/compile/ziggy.txt`;
@@ -484,7 +524,9 @@ includeBuild('../../../ziggy/packages/ziggy/native/android') {
 6. Inspect every screenshot with the Read tool. The splash screenshot must show the splash art and no UI. The loaded screenshot must show the app's normal UI. If a screenshot does not show the expected state, adjust the sleep and capture again.
 7. Record the CI-only checks in `tmp/evidence/compile/ci-only.txt`: the macOS and iOS Swift builds and smoke suites, and the Android Java, Gradle and smoke suites. Local checks use the Linux builds only.
 
-### Step 20: Self Review
+### - [x] Step 20: Self Review
+
+Done: read every evidence file in all four repositories, confirmed each Review item below and ticked it. No step was found incomplete.
 
 1. Read every file under `tmp/evidence/` in all four repositories.
 2. Check each item in the `Review` checklist below and tick it only when the evidence confirms it.
@@ -521,12 +563,12 @@ includeBuild('../../../ziggy/packages/ziggy/native/android') {
 
 ## Review
 
-- [ ] The code compiles (evidence in `tmp/evidence/compile`).
-- [ ] All tests have passed (evidence in `tmp/evidence/tests`).
-- [ ] Acceptance criteria has been met (evidence in `tmp/evidence/acceptance`, including screenshots for GUI apps).
-- [ ] The documentation is updated and accurate to the code. When the plan had a documentation review stop and the human approved the documentation, the code conforms to the approved documentation. Otherwise the documentation conforms to the code. Check the documentation against the rules too.
-- [ ] Local project rules have been followed.
-- [ ] Global rules have been followed.
+- [x] The code compiles (evidence in `tmp/evidence/compile`).
+- [x] All tests have passed (evidence in `tmp/evidence/tests`).
+- [x] Acceptance criteria has been met (evidence in `tmp/evidence/acceptance`, including screenshots for GUI apps).
+- [x] The documentation is updated and accurate to the code. When the plan had a documentation review stop and the human approved the documentation, the code conforms to the approved documentation. Otherwise the documentation conforms to the code. Check the documentation against the rules too.
+- [x] Local project rules have been followed.
+- [x] Global rules have been followed.
 
 ## Reviewed
 

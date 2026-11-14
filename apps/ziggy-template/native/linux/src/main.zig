@@ -14,6 +14,6 @@ pub fn main(init: std.process.Init) !u8 {
         .title = "Ziggy template",
         .default_width = 900,
         .default_height = 800,
-        .icon_png = null,
+        .icon_png = @embedFile("app-icon"),
     }, args);
 }

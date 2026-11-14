@@ -22,6 +22,8 @@ const pickers_lib = @import("pickers.zig");
 const native_message = @import("native-message");
 const remote_control_arguments = @import("remote-control-arguments");
 const system_theme = @import("system-theme.zig");
+const splash = @import("splash");
+const splash_windows = @import("splash-windows.zig");
 
 //
 // The URL prefix the bundled frontend is served under, with a trailing slash. The host name is under .invalid, which can
@@ -159,6 +161,14 @@ const AcceleratorHandler = ComHandler(c.ICoreWebView2AcceleratorKeyPressedEventH
 // The handler object for the CapturePreview callback, which WebView2 calls on the UI thread when a capture of the window ends.
 //
 const CapturePreviewHandler = ComHandler(c.ICoreWebView2CapturePreviewCompletedHandler, c.IID_ICoreWebView2CapturePreviewCompletedHandler);
+//
+// The handler object for the NavigationCompleted callback, which WebView2 calls on the UI thread when a page has loaded.
+//
+const NavigationCompletedHandler = ComHandler(c.ICoreWebView2NavigationCompletedEventHandler, c.IID_ICoreWebView2NavigationCompletedEventHandler);
+//
+// The handler object for the splash controller callback, which WebView2 calls on the UI thread.
+//
+const SplashControllerHandler = ComHandler(c.ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, c.IID_ICoreWebView2CreateCoreWebView2ControllerCompletedHandler);
 
 //
 // The first command id given to a menu item. An item's id is this plus its place in the native app's list of menu actions.
@@ -296,6 +306,26 @@ const NativeApp = struct {
     key_press_handler: DevToolsCallHandler,
     // The brush the window procedure paints the background with, or null before the theme is applied.
     background_brush: ?c.HBRUSH,
+    // The splash controller, while the splash is showing, or null when the app has no splash or it has ended. Owned.
+    splash_controller: ?*c.ICoreWebView2Controller,
+    // The splash web view, while the splash is showing, or null when it has ended. Owned by the splash controller.
+    splash_web_view: ?*c.ICoreWebView2,
+    // Receives the splash controller.
+    splash_controller_handler: SplashControllerHandler,
+    // Receives the end of the splash page's navigation.
+    splash_navigation_completed_handler: NavigationCompletedHandler,
+    // Receives the end of the app's own page's navigation.
+    main_navigation_completed_handler: NavigationCompletedHandler,
+    // Whether the splash page has finished loading.
+    splash_load_finished: bool,
+    // Whether the app's own page has finished loading.
+    main_load_finished: bool,
+    // The BMP of the splash image the window paints, while the splash is showing.
+    splash_bitmap: ?splash_windows.Bitmap,
+    // The brush the window's background is painted with before the splash web view shows.
+    splash_background_brush: c.HBRUSH,
+    // Whether the window's splash painting has ended, so it no longer paints the image.
+    splash_painted: bool,
 };
 
 //
@@ -348,11 +378,24 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .key_press_next_event = 0,
         .key_press_handler = undefined,
         .background_brush = null,
+        .splash_controller = null,
+        .splash_web_view = null,
+        .splash_controller_handler = undefined,
+        .splash_navigation_completed_handler = undefined,
+        .main_navigation_completed_handler = undefined,
+        .splash_load_finished = false,
+        .main_load_finished = false,
+        .splash_bitmap = null,
+        .splash_background_brush = null,
+        .splash_painted = false,
     };
     initHandlers(&native_app);
     const exit_code = try start(&native_app, allocator);
     destroyCore(&native_app);
     if (native_app.background_brush) |brush| {
+        _ = c.DeleteObject(brush);
+    }
+    if (native_app.splash_background_brush) |brush| {
         _ = c.DeleteObject(brush);
     }
     for (native_app.menu_actions.items) |menu_action| {
@@ -478,6 +521,24 @@ fn initHandlers(native_app: *NativeApp) void {
         },
         .native_app = native_app,
     };
+    native_app.splash_controller_handler = .{
+        .interface = .{
+            .lpVtbl = @constCast(&splash_controller_vtable),
+        },
+        .native_app = native_app,
+    };
+    native_app.splash_navigation_completed_handler = .{
+        .interface = .{
+            .lpVtbl = @constCast(&splash_navigation_completed_vtable),
+        },
+        .native_app = native_app,
+    };
+    native_app.main_navigation_completed_handler = .{
+        .interface = .{
+            .lpVtbl = @constCast(&main_navigation_completed_vtable),
+        },
+        .native_app = native_app,
+    };
 }
 
 //
@@ -545,6 +606,17 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
         }
     }
 
+    if (splash.configured) {
+        const colour = splash_windows.parseColor(splash.background) catch {
+            fatal("the splash background {s} is not a #RRGGBB colour", .{splash.background});
+        };
+        native_app.splash_background_brush = c.CreateSolidBrush(@as(u32, colour.red) | (@as(u32, colour.green) << 8) | (@as(u32, colour.blue) << 16));
+        const bmp = if (width < height) splash.portrait_bmp else splash.landscape_bmp;
+        native_app.splash_bitmap = splash_windows.bitmap(bmp) catch |err| {
+            fatal("the splash image cannot be read: {s}", .{@errorName(err)});
+        };
+    }
+
     // Without this Windows scales the window as a bitmap on a high resolution screen and the frontend looks blurred.
     if (c.SetProcessDpiAwarenessContext(c.DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2) == 0) {
         std.debug.print("ziggy native app: could not set per monitor DPI awareness, error {d}\n", .{c.GetLastError()});
@@ -566,6 +638,7 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
         window_class.hIconSm = window_class.hIcon;
     }
     window_class.lpszClassName = window_class_name.ptr;
+    window_class.hbrBackground = native_app.splash_background_brush;
     if (c.RegisterClassExW(&window_class) == 0) {
         return error.WindowClassFailed;
     }
@@ -689,6 +762,13 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
             }
             return c.DefWindowProcW(window, message, wparam, lparam);
         },
+        c.WM_PAINT => {
+            if (splash.configured and !native_app.splash_painted) {
+                paintSplash(native_app, window);
+                return 0;
+            }
+            return c.DefWindowProcW(window, message, wparam, lparam);
+        },
         c.WM_SETTINGCHANGE => {
             if (lparam != 0) {
                 const text: [*:0]const u16 = @ptrFromInt(@as(usize, @intCast(lparam)));
@@ -737,10 +817,65 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
 }
 
 //
+// Paints the splash background and image over the window, which is what the user sees until the splash web view is shown.
+//
+fn paintSplash(native_app: *NativeApp, window: c.HWND) void {
+    var paint: c.PAINTSTRUCT = undefined;
+    const device_context = c.BeginPaint(window, &paint);
+    defer _ = c.EndPaint(window, &paint);
+    var rect: c.RECT = undefined;
+    if (c.GetClientRect(window, &rect) == 0) {
+        return;
+    }
+    if (native_app.splash_background_brush) |brush| {
+        _ = c.FillRect(device_context, &rect, brush);
+    }
+    if (native_app.splash_bitmap) |bitmap| {
+        _ = c.SetStretchBltMode(device_context, c.HALFTONE);
+        _ = StretchDIBits(
+            device_context,
+            0,
+            0,
+            rect.right - rect.left,
+            rect.bottom - rect.top,
+            0,
+            0,
+            bitmap.width,
+            bitmap.height,
+            @ptrCast(bitmap.bytes.ptr + bitmap.pixel_offset),
+            @ptrCast(bitmap.bytes.ptr + splash_windows.file_header_size),
+            c.DIB_RGB_COLORS,
+            c.SRCCOPY,
+        );
+    }
+}
+
+//
+// StretchDIBits with untyped pointers: the embedded BMP's bytes are not aligned to the BITMAPINFO the translated header
+// expects, and its pixels and info header are slices of the same embedded bytes.
+//
+extern "gdi32" fn StretchDIBits(device_context: c.HDC, x_dest: c_int, y_dest: c_int, dest_width: c_int, dest_height: c_int, x_src: c_int, y_src: c_int, src_width: c_int, src_height: c_int, bits: ?*const anyopaque, info: ?*const anyopaque, usage: c.UINT, rop: c.DWORD) callconv(.winapi) c_int;
+
+//
 // Makes the web view fill the window's client area.
 //
 fn resizeWebView(native_app: *NativeApp) void {
+    resizeSplashWebView(native_app);
     const controller = native_app.controller orelse {
+        return;
+    };
+    var bounds: c.RECT = undefined;
+    if (c.GetClientRect(native_app.window, &bounds) == 0) {
+        fatal("GetClientRect failed, error {d}", .{c.GetLastError()});
+    }
+    check("put_Bounds", controller.lpVtbl.*.put_Bounds.?(controller, bounds));
+}
+
+//
+// Makes the splash web view fill the window's client area, once it exists.
+//
+fn resizeSplashWebView(native_app: *NativeApp) void {
+    const controller = native_app.splash_controller orelse {
         return;
     };
     var bounds: c.RECT = undefined;
@@ -754,6 +889,11 @@ fn resizeWebView(native_app: *NativeApp) void {
 // Closes the web view and lets go of it.
 //
 fn closeWebView(native_app: *NativeApp) void {
+    closeSplashController(native_app);
+    if (native_app.splash_background_brush) |brush| {
+        _ = c.DeleteObject(brush);
+        native_app.splash_background_brush = null;
+    }
     if (native_app.web_view) |web_view| {
         _ = web_view.lpVtbl.*.Release.?(web_view);
         native_app.web_view = null;
@@ -766,6 +906,21 @@ fn closeWebView(native_app: *NativeApp) void {
     if (native_app.environment) |environment| {
         _ = environment.lpVtbl.*.Release.?(environment);
         native_app.environment = null;
+    }
+}
+
+//
+// Closes the splash controller and lets go of its web view, when the splash still exists.
+//
+fn closeSplashController(native_app: *NativeApp) void {
+    if (native_app.splash_web_view) |web_view| {
+        _ = web_view.lpVtbl.*.Release.?(web_view);
+        native_app.splash_web_view = null;
+    }
+    if (native_app.splash_controller) |controller| {
+        check("Close", controller.lpVtbl.*.Close.?(controller));
+        _ = controller.lpVtbl.*.Release.?(controller);
+        native_app.splash_controller = null;
     }
 }
 
@@ -879,6 +1034,7 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .key_press => |key| press_key(native_app, reply, key),
         .new_window => |arguments| start_new_window(native_app, reply, arguments),
         .theme => |theme_call| applyTheme(native_app, theme_call),
+        .frontend_ready => revealAppView(native_app),
         .keep_alive, .native_call, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
 }
@@ -1017,6 +1173,17 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     native_app.core = c.ziggy_create(&config) orelse {
         fatal("the core could not be created", .{});
     };
+
+    // The page is loaded hidden and shown when its navigation completes, so the window shows the splash until then.
+    check("put_IsVisible", controller.lpVtbl.*.put_IsVisible.?(controller, 0));
+    var navigation_token: c.EventRegistrationToken = undefined;
+    check("add_NavigationCompleted", created_web_view.lpVtbl.*.add_NavigationCompleted.?(created_web_view, &native_app.main_navigation_completed_handler.interface, &navigation_token));
+    if (splash.configured) {
+        const environment = native_app.environment orelse {
+            fatal("the splash controller was requested before the WebView2 environment existed", .{});
+        };
+        check("CreateCoreWebView2Controller for the splash", environment.lpVtbl.*.CreateCoreWebView2Controller.?(environment, native_app.window, &native_app.splash_controller_handler.interface));
+    }
 
     var theme_arena_state = std.heap.ArenaAllocator.init(std.heap.c_allocator);
     defer theme_arena_state.deinit();
@@ -2101,6 +2268,108 @@ fn controllerInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2ControllerComplet
 }
 
 //
+// WebView2 has created the splash controller: shows the splash page until the app's own page has loaded.
+//
+fn splashControllerInvoke(this: [*c]c.ICoreWebView2CreateCoreWebView2ControllerCompletedHandler, error_code: c.HRESULT, controller: [*c]c.ICoreWebView2Controller) callconv(.c) c.HRESULT {
+    const native_app = SplashControllerHandler.fromInterface(this).native_app;
+    if (native_app.closing) {
+        return c.S_OK;
+    }
+    check("creating the splash WebView2 controller", error_code);
+    if (controller == null) {
+        fatal("WebView2 gave no splash controller", .{});
+    }
+    _ = controller.*.lpVtbl.*.AddRef.?(controller);
+    native_app.splash_controller = controller;
+    var web_view: ?*c.ICoreWebView2 = null;
+    check("get_CoreWebView2", controller.*.lpVtbl.*.get_CoreWebView2.?(controller, @ptrCast(&web_view)));
+    const created_web_view = web_view orelse {
+        fatal("the splash controller gave no web view", .{});
+    };
+    native_app.splash_web_view = created_web_view;
+    resizeSplashWebView(native_app);
+    check("put_IsVisible", controller.*.lpVtbl.*.put_IsVisible.?(controller, 0));
+    var token: c.EventRegistrationToken = undefined;
+    check("AddWebResourceRequestedFilter", created_web_view.lpVtbl.*.AddWebResourceRequestedFilter.?(created_web_view, std.unicode.utf8ToUtf16LeStringLiteral(app_url_prefix ++ "*"), c.COREWEBVIEW2_WEB_RESOURCE_CONTEXT_ALL));
+    check("add_WebResourceRequested", created_web_view.lpVtbl.*.add_WebResourceRequested.?(created_web_view, &native_app.resource_handler.interface, &token));
+    check("add_NavigationStarting", created_web_view.lpVtbl.*.add_NavigationStarting.?(created_web_view, &native_app.navigation_handler.interface, &token));
+    check("add_NewWindowRequested", created_web_view.lpVtbl.*.add_NewWindowRequested.?(created_web_view, &native_app.new_window_handler.interface, &token));
+    check("add_NavigationCompleted", created_web_view.lpVtbl.*.add_NavigationCompleted.?(created_web_view, &native_app.splash_navigation_completed_handler.interface, &token));
+    const splash_url = std.unicode.utf8ToUtf16LeStringLiteral(app_url_prefix ++ "ziggy-splash.html");
+    check("Navigate", created_web_view.*.lpVtbl.*.Navigate.?(created_web_view, splash_url.ptr));
+    return c.S_OK;
+}
+
+//
+// The splash page has finished loading: shows it over the window's painted splash, or destroys it when the app's own page
+// is already showing.
+//
+fn splashNavigationCompletedInvoke(this: [*c]c.ICoreWebView2NavigationCompletedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2NavigationCompletedEventArgs) callconv(.c) c.HRESULT {
+    _ = sender;
+    _ = args;
+    const native_app = NavigationCompletedHandler.fromInterface(this).native_app;
+    if (native_app.closing) {
+        return c.S_OK;
+    }
+    native_app.splash_load_finished = true;
+    if (!native_app.main_load_finished) {
+        if (native_app.splash_controller) |controller| {
+            check("put_IsVisible", controller.lpVtbl.*.put_IsVisible.?(controller, 1));
+        }
+        native_app.splash_painted = true;
+        if (c.InvalidateRect(native_app.window, null, 0) == 0) {
+            fatal("InvalidateRect failed, error {d}", .{c.GetLastError()});
+        }
+        return c.S_OK;
+    }
+    closeSplashController(native_app);
+    return c.S_OK;
+}
+
+//
+// The app's own page has finished loading. With no splash it is shown at once. With one it stays hidden behind the splash web view
+// until the frontend sends frontend-ready, which is the frontend saying its own splash overlay has painted over the real UI.
+//
+fn mainNavigationCompletedInvoke(this: [*c]c.ICoreWebView2NavigationCompletedEventHandler, sender: [*c]c.ICoreWebView2, args: [*c]c.ICoreWebView2NavigationCompletedEventArgs) callconv(.c) c.HRESULT {
+    _ = sender;
+    _ = args;
+    const native_app = NavigationCompletedHandler.fromInterface(this).native_app;
+    if (native_app.closing) {
+        return c.S_OK;
+    }
+    native_app.main_load_finished = true;
+    if (!splash.configured) {
+        if (native_app.controller) |controller| {
+            check("put_IsVisible", controller.lpVtbl.*.put_IsVisible.?(controller, 1));
+        }
+        native_app.splash_painted = true;
+        if (c.InvalidateRect(native_app.window, null, 0) == 0) {
+            fatal("InvalidateRect failed, error {d}", .{c.GetLastError()});
+        }
+    }
+    return c.S_OK;
+}
+
+//
+// The frontend's frontend-ready message: the app's web view, with the frontend's own splash overlay painted in it, is shown behind the
+// splash web view, the splash goes, and the frontend is told the app is showing so it can fade its overlay.
+//
+fn revealAppView(native_app: *NativeApp) void {
+    if (!splash.configured) {
+        return;
+    }
+    if (native_app.controller) |controller| {
+        check("put_IsVisible", controller.lpVtbl.*.put_IsVisible.?(controller, 1));
+    }
+    closeSplashController(native_app);
+    native_app.splash_painted = true;
+    if (c.InvalidateRect(native_app.window, null, 0) == 0) {
+        fatal("InvalidateRect failed, error {d}", .{c.GetLastError()});
+    }
+    deliverToWebView(native_app, "{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}");
+}
+
+//
 // Records the files that came with a message from the frontend, which WebView2 gives the native side as objects with real
 // paths, as a drop with the core.
 //
@@ -2468,6 +2737,36 @@ const capture_vtable = c.struct_ICoreWebView2CapturePreviewCompletedHandlerVtbl{
     .AddRef = CapturePreviewHandler.addRef,
     .Release = CapturePreviewHandler.release,
     .Invoke = capturePreviewInvoke,
+};
+
+//
+// The table of functions of the splash controller handler.
+//
+const splash_controller_vtable = c.struct_ICoreWebView2CreateCoreWebView2ControllerCompletedHandlerVtbl{
+    .QueryInterface = SplashControllerHandler.queryInterface,
+    .AddRef = SplashControllerHandler.addRef,
+    .Release = SplashControllerHandler.release,
+    .Invoke = splashControllerInvoke,
+};
+
+//
+// The table of functions of the splash navigation completed handler.
+//
+const splash_navigation_completed_vtable = c.struct_ICoreWebView2NavigationCompletedEventHandlerVtbl{
+    .QueryInterface = NavigationCompletedHandler.queryInterface,
+    .AddRef = NavigationCompletedHandler.addRef,
+    .Release = NavigationCompletedHandler.release,
+    .Invoke = splashNavigationCompletedInvoke,
+};
+
+//
+// The table of functions of the main navigation completed handler.
+//
+const main_navigation_completed_vtable = c.struct_ICoreWebView2NavigationCompletedEventHandlerVtbl{
+    .QueryInterface = NavigationCompletedHandler.queryInterface,
+    .AddRef = NavigationCompletedHandler.addRef,
+    .Release = NavigationCompletedHandler.release,
+    .Invoke = mainNavigationCompletedInvoke,
 };
 
 //
