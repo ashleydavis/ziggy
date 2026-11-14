@@ -5,6 +5,7 @@ Runs the Ziggy test app's smoke test scenarios for one platform. Invoked by the 
 ## Arguments
 
 - `<platform>`: `linux`, `windows`, `macos`, `android` or `ios` (a connected iPhone or iPad when there is one, see `lib/ios-device.sh`, otherwise a simulator). Each has a platform library in `lib/<platform>.sh` that puts the app in place, starts it and stops it.
+- `--extras`: also run the scenarios in `extras`, the ones that check the system's theme (see below). Without it they never run, even when named.
 - `[scenario]`: optional scenario number or name, to run one scenario.
 
 ## Behaviour
@@ -57,20 +58,21 @@ The scenarios in `desktop-only` run on Linux, Windows and macOS and not on a mob
 - `37-new-window`: the menu item starts window 2 as a process of its own with the arguments its action gives; window 2 runs its own frontend and backend; on Linux and macOS closing window 4 ends its process, closing window 1 leaves windows 2 and 3 running, and Quit in window 3 ends window 2 and window 3 and writes every window's log footer; on Windows closing window 1 ends its process and leaves window 2, and Quit in window 2 ends only its process.
 
 
-The scenarios in `workflows-only` change the system's appearance, which on a desktop is the developer's own screen. They run only in the workflow, and locally only when named with `ZIGGY_SMOKE_SCENARIO` or the runner's second argument, so an unfiltered local run never changes it:
+The scenarios in `extras` check the system's theme. They are optional: they run only when the runner is given `--extras`, locally or in a workflow, and the workflows do not give it. What they see depends on the machine's desktop (on Linux, a session bus with the desktop portal), and `30-system-theme` changes the system's appearance, which on a desktop is the developer's own screen:
 
-- `30-system-theme`: with the setting `system`, a change of the system's appearance reaches the page while the app stays in front. It puts the appearance it found back at the end. A connected iPhone or iPad cannot change its appearance, and the scenario exits with the skipped code.
+- `30-system-theme`: with the setting `system`, a change of the system's appearance reaches the page while the app stays in front. It puts the appearance it found back at the end. It runs where the platform library can change the appearance (`ziggy_platform_changes_appearance`), which a connected iPhone or iPad cannot.
+- `desktop-only/31-system-theme`: on Linux, Windows and macOS, with the setting `system`, the page's theme is the operating system's theme.
 
-To run it locally:
-
-```
-ZIGGY_SMOKE_SCENARIO=30-system-theme bun run test:smoke
-```
-
-To run every scenario, including the `workflows-only` ones, set `CI`, which is how the workflow runs them. This changes the desktop's appearance while the run lasts and puts it back at the end:
+To run every scenario, extras included:
 
 ```
-CI=true bun run test:smoke
+bun run test:smoke -- --extras
+```
+
+To run one of them:
+
+```
+bun run test:smoke -- --extras 30-system-theme
 ```
 
 Toggle Full Screen is not smoke tested. The Linux suite runs on a virtual display with no window manager, and nothing honours a request for full screen there, so there is nothing to see change.

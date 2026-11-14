@@ -173,7 +173,7 @@ ziggy_platform_os_process_alive() {
 }
 
 #
-# Succeeds when the desktop's appearance can be read and set in the registry, which the workflows-only scenarios need.
+# Succeeds when the desktop's appearance can be read and set in the registry, which the extras scenarios need.
 #
 ziggy_platform_changes_appearance() {
     reg query 'HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' /v AppsUseLightTheme > /dev/null 2>&1

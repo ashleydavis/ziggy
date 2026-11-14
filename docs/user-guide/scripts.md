@@ -23,7 +23,7 @@ Run from the app's directory. Every app made from the template has them, and so 
 | `bun run compile:zig` | Builds the frontend and the backend for this machine, then cross-builds the backend for every other platform and checks the Windows native app compiles. |
 | `bun run test` (alias `bun run t`) | The frontend's unit tests. |
 | `bun run test:zig` | The backend's unit tests (`zig build test`). `zig build test -Dtest-filter=<text>`, run in the app's directory once `bun run bundle:ui` has built the frontend, runs only the backend tests whose names contain the text. The option may be given more than once. |
-| `bun run test:smoke` | The smoke tests on this machine's desktop platform. `bun run test:smoke -- <name>` runs one. |
+| `bun run test:smoke` | The smoke tests on this machine's desktop platform. `bun run test:smoke -- <name>` runs one. `bun run test:smoke -- --extras` also runs the optional scenarios that check the system's theme. |
 | `bun run test:smoke:android` | The smoke tests on an attached Android device or emulator (the ones `ZIGGY_ANDROID_DEVICES` names when it is set, else a plugged-in device in preference to an emulator). |
 | `bun run test:smoke:ios` | The smoke tests on a connected iPhone or iPad when there is one, otherwise the iOS simulator. |
 
