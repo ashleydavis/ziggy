@@ -76,7 +76,9 @@ test "a task and a queue handler see the config and state paths" {
 
     const config_path = try std.fs.path.join(arena, &.{ config_dir, "config.toml" });
     const state_path = try std.fs.path.join(arena, &.{ state_dir, "state.json" });
-    const expected = try std.fmt.allocPrint(std.testing.allocator, "\"configPath\":\"{s}\",\"statePath\":\"{s}\"", .{ config_path, state_path });
+    // The paths are written as JSON strings, as the message holds them. Written raw, a Windows path's backslashes did not match
+    // their escaped form in the message, and the test failed in CI's unit-tests-windows.
+    const expected = try std.fmt.allocPrint(std.testing.allocator, "\"configPath\":{f},\"statePath\":{f}", .{ std.json.fmt(config_path, .{}), std.json.fmt(state_path, .{}) });
     defer std.testing.allocator.free(expected);
 
     try addTask(&native_app, "t1", "paths", "s", "null", "background");
