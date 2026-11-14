@@ -188,7 +188,11 @@ test "on Windows the environment map holds PATH and a program starts" {
             }
         }
         try std.testing.expect(found);
-        const id = try new_instance.start_program(std.testing.io, std.testing.allocator, "C:\\Windows\\System32\\cmd.exe", &.{ "/c", "exit 0" });
+        // The map start_program reads the environment into lives on the arena, which the caller owns, as a native app's call does.
+        // Given the testing allocator, the map's 318 allocations leaked and the test failed in CI's unit-tests-windows.
+        var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+        defer arena_state.deinit();
+        const id = try new_instance.start_program(std.testing.io, arena_state.allocator(), "C:\\Windows\\System32\\cmd.exe", &.{ "/c", "exit 0" });
         try std.testing.expect(id > 0);
     }
 }
