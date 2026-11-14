@@ -196,6 +196,12 @@ pub extern fn gdk_pixbuf_loader_write(loader: *GdkPixbufLoader, buffer: [*]const
 pub extern fn gdk_pixbuf_loader_close(loader: *GdkPixbufLoader, err: ?*?*GError) gboolean;
 pub extern fn gdk_pixbuf_loader_get_pixbuf(loader: *GdkPixbufLoader) ?*GdkPixbuf;
 pub extern fn gtk_window_set_default_size(window: *GtkWindow, width: c_int, height: c_int) void;
+
+// GtkWindowPosition: GTK_WIN_POS_CENTER centres the window on the screen containing the mouse pointer.
+pub const GTK_WIN_POS_CENTER: c_int = 1;
+
+// Sets where the window is placed when it is shown.
+pub extern fn gtk_window_set_position(window: *GtkWindow, position: c_int) void;
 pub extern fn gtk_container_add(container: *GtkWidget, widget: *GtkWidget) void;
 pub extern fn gtk_widget_show_all(widget: *GtkWidget) void;
 pub extern fn gtk_window_present(window: *GtkWindow) void;
@@ -220,6 +226,23 @@ pub extern fn jsc_value_to_string(value: *JSCValue) ?[*:0]u8;
 
 pub extern fn system(command: [*:0]const u8) c_int;
 pub extern fn setenv(name: [*:0]const u8, value: [*:0]const u8, overwrite: c_int) c_int;
+
+// GPid: a process id, a C int.
+pub const GPid = c_int;
+
+// A GChildWatchFunc: called once GLib has reaped a child process.
+pub const GChildWatchFunc = *const fn (pid: GPid, wait_status: c_int, user_data: gpointer) callconv(.c) void;
+
+// Watches a child process, calling the function once GLib has reaped it (glib/gmain.h). GLib here is 2.80, whose child watch uses a
+// pidfd and installs no SIGCHLD handler.
+pub extern fn g_child_watch_add(pid: GPid, function: GChildWatchFunc, data: gpointer) c_uint;
+
+// Calls the function when the process receives the signal (glib-unix.h). The handler is reset to the default by execve, so the
+// windows and tools this process starts end on SIGTERM as usual.
+pub extern fn g_unix_signal_add(signum: c_int, function: GSourceFunc, data: gpointer) c_uint;
+
+// The SIGTERM signal's number.
+pub const SIGTERM: c_int = 15;
 
 
 pub const GtkAccelGroup = opaque {};

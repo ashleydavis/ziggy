@@ -534,6 +534,12 @@
                     throw error;
                 });
             },
+            // Starts another window of the app with the arguments, and resolves once its process has started.
+            newWindow: function (args) {
+                return invokeSystem("new-window", {
+                    arguments: args,
+                });
+            },
         }),
     });
     Object.defineProperty(window, "__ziggyReceive", { value: receive });

@@ -18,6 +18,7 @@ const task_runner = @import("task-runner.zig");
 const utils = @import("utils");
 const environment_variable = @import("environment-variable.zig");
 const remote_control = @import("remote-control.zig");
+const new_instance = @import("new_instance.zig");
 const test_commands = @import("test-commands.zig");
 const dropped_files = @import("dropped-files.zig");
 const system_messages = @import("system-messages.zig");
@@ -339,6 +340,7 @@ const MainServices = struct {
         .quit = quit,
         .menuAction = menuAction,
         .runAction = runAction,
+        .new_window = new_window,
         .dataDir = dataDir,
         .configPath = configPath,
         .statePath = statePath,
@@ -463,6 +465,53 @@ const MainServices = struct {
             }
         }
         return error.UnknownAction;
+    }
+
+    //
+    // Starts another window of the app as a process of its own with the arguments, through the native app's new-window call. The
+    // native app's UI thread starts the process and answers at once, so waiting here for the answer cannot deadlock. Under remote
+    // control the window gets the same --remote-control address, and fails with RemoteControlArgument when an argument is that option
+    // itself.
+    //
+    fn new_window(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        if (!self.config.has_new_window) {
+            return error.NewWindowUnavailable;
+        }
+        const remote_control_address = if (self.config.remote_control) |address| std.mem.span(address) else null;
+        const new_arguments = try new_instance.instance_arguments(allocator, arguments, remote_control_address);
+        defer allocator.free(new_arguments);
+        var replies = MessageQueue.init();
+        defer replies.deinit();
+        try self.frontend.native.call(io, allocator, .{
+            .new_window = new_arguments,
+        }, .{
+            .queue = &replies,
+            .call_id = 0,
+        });
+        var arena_state = std.heap.ArenaAllocator.init(allocator);
+        defer arena_state.deinit();
+        const arena = arena_state.allocator();
+        const reply = replies.take(io, arena, .none) orelse {
+            @panic("the queue of a new window's result closed");
+        };
+        const response = try worker_messages.decode(worker_messages.INativeAppResponseMessage, arena, reply.text);
+        if (response.@"error") |reason| {
+            return utils.errors.throwError("A new window could not start: {s}", .{reason});
+        }
+        const result = response.result orelse return error.InvalidNativeAppResponse;
+        if (result != .string) {
+            return error.InvalidNativeAppResponse;
+        }
+        const process_id = std.fmt.parseInt(u64, result.string, 10) catch {
+            return utils.errors.throwError("The native app answered new-window with {s}", .{result.string});
+        };
+        if (process_id == 0) {
+            return utils.errors.throwError("The native app answered new-window with {s}", .{result.string});
+        }
+        const line = try std.fmt.allocPrint(allocator, "Started a new window, process {d}.", .{process_id});
+        defer allocator.free(line);
+        self.log.info(line);
     }
 
     //
@@ -1528,6 +1577,15 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: F
     }
     if (std.mem.eql(u8, name, "list-shortcuts")) {
         return try respond(arena, system_messages.action.list_shortcuts(shortcuts, services));
+    }
+    if (std.mem.eql(u8, name, "new-window")) {
+        const payload = switch (try handlers_lib.parsePayload(system_messages.window.NewWindowRequest, arena, data)) {
+            .parsed => |value| value,
+            .invalid => |text| return .{
+                .invalid_data = text,
+            },
+        };
+        return try respond(arena, try system_messages.window.new_window(services, io, arena, payload));
     }
     if (std.mem.eql(u8, name, "get-dropped-paths")) {
         return try respond(arena, try system_messages.dropped_files.getDroppedPaths(dropped, arena));

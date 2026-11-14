@@ -371,6 +371,8 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
         .has_screenshot = false,
         // A mobile has no shortcuts.
         .has_key_press = false,
+        // An Android app has one window, so there is no other window to open.
+        .has_new_window = false,
         .worker_threads = arguments.worker_threads,
         .max_concurrent_child_tasks = arguments.max_concurrent_child_tasks,
         .app_url_prefix = app_url_prefix.ptr,
@@ -540,7 +542,7 @@ fn doCall(env: *c.JNIEnv, bridge: *Bridge, arena: std.mem.Allocator, call: nativ
             envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.native_call_method, &arguments);
             failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.nativeCall threw");
         },
-        .screenshot, .key_press, .stopped => std.debug.panic("Ziggy JNI: the core sent a call the native app does not do", .{}),
+        .screenshot, .key_press, .new_window, .stopped => std.debug.panic("Ziggy JNI: the core sent a call the native app does not do", .{}),
     }
 }
 

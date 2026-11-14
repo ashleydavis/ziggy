@@ -8,7 +8,7 @@ import assert from "node:assert";
 import { createServer, connect, Socket } from "node:net";
 import type { AddressInfo } from "node:net";
 import { WebSocket } from "ws";
-import { closeServer, describeStartError, listen, releaseScript, startRemoteControlServer, writeToScript } from "../../lib/remote-control-server";
+import { WINDOW_COUNT_MAX, closeServer, describeStartError, listen, lowestFreeWindow, readTarget, releaseScript, startRemoteControlServer, writeToScript } from "../../lib/remote-control-server";
 import type { IRelayState, IRemoteControlServer } from "../../lib/remote-control-server";
 
 //
@@ -161,7 +161,7 @@ async function connectScript(port: number): Promise<IScriptClient> {
     const socket = connect(port, "127.0.0.1");
     socket.setEncoding("utf8");
     let rest = "";
-    // A server that replaces this connection with a newer one resets it, which a test of the replacement expects.
+    // A server that closes or turns away this connection ends it at once, which a test of the limit expects.
     socket.on("error", () => {});
     socket.on("data", chunk => {
         const pieces = (rest + String(chunk)).split("\n");
@@ -311,12 +311,14 @@ describe("startRemoteControlServer", () => {
         await started.server.close();
     });
 
-    test("accepts a second app after the first disconnects", async () => {
+    test("accepts a second app after the first disconnects, as window 1 again", async () => {
         const started = await startServer(1000);
         const script = await connectScript(started.scriptPort);
         const first = await connectApp(started.appPort);
+        script.socket.write("to the first\n");
+        expect(await first.nextMessage()).toBe("to the first");
         first.socket.close();
-        await closed(first.socket);
+        expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"AppDisconnected\"}");
         const second = await connectApp(started.appPort);
         script.socket.write("to the second\n");
         expect(await second.nextMessage()).toBe("to the second");
@@ -328,18 +330,19 @@ describe("startRemoteControlServer", () => {
         await started.server.close();
     });
 
-    test("a new app replaces a connected one, whose unanswered line gets AppDisconnected", async () => {
+    test("a second app becomes window 2 while the first stays connected", async () => {
         const started = await startServer(1000);
         const script = await connectScript(started.scriptPort);
         const first = await connectApp(started.appPort);
-        script.socket.write("to the first\n");
-        expect(await first.nextMessage()).toBe("to the first");
-        const firstClosed = closed(first.socket);
         const second = await connectApp(started.appPort);
-        await firstClosed;
-        expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"AppDisconnected\"}");
-        script.socket.write("to the second\n");
-        expect(await second.nextMessage()).toBe("to the second");
+        script.socket.write("{\"command\":\"ready\"}\n");
+        expect(await first.nextMessage()).toBe("{\"command\":\"ready\"}");
+        script.socket.write("{\"command\":\"ready\",\"window\":2}\n");
+        expect(await second.nextMessage()).toBe("{\"command\":\"ready\"}");
+        second.socket.send("{\"ok\":true}");
+        expect(await script.nextLine()).toBe("{\"ok\":true}");
+        expect(started.errors).toEqual([]);
+        first.socket.close();
         second.socket.close();
         script.socket.destroy();
         await started.server.close();
@@ -351,7 +354,7 @@ describe("startRemoteControlServer", () => {
         script.socket.write("{\"command\":\"ready\"}\n");
         expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"AppNotConnected\"}");
         expect(started.errors).toEqual([
-            `No app connected to port ${started.appPort} within 100 ms, so this line got AppNotConnected: {"command":"ready"}`,
+            `No app connected to port ${started.appPort} as window 1 within 100 ms, so this line got AppNotConnected: {"command":"ready"}`,
         ]);
         script.socket.destroy();
         await started.server.close();
@@ -419,7 +422,7 @@ describe("startRemoteControlServer", () => {
         });
         app.socket.send("unasked");
         expect(await started.nextError()).toBe("The app sent the remote control server a binary message. It sends text only, so the message was dropped.");
-        expect(await started.nextError()).toBe("The app sent the remote control server a reply to no line it was sent, so it was dropped: unasked");
+        expect(await started.nextError()).toBe("The app connected as window 1 sent the remote control server a reply to no line it was sent, so it was dropped: unasked");
         app.socket.close();
         await started.server.close();
     });
@@ -439,6 +442,230 @@ describe("startRemoteControlServer", () => {
             await closeServer(server);
         }
     });
+
+    test("sends a line that names window 2 to app 2 without the window key, and its reply back to the script", async () => {
+        const started = await startServer(1000);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        const second = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"x\",\"window\":2}\n");
+        expect(await second.nextMessage()).toBe("{\"command\":\"x\"}");
+        expect(started.errors).toEqual([]);
+        second.socket.send("{\"ok\":true}");
+        expect(await script.nextLine()).toBe("{\"ok\":true}");
+        first.socket.close();
+        second.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("sends each app's reply as it comes, in the order the replies are sent", async () => {
+        const started = await startServer(1000);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        const second = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"one\"}\n");
+        script.socket.write("{\"command\":\"two\",\"window\":2}\n");
+        expect(await first.nextMessage()).toBe("{\"command\":\"one\"}");
+        expect(await second.nextMessage()).toBe("{\"command\":\"two\"}");
+        second.socket.send("from two");
+        expect(await script.nextLine()).toBe("from two");
+        first.socket.send("from one");
+        expect(await script.nextLine()).toBe("from one");
+        first.socket.close();
+        second.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("waits a line for window 2 until app 2 connects, and sends app 1 only its own line", async () => {
+        const started = await startServer(5000);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"two\",\"window\":2}\n");
+        script.socket.write("{\"command\":\"one\"}\n");
+        expect(await first.nextMessage()).toBe("{\"command\":\"one\"}");
+        const second = await connectApp(started.appPort);
+        expect(await second.nextMessage()).toBe("{\"command\":\"two\"}");
+        expect(started.errors).toEqual([]);
+        first.socket.close();
+        second.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("gives an app connecting only its own window's waiting lines and leaves the others waiting", async () => {
+        const started = await startServer(5000);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"for-three\",\"window\":3}\n");
+        script.socket.write("{\"command\":\"one\"}\n");
+        expect(await first.nextMessage()).toBe("{\"command\":\"one\"}");
+        const second = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"two\",\"window\":2}\n");
+        expect(await second.nextMessage()).toBe("{\"command\":\"two\"}");
+        const third = await connectApp(started.appPort);
+        expect(await third.nextMessage()).toBe("{\"command\":\"for-three\"}");
+        third.socket.send("from three");
+        expect(await script.nextLine()).toBe("from three");
+        expect(started.errors).toEqual([]);
+        first.socket.close();
+        second.socket.close();
+        third.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("answers AppNotConnected naming the port, window 2 and the line as the script sent it", async () => {
+        const started = await startServer(100);
+        const script = await connectScript(started.scriptPort);
+        script.socket.write("{\"command\":\"x\",\"window\":2}\n");
+        expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"AppNotConnected\"}");
+        expect(started.errors).toEqual([
+            `No app connected to port ${started.appPort} as window 2 within 100 ms, so this line got AppNotConnected: {"command":"x","window":2}`,
+        ]);
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("clears a waiting line's timer when its window connects", async () => {
+        const started = await startServer(100);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"x\",\"window\":2}\n");
+        const second = await connectApp(started.appPort);
+        expect(await second.nextMessage()).toBe("{\"command\":\"x\"}");
+        await delay(150);
+        second.socket.send("{\"ok\":true}");
+        expect(await script.nextLine()).toBe("{\"ok\":true}");
+        expect(started.errors).toEqual([]);
+        first.socket.close();
+        second.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("does not send a window's earlier lines to the next app that takes it", async () => {
+        const started = await startServer(5000);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"for-two\",\"window\":2}\n");
+        const second = await connectApp(started.appPort);
+        expect(await second.nextMessage()).toBe("{\"command\":\"for-two\"}");
+        second.socket.close();
+        expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"AppDisconnected\"}");
+        const replacement = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"again\",\"window\":2}\n");
+        expect(await replacement.nextMessage()).toBe("{\"command\":\"again\"}");
+        first.socket.close();
+        replacement.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("answers InvalidWindow at once and sends neither bad line to the app", async () => {
+        const started = await startServer(1000);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"bad\",\"window\":0}\n");
+        expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"InvalidWindow\"}");
+        expect(await started.nextError()).toBe(`The script sent a line whose window is not a whole number from 1 to ${WINDOW_COUNT_MAX}, so it got InvalidWindow: {"command":"bad","window":0}`);
+        script.socket.write("{\"command\":\"bad\",\"window\":\"2\"}\n");
+        expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"InvalidWindow\"}");
+        expect(await started.nextError()).toBe(`The script sent a line whose window is not a whole number from 1 to ${WINDOW_COUNT_MAX}, so it got InvalidWindow: {"command":"bad","window":"2"}`);
+        script.socket.write("{\"command\":\"after\"}\n");
+        expect(await first.nextMessage()).toBe("{\"command\":\"after\"}");
+        first.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("frees window 1 when its app disconnects while window 2 keeps relaying", async () => {
+        const started = await startServer(1000);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        const second = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"to-one\"}\n");
+        expect(await first.nextMessage()).toBe("{\"command\":\"to-one\"}");
+        first.socket.close();
+        expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"AppDisconnected\"}");
+        script.socket.write("{\"command\":\"to-two\",\"window\":2}\n");
+        expect(await second.nextMessage()).toBe("{\"command\":\"to-two\"}");
+        second.socket.send("from two");
+        expect(await script.nextLine()).toBe("from two");
+        const third = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"to-one-again\"}\n");
+        expect(await third.nextMessage()).toBe("{\"command\":\"to-one-again\"}");
+        third.socket.close();
+        second.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("turns away an app beyond the window count", async () => {
+        const started = await startServer(5000);
+        const script = await connectScript(started.scriptPort);
+        const apps: IAppClient[] = [];
+        for (let window = 1; window <= WINDOW_COUNT_MAX; window++) {
+            apps.push(await connectApp(started.appPort));
+        }
+        const beyond = new WebSocket(`ws://127.0.0.1:${started.appPort}/`);
+        beyond.on("error", () => {});
+        const beyondClosed = closed(beyond);
+        await beyondClosed;
+        expect(await started.nextError()).toBe(`More than ${WINDOW_COUNT_MAX} apps connected to the remote control server on port ${started.appPort}, so this one was closed.`);
+        script.socket.write(`{"command":"last","window":${WINDOW_COUNT_MAX}}\n`);
+        expect(await apps[WINDOW_COUNT_MAX - 1].nextMessage()).toBe("{\"command\":\"last\"}");
+        for (const app of apps) {
+            app.socket.close();
+        }
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("shares the waiting-line limit with the lines for another window", async () => {
+        const started = await startServer(60_000);
+        const script = await connectScript(started.scriptPort);
+        const first = await connectApp(started.appPort);
+        script.socket.write("{\"command\":\"ready\"}\n");
+        expect(await first.nextMessage()).toBe("{\"command\":\"ready\"}");
+        first.socket.send("{\"ok\":true}");
+        expect(await script.nextLine()).toBe("{\"ok\":true}");
+        script.socket.write("{\"command\":\"for-two\",\"window\":2}\n".repeat(1001));
+        expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"AppNotConnected\"}");
+        expect(await started.nextError()).toBe("The script sent more than 1000 lines for windows that were not connected, so this one was answered at once: {\"command\":\"for-two\",\"window\":2}");
+        script.socket.write("{\"command\":\"after\"}\n");
+        expect(await first.nextMessage()).toBe("{\"command\":\"after\"}");
+        first.socket.close();
+        script.socket.destroy();
+        await started.server.close();
+    });
+
+    test("close ends every connected app", async () => {
+        const started = await startServer(1000);
+        const first = await connectApp(started.appPort);
+        const second = await connectApp(started.appPort);
+        const firstClosed = closed(first.socket);
+        const secondClosed = closed(second.socket);
+        await started.server.close();
+        await firstClosed;
+        await secondClosed;
+    });
+});
+
+describe("lowestFreeWindow", () => {
+    test("gives the lowest number no app holds", () => {
+        expect(lowestFreeWindow(new Map())).toBe(1);
+        expect(lowestFreeWindow(new Map<number, string>([[1, "one"], [3, "three"]]))).toBe(2);
+    });
+
+    test("gives undefined when every number to the count is held", () => {
+        const apps = new Map<number, string>();
+        for (let window = 1; window <= WINDOW_COUNT_MAX; window++) {
+            apps.set(window, `window ${window}`);
+        }
+        expect(lowestFreeWindow(apps)).toBeUndefined();
+    });
 });
 
 describe("receiveLine", () => {
@@ -447,7 +674,7 @@ describe("receiveLine", () => {
         const script = await connectScript(started.scriptPort);
         script.socket.write("line\n".repeat(1001));
         expect(await script.nextLine()).toBe("{\"ok\":false,\"error\":\"AppNotConnected\"}");
-        expect(await started.nextError()).toBe("The script sent more than 1000 lines while no app was connected, so this one was answered at once: line");
+        expect(await started.nextError()).toBe("The script sent more than 1000 lines for windows that were not connected, so this one was answered at once: line");
         script.socket.destroy();
         await started.server.close();
     });
@@ -498,10 +725,9 @@ describe("writeToScript", () => {
         const script = await connectScript(started.scriptPort);
         const other = new Socket();
         const state: IRelayState = {
-            app: undefined,
+            apps: new Map(),
             script: other,
             waiting: [],
-            owed: [],
         };
         expect(writeToScript(state, script.socket, "text")).toBe(false);
         other.destroy();
@@ -515,10 +741,9 @@ describe("releaseScript", () => {
     test("leaves the state alone for a script that is not the connected one", () => {
         const connected = new Socket();
         const state: IRelayState = {
-            app: undefined,
+            apps: new Map(),
             script: connected,
             waiting: [],
-            owed: [],
         };
         releaseScript(state, new Socket());
         expect(state.script).toBe(connected);
@@ -553,5 +778,95 @@ describe("describeStartError", () => {
             port: 4002,
             message: "EACCES",
         })).toBe("The remote control server could not listen on port 4002: EACCES");
+    });
+});
+
+describe("readTarget", () => {
+    test("sends a line that is not a plain object to window 1 with its text unchanged", () => {
+        for (const text of ["not json", "[1,2]", "\"text\"", "42", "true", "false", "null"]) {
+            expect(readTarget(text)).toEqual({
+                ok: true,
+                value: {
+                    window: 1,
+                    text,
+                },
+            });
+        }
+    });
+
+    test("sends a plain object without a window to window 1 with its text unchanged byte for byte", () => {
+        const text = "{ \"command\" : \"x\" , \"value\" : 1 }";
+        expect(readTarget(text)).toEqual({
+            ok: true,
+            value: {
+                window: 1,
+                text,
+            },
+        });
+    });
+
+    test("sends a line naming a window to that window without the window key, keeping the other keys in their order", () => {
+        expect(readTarget("{\"command\":\"x\",\"window\":1}")).toEqual({
+            ok: true,
+            value: {
+                window: 1,
+                text: "{\"command\":\"x\"}",
+            },
+        });
+        expect(readTarget("{\"command\":\"x\",\"window\":2}")).toEqual({
+            ok: true,
+            value: {
+                window: 2,
+                text: "{\"command\":\"x\"}",
+            },
+        });
+        expect(readTarget(`{"command":"x","window":${WINDOW_COUNT_MAX}}`)).toEqual({
+            ok: true,
+            value: {
+                window: WINDOW_COUNT_MAX,
+                text: "{\"command\":\"x\"}",
+            },
+        });
+    });
+
+    test("writes the line again with the numbers and escapes JSON.stringify gives", () => {
+        const text = "{\"command\":\"x\",\"window\":2,\"a\":1.0,\"b\":1e2,\"c\":\"A\\/\",\"d\":9007199254740993,\"e\":1,\"e\":2}";
+        expect(readTarget(text)).toEqual({
+            ok: true,
+            value: {
+                window: 2,
+                text: "{\"command\":\"x\",\"a\":1,\"b\":100,\"c\":\"A/\",\"d\":9007199254740992,\"e\":2}",
+            },
+        });
+    });
+
+    test("writes a value outside the double range as null and puts an integer-like key first", () => {
+        expect(readTarget("{\"window\":2,\"n\":1e999,\"2\":\"x\"}")).toEqual({
+            ok: true,
+            value: {
+                window: 2,
+                text: "{\"2\":\"x\",\"n\":null}",
+            },
+        });
+    });
+
+    test("gets InvalidWindow for a window that is not a whole number from 1 to the count", () => {
+        for (const text of [
+            "{\"window\":0}",
+            "{\"window\":-1}",
+            "{\"window\":1.5}",
+            "{\"window\":\"2\"}",
+            "{\"window\":null}",
+            "{\"window\":true}",
+            `{"window":${WINDOW_COUNT_MAX + 1}}`,
+        ]) {
+            expect(readTarget(text)).toEqual({
+                ok: false,
+                error: {
+                    name: "InvalidWindow",
+                    text,
+                },
+            });
+        }
     });
 });

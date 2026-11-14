@@ -16,4 +16,10 @@ pub const actions: []const ziggy.action.Action = &.{
         .label = "Say Hello From an Action",
         .shortcut = "CmdOrCtrl+Shift+H",
     },
+    // Opens another window of the template.
+    .{
+        .name = "new-window",
+        .label = "New Window",
+        .shortcut = "CmdOrCtrl+Shift+N",
+    },
 };

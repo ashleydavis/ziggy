@@ -19,9 +19,12 @@ Both are required, from 0 to 65535, and different unless both are 0. A port of 0
 
 - It listens on `127.0.0.1` only. A port already in use ends it at once with an error naming the port.
 - Each line from the script goes to the app as one WebSocket text message, and each text message from the app goes back to the script as one line, in order.
-- One app and one script are connected at a time. A new connection replaces the one before it, because a scenario that restarts the app connects again before the server may have seen the old connection end.
-- When the app connection ends, the server waits for the next app, so a scenario that restarts the app keeps the same server. A line the app was sent and did not answer before it went gets `{"ok":false,"error":"AppDisconnected"}`.
-- A line that arrives while no app is connected waits for one for 90 seconds, then gets `{"ok":false,"error":"AppNotConnected"}`.
+- Many apps can be connected at once, each numbered with the lowest number from 1 that no connected app has, and one script is connected at a time, a new script connection replacing the one before it.
+- A line goes to the window its `"window": <n>` field names, or window 1 when it has none, with the field taken off. A line that is not a JSON object, or has no `window` field, goes to window 1 unchanged.
+- A line with a `window` field reaches the app as its JSON value written again compactly by `JSON.stringify`, with its other keys in their order: numbers and string escapes are written as `JSON.stringify` writes them, an integer beyond 2^53 is rounded, a key given twice keeps its last value, a number outside the double range (`1e999`) is written as `null`, and a key whose name is an integer-like string comes before the other keys.
+- A `window` that is not a whole number from 1 to the server's window limit (`WINDOW_COUNT_MAX` in `src/lib/remote-control-server.ts`) gets `{"ok":false,"error":"InvalidWindow"}`. When the server sees an app's connection end, its number is free for the next app.
+- A scenario that restarts the app starts a new server for the new run, and a new server holds no app, so the new app is window 1. A line the app was sent and did not answer before it went gets `{"ok":false,"error":"AppDisconnected"}`.
+- A line for a window that is not connected waits for that window for the server's app wait (`APP_WAIT_TIMEOUT_MS` in `src/index.ts`), then gets `{"ok":false,"error":"AppNotConnected"}`.
 - A reply whose script has gone is dropped and reported.
 - Every failure is written to stderr with what failed and the port involved. A failure to start exits with code 1, and a wrong command line with code 2.
 - It ends with code 0 when its stdin closes or it receives SIGTERM. The test starts it with a stdin it holds open, so the server ends with the test even when the test is killed.

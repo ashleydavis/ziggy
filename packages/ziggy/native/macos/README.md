@@ -23,6 +23,12 @@ The frontend and the script that exposes `window.ziggy` (`ziggy-inject.js`, from
 
 When the app is started with `--remote-control <host:port>`, the native app takes the option and its address out of the command-line arguments, so the app's own argument handling never sees them. It tells the backend it is in test mode and passes the address on. The backend then connects to the remote control server there. A `--remote-control` with no address after it ends the app.
 
+## New windows
+
+A `new-window` call starts the app's own executable again with the arguments the call gives, through `ziggy_start_instance`, and answers with the new process's id. A `DispatchSource` process source reaps the process when it ends. The new window stays in the opener's process group and, under remote control, gets the same address.
+
+On MacOS Quit ends every window of the app: the Quit item, the backend's `quit` and the remote control `quit` command all reach `ZiggyBridge.quit`, which sends every other recorded window of the app SIGTERM. Each window records itself in the `windows` folder of the app's data directory as it starts and removes its record as it shuts down. A window that receives SIGTERM ends as if its own Quit had been asked for, through a `DispatchSource` signal source.
+
 ## Failures
 
 A failure that leaves the app unusable prints to standard error and exits non-zero. A frontend that fails to load, a blocked navigation and a failed delivery print to standard error and the app carries on.

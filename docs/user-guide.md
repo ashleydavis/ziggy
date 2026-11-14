@@ -34,16 +34,17 @@ Read the guides in this order:
 3. [Dev mode](user-guide/dev-mode.md): how to run your app's frontend in a browser that reloads as you save.
 4. [Messages](user-guide/messages.md): how to send JSON messages between frontend and backend.
 5. [Actions](user-guide/actions.md): named pieces of the app's functionality, run from a menu item, a keyboard shortcut, the frontend or the backend.
-6. [Menus](user-guide/menus.md): the desktop menu, its keyboard shortcuts and how a chosen item reaches the backend or the frontend.
-7. [Theme](user-guide/theme.md): the light, dark or system theme, --theme and how a page follows it.
-8. [Tasks](user-guide/tasks.md): how to run background tasks that don't block the frontend.
-9. [Threads](user-guide/threads.md): the threads an app runs on, what each one may touch and how they talk by messages.
-10. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
-11. [Logging](user-guide/logging.md): how to log, where the lines go and how to configure the log files.
-12. [The config file](user-guide/config-file.md): where an app keeps what the user chose, and the typed key-path API that reads and writes it.
-13. [The state file](user-guide/state-file.md): where an app keeps what it remembers, and the typed key-path API that reads and writes it.
-14. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the remote control connection.
-15. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
+6. [New windows](user-guide/new-windows.md): opening another window of the app as a process of its own, and what Quit ends.
+7. [Menus](user-guide/menus.md): the desktop menu, its keyboard shortcuts and how a chosen item reaches the backend or the frontend.
+8. [Theme](user-guide/theme.md): the light, dark or system theme, --theme and how a page follows it.
+9. [Tasks](user-guide/tasks.md): how to run background tasks that don't block the frontend.
+10. [Threads](user-guide/threads.md): the threads an app runs on, what each one may touch and how they talk by messages.
+11. [Native calls](user-guide/native-calls.md): file dialogs and calls into your own native code.
+12. [Logging](user-guide/logging.md): how to log, where the lines go and how to configure the log files.
+13. [The config file](user-guide/config-file.md): where an app keeps what the user chose, and the typed key-path API that reads and writes it.
+14. [The state file](user-guide/state-file.md): where an app keeps what it remembers, and the typed key-path API that reads and writes it.
+15. [Testing your app](user-guide/testing.md): unit tests, smoke tests and the remote control connection.
+16. [Distributing your app](user-guide/distributing-your-app.md): packaging, signing and getting builds to testers and app stores.
 
 Also:
 

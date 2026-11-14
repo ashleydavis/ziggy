@@ -74,6 +74,8 @@ pub const ZiggyConfig = extern struct {
     // Whether the native app presses a key by the path a user's key press takes into it. False on a platform with no shortcuts. Used
     // only by the remote control connection.
     has_key_press: bool,
+    // Whether the native app does "new-window" calls: starts another window of the app.
+    has_new_window: bool,
     // The number of worker threads.
     worker_threads: u32,
     // The limit on child tasks in flight for any one parent task.

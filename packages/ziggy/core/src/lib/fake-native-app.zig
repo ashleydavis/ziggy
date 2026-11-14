@@ -174,6 +174,7 @@ pub const FakeNativeApp = struct {
             .is_mobile = false,
             .has_screenshot = true,
             .has_key_press = true,
+            .has_new_window = true,
             .worker_threads = worker_threads,
             .max_concurrent_child_tasks = max_children,
             .app_url_prefix = "file:///app/dist/",
@@ -713,7 +714,7 @@ fn handleCall(io: std.Io, allocator: std.mem.Allocator, native: *NativeSide, rec
             recorded.pressed_keys.appendSlice(allocator, key) catch @panic("out of memory");
             recorded.pressed_keys.append(allocator, '\n') catch @panic("out of memory");
         },
-        .os_version, .pick_paths, .native_call, .theme, .stopped => {},
+        .os_version, .pick_paths, .native_call, .new_window, .theme, .stopped => {},
     }
     if (reply == 0) {
         return;
@@ -727,7 +728,8 @@ fn handleCall(io: std.Io, allocator: std.mem.Allocator, native: *NativeSide, rec
 //
 // The result a native app gives a call when the test has set none: the operating system "Test OS 1.0"; a dialog that gives its kind,
 // its title and its initial name back as the paths chosen; a native call that gives its method and request back, or fails with a reason
-// when the method is "fail"; a screenshot that is written, or fails with a reason when the path ends in "refused.png".
+// when the method is "fail"; a screenshot that is written, or fails with a reason when the path ends in "refused.png"; a new-window
+// call gives the process id 4242.
 //
 fn defaultResult(arena: std.mem.Allocator, call: native_message.Call) !CallResult {
     switch (call) {
@@ -774,6 +776,10 @@ fn defaultResult(arena: std.mem.Allocator, call: native_message.Call) !CallResul
                 .succeeded = true,
                 .text = try arena.dupe(u8, ""),
             };
+        },
+        .new_window => return .{
+            .succeeded = true,
+            .text = try arena.dupe(u8, "4242"),
         },
         .quit, .menu_action, .keep_alive, .theme, .stopped => std.debug.panic("a call that has no result was given a number for its result", .{}),
     }

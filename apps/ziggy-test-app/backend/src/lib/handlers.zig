@@ -981,12 +981,10 @@ pub fn onTaskEvent(services: HandlerServices, timers: Timers, io: std.Io, alloca
 // Example menu's task items and About are the frontend's. Send Event From Zig runs sendZigEvent, below. See "Menus" in the
 // architecture document.
 //
-
-//
 // The test app's actions, which it passes to ziggy.core.App as `.actions`: Say From an Action, on the Example menu, whose handler the
-// frontend registers and whose shortcut, CmdOrCtrl+5, is free of the Example menu's; and Escape Action, Enter Action, Down Action and
-// Show Help, which have no menu item because the build refuses a shortcut a text box keeps on one, and whose handlers the frontend
-// registers too.
+// frontend registers and whose shortcut, CmdOrCtrl+5, is free of the Example menu's; New Window, on the File menu; and Escape Action,
+// Enter Action, Down Action and Show Help, which have no menu item because the build refuses a shortcut a text box keeps on one, and
+// whose handlers the frontend registers too.
 //
 pub const actions: []const ziggy.action.Action = &.{
     .{
@@ -1014,6 +1012,12 @@ pub const actions: []const ziggy.action.Action = &.{
         .label = "Show Help",
         .shortcut = "?",
     },
+    // Opens another window of the test app, at the size its action gives it.
+    .{
+        .name = "new-window",
+        .label = "New Window",
+        .shortcut = "CmdOrCtrl+Shift+N",
+    },
 };
 
 //
@@ -1023,6 +1027,12 @@ pub const menu: []const ziggy.menu.Menu = &.{
     .{
         .label = "File",
         .items = &.{
+            // Runs the test app's action New Window, whose label and shortcut the item shows.
+            .{
+                .run = .{
+                    .action = "new-window",
+                },
+            },
             .{
                 .label = "Close Window",
                 .shortcut = "CmdOrCtrl+W",

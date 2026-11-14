@@ -63,10 +63,10 @@ On Windows a desktop app has no console, and on Android and iOS nothing shows st
 
 A file log writes two files for each run of the program, in the logs directory it is given:
 
-- `<file prefix>-<start time>.log`: every line, at every level, whatever the console shows.
-- `<file prefix>-<start time>-errors.log`: the error, exception and warning lines again.
+- `<file prefix>-<start time>-<pid>.log`: every line, at every level, whatever the console shows.
+- `<file prefix>-<start time>-<pid>-errors.log`: the error, exception and warning lines again.
 
-The start time is in UTC, written as `2026-10-26T09-15-04` so it is a valid file name on every platform. Each run makes a new pair of files. Nothing is rotated or deleted.
+The start time is in UTC, written as `2026-10-26T09-15-04` so it is a valid file name on every platform. The process id follows the start time, so each window of the app writes its own pair of files, including two windows started in the same second. Each run makes a new pair of files. Nothing is rotated or deleted.
 
 Both files start with a header holding the title, start time, command line, working directory, system information, version and the program's own header lines.
 
@@ -86,7 +86,7 @@ A Ziggy app writes no code to have log files. It gives its details in `app.zon`,
 
 | Field | Required | What it is for |
 |---|---|---|
-| `name` | Yes | Names the log files: `my-app-<start time>.log` and `my-app-<start time>-errors.log`. |
+| `name` | Yes | Names the log files: `my-app-<start time>-<pid>.log` and `my-app-<start time>-<pid>-errors.log`. |
 | `title` | Yes | The first line of each file's header. |
 | `version` | No | The header's `Version:` line. Without it the header has none. |
 

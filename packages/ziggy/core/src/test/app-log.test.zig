@@ -236,6 +236,28 @@ test "an app with a name has its two log files in the logs directory of its data
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "\"afterStopLog\":\"file\"");
 }
 
+test "a new-window message writes the started window's process id to the log at info level" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    var environ_map = try testFileDirectories(std.testing.allocator, arena_state.allocator(), &native_app, "logged-app");
+    defer environ_map.deinit();
+    const previous = ziggy.utils.process_env.getEnvironMap();
+    defer ziggy.utils.process_env.setEnvironMap(previous);
+    ziggy.utils.process_env.setEnvironMap(&environ_map);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), logged_app);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[]}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true,\"data\":{}}");
+    native_app.stop(std.testing.io, std.testing.allocator);
+    const logs_dir = try std.fs.path.join(std.testing.allocator, &.{ std.mem.sliceTo(&native_app.data_dir_path, 0), "logs" });
+    defer std.testing.allocator.free(logs_dir);
+    const written = try readLogFile(std.testing.allocator, logs_dir, "logged-app-", false);
+    defer std.testing.allocator.free(written);
+    try std.testing.expect(std.mem.indexOf(u8, written, "] [INFO] Started a new window, process 4242.\n") != null);
+}
+
 test "an app's log files go in the logs directory of the directory <NAME>_LOG_DIR names when it is set" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();

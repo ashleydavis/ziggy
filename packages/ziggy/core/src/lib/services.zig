@@ -119,6 +119,7 @@ pub const HandlerServices = struct {
         quit: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator) void,
         menuAction: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, action: []const u8) void,
         runAction: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, action: []const u8) anyerror!void,
+        new_window: *const fn (ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void,
         dataDir: *const fn (ptr: *anyopaque) []const u8,
         configPath: *const fn (ptr: *anyopaque) []const u8,
         statePath: *const fn (ptr: *anyopaque) []const u8,
@@ -187,6 +188,16 @@ pub const HandlerServices = struct {
     //
     pub fn runAction(self: HandlerServices, io: std.Io, allocator: std.mem.Allocator, action: []const u8) !void {
         try self.vtable.runAction(self.ptr, io, allocator, action);
+    }
+
+    //
+    // Starts another window of the app, as a process of its own with its own backend and task queue, with the arguments after the
+    // program's name. Under remote control the window gets the same --remote-control address. Fails with error.NewWindowUnavailable on
+    // Android, iOS and in dev mode, with error.RemoteControlArgument when an argument is --remote-control, and with the native app's
+    // reason when the process could not start.
+    //
+    pub fn new_window(self: HandlerServices, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) !void {
+        try self.vtable.new_window(self.ptr, io, allocator, arguments);
     }
 
     //

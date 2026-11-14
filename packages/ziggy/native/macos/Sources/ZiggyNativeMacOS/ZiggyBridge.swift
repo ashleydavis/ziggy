@@ -108,6 +108,12 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The pickers the core requested, which shutdown closes before it destroys the core.
     private let pickers = ZiggyPickers()
 
+    // The sources that reap the windows this one started, by their process ids.
+    private var childExits: [pid_t: DispatchSourceProcess] = [:]
+
+    // The source that ends this window when the process receives SIGTERM, which another window's Quit sends.
+    private var terminateSignal: DispatchSourceSignal?
+
     // The name of the script message handler that the injected script posts through.
     private static let handlerName = "ziggy"
 
@@ -143,6 +149,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             ZiggyBridge.fail("could not create \(dataDirectory.path): \(error)")
         }
         self.dataDirectory = dataDirectory
+        if !dataDirectory.path.withCString({ ziggy_window_opened($0, dataDirectory.path.utf8.count) }) {
+            ZiggyBridge.fail("ziggy_window_opened failed")
+        }
 
         self.remoteControl = ZiggyBridge.remoteControlAddress(Array(CommandLine.arguments.dropFirst()))
         self.core = nil
@@ -203,6 +212,19 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             ZiggyBridge.fail("start was called more than once")
         }
 
+        // Another window's Quit, or anything else that sends SIGTERM, ends this window, and only this window, as its own Quit
+        // would. The empty C handler replaces the default action, which ends the process at once, so the dispatch source runs;
+        // applicationWillTerminate then shuts the bridge down, which writes the log's footer. SIG_IGN is the wrong choice: an
+        // ignored signal stays ignored across execve, so every window this process starts and every tool the core runs would
+        // ignore SIGTERM.
+        _ = signal(SIGTERM, { _ in })
+        let terminate = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        terminate.setEventHandler {
+            NSApplication.shared.terminate(nil)
+        }
+        terminate.resume()
+        terminateSignal = terminate
+
         var config = ziggy_config()
         // The main queue hands the bridge's address back to the main thread, which is the only thread that reads it.
         config.wake_data = Unmanaged.passUnretained(self).toOpaque()
@@ -220,6 +242,7 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.has_menu_action = true
         config.has_screenshot = true
         config.has_key_press = true
+        config.has_new_window = true
         config.worker_threads = UInt32(ProcessInfo.processInfo.activeProcessorCount)
         config.max_concurrent_child_tasks = 10
         config.system_theme = ZiggyBridge.systemTheme()
@@ -301,6 +324,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             return
         }
         pickers.close()
+        if !dataDirectory.path.withCString({ ziggy_window_closed($0, dataDirectory.path.utf8.count) }) {
+            ZiggyBridge.report("ziggy_window_closed failed")
+        }
         destroyed = true
         core = nil
         uiHandler.core = nil
@@ -309,8 +335,13 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     }
 
 
-    // Ends the app. Only the core's remote control connection requests this.
-    private func quit() {
+    // Quit ends every window of the app, then this one: every other recorded window of the app is sent SIGTERM, which it handles as
+    // its own Quit. The app's own code's HandlerServices.quit and the remote control quit command both reach this, as the menu's
+    // Quit item does.
+    func quit() {
+        if !dataDirectory.path.withCString({ ziggy_end_other_windows($0, dataDirectory.path.utf8.count) }) {
+            ZiggyBridge.report("ziggy_end_other_windows failed")
+        }
         NSApplication.shared.terminate(nil)
     }
 
@@ -396,9 +427,45 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
                     self?.finishCall(reply, ok: true, text: "")
                 }
             }
+        case "new-window":
+            guard let arguments = call["arguments"] as? [String] else {
+                ZiggyBridge.fail("the core sent a new-window call with no arguments: \(text)")
+            }
+            startNewWindow(arguments, reply: reply)
         default:
             ZiggyBridge.fail("the core sent a call the native app does not do: \(text)")
         }
+    }
+
+    // Starts the app again, as a process of its own in this process's group, which is another window of the app, and gives the core its
+    // process id. The process source reaps the process when it ends, and is kept until then.
+    private func startNewWindow(_ arguments: [String], reply: UInt64) {
+        let argumentTexts = arguments.map { ZiggyBridge.duplicate($0) }
+        defer {
+            for text in argumentTexts {
+                free(text)
+            }
+        }
+        let argumentPointers: [UnsafePointer<CChar>?] = argumentTexts.map { UnsafePointer($0) }
+        var processId: Int64 = 0
+        let started = argumentPointers.withUnsafeBufferPointer { (buffer: UnsafeBufferPointer<UnsafePointer<CChar>?>) -> Bool in
+            ziggy_start_instance(buffer.baseAddress, argumentPointers.count, &processId)
+        }
+        guard started else {
+            finishCall(reply, ok: false, text: "StartFailed")
+            return
+        }
+        let pid = pid_t(processId)
+        let source = DispatchSource.makeProcessSource(identifier: pid, eventMask: .exit, queue: .main)
+        source.setEventHandler { [weak self, weak source] in
+            var status: Int32 = 0
+            _ = waitpid(pid, &status, 0)
+            source?.cancel()
+            self?.childExits.removeValue(forKey: pid)
+        }
+        source.resume()
+        childExits[pid] = source
+        finishCall(reply, ok: true, text: "\(processId)")
     }
 
     // Runs on the main thread: gives the core the result of its call taken under the number reply, unless the core has been destroyed,

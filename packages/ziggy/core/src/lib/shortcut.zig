@@ -89,7 +89,7 @@ pub fn parse(text: []const u8) ParseError!Shortcut {
         return error.MissingKey;
     };
     try writeKey(&result.key, key);
-    if (std.mem.eql(u8, std.mem.sliceTo(&result.key, 0), "?") and result.modifiers != 0) {
+    if (result.key[0] == '?' and result.key[1] == 0 and result.modifiers != 0) {
         return error.ModifierWithQuestionMark;
     }
     return result;

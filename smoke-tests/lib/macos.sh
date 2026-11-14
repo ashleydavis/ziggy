@@ -96,6 +96,21 @@ ziggy_platform_process_alive() {
 }
 
 #
+# Succeeds: on macOS, Quit ends every window of the app.
+#
+ziggy_platform_quit_ends_every_window() {
+    return 0
+}
+
+#
+# Succeeds when a process with the id is running, whether or not it is one of the app's. A zombie answers it too.
+# Usage: ziggy_platform_os_process_alive <pid>
+#
+ziggy_platform_os_process_alive() {
+    kill -0 "$1" 2>/dev/null
+}
+
+#
 # Prints the stack of every thread of the app, for a scenario to show where an app that did not end is waiting. The MacOS smoke
 # job's 25-close-with-dialog-open failed twice with the app still running after it was told to quit, and an empty log. `sample`
 # ships with macOS and reads the stacks of a running process.

@@ -47,6 +47,23 @@ test "the Hello menu's action item is found by its action's name" {
     try std.testing.expect(from_action == .action);
 }
 
+test "the File menu's New Window item is found by its action's name" {
+    const new_window = app.app.menu_targets.get("new-window") orelse return error.MenuItemMissing;
+    try std.testing.expect(new_window == .action);
+}
+
+test "New Window sends the UI the action system event naming it" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
+    defer test_environment.freeTestEnvironment(std.testing.allocator, directories);
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(2, 2), app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"menu-action\",\"data\":{\"action\":\"new-window\"}}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"name\":\"action\",\"data\":{\"action\":\"new-window\"}}");
+}
+
 test "Say Hello From an Action sends the UI the action system event naming it" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();

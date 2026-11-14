@@ -53,6 +53,38 @@ ziggy_platform_start() {
 
 ziggy_platform_stop() {
     local test_dir="$1"
+    # Windows has no process groups, so every window's process is ended by the id the app recorded: the core writes "Started a new
+    # window, process <pid>." once the native app has started it, and each window's own log file name ends in its process id, so a
+    # window is found even when the opener ended before the line was written. A process that has already gone is ignored.
+    local logs_dir
+    logs_dir="$(ziggy_platform_data_dir "$test_dir")/logs"
+    if [ -d "$logs_dir" ]; then
+        local file name pid line
+        for file in "$logs_dir"/*.log; do
+            [ -f "$file" ] || continue
+            name="${file##*/}"
+            case "$name" in
+                *-errors.log) ;;
+                *)
+                    pid="${name##*-}"
+                    pid="${pid%.log}"
+                    case "$pid" in
+                        ''|*[!0-9]*) ;;
+                        *) taskkill //F //PID "$pid" > /dev/null 2>&1 || true ;;
+                    esac
+                    ;;
+            esac
+            while read -r line; do
+                case "$line" in
+                    *"Started a new window, process "*)
+                        pid="${line##*Started a new window, process }"
+                        pid="${pid%%.*}"
+                        taskkill //F //PID "$pid" > /dev/null 2>&1 || true
+                        ;;
+                esac
+            done < "$file"
+        done
+    fi
     if [ -f "$test_dir/$WINDOWS_PGID_FILE_NAME" ]; then
         kill_process_group "$(cat "$test_dir/$WINDOWS_PGID_FILE_NAME")" || true
     fi
@@ -123,6 +155,21 @@ ziggy_platform_leave_app() {
 
 ziggy_platform_process_alive() {
     ziggy_platform_is_running "$1"
+}
+
+#
+# Fails: on Windows, Quit closes only its own window.
+#
+ziggy_platform_quit_ends_every_window() {
+    return 1
+}
+
+#
+# Succeeds when a process with the id is running. Git Bash's kill does not take a Windows process id, so tasklist is asked.
+# Usage: ziggy_platform_os_process_alive <pid>
+#
+ziggy_platform_os_process_alive() {
+    tasklist //fo csv //nh //fi "PID eq $1" | grep -qF "\"$1\""
 }
 
 #

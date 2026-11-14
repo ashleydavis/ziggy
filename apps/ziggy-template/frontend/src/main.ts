@@ -100,6 +100,17 @@ function helloFromAction(): void {
 //
 function registerActions(): void {
     window.ziggy.registerAction("hello-from-action", helloFromAction);
+    window.ziggy.registerAction("new-window", openNewWindow);
+}
+
+//
+// The handler of the template's action New Window: opens another window of the template as a process of its own, and logs why when
+// it does not open.
+//
+function openNewWindow(): Promise<void> {
+    return window.ziggy.newWindow([]).catch((error: Error) => {
+        log(`The new window did not open: ${error.message}`);
+    });
 }
 
 //

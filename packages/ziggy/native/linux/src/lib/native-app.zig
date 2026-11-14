@@ -76,6 +76,8 @@ pub const AppConfig = struct {
 const NativeApp = struct {
     // The configuration the app passed in.
     app_config: AppConfig,
+    // The app's private data directory, owned: freed with g_free when run returns.
+    data_directory: [*:0]u8,
     // The GTK application.
     application: *c.GtkApplication,
     // The command line without --remote-control and its address, for the geometry option and the app.
@@ -117,12 +119,18 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
     defer std.heap.c_allocator.free(taken.arguments);
     // Before GTK starts any thread, because choosing the card forks.
     try render_device.chooseRenderDevice();
+    const data_directory = c.g_build_filename(c.g_get_user_data_dir(), app_config.app_id.ptr, @as([*c]const u8, null));
+    defer c.g_free(data_directory);
+    if (c.g_mkdir_with_parents(data_directory, 0o755) != 0) {
+        return error.DataDirectoryFailed;
+    }
     const application = c.gtk_application_new(app_config.app_id.ptr, c.G_APPLICATION_NON_UNIQUE) orelse {
         return error.GtkApplicationFailed;
     };
     defer c.g_object_unref(application);
     var native_app = NativeApp{
         .app_config = app_config,
+        .data_directory = data_directory,
         .application = application,
         .args = taken.arguments,
         .web_view = null,
@@ -142,6 +150,16 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
     defer if (native_app.gtk_theme_name) |name| c.g_free(@ptrCast(name));
     _ = c.g_signal_connect_data(application, "activate", @ptrCast(&onActivate), &native_app, null, 0);
     _ = c.g_signal_connect_data(application, "shutdown", @ptrCast(&onShutdown), &native_app, null, 0);
+    // Another window's Quit, or anything else that sends SIGTERM, ends this window, and only this window, as its own Quit would.
+    _ = c.g_unix_signal_add(c.SIGTERM, on_terminate_signal, &native_app);
+    if (!z.ziggy_window_opened(native_app.data_directory, std.mem.len(native_app.data_directory))) {
+        fatal("could not record the window in the app's data directory", .{});
+    }
+    defer {
+        if (!z.ziggy_window_closed(native_app.data_directory, std.mem.len(native_app.data_directory))) {
+            std.debug.print("ziggy native app: could not remove the window's record\n", .{});
+        }
+    }
     const status = c.g_application_run(@ptrCast(application), 0, null);
     if (status < 0 or status > 255) {
         return error.GtkApplicationFailed;
@@ -219,12 +237,6 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
             native_app.gtk_theme_name = @ptrCast(theme_name);
         }
     }
-    const data_directory = c.g_build_filename(c.g_get_user_data_dir(), native_app.app_config.app_id.ptr, @as([*c]const u8, null));
-    defer c.g_free(data_directory);
-    if (c.g_mkdir_with_parents(data_directory, 0o755) != 0) {
-        return error.DataDirectoryFailed;
-    }
-
     var width = native_app.app_config.default_width;
     var height = native_app.app_config.default_height;
     for (native_app.args) |argument| {
@@ -242,6 +254,8 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     native_app.window = window;
     c.gtk_window_set_title(window, native_app.app_config.title.ptr);
     c.gtk_window_set_default_size(window, width, height);
+    // The window opens in the centre of the screen that has the focus, which GTK takes to be the one the mouse pointer is on.
+    c.gtk_window_set_position(window, c.GTK_WIN_POS_CENTER);
     if (native_app.app_config.icon_png) |icon_png| {
         setWindowIcon(window, icon_png);
     }
@@ -256,11 +270,12 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
     config.has_menu_action = true;
     config.has_screenshot = true;
     config.has_key_press = true;
+    config.has_new_window = true;
     config.has_native_call = native_app.app_config.native_call != null;
     config.worker_threads = c.g_get_num_processors();
     config.max_concurrent_child_tasks = 10;
     config.app_url_prefix = app_url_prefix;
-    config.data_dir = data_directory;
+    config.data_dir = native_app.data_directory;
     if (native_app.remote_control) |address| {
         config.test_mode = true;
         config.remote_control = address.ptr;
@@ -566,6 +581,7 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .pick_paths => |pick| try showPickDialog(native_app, reply, pick),
         .screenshot => |output_path| try startScreenshot(native_app, reply, output_path),
         .key_press => |key| press_key(native_app, reply, key),
+        .new_window => |arguments| start_new_window(native_app, reply, arguments),
         .theme => |theme_call| applyTheme(native_app, theme_call),
         .keep_alive, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
@@ -579,6 +595,55 @@ fn sendResult(native_app: *NativeApp, reply: u64, ok: bool, text: []const u8) vo
         return;
     };
     z.ziggy_native_result(core, reply, ok, text.ptr, text.len);
+}
+
+//
+// Starts the app again as a process of its own with the arguments, which is another window of the app, and sends the core its
+// process id. GLib reaps the process when it ends.
+//
+fn start_new_window(native_app: *NativeApp, reply: u64, arguments: []const []const u8) void {
+    const allocator = std.heap.c_allocator;
+    const pointers = allocator.alloc([*:0]const u8, arguments.len) catch @panic("out of memory starting a new window");
+    defer allocator.free(pointers);
+    var copied: usize = 0;
+    defer {
+        for (pointers[0..copied]) |pointer| {
+            allocator.free(std.mem.span(pointer));
+        }
+    }
+    for (arguments, pointers) |argument, *pointer| {
+        const argument_z = allocator.dupeZ(u8, argument) catch @panic("out of memory starting a new window");
+        pointer.* = argument_z.ptr;
+        copied += 1;
+    }
+    var process_id: i64 = 0;
+    if (!z.ziggy_start_instance(@ptrCast(pointers.ptr), pointers.len, &process_id)) {
+        sendResult(native_app, reply, false, "StartFailed");
+        return;
+    }
+    _ = c.g_child_watch_add(@intCast(process_id), on_child_exited, null);
+    var text_buffer: [32]u8 = undefined;
+    const text = std.fmt.bufPrint(&text_buffer, "{d}", .{process_id}) catch unreachable;
+    sendResult(native_app, reply, true, text);
+}
+
+//
+// Called once GLib has reaped a window's process that this one started. The process's record is its own to remove.
+//
+fn on_child_exited(pid: c.GPid, wait_status: c_int, user_data: c.gpointer) callconv(.c) void {
+    _ = pid;
+    _ = wait_status;
+    _ = user_data;
+}
+
+//
+// Called when this process receives SIGTERM: another window's Quit, or anything else that sends SIGTERM, ends this window, and only
+// this window, as its own Quit would. The core is then destroyed by onShutdown, which writes the log's footer.
+//
+fn on_terminate_signal(user_data: c.gpointer) callconv(.c) c.gboolean {
+    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
+    c.g_application_quit(@ptrCast(native_app.application));
+    return 0;
 }
 
 //
@@ -644,9 +709,14 @@ fn releaseAwakeOnMainThread(native_app: *NativeApp) void {
 }
 
 //
-// Quits the application.
+// Quit ends every window of the app, whichever route asked for it: the File menu's Quit and Ctrl+Q, the app's own code's
+// HandlerServices.quit, and the remote control quit command all reach this. Every other recorded window of the app is sent SIGTERM,
+// which it handles as its own Quit.
 //
 fn quitApplication(native_app: *NativeApp) void {
+    if (!z.ziggy_end_other_windows(native_app.data_directory, std.mem.len(native_app.data_directory))) {
+        std.debug.print("ziggy native app: could not end the app's other windows\n", .{});
+    }
     c.g_application_quit(@ptrCast(native_app.application));
 }
 

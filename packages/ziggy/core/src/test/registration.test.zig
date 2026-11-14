@@ -143,7 +143,7 @@ test "every system message of Ziggy's parts is handled, the remote control ones 
     defer native_app.deinit(std.testing.io, std.testing.allocator);
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), declared_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    for ([_][]const u8{ "add-task", "cancel-tasks", "get-platform", "menu-action", "run-action", "list-actions", "list-shortcuts", "get-dropped-paths" }) |name| {
+    for ([_][]const u8{ "add-task", "cancel-tasks", "get-platform", "menu-action", "run-action", "list-actions", "list-shortcuts", "new-window", "get-dropped-paths" }) |name| {
         try std.testing.expect(try systemHas(&native_app, name));
     }
     // The remote control messages are handled in every build.

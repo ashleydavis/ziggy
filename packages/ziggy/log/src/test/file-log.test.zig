@@ -1,9 +1,30 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const ziggy = @import("ziggy");
 const utils = @import("utils");
 const logging = @import("log");
 const errors = utils.errors;
 const FileLog = logging.file_log.FileLog;
+
+//
+// The Windows API functions this file calls that std.os.windows does not declare.
+//
+const kernel32 = struct {
+    // Gets the id of the calling process.
+    extern "kernel32" fn GetCurrentProcessId() callconv(.winapi) std.os.windows.DWORD;
+};
+
+//
+// The id of the process running this test, read the way the file log reads it.
+//
+fn ownProcessId() u64 {
+    const id: u64 = switch (builtin.os.tag) {
+        .windows => kernel32.GetCurrentProcessId(),
+        .macos, .ios => @intCast(std.c.getpid()),
+        else => @intCast(std.os.linux.getpid()),
+    };
+    return id;
+}
 
 //
 // A file log's configuration for a test, writing in the directory given, with every console option off.
@@ -94,12 +115,20 @@ test "start creates the logs directory and both files named with the prefix" {
 
     const log_name = std.fs.path.basename(logger.getLogFilePath());
     const error_name = std.fs.path.basename(logger.getErrorLogFilePath());
-    try std.testing.expect(std.mem.startsWith(u8, log_name, "test-app-"));
-    try std.testing.expect(std.mem.endsWith(u8, log_name, ".log"));
-    try std.testing.expect(!std.mem.endsWith(u8, log_name, "-errors.log"));
-    try std.testing.expectEqual(@as(usize, "test-app-2026-10-26T09-15-04.log".len), log_name.len);
-    try std.testing.expect(std.mem.startsWith(u8, error_name, "test-app-"));
-    try std.testing.expect(std.mem.endsWith(u8, error_name, "-errors.log"));
+    const start_iso = try (utils.timestamp_provider.Date{ .epochMilliseconds = logger.start_ms }).toISOString(allocator);
+    defer allocator.free(start_iso);
+    const file_timestamp = try allocator.dupe(u8, start_iso[0..19]);
+    defer allocator.free(file_timestamp);
+    std.mem.replaceScalar(u8, file_timestamp, ':', '-');
+    std.mem.replaceScalar(u8, file_timestamp, '.', '-');
+    const expected_name = try std.fmt.allocPrint(allocator, "test-app-{s}-{d}.log", .{ file_timestamp, ownProcessId() });
+    defer allocator.free(expected_name);
+    const expected_error_name = try std.fmt.allocPrint(allocator, "test-app-{s}-{d}-errors.log", .{ file_timestamp, ownProcessId() });
+    defer allocator.free(expected_error_name);
+    try std.testing.expectEqualStrings(expected_name, log_name);
+    try std.testing.expectEqualStrings(expected_error_name, error_name);
+    try std.testing.expectEqual(expected_name.len, log_name.len);
+    try std.testing.expectEqual(expected_error_name.len, error_name.len);
     try std.testing.expectEqualStrings(std.fs.path.dirname(logger.getLogFilePath()).?, logs_dir);
     try std.Io.Dir.cwd().access(std.testing.io, logger.getErrorLogFilePath(), .{});
 }
@@ -373,7 +402,6 @@ test "readLogDetails gives the first 50 lines of a file with no start of log" {
 test "defaultLogsDir is the program's logs directory under the temporary directory the environment names" {
     var environ_map = std.process.Environ.Map.init(std.testing.allocator);
     defer environ_map.deinit();
-    const builtin = @import("builtin");
     if (builtin.os.tag == .windows) {
         try environ_map.put("TEMP", "C:\\Temp\\");
     }

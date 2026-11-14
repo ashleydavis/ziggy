@@ -115,7 +115,11 @@ final class ZiggyMenu: NSObject {
             applicationMenu.addItem(makeItem(title: "Quit \(applicationName)", entry: quit))
         }
         else {
-            applicationMenu.addItem(NSMenuItem(title: "Quit \(applicationName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+            // The same route as the core's Quit item, so every Quit ends every window of the app.
+            let item = NSMenuItem(title: "Quit \(applicationName)", action: #selector(menuItemChosen(_:)), keyEquivalent: "q")
+            item.target = self
+            item.representedObject = "quit"
+            applicationMenu.addItem(item)
         }
         let item = NSMenuItem(title: applicationName, action: nil, keyEquivalent: "")
         item.submenu = applicationMenu
@@ -324,7 +328,7 @@ final class ZiggyMenu: NSObject {
             }
             window.performClose(nil)
         case "quit":
-            NSApplication.shared.terminate(nil)
+            bridge?.quit()
         case "reload":
             webView.reload()
         case "toggle-devtools":

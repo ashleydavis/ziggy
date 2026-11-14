@@ -386,6 +386,12 @@ export interface IZiggyBridge {
     // Resolves with every action of the app and every standard item of its menu, with its label and its shortcut.
     //
     listActions(): Promise<IActionInfo[]>;
+
+    //
+    // Starts another window of the app as a process of its own with the arguments after the program's name, and resolves once its
+    // process has started. Rejects on Android, iOS and in dev mode with NewWindowUnavailable.
+    //
+    newWindow(args: string[]): Promise<void>;
 }
 
 declare global {

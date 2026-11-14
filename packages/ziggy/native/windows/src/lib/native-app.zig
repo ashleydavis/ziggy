@@ -581,6 +581,22 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
     if (c.AdjustWindowRectExForDpi(&frame, window_style, 0, 0, dpi) == 0) {
         return error.WindowSizeFailed;
     }
+    // A window with no position of its own opens in the centre of the monitor the mouse pointer is on, which is the screen that has
+    // the focus.
+    if (left == std.math.minInt(c_int) or top == std.math.minInt(c_int)) {
+        var cursor: c.POINT = undefined;
+        if (c.GetCursorPos(&cursor) != 0) {
+            const monitor = c.MonitorFromPoint(cursor, c.MONITOR_DEFAULTTONEAREST);
+            var monitor_info: c.MONITORINFO = undefined;
+            monitor_info.cbSize = @sizeOf(c.MONITORINFO);
+            if (c.GetMonitorInfoW(monitor, &monitor_info) != 0) {
+                const work_width = monitor_info.rcWork.right - monitor_info.rcWork.left;
+                const work_height = monitor_info.rcWork.bottom - monitor_info.rcWork.top;
+                left = monitor_info.rcWork.left + @divTrunc(work_width - (frame.right - frame.left), 2);
+                top = monitor_info.rcWork.top + @divTrunc(work_height - (frame.bottom - frame.top), 2);
+            }
+        }
+    }
     const wide_title = try std.unicode.utf8ToUtf16LeAllocZ(allocator, native_app.app_config.title);
     defer allocator.free(wide_title);
     native_app.window = c.CreateWindowExW(
@@ -861,9 +877,39 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .pick_paths => |pick| try askForPick(native_app, reply, pick),
         .screenshot => |output_path| startScreenshot(native_app, reply, output_path),
         .key_press => |key| press_key(native_app, reply, key),
+        .new_window => |arguments| start_new_window(native_app, reply, arguments),
         .theme => |theme_call| applyTheme(native_app, theme_call),
         .keep_alive, .native_call, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
+}
+
+//
+// Starts the app again as a process of its own with the arguments, which is another window of the app, and sends the core its
+// process id. Windows has no zombies, and start_instance closed the process and thread handles, so no process needs reaping here.
+//
+fn start_new_window(native_app: *NativeApp, reply: u64, arguments: []const []const u8) void {
+    const allocator = std.heap.c_allocator;
+    const pointers = allocator.alloc([*:0]const u8, arguments.len) catch @panic("out of memory starting a new window");
+    defer allocator.free(pointers);
+    var copied: usize = 0;
+    defer {
+        for (pointers[0..copied]) |pointer| {
+            allocator.free(std.mem.span(pointer));
+        }
+    }
+    for (arguments, pointers) |argument, *pointer| {
+        const argument_z = allocator.dupeZ(u8, argument) catch @panic("out of memory starting a new window");
+        pointer.* = argument_z.ptr;
+        copied += 1;
+    }
+    var process_id: i64 = 0;
+    if (!c.ziggy_start_instance(@ptrCast(pointers.ptr), pointers.len, &process_id)) {
+        sendResult(native_app, reply, false, "StartFailed");
+        return;
+    }
+    var text_buffer: [32]u8 = undefined;
+    const text = std.fmt.bufPrint(&text_buffer, "{d}", .{process_id}) catch unreachable;
+    sendResult(native_app, reply, true, text);
 }
 
 //
@@ -947,6 +993,7 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     config.has_menu_action = true;
     config.has_screenshot = true;
     config.has_key_press = true;
+    config.has_new_window = true;
     var system_info: c.SYSTEM_INFO = undefined;
     c.GetSystemInfo(&system_info);
     config.worker_threads = system_info.dwNumberOfProcessors;
