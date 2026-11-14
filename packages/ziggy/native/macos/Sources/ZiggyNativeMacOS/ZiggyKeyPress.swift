@@ -102,10 +102,22 @@ enum ZiggyKeyPress {
         layout = Unmanaged<CFData>.fromOpaque(rawLayout).takeUnretainedValue() as Data
         let keyboardType = UInt32(LMGetKbdType())
 
-        guard let characters = character(for: keyCodeValue, layout: layout, flags: pressFlags, keyboardType: keyboardType),
-              let charactersIgnoringModifiers = character(for: keyCodeValue, layout: layout, flags: [], keyboardType: keyboardType) else {
-            completion("the keyboard has no key for \(key)")
-            return
+        let characters: String
+        let charactersIgnoringModifiers: String
+        if namedKeyCodes[keyName] != nil {
+            // A named key's event carries the character AppKit gives it, such as NSDownArrowFunctionKey. The layout gives Down
+            // 0x1F, which WebKit typed into the text area: CI's 32-text-box-keys found "hello", 0x1F, a newline and "x".
+            characters = ZiggyMenu.keyEquivalent(forKeyName: keyName)
+            charactersIgnoringModifiers = characters
+        }
+        else {
+            guard let typed = character(for: keyCodeValue, layout: layout, flags: pressFlags, keyboardType: keyboardType),
+                  let plain = character(for: keyCodeValue, layout: layout, flags: [], keyboardType: keyboardType) else {
+                completion("the keyboard has no key for \(key)")
+                return
+            }
+            characters = typed
+            charactersIgnoringModifiers = plain
         }
 
         if !NSApp.isActive || !window.isKeyWindow {
