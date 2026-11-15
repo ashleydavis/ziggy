@@ -326,6 +326,9 @@ const NativeApp = struct {
     splash_background_brush: c.HBRUSH,
     // Whether the window's splash painting has ended, so it no longer paints the image.
     splash_painted: bool,
+    // Whether the app follows the system's theme, which it starts to do the first time the theme setting is system. Until then it
+    // never reads the system's theme, so a start with light or dark reads nothing from the system.
+    follows_system_theme: bool,
 };
 
 //
@@ -388,6 +391,7 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .splash_bitmap = null,
         .splash_background_brush = null,
         .splash_painted = false,
+        .follows_system_theme = false,
     };
     initHandlers(&native_app);
     const exit_code = try start(&native_app, allocator);
@@ -774,15 +778,10 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
         c.WM_SETTINGCHANGE => {
             if (lparam != 0) {
                 const text: [*:0]const u16 = @ptrFromInt(@as(usize, @intCast(lparam)));
-                if (std.mem.eql(u16, std.mem.span(text), std.unicode.utf8ToUtf16LeStringLiteral("ImmersiveColorSet")[0..])) {
-                    const theme = readSystemTheme();
-                    var buffer: [128]u8 = undefined;
-                    const message_text = std.fmt.bufPrint(&buffer, "{{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"{s}\"}}", .{if (theme == .dark) "dark" else "light"}) catch {
-                        return 0;
-                    };
-                    if (native_app.core) |core| {
-                        c.ziggy_send_message(core, message_text.ptr, message_text.len);
-                    }
+                // The system's theme is read only once the app follows it, which it does once the theme setting is system, so a
+                // change while the setting is light or dark reads nothing from the system.
+                if (native_app.follows_system_theme and std.mem.eql(u16, std.mem.span(text), std.unicode.utf8ToUtf16LeStringLiteral("ImmersiveColorSet")[0..])) {
+                    sendSystemTheme(native_app, readSystemTheme());
                 }
             }
             return 0;
@@ -1040,7 +1039,13 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
         .screenshot => |output_path| startScreenshot(native_app, reply, output_path),
         .key_press => |key| press_key(native_app, reply, key),
         .new_window => |arguments| start_new_window(native_app, reply, arguments),
-        .theme => |theme_call| applyTheme(native_app, theme_call),
+        .theme => |theme_call| {
+            applyTheme(native_app, theme_call);
+            // A theme setting changed to system starts the app following the system's theme, which it has not read until now.
+            if (std.mem.eql(u8, theme_call.setting, "system")) {
+                followSystemTheme(native_app);
+            }
+        },
         .frontend_ready => revealAppView(native_app),
         .keep_alive, .native_call, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
@@ -1176,7 +1181,8 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     }
     config.arg_count = @intCast(argument_pointers.len);
     config.args = @ptrCast(argument_pointers.ptr);
-    config.system_theme = @intFromEnum(readSystemTheme());
+    // The system's theme is read only once the setting is system (see followSystemTheme), so the core starts with light until then.
+    config.system_theme = @intFromEnum(system_theme.SystemTheme.light);
     native_app.core = c.ziggy_create(&config) orelse {
         fatal("the core could not be created", .{});
     };
@@ -1194,17 +1200,14 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
 
     var theme_arena_state = std.heap.ArenaAllocator.init(std.heap.c_allocator);
     defer theme_arena_state.deinit();
-    var theme_length: usize = 0;
-    const theme_pointer = c.ziggy_theme(native_app.core, &theme_length) orelse {
-        fatal("the core could not give the theme", .{});
-    };
-    const theme_call = native_message.parse(theme_arena_state.allocator(), theme_pointer[0..theme_length]) catch {
-        fatal("the core gave a theme that cannot be read", .{});
-    };
-    switch (theme_call) {
-        .theme => |theme_value| applyTheme(native_app, theme_value),
-        else => fatal("the core gave a call that is not the theme", .{}),
+    var theme_call = queryTheme(native_app, theme_arena_state.allocator());
+    if (std.mem.eql(u8, theme_call.setting, "system")) {
+        // The core takes the system's theme before it answers the next query, which goes to it on the same queue, so the theme
+        // applied is the system's.
+        followSystemTheme(native_app);
+        theme_call = queryTheme(native_app, theme_arena_state.allocator());
     }
+    applyTheme(native_app, theme_call);
 
     // The app supplies the query unread, and the core names none of its parts.
     var query_length: usize = 0;
@@ -2790,6 +2793,48 @@ fn hkeyCurrentUser() c.HKEY {
 fn hkeyFromValue(value: usize) c.HKEY {
     @setRuntimeSafety(false);
     return @ptrFromInt(value);
+}
+
+//
+// The core's theme call, parsed with the allocator.
+//
+fn queryTheme(native_app: *NativeApp, allocator: std.mem.Allocator) native_message.ThemeCall {
+    var theme_length: usize = 0;
+    const theme_pointer = c.ziggy_theme(native_app.core, &theme_length) orelse {
+        fatal("the core could not give the theme", .{});
+    };
+    const theme_call = native_message.parse(allocator, theme_pointer[0..theme_length]) catch {
+        fatal("the core gave a theme that cannot be read", .{});
+    };
+    return switch (theme_call) {
+        .theme => |theme_value| theme_value,
+        else => fatal("the core gave a call that is not the theme", .{}),
+    };
+}
+
+//
+// Follows the system's theme, the first time the theme setting is system: sends the core the system's theme, and from then on the
+// window procedure sends it each change. Until then the app never reads the system's theme, so a start with light or dark reads
+// nothing from the system.
+//
+fn followSystemTheme(native_app: *NativeApp) void {
+    if (native_app.follows_system_theme) {
+        return;
+    }
+    native_app.follows_system_theme = true;
+    sendSystemTheme(native_app, readSystemTheme());
+}
+
+//
+// Sends the core the system's theme as a system-theme message.
+//
+fn sendSystemTheme(native_app: *NativeApp, theme: system_theme.SystemTheme) void {
+    const core = native_app.core orelse {
+        return;
+    };
+    var buffer: [128]u8 = undefined;
+    const text = std.fmt.bufPrint(&buffer, "{{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"{s}\"}}", .{if (theme == .dark) "dark" else "light"}) catch unreachable;
+    c.ziggy_send_message(core, text.ptr, text.len);
 }
 
 //

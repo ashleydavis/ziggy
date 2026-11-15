@@ -127,6 +127,10 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The source that ends this window when the process receives SIGTERM, which another window's Quit sends.
     private var terminateSignal: DispatchSourceSignal?
 
+    // Whether the app has read the system's theme and started following its changes, which it does once, the first time the theme
+    // setting is system.
+    private var followingSystemTheme = false
+
     // The name of the script message handler that the injected script posts through.
     private static let handlerName = "ziggy"
 
@@ -299,7 +303,8 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.has_new_window = true
         config.worker_threads = UInt32(ProcessInfo.processInfo.activeProcessorCount)
         config.max_concurrent_child_tasks = 10
-        config.system_theme = ZiggyBridge.systemTheme()
+        // The system's theme is read only once the setting is system (see followSystemTheme), so the core starts with light until then.
+        config.system_theme = Int32(ZIGGY_THEME_LIGHT)
 
         let prefixText = ZiggyBridge.duplicate(ZiggyBridge.appUrlPrefix)
         let dataText = ZiggyBridge.duplicate(dataDirectory.path)
@@ -342,18 +347,14 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         }
         menu = ZiggyMenu(bridge: self, entries: UnsafeBufferPointer(start: entries, count: entryCount))
 
-        var themeLength = 0
-        guard let themeText = ziggy_theme(created, &themeLength) else {
-            ZiggyBridge.fail("the core could not give the theme")
-        }
-        let themeData = Data(bytes: themeText, count: themeLength)
-        guard let themeCall = (try? JSONSerialization.jsonObject(with: themeData)) as? [String: Any] else {
-            ZiggyBridge.fail("the core gave a theme that cannot be read")
+        var themeCall = ZiggyBridge.queryTheme(created)
+        if themeCall["setting"] as? String == "system" {
+            // The core takes the system's theme before it answers the next query, which goes to it on the same queue, so the app
+            // starts in the system's theme.
+            followSystemTheme()
+            themeCall = ZiggyBridge.queryTheme(created)
         }
         applyTheme(themeCall)
-        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { [weak self] _ in
-            self?.postSystemTheme()
-        }
 
         // The app supplies the query, which is passed through unread.
         var queryLength = 0
@@ -447,6 +448,10 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             menu.perform(action: action)
         case "theme":
             applyTheme(call)
+            // A start with light or dark never followed the system's theme, so it starts the first time the setting becomes system.
+            if call["setting"] as? String == "system" {
+                followSystemTheme()
+            }
         case "os-version":
             let version = ProcessInfo.processInfo.operatingSystemVersion
             finishCall(reply, ok: true, text: "\"\(ZiggyBridge.operatingSystemName) \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)\"")
@@ -721,6 +726,33 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // The system's theme: dark when the AppleInterfaceStyle default is "Dark".
     static func systemTheme() -> Int32 {
         return UserDefaults.standard.string(forKey: "AppleInterfaceStyle") == "Dark" ? Int32(ZIGGY_THEME_DARK) : Int32(ZIGGY_THEME_LIGHT)
+    }
+
+    // The core's theme call.
+    private static func queryTheme(_ handle: UnsafeMutableRawPointer) -> [String: Any] {
+        var themeLength = 0
+        guard let themeText = ziggy_theme(handle, &themeLength) else {
+            ZiggyBridge.fail("the core could not give the theme")
+        }
+        let themeData = Data(bytes: themeText, count: themeLength)
+        guard let themeCall = (try? JSONSerialization.jsonObject(with: themeData)) as? [String: Any] else {
+            ZiggyBridge.fail("the core gave a theme that cannot be read")
+        }
+        return themeCall
+    }
+
+    // Follows the system's theme, the first time the theme setting is system: sends the core the system's theme and follows its
+    // changes for the rest of the run. Until then the app never reads AppleInterfaceStyle or watches for its changes, so a start
+    // with light or dark reads and watches nothing.
+    private func followSystemTheme() {
+        if followingSystemTheme {
+            return
+        }
+        followingSystemTheme = true
+        postSystemTheme()
+        DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { [weak self] _ in
+            self?.postSystemTheme()
+        }
     }
 
     // Tells the core the system's theme.

@@ -34,19 +34,6 @@ const splash_url = app_url_prefix ++ "ziggy-splash.html";
 pub const NativeCallContext = struct {
     // The native app the native call came to.
     native_app: *NativeApp,
-
-    //
-    // Holds the computer from suspending, or lets it go again. Calls nest: the computer may suspend again once every hold has been
-    // let go.
-    //
-    pub fn holdAwake(self: NativeCallContext, awake: bool) void {
-        if (awake) {
-            holdAwakeOnMainThread(self.native_app);
-        }
-        else {
-            releaseAwakeOnMainThread(self.native_app);
-        }
-    }
 };
 
 //
@@ -111,10 +98,6 @@ const NativeApp = struct {
     inspector_open: bool,
     // Whether the window is full screen.
     fullscreen: bool,
-    // How many holds on the computer staying awake are in place. Only the main thread touches it.
-    awake_holds: u32,
-    // The cookie of the suspend inhibit, while there is one.
-    inhibit_cookie: c_uint,
     // The desktop portal's settings proxy, or null before the theme setting was first system or when it could not be made.
     portal: ?*c.GDBusProxy,
     // Whether the app has connected to the portal, or tried to, which it does once, the first time the theme setting is system.
@@ -133,12 +116,25 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
     defer std.heap.c_allocator.free(taken.arguments);
     // Before GTK starts any thread, because choosing the card forks.
     try render_device.chooseRenderDevice();
+    // GTK's accessibility bridge connects to the session bus when GTK starts. NO_AT_BRIDGE turns it off, before GTK reads it, so
+    // the app makes no contact with the bus at start.
+    if (c.setenv("NO_AT_BRIDGE", "1", 1) != 0) {
+        return error.EnvironmentFailed;
+    }
+    // WebKit's UI process asks the session bus for the accessibility bus's address when it starts a web process, unless
+    // WEBKIT_A11Y_BUS_ADDRESS gives one. Empty, the web process connects to no accessibility bus either.
+    if (c.setenv("WEBKIT_A11Y_BUS_ADDRESS", "", 1) != 0) {
+        return error.EnvironmentFailed;
+    }
     const data_directory = c.g_build_filename(c.g_get_user_data_dir(), app_config.app_id.ptr, @as([*c]const u8, null));
     defer c.g_free(data_directory);
     if (c.g_mkdir_with_parents(data_directory, 0o755) != 0) {
         return error.DataDirectoryFailed;
     }
-    const application = c.gtk_application_new(app_config.app_id.ptr, c.G_APPLICATION_NON_UNIQUE) orelse {
+    // No application id, so GLib never registers the application on the session bus. Registering it made GTK ask the bus to start
+    // the desktop portal, which on CI's runner never starts: every start of the app waited out D-Bus's 25-second timeout, and the
+    // Linux smoke suite ran out of its 20 minutes. The app uses nothing registration gives (it is not unique and exports nothing).
+    const application = c.gtk_application_new(null, c.G_APPLICATION_NON_UNIQUE) orelse {
         return error.GtkApplicationFailed;
     };
     defer c.g_object_unref(application);
@@ -159,8 +155,6 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .window = null,
         .inspector_open = false,
         .fullscreen = false,
-        .awake_holds = 0,
-        .inhibit_cookie = 0,
         .portal = null,
         .portal_tried = false,
         .gtk_theme_name = null,
@@ -907,32 +901,6 @@ fn runNativeCall(native_app: *NativeApp, reply: u64, method: []const u8, request
         return;
     };
     sendResult(native_app, reply, true, text);
-}
-
-//
-// Takes one hold on the computer staying awake. The first one inhibits suspend.
-//
-fn holdAwakeOnMainThread(native_app: *NativeApp) void {
-    native_app.awake_holds += 1;
-    if (native_app.awake_holds == 1) {
-        const reason = std.fmt.allocPrintSentinel(std.heap.c_allocator, "{s} is working in the background", .{native_app.app_config.title}, 0) catch @panic("out of memory holding the computer awake");
-        defer std.heap.c_allocator.free(reason);
-        native_app.inhibit_cookie = c.gtk_application_inhibit(native_app.application, native_app.window, c.GTK_APPLICATION_INHIBIT_SUSPEND, reason.ptr);
-    }
-}
-
-//
-// Lets go of one hold on the computer staying awake. Letting go of the last one allows suspend again.
-//
-fn releaseAwakeOnMainThread(native_app: *NativeApp) void {
-    if (native_app.awake_holds == 0) {
-        fatal("a hold on the computer staying awake was let go that was never taken", .{});
-    }
-    native_app.awake_holds -= 1;
-    if (native_app.awake_holds == 0 and native_app.inhibit_cookie != 0) {
-        c.gtk_application_uninhibit(native_app.application, native_app.inhibit_cookie);
-        native_app.inhibit_cookie = 0;
-    }
 }
 
 //

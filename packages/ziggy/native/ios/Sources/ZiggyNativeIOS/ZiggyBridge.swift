@@ -123,6 +123,13 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // call was true.
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
 
+    //
+    // Whether the bridge follows the system's theme. It is set by followSystemTheme the first time the core's theme setting is system
+    // and stays set for the rest of the run. Until then the system's style is never read and no change of it is sent to the core, so
+    // an app whose setting is light or dark makes no OS call for the system's theme. Read and written on the main thread only.
+    //
+    private var followingSystemTheme = false
+
     // The name of the script message handler that the injected script posts through.
     private static let handlerName = "ziggy"
 
@@ -208,8 +215,15 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
 
         // Set after super.init because the closure captures self. Setting it before failed CI's app-build-ios with "'self' used
         // before 'super.init' call".
+        //
+        // A change of the system's style matters to the core only while the theme setting is system, so it is sent only once the bridge
+        // follows the system's theme.
+        //
         createdWebView.onSystemStyleChange = { [weak self] _ in
-            self?.postSystemTheme()
+            guard let self = self, self.followingSystemTheme else {
+                return
+            }
+            self.postSystemTheme()
         }
         configuration.userContentController.add(self, name: ZiggyBridge.handlerName)
         self.webView.navigationDelegate = self
@@ -252,7 +266,11 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.is_mobile = true
         config.worker_threads = 5
         config.max_concurrent_child_tasks = 2
-        config.system_theme = ZiggyBridge.systemTheme()
+        //
+        // The system's theme is read only once the theme setting is system (see followSystemTheme), so the core starts with light
+        // until then and an app whose setting is light or dark never reads it.
+        //
+        config.system_theme = Int32(ZIGGY_THEME_LIGHT)
 
         let prefixText = ZiggyBridge.duplicate(ZiggyBridge.appUrlPrefix)
         let dataText = ZiggyBridge.duplicate(dataDirectory.path)
@@ -289,18 +307,16 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         uiHandler.core = created
         splashUiHandler.core = created
 
-        var themeLength = 0
-        guard let themeText = ziggy_theme(created, &themeLength) else {
-            ZiggyBridge.fail("the core could not give the theme")
-        }
-        let themeData = Data(bytes: themeText, count: themeLength)
-        guard let themeCall = (try? JSONSerialization.jsonObject(with: themeData)) as? [String: Any] else {
-            ZiggyBridge.fail("the core gave a theme that cannot be read")
+        var themeCall = ZiggyBridge.queryTheme(created)
+        if themeCall["setting"] as? String == "system" {
+            //
+            // The core takes the system-theme message before it answers the next query, which goes to it on the same queue, so the web
+            // view is given the system's theme rather than the light the core was created with.
+            //
+            followSystemTheme()
+            themeCall = ZiggyBridge.queryTheme(created)
         }
         applyTheme(themeCall)
-        NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.postSystemTheme()
-        }
 
         // The app supplies the query, which is passed through unread.
         var queryLength = 0
@@ -408,6 +424,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             setKeepsRunning(keepRunning)
         case "theme":
             applyTheme(call)
+            if call["setting"] as? String == "system" {
+                followSystemTheme()
+            }
         case "os-version":
             let version = ProcessInfo.processInfo.operatingSystemVersion
             finishCall(reply, ok: true, text: "\"\(ZiggyBridge.operatingSystemName) \(version.majorVersion).\(version.minorVersion).\(version.patchVersion)\"")
@@ -694,7 +713,45 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         return kept
     }
 
-    // The system's theme.
+    //
+    // Asks the core for its theme call and gives it parsed, for start to apply to the web view before the frontend loads.
+    //
+    private static func queryTheme(_ handle: UnsafeMutableRawPointer) -> [String: Any] {
+        var themeLength = 0
+        guard let themeText = ziggy_theme(handle, &themeLength) else {
+            ZiggyBridge.fail("the core could not give the theme")
+        }
+        let themeData = Data(bytes: themeText, count: themeLength)
+        guard let themeCall = (try? JSONSerialization.jsonObject(with: themeData)) as? [String: Any] else {
+            ZiggyBridge.fail("the core gave a theme that cannot be read")
+        }
+        return themeCall
+    }
+
+    //
+    // Follows the system's theme while the theme setting is system: sends the core the system's theme and, the first time, starts
+    // sending it each time the app becomes active, for the rest of the run. Called by start and by each theme call whose setting is
+    // system. The theme is sent on every such call, not only the first, because while the setting was light or dark the web view's
+    // style was overridden, so a change of the system's style in that time reached nobody and the core's copy may be stale. Until the
+    // first call the app reads no system style and registers no observer.
+    //
+    private func followSystemTheme() {
+        if !followingSystemTheme {
+            followingSystemTheme = true
+            //
+            // The web view hears no change of style made while the app was in the background, so the theme is sent again each time
+            // it comes back.
+            //
+            NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                self?.postSystemTheme()
+            }
+        }
+        postSystemTheme()
+    }
+
+    //
+    // Reads the system's theme from the screen's style, for postSystemTheme to send to the core.
+    //
     static func systemTheme() -> Int32 {
         return UIScreen.main.traitCollection.userInterfaceStyle == .dark ? Int32(ZIGGY_THEME_DARK) : Int32(ZIGGY_THEME_LIGHT)
     }
@@ -732,9 +789,6 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         let colour = ZiggyBridge.colour(background)
         webView.backgroundColor = colour
         webView.scrollView.backgroundColor = colour
-        if setting == "system" {
-            postSystemTheme()
-        }
     }
 
     // A colour from a "#rrggbb" background.
