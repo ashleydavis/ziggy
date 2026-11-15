@@ -22,11 +22,14 @@ on:
 
   workflow_dispatch:
 
+# The Linux jobs run on ubuntu-24.04, not ubuntu-latest. ubuntu-latest moved to ubuntu-26.04, where every start of the Linux app
+# waited 25 seconds: GTK registering the application asks the session bus to start the desktop portal, which the image lists but
+# never starts, so smoke-tests-linux ran out of its 20 minutes.
 jobs:
   typescript-compile:
     # Compiles the TypeScript, which is the only check of its types: the unit tests run it without checking them.
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -61,7 +64,7 @@ jobs:
   typescript-unit-tests:
     # The TypeScript unit tests.
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -98,7 +101,7 @@ jobs:
     # The unit tests of websocket.zig, the WebSocket library the remote control connection uses, which Ziggy keeps with its patches
     # in third-party/websocket. They need nothing another job makes, so they start when the workflow starts.
     timeout-minutes: 20
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -157,7 +160,7 @@ jobs:
     # tests and the smoke tests need this job, restore that entry and build no app of their own, so the smoke tests drive the app
     # app-build built.
     timeout-minutes: 40
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -486,7 +489,7 @@ jobs:
     # tests and the smoke tests need this job, restore that entry and build no app of their own, so the smoke tests drive the app
     # app-build built.
     timeout-minutes: 40
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -718,7 +721,7 @@ jobs:
     # compiles only the tests.
     needs: app-build-linux
     timeout-minutes: 50
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -896,7 +899,7 @@ jobs:
     # compiles only the tests.
     needs: app-build-android
     timeout-minutes: 50
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -1051,7 +1054,7 @@ jobs:
     # virtual display, Windows, MacOS on the runner's own display, Android on an emulator and iOS on a simulator.
     needs: app-build-linux
     timeout-minutes: 75
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -1261,7 +1264,7 @@ jobs:
     # virtual display, Windows, MacOS on the runner's own display, Android on an emulator and iOS on a simulator.
     needs: app-build-android
     timeout-minutes: 75
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
