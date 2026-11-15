@@ -1001,8 +1001,8 @@ fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget) !void {
     }
     c.gtk_box_pack_start(box_widget, menu_bar, 0, 0, 0);
     c.gtk_box_reorder_child(box_widget, menu_bar, 0);
-    // The box was shown before the menu existed, so the menu bar is shown here.
-    c.gtk_widget_show(menu_bar);
+    // The box was shown before the menu existed, so the menu bar, its menus and their items are shown here.
+    c.gtk_widget_show_all(menu_bar);
 }
 
 //
