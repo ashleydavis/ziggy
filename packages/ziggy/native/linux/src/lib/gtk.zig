@@ -407,7 +407,7 @@ pub extern fn gtk_widget_hide(widget: *GtkWidget) void;
 pub extern fn gtk_widget_destroy(widget: *GtkWidget) void;
 // Calls the callback before each frame the widget's frame clock draws, until it returns 0.
 pub extern fn gtk_widget_add_tick_callback(widget: *GtkWidget, callback: *const fn (*GtkWidget, ?*anyopaque, ?*anyopaque) callconv(.c) gboolean, user_data: ?*anyopaque, notify: ?*anyopaque) c_uint;
-pub extern fn gtk_widget_override_background_color(widget: *GtkWidget, state: c_uint, color: *const GdkRGBA) void;
+pub extern fn gtk_widget_override_background_color(widget: *GtkWidget, state: c_uint, color: ?*const GdkRGBA) void;
 
 // The part of cairo the splash picture draws with, and the drawing area it draws into. GTK 3 has no GtkPicture, so the
 // image is scaled to cover the window here.

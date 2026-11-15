@@ -583,6 +583,10 @@ fn destroySplashPicture(native_app: *NativeApp) void {
         native_app.splash_pixbuf = null;
         c.g_object_unref(pixbuf);
     }
+    // The splash's background colour on the window goes too, so the menu bar shows the theme's colour, focused or not.
+    if (native_app.window) |window| {
+        c.gtk_widget_override_background_color(@ptrCast(window), c.GTK_STATE_FLAG_NORMAL, null);
+    }
 }
 
 //
