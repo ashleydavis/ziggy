@@ -739,18 +739,18 @@ function startConfig(): void {
 // Opens each kind of external link the smoke scenario checks. The remote control's click runs inside a script the native app
 // evaluates, which WebKit runs as a user gesture (webkit_web_view_evaluate_javascript passes ForceUserGesture::Yes), and WebKit
 // carries a gesture through a timer for only 1 s (UserGestureToken::maximumIntervalForUserGestureForwarding). So only an open
-// that comes from a 6 s timer has no user gesture behind it, which is the case the popup blocker drops.
+// that comes from a 1.5 s timer has no user gesture behind it, which is the case the popup blocker drops.
 //
 function startExternalLinks(): void {
     element("new-window-later").addEventListener("click", () => {
         setTimeout(() => {
             element("link-new-window").click();
-        }, 6000);
+        }, 1500);
     });
     element("open-window-later").addEventListener("click", () => {
         setTimeout(() => {
             window.open("https://window-open.example.com/ziggy-external-link", "_blank");
-        }, 6000);
+        }, 1500);
     });
 }
 

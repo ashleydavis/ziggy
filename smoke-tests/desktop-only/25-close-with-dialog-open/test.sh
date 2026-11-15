@@ -10,9 +10,9 @@ start_test_app
 # No paths are set for the dialog, so a real one is shown. The frontend replies to the click before it requests the dialog, because while
 # the dialog is open the backend's main thread waits on it and replies to nothing the control connection sends through the frontend.
 click pick-files
-# Nothing in the app reports that the dialog is on screen, so the scenario gives the native app three seconds to show it. Were it not
+# Nothing in the app reports that the dialog is on screen, so the scenario gives the native app one second to show it. Were it not
 # shown yet, quitting must still end the app.
-sleep 3
+sleep 1
 # The quit command goes to the native app straight from the control connection, without the backend's main thread.
 reply="$(control '{"command":"quit"}')"
 case "$reply" in

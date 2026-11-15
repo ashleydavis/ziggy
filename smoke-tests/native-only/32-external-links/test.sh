@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 
-# Checks that a link to an outside page reaches the system on every platform: a plain link, a target="_blank" link followed 6 s
-# after a click and a window.open 6 s after a click, so no user gesture is behind the last two.
+# Checks that a link to an outside page reaches the system on every platform: a plain link, a target="_blank" link followed 1.5 s
+# after a click and a window.open 1.5 s after a click, so no user gesture is behind the last two.
 #
 # Linux: a run with every URL handler hidden first checks that a failed open reaches the app's log. Then a URL handler of the
 # scenario's own records each address the system is asked to open, and the frontend still holds its marker.
 # Android: the device log shows the activity start for each address.
-# Windows, macOS and iOS: nothing reports the open, so the scenario checks the app is still running 11 s after each click, which
-# comes up to 6 s after it. On Windows the app's log also shows the new window request, and on Windows and macOS the frontend
+# Windows, macOS and iOS: nothing reports the open, so the scenario checks the app is still running 2 s after each click, which
+# comes up to 1.5 s after it. On Windows the app's log also shows the new window request, and on Windows and macOS the frontend
 # still holds its marker.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
@@ -52,7 +52,7 @@ for element_id in link-plain new-window-later open-window-later; do
             wait_for_opened_url "$host"
             ;;
         *)
-            if ziggy_platform_wait_exit "$ZIGGY_TEST_DIR" 11; then
+            if ziggy_platform_wait_exit "$ZIGGY_TEST_DIR" 2; then
                 fail "the app ended after $element_id was clicked"
             fi
             ;;

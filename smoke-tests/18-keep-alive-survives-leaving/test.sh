@@ -19,11 +19,8 @@ case "$ZIGGY_SMOKE_PLATFORM" in
         fi
         ;;
     *)
-        sleep 3
-        after="$(data_file_number keep-alive.txt)"
-        if [ "$after" -le "$before" ]; then
-            fail "the keep-alive task stopped counting when the app left the foreground: $before then $after"
-        fi
+        # Waits for the count to go up, which fails the scenario when it never does, rather than a fixed time.
+        wait_for_data_file_number keep-alive.txt "$((before + 1))" > /dev/null
         if ! ziggy_platform_process_alive "$ZIGGY_TEST_DIR"; then
             fail "the app's process ended while a keep-alive task was running"
         fi

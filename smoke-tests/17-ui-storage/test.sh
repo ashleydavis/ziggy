@@ -13,7 +13,8 @@ wait_for_text storage-status "localStorage: none; indexedDB: none"
 click storage-write
 wait_for_text storage-status "written"
 
-# Android's web view writes localStorage to disk a few seconds after the frontend sets it, so a kill sooner than that loses it.
+# Android's web view and WebKitGTK on Linux write localStorage to disk a few seconds after the frontend sets it, so a kill sooner
+# than that loses it (on Linux, with no wait, the restarted app found no value).
 # IndexedDB is written at once. The wait lets the delayed write happen, as it does when a person uses the app and then leaves it.
 sleep 8
 restart_test_app
