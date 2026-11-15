@@ -331,6 +331,9 @@ const MainServices = struct {
     config_path: ?[]const u8,
     // The app's state file path, or null for a core built for no app.
     state_path: ?[]const u8,
+    // The command line the app was started with, after the program's name and without --remote-control: the user's options for
+    // the run, which a window it starts gets too.
+    arguments: []const []const u8,
 
     const vtable: services_lib.HandlerServices.VTable = .{
         .sendEvent = sendEvent,
@@ -468,18 +471,23 @@ const MainServices = struct {
     }
 
     //
-    // Starts another window of the app as a process of its own with the arguments, through the native app's new-window call. The
-    // native app's UI thread starts the process and answers at once, so waiting here for the answer cannot deadlock. Under remote
-    // control the window gets the same --remote-control address, and fails with RemoteControlArgument when an argument is that option
-    // itself.
+    // Starts another window of the app as a process of its own, through the native app's new-window call. The window gets the
+    // command line this one was started with, the user's options for the run, followed by the arguments; a theme option given in
+    // both fails its start with ThemeGivenTwice. It inherits this process's environment too. Without the command line a window
+    // lost the user's options: the smoke tests' windows started with --theme light took the setting system and read the system
+    // theme, which waited 25 seconds on CI's runner. The native app's UI thread starts the process and answers at once, so waiting
+    // here for the answer cannot deadlock. Under remote control the window gets the same --remote-control address, and fails with
+    // RemoteControlArgument when an argument is that option itself.
     //
     fn new_window(ptr: *anyopaque, io: std.Io, allocator: std.mem.Allocator, arguments: []const []const u8) anyerror!void {
         const self: *MainServices = @ptrCast(@alignCast(ptr));
         if (!self.config.has_new_window) {
             return error.NewWindowUnavailable;
         }
+        const window_arguments = try std.mem.concat(allocator, []const u8, &.{ self.arguments, arguments });
+        defer allocator.free(window_arguments);
         const remote_control_address = if (self.config.remote_control) |address| std.mem.span(address) else null;
-        const new_arguments = try new_instance.instance_arguments(allocator, arguments, remote_control_address);
+        const new_arguments = try new_instance.instance_arguments(allocator, window_arguments, remote_control_address);
         defer allocator.free(new_arguments);
         var replies = MessageQueue.init();
         defer replies.deinit();
@@ -1088,6 +1096,7 @@ fn mainThread(given: MainStart) void {
         .standard_menu_items = app.standard_menu_items,
         .config_path = null,
         .state_path = null,
+        .arguments = start_data.arguments,
     };
     if (app.name) |name| {
         const app_names: config_state.platform.AppNames = .{ .name = name, .title = app.title orelse name };
@@ -1160,8 +1169,14 @@ fn mainThread(given: MainStart) void {
             @intFromEnum(types.Theme.dark) => .dark,
             else => break :failed error.UnknownSystemTheme,
         };
-        // An option on the command line sets the run's setting first, then the environment variable, then the config file.
-        const environment_setting = theme_lib.environmentSetting(utils.process_env.getEnv(theme_lib.environment_variable)) catch |err| {
+        // An option on the command line sets the run's setting first, then the environment variable, then the config file. The
+        // variable is read through environment_variable, which falls back to the process's own environment: a native app gives
+        // the main thread none, so a window started with no theme option (only ZIGGY_THEME, which it inherits) took the setting
+        // system and read the system theme, waiting 25 seconds on a bus whose portal never starts.
+        const environment_text = environment_variable.get(start_arena, theme_lib.environment_variable) catch |err| {
+            break :failed err;
+        };
+        const environment_setting = theme_lib.environmentSetting(environment_text) catch |err| {
             break :failed err;
         };
         const given_setting: ?theme_lib.Setting = taken_theme.setting orelse environment_setting;

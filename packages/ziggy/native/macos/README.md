@@ -25,7 +25,7 @@ When the app is started with `--remote-control <host:port>`, the native app take
 
 ## New windows
 
-A `new-window` call starts the app's own executable again with the arguments the call gives, through `ziggy_start_instance`, and answers with the new process's id. A `DispatchSource` process source reaps the process when it ends. The new window stays in the opener's process group and, under remote control, gets the same address.
+A `new-window` call starts the app's own executable again with the arguments the call gives, through `ziggy_start_instance`, and answers with the new process's id. A `DispatchSource` process source reaps the process when it ends. The new window stays in the process group of the window that started it and, under remote control, gets the same address.
 
 On MacOS Quit ends every window of the app: the Quit item, the backend's `quit` and the remote control `quit` command all reach `ZiggyBridge.quit`, which sends every other recorded window of the app SIGTERM. Each window records itself in the `windows` folder of the app's data directory as it starts and removes its record as it shuts down. A window that receives SIGTERM ends as if its own Quit had been asked for, through a `DispatchSource` signal source.
 

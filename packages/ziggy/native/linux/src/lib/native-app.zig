@@ -69,8 +69,6 @@ const NativeApp = struct {
     app_config: AppConfig,
     // The app's private data directory, owned: freed with g_free when run returns.
     data_directory: [*:0]u8,
-    // The GTK application.
-    application: *c.GtkApplication,
     // The command line without --remote-control and its address, for the geometry option and the app.
     args: []const [:0]const u8,
     // The web view, once the window exists.
@@ -110,8 +108,8 @@ const NativeApp = struct {
 // Runs the app and returns the process's exit code.
 //
 pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
-    // The option is taken out first, so nothing that reads the command line after this sees it. GApplication is given no
-    // arguments at all, because it refuses options it does not know.
+    // The option is taken out first, so nothing that reads the command line after this sees it. GTK is given no arguments at
+    // all.
     const taken = try remote_control_arguments.take(std.heap.c_allocator, args);
     defer std.heap.c_allocator.free(taken.arguments);
     // Before GTK starts any thread, because choosing the card forks.
@@ -131,17 +129,16 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
     if (c.g_mkdir_with_parents(data_directory, 0o755) != 0) {
         return error.DataDirectoryFailed;
     }
-    // No application id, so GLib never registers the application on the session bus. Registering it made GTK ask the bus to start
-    // the desktop portal, which on CI's runner never starts: every start of the app waited out D-Bus's 25-second timeout, and the
-    // Linux smoke suite ran out of its 20 minutes. The app uses nothing registration gives (it is not unique and exports nothing).
-    const application = c.gtk_application_new(null, c.G_APPLICATION_NON_UNIQUE) orelse {
-        return error.GtkApplicationFailed;
-    };
-    defer c.g_object_unref(application);
+    // GTK is started on its own, with no GtkApplication. A GtkApplication registers on the session bus, and registering it made
+    // GTK ask the bus to start the desktop portal, which on CI's runner never starts: every start of the app waited out D-Bus's
+    // 25-second timeout (registration alone took 25.4 seconds there), and the Linux smoke suite ran out of its 20 minutes. The
+    // app uses nothing registration gives: it is not unique and exports nothing.
+    if (c.gtk_init_check(null, null) == 0) {
+        return error.GtkInitFailed;
+    }
     var native_app = NativeApp{
         .app_config = app_config,
         .data_directory = data_directory,
-        .application = application,
         .args = taken.arguments,
         .web_view = null,
         .overlay = null,
@@ -161,8 +158,6 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
     };
     defer if (native_app.portal) |proxy| c.g_object_unref(proxy);
     defer if (native_app.gtk_theme_name) |name| c.g_free(@ptrCast(name));
-    _ = c.g_signal_connect_data(application, "activate", @ptrCast(&onActivate), &native_app, null, 0);
-    _ = c.g_signal_connect_data(application, "shutdown", @ptrCast(&onShutdown), &native_app, null, 0);
     // Another window's Quit, or anything else that sends SIGTERM, ends this window, and only this window, as its own Quit would.
     _ = c.g_unix_signal_add(c.SIGTERM, on_terminate_signal, &native_app);
     if (!z.ziggy_window_opened(native_app.data_directory, std.mem.len(native_app.data_directory))) {
@@ -173,11 +168,13 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
             std.debug.print("ziggy native app: could not remove the window's record\n", .{});
         }
     }
-    const status = c.g_application_run(@ptrCast(application), 0, null);
-    if (status < 0 or status > 255) {
-        return error.GtkApplicationFailed;
-    }
-    return @intCast(status);
+    start(&native_app) catch |err| {
+        fatal("could not start: {s}", .{@errorName(err)});
+    };
+    // Runs until the window is destroyed or the app quits, then destroys the core if the window's close has not already.
+    c.gtk_main();
+    destroyCore(&native_app);
+    return 0;
 }
 
 //
@@ -244,16 +241,6 @@ fn onUriSchemeRequest(request: *c.WebKitURISchemeRequest, user_data: c.gpointer)
 }
 
 //
-// GTK calls this when the application starts: creates the window and the web view.
-//
-fn onActivate(application: *c.GtkApplication, user_data: ?*anyopaque) callconv(.c) void {
-    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
-    start(native_app, application) catch |err| {
-        fatal("could not start: {s}", .{@errorName(err)});
-    };
-}
-
-//
 // Prints a splash event with its wall-clock time, so a recording can be annotated.
 //
 fn splashEvent(name: []const u8) void {
@@ -263,7 +250,7 @@ fn splashEvent(name: []const u8) void {
 //
 // Creates the window and the web view, creates the core and loads the frontend.
 //
-fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
+fn start(native_app: *NativeApp) !void {
     splashEvent("started");
     if (c.gtk_settings_get_default()) |settings| {
         var theme_name: [*c]u8 = null;
@@ -284,7 +271,9 @@ fn start(native_app: *NativeApp, application: *c.GtkApplication) !void {
         }
     }
 
-    const window_widget = c.gtk_application_window_new(application);
+    const window_widget = c.gtk_window_new(c.GTK_WINDOW_TOPLEVEL);
+    // With no GtkApplication, nothing ends the main loop when the window goes, so its destroy ends it.
+    _ = c.g_signal_connect_data(window_widget, "destroy", @ptrCast(&onWindowDestroyed), null, null, 0);
     const window: *c.GtkWindow = @ptrCast(@alignCast(window_widget));
     native_app.window = window;
     c.gtk_window_set_title(window, native_app.app_config.title.ptr);
@@ -700,12 +689,12 @@ fn onDeleteEvent(window: *c.GtkWidget, event: ?*anyopaque, user_data: ?*anyopaqu
 }
 
 //
-// The application is shutting down: destroys the core if it still exists.
+// The window is gone: ends the main loop, after which run destroys the core if it still exists.
 //
-fn onShutdown(application: *c.GApplication, user_data: ?*anyopaque) callconv(.c) void {
-    _ = application;
-    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
-    destroyCore(native_app);
+fn onWindowDestroyed(window: *c.GtkWidget, user_data: ?*anyopaque) callconv(.c) void {
+    _ = window;
+    _ = user_data;
+    c.gtk_main_quit();
 }
 
 //
@@ -859,11 +848,11 @@ fn on_child_exited(pid: c.GPid, wait_status: c_int, user_data: c.gpointer) callc
 
 //
 // Called when this process receives SIGTERM: another window's Quit, or anything else that sends SIGTERM, ends this window, and only
-// this window, as its own Quit would. The core is then destroyed by onShutdown, which writes the log's footer.
+// this window, as its own Quit would. The core is then destroyed when the main loop ends, which writes the log's footer.
 //
 fn on_terminate_signal(user_data: c.gpointer) callconv(.c) c.gboolean {
-    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
-    c.g_application_quit(@ptrCast(native_app.application));
+    _ = user_data;
+    c.gtk_main_quit();
     return 0;
 }
 
@@ -912,7 +901,7 @@ fn quitApplication(native_app: *NativeApp) void {
     if (!z.ziggy_end_other_windows(native_app.data_directory, std.mem.len(native_app.data_directory))) {
         std.debug.print("ziggy native app: could not end the app's other windows\n", .{});
     }
-    c.g_application_quit(@ptrCast(native_app.application));
+    c.gtk_main_quit();
 }
 
 

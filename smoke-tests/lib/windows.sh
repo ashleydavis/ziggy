@@ -55,7 +55,7 @@ ziggy_platform_stop() {
     local test_dir="$1"
     # Windows has no process groups, so every window's process is ended by the id the app recorded: the core writes "Started a new
     # window, process <pid>." once the native app has started it, and each window's own log file name ends in its process id, so a
-    # window is found even when the opener ended before the line was written. A process that has already gone is ignored.
+    # window is found even when the window that started it ended before the line was written. A process that has already gone is ignored.
     local logs_dir
     logs_dir="$(ziggy_platform_data_dir "$test_dir")/logs"
     if [ -d "$logs_dir" ]; then
