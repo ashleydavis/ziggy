@@ -79,6 +79,8 @@ const NativeApp = struct {
     splash_picture: ?*c.GtkWidget,
     // The pixbuf the splash picture draws. Owned while the picture exists.
     splash_pixbuf: ?*c.GdkPixbuf,
+    // The frames the app's web view has started since it was shown, counted until the splash picture is removed.
+    splash_frames: u8,
     // Whether the app's own frontend has loaded.
     main_loaded: bool,
     // The core's handle, until it is destroyed.
@@ -144,6 +146,7 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .overlay = null,
         .splash_picture = null,
         .splash_pixbuf = null,
+        .splash_frames = 0,
         .main_loaded = false,
         .core = null,
         .open_pick = null,
@@ -542,9 +545,30 @@ fn revealAppView(native_app: *NativeApp) void {
         // does not either. Without this no key reached the page: the smoke tests 32 to 35 failed with the key log empty.
         c.gtk_widget_grab_focus(@ptrCast(web_view));
         splashEvent("app-web-view-visible");
+        // The picture stays until the web view's first frame is drawn over it, then goes on the next frame.
+        native_app.splash_frames = 0;
+        _ = c.gtk_widget_add_tick_callback(@ptrCast(web_view), &removeSplashAfterFirstFrame, native_app, null);
+    }
+    else {
+        destroySplashPicture(native_app);
+    }
+    deliverToWebView(native_app, "{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}");
+}
+
+//
+// Runs before each frame of the app's web view once it is shown. The first call comes before its first frame; the second
+// comes once that frame is drawn, so the splash picture is removed then and the callback stops.
+//
+fn removeSplashAfterFirstFrame(widget: *c.GtkWidget, frame_clock: ?*anyopaque, user_data: ?*anyopaque) callconv(.c) c.gboolean {
+    _ = widget;
+    _ = frame_clock;
+    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
+    native_app.splash_frames += 1;
+    if (native_app.splash_frames < 2) {
+        return 1;
     }
     destroySplashPicture(native_app);
-    deliverToWebView(native_app, "{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}");
+    return 0;
 }
 
 //
