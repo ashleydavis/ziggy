@@ -2,10 +2,15 @@
 
 # New Window starts a window as a process of its own, with the arguments its action gives and a backend of its own; closing a
 # window ends only its own process; on Linux and macOS Quit in any window ends every window's process, including windows whose
-# opener has closed; on Windows Quit ends only its own window's process. It runs on Linux, Windows and macOS.
+# starting window has closed; on Windows Quit ends only its own window's process. It runs on Linux, Windows and macOS.
 
 source "$(dirname "${BASH_SOURCE[0]}")/../../lib/common.sh"
 
+# Window 1 gets the theme only as --theme dark on its command line: ZIGGY_THEME stays a shell variable, which the platform library
+# turns into the option, and is not in the app's environment. So a window it starts shows the theme dark only if it got window 1's
+# command line.
+ZIGGY_THEME=dark
+export -n ZIGGY_THEME
 start_test_app
 window_one_log="$(window_log_files "$ZIGGY_TEST_DIR")"
 if [ -z "$window_one_log" ]; then
@@ -15,6 +20,21 @@ fi
 choose_menu_item new-window
 wait_for_ready 2
 window_two_pid="$(started_window_pid "$window_one_log" 1)"
+
+waited=0
+shown=""
+while [ "$waited" -lt "$WAIT_TIMEOUT_SECONDS" ]; do
+    answer="$(window_control 2 '{"command":"get-text","dataId":"theme"}')" || exit 1
+    shown="$(printf '%s' "$answer" | jq -r '.value')"
+    if [ "$shown" = "setting theme: dark dark" ]; then
+        break
+    fi
+    sleep 1
+    waited=$((waited + 1))
+done
+if [ "$shown" != "setting theme: dark dark" ]; then
+    fail "window 2's theme never showed \"setting theme: dark dark\", so it did not get window 1's --theme dark. It showed: $shown"
+fi
 
 answer="$(window_control 2 '{"command":"viewport"}')" || exit 1
 window_two_viewport="$(printf '%s' "$answer" | jq -r '.value')"

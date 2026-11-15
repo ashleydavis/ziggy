@@ -9,8 +9,6 @@
 pub const gboolean = c_int;
 pub const gpointer = ?*anyopaque;
 
-pub const GApplication = opaque {};
-pub const GtkApplication = opaque {};
 pub const GtkWidget = opaque {};
 pub const GtkWindow = opaque {};
 pub const GError = opaque {};
@@ -64,8 +62,8 @@ pub const WebKitPolicyDecisionType = c_uint;
 pub const GCallback = ?*const fn () callconv(.c) void;
 pub const GSourceFunc = *const fn (user_data: gpointer) callconv(.c) gboolean;
 
-// GApplicationFlags: G_APPLICATION_NON_UNIQUE lets several copies run at once.
-pub const G_APPLICATION_NON_UNIQUE: c_uint = 1 << 5;
+// GtkWindowType: GTK_WINDOW_TOPLEVEL, a normal window.
+pub const GTK_WINDOW_TOPLEVEL: c_int = 0;
 
 // WebKitUserContentInjectedFrames: WEBKIT_USER_CONTENT_INJECT_TOP_FRAME.
 pub const WEBKIT_USER_CONTENT_INJECT_TOP_FRAME: c_uint = 1;
@@ -178,8 +176,9 @@ pub extern fn g_strdup(text: [*:0]const u8) [*:0]u8;
 pub extern fn g_object_unref(object: gpointer) void;
 pub extern fn g_object_ref(object: gpointer) gpointer;
 pub extern fn g_signal_connect_data(instance: gpointer, detailed_signal: [*:0]const u8, handler: GCallback, data: gpointer, destroy_data: gpointer, connect_flags: c_uint) c_ulong;
-pub extern fn g_application_run(application: *GApplication, argc: c_int, argv: ?[*]?[*:0]u8) c_int;
-pub extern fn g_application_quit(application: *GApplication) void;
+pub extern fn gtk_init_check(argc: ?*c_int, argv: ?*?[*]?[*:0]u8) gboolean;
+pub extern fn gtk_main() void;
+pub extern fn gtk_main_quit() void;
 pub extern fn g_idle_add(function: GSourceFunc, data: gpointer) c_uint;
 pub extern fn g_get_real_time() i64;
 pub extern fn g_timeout_add(interval: c_uint, function: GSourceFunc, data: gpointer) c_uint;
@@ -201,8 +200,7 @@ pub extern fn g_dir_read_name(dir: *GDir) ?[*:0]const u8;
 pub extern fn g_dir_close(dir: *GDir) void;
 pub extern fn g_file_get_contents(filename: [*:0]const u8, contents: *[*c]u8, length: ?*usize, err: ?*?*GError) gboolean;
 
-pub extern fn gtk_application_new(application_id: ?[*:0]const u8, flags: c_uint) ?*GtkApplication;
-pub extern fn gtk_application_window_new(application: *GtkApplication) *GtkWidget;
+pub extern fn gtk_window_new(window_type: c_int) *GtkWidget;
 pub extern fn gtk_window_set_title(window: *GtkWindow, title: [*:0]const u8) void;
 pub extern fn gtk_window_set_icon(window: *GtkWindow, icon: ?*GdkPixbuf) void;
 pub extern fn gdk_pixbuf_loader_new_with_type(image_type: [*:0]const u8, err: ?*?*GError) ?*GdkPixbufLoader;

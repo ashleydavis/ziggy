@@ -1,12 +1,12 @@
 # New windows
 
-A new window is another window of the app, run as a process of its own: one window, its own backend and its own task queue. It starts from the app's own executable, with the arguments the app gives it. The new process stays in its opener's process group, so a smoke test that ends the group ends every window of the run.
+A new window is another window of the app, run as a process of its own: one window, its own backend and its own task queue. It starts from the app's own executable, with the arguments the app gives it. The new process stays in the process group of the window that started it, so a smoke test that ends the group ends every window of the run.
 
 ## Opening a window
 
 The frontend opens one with `window.ziggy.newWindow(arguments)`, usually in the handler of one of the app's actions. The template's File > New Window item runs the template's New Window action, whose handler calls `window.ziggy.newWindow([])`. The backend opens one with `services.new_window(io, allocator, arguments)`, from a message handler, a menu item's Zig function or a callback. Both resolve once the new process has started.
 
-The arguments are the new process's command line after the program's name. From the opener's own command line only `--remote-control` and its address are carried over, so a window gets `-geometry=` or another of the app's options through its own arguments. A window opened under remote control connects to the same remote control server, where it is the next window number.
+The new process gets everything the window that started it was given. Its command line, after the program's name, is that window's own command line followed by the arguments given to `newWindow`, so the user's options for the run (`--theme`, `-geometry=` or one of the app's own) reach every window. An option that both give reaches the window twice: `-geometry=` takes the later one, and a theme option given twice fails the window's start with `ThemeGivenTwice`. It also inherits that window's whole environment. A window opened under remote control connects to the same remote control server, where it is the next window number.
 
 On Android, iOS and in dev mode the call fails with `NewWindowUnavailable`: a phone runs one window of an app, and dev mode's frontend is one browser tab served by one dev host.
 
