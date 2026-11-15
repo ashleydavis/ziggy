@@ -201,12 +201,7 @@ pub extern fn g_dir_read_name(dir: *GDir) ?[*:0]const u8;
 pub extern fn g_dir_close(dir: *GDir) void;
 pub extern fn g_file_get_contents(filename: [*:0]const u8, contents: *[*c]u8, length: ?*usize, err: ?*?*GError) gboolean;
 
-pub extern fn gtk_application_new(application_id: [*:0]const u8, flags: c_uint) ?*GtkApplication;
-pub extern fn gtk_application_inhibit(application: *GtkApplication, window: ?*GtkWindow, flags: c_uint, reason: [*:0]const u8) c_uint;
-pub extern fn gtk_application_uninhibit(application: *GtkApplication, cookie: c_uint) void;
-
-// GtkApplicationInhibitFlags: GTK_APPLICATION_INHIBIT_SUSPEND.
-pub const GTK_APPLICATION_INHIBIT_SUSPEND: c_uint = 4;
+pub extern fn gtk_application_new(application_id: ?[*:0]const u8, flags: c_uint) ?*GtkApplication;
 pub extern fn gtk_application_window_new(application: *GtkApplication) *GtkWidget;
 pub extern fn gtk_window_set_title(window: *GtkWindow, title: [*:0]const u8) void;
 pub extern fn gtk_window_set_icon(window: *GtkWindow, icon: ?*GdkPixbuf) void;

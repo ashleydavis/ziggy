@@ -157,8 +157,12 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
     // What a picker returns when it is dismissed with no choice, or the native app is being destroyed under it.
     private static final Intent NOTHING_PICKED = new Intent();
 
-    // The night bit of the configuration when the core was created, so onConfigurationChanged can tell a change of the system's
-    // appearance from any other configuration change.
+    // Whether the native app follows the system's theme, which it starts doing the first time the theme setting is system (see
+    // followSystemTheme). Only the main thread reads or writes it.
+    private boolean followingSystemTheme;
+
+    // The night bit of the configuration when the native app last sent the core the system's theme, so onConfigurationChanged can tell
+    // a change of the system's appearance from any other configuration change. Read only while followingSystemTheme is true.
     private int nightMode;
 
     public ZiggyNativeApp(Activity activity, WebView webView, String nativeLibraryName, int workerThreads, int maxConcurrentChildTasks) {
@@ -180,8 +184,9 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         setEnvironmentExtra(intent, "ZIGGY_TEST_APP_STATE_DIR");
 
         String theme = ThemeExtra.value(intent.getStringExtra(ThemeExtra.NAME));
-        nightMode = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
-        int systemTheme = nightMode == Configuration.UI_MODE_NIGHT_YES ? 1 : 0;
+        // The system's theme is read only once the setting is system (see followSystemTheme), so the core starts with light (0) until
+        // then, as on Linux. With a light or dark setting the app never needs the system's theme.
+        int systemTheme = 0;
         long created = ZiggyNative.create(
             this,
             workerThreads,
@@ -202,7 +207,14 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
 
         configureWebView();
         addSplashIfConfigured();
-        applyTheme(new String(ZiggyNative.theme(created), StandardCharsets.UTF_8));
+        String themeCall = new String(ZiggyNative.theme(created), StandardCharsets.UTF_8);
+        if ("system".equals(themeSetting(themeCall))) {
+            // The core takes the system-theme message before it answers the next query, which goes to it on the same queue, so the
+            // first page is shown in the system's theme.
+            followSystemTheme();
+            themeCall = new String(ZiggyNative.theme(created), StandardCharsets.UTF_8);
+        }
+        applyTheme(themeCall);
         String query = new String(ZiggyNative.uiQuery(created), StandardCharsets.UTF_8);
         webView.loadUrl(APP_URL_PREFIX + "index.html" + (query.isEmpty() ? "" : "?" + query));
     }
@@ -273,20 +285,55 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         }
     }
 
-    // Applies a theme call the core sent after a change of the setting or the system's theme.
-    @Override
-    public void theme(byte[] callJson) {
-        applyTheme(new String(callJson, StandardCharsets.UTF_8));
+    // The setting of a theme call's JSON.
+    private static String themeSetting(String json) {
+        try {
+            return new JSONObject(json).getString("setting");
+        } catch (JSONException error) {
+            throw new RuntimeException("Ziggy: the theme call cannot be read: " + json, error);
+        }
     }
 
-    // Posts the system's theme when the night bit of the configuration changes.
+    // Applies a theme call the core sent after a change of the setting or the system's theme, and starts following the system's theme
+    // when the setting has become system.
+    @Override
+    public void theme(byte[] callJson) {
+        String json = new String(callJson, StandardCharsets.UTF_8);
+        applyTheme(json);
+        if ("system".equals(themeSetting(json))) {
+            followSystemTheme();
+        }
+    }
+
+    // Follows the system's theme, the first time the theme setting is system: reads the night bit of the configuration, sends the core
+    // the system's theme and has onConfigurationChanged send its changes for the rest of the run. Until then the system's theme is never
+    // read, because with a light or dark setting nothing uses it.
+    private void followSystemTheme() {
+        if (followingSystemTheme) {
+            return;
+        }
+        followingSystemTheme = true;
+        nightMode = activity.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK;
+        sendSystemTheme(nightMode);
+    }
+
+    // Sends the core the system's theme when the night bit of the configuration changes, once the native app follows the system's theme.
+    // Before then the change is not sent, because followSystemTheme reads the night bit when it starts following.
     public void onConfigurationChanged(Configuration configuration) {
+        if (!followingSystemTheme) {
+            return;
+        }
         int newNightMode = configuration.uiMode & Configuration.UI_MODE_NIGHT_MASK;
         if (newNightMode == nightMode) {
             return;
         }
         nightMode = newNightMode;
-        String message = "{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"" + (newNightMode == Configuration.UI_MODE_NIGHT_YES ? "dark" : "light") + "\"}";
+        sendSystemTheme(newNightMode);
+    }
+
+    // Sends the core the system's theme, for the night bit given, as a system-theme message.
+    private void sendSystemTheme(int night) {
+        String message = "{\"kind\":\"system\",\"name\":\"system-theme\",\"data\":\"" + (night == Configuration.UI_MODE_NIGHT_YES ? "dark" : "light") + "\"}";
         byte[] bytes = message.getBytes(StandardCharsets.UTF_8);
         coreLock.readLock().lock();
         try {
