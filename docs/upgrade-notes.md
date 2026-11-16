@@ -5,6 +5,7 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 ## v0.0.26
 
 - **Take `android:postSplashScreenTheme` out of `native/android/app/src/main/res/values-v31/styles.xml`.** The Android framework has no such attribute, so with it the Android build fails in `:app:processDebugResources`. `scripts/generate-app-assets.sh` no longer writes it.
+- **Add `native/android/app/src/main/res/drawable/splash.png`, a copy of `drawable-port/splash.png`.** Without a default splash image, release lint fails the Android release build with `MissingDefaultResource`. `scripts/generate-app-assets.sh` now writes it.
 
 ## v0.0.24
 

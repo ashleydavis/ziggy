@@ -268,6 +268,11 @@ printf '<?xml version="1.0" encoding="utf-8"?>\n<adaptive-icon xmlns:android="ht
 printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">%s</color>\n</resources>\n' "$background" > "$android_res/values/ic_launcher_background.xml"
 printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="splash_background">%s</color>\n</resources>\n' "$background" > "$android_res/values/splash.xml"
 printf '<?xml version="1.0" encoding="utf-8"?>\n<layer-list xmlns:android="http://schemas.android.com/apk/res/android">\n    <item android:drawable="@color/splash_background"/>\n    <item>\n        <bitmap android:src="@drawable/splash" android:gravity="fill"/>\n    </item>\n</layer-list>\n' > "$android_res/drawable/splash_background.xml"
+
+# drawable/splash.png is the default, a copy of the portrait image. With only the -port and -land images, a
+# configuration that is neither has no splash drawable, and release lint (lintVitalRelease) fails the release build
+# with MissingDefaultResource.
+convert "$assets_root/splash-portrait.png" -strip "$android_res/drawable/splash.png"
 convert "$assets_root/splash-portrait.png" -strip "$android_res/drawable-port/splash.png"
 convert "$assets_root/splash-landscape.png" -strip "$android_res/drawable-land/splash.png"
 printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">\n        <item name="android:windowBackground">@drawable/splash_background</item>\n    </style>\n</resources>\n' > "$android_res/values/styles.xml"

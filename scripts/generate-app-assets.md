@@ -75,5 +75,6 @@ Run it after adding or changing any of the art. It writes every output every tim
 - `values/splash.xml`: the splash background colour.
 - `drawable/splash_background.xml`: the splash layer list.
 - `drawable-port/splash.png` and `drawable-land/splash.png`: the splash images.
+- `drawable/splash.png`: the default splash image, the portrait one, which release lint requires.
 - `values/styles.xml`: `AppTheme` with the splash background as the window background.
 - `values-v31/styles.xml`: `AppTheme` with the Android 12 system splash settings.
