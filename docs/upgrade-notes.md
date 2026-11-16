@@ -2,6 +2,10 @@
 
 What an app has to change to move to each version of Ziggy, newest first. The `/ziggy:upgrade` Claude Code command reads this, along with the release notes. A version with nothing listed needs no change to the app beyond taking the new version.
 
+## v0.0.26
+
+- **Take `android:postSplashScreenTheme` out of `native/android/app/src/main/res/values-v31/styles.xml`.** The Android framework has no such attribute, so with it the Android build fails in `:app:processDebugResources`. `scripts/generate-app-assets.sh` no longer writes it.
+
 ## v0.0.24
 
 - **`ziggy_config` has `has_key_press` and `is_mobile`.** Native code of the app's own that fills a `ziggy_config` field by field sets both.

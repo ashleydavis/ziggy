@@ -271,6 +271,10 @@ printf '<?xml version="1.0" encoding="utf-8"?>\n<layer-list xmlns:android="http:
 convert "$assets_root/splash-portrait.png" -strip "$android_res/drawable-port/splash.png"
 convert "$assets_root/splash-landscape.png" -strip "$android_res/drawable-land/splash.png"
 printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">\n        <item name="android:windowBackground">@drawable/splash_background</item>\n    </style>\n</resources>\n' > "$android_res/values/styles.xml"
-printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">\n        <item name="android:windowSplashScreenBackground">@color/splash_background</item>\n        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>\n        <item name="android:postSplashScreenTheme">@android:style/Theme.DeviceDefault.NoActionBar</item>\n    </style>\n</resources>\n' > "$android_res/values-v31/styles.xml"
+
+# No android:postSplashScreenTheme: the Android framework has no such attribute (it belongs to AndroidX
+# core-splashscreen, without the android: prefix), so writing it failed every app's :app:processDebugResources with
+# "style attribute 'android:attr/postSplashScreenTheme' not found".
+printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">\n        <item name="android:windowSplashScreenBackground">@color/splash_background</item>\n        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>\n    </style>\n</resources>\n' > "$android_res/values-v31/styles.xml"
 
 printf 'Generated the assets for %s.\n' "$app_name"
