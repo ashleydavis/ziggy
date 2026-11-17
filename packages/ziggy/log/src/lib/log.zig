@@ -54,7 +54,7 @@ pub const ILog = struct {
         verbose: *const fn (ptr: *anyopaque, message: []const u8) void,
 
         // Logs an error message.
-        @"error": *const fn (ptr: *anyopaque, message: []const u8) void,
+        err: *const fn (ptr: *anyopaque, message: []const u8) void,
 
         // Logs a message and an error with its cause chain.
         exception: *const fn (ptr: *anyopaque, message: []const u8, err: anyerror) void,
@@ -98,15 +98,15 @@ pub const ILog = struct {
     //
     // Logs an error message.
     //
-    pub fn @"error"(self: ILog, message: []const u8) void {
-        self.vtable.@"error"(self.ptr, message);
+    pub fn err(self: ILog, message: []const u8) void {
+        self.vtable.err(self.ptr, message);
     }
 
     //
     // Logs a message and an error with its cause chain.
     //
-    pub fn exception(self: ILog, message: []const u8, err: anyerror) void {
-        self.vtable.exception(self.ptr, message, err);
+    pub fn exception(self: ILog, message: []const u8, cause: anyerror) void {
+        self.vtable.exception(self.ptr, message, cause);
     }
 
     //
@@ -325,7 +325,7 @@ pub const ConsoleLog = struct {
     const vtable: ILog.VTable = .{
         .info = info,
         .verbose = verbose,
-        .@"error" = logError,
+        .err = logError,
         .exception = exception,
         .warn = warn,
         .debug = debug,

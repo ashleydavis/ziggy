@@ -632,7 +632,7 @@ pub const WorkerPool = struct {
             };
             // TypeScript logs a worker that ends on its own ("exit") and treats it as crashed. This one ended as it started, so it
             // had no task: it is let go, and a worker is started for the tasks queued, as one would be in its place.
-            log.@"error"(std.fmt.allocPrint(arena, "Worker {d} could not start: {s}", .{ state.workerId, failure.message }) catch @panic("out of memory logging a worker that could not start"));
+            log.err(std.fmt.allocPrint(arena, "Worker {d} could not start: {s}", .{ state.workerId, failure.message }) catch @panic("out of memory logging a worker that could not start"));
             for (self.workers.items, 0..) |candidate, index| {
                 if (candidate == state) {
                     _ = self.workers.orderedRemove(index);
@@ -1135,12 +1135,12 @@ pub fn writeTaggedLine(arena: std.mem.Allocator, log: logging.ILog, source: []co
     switch (line.level) {
         .info => log.info(tagged),
         .verbose => log.verbose(tagged),
-        .@"error" => log.@"error"(tagged),
+        .@"error" => log.err(tagged),
         .exception => if (line.error_text) |details| {
-            log.@"error"(std.fmt.allocPrint(arena, "{s}\n{s}", .{ tagged, details }) catch @panic("out of memory writing a log line"));
+            log.err(std.fmt.allocPrint(arena, "{s}\n{s}", .{ tagged, details }) catch @panic("out of memory writing a log line"));
         }
         else {
-            log.@"error"(tagged);
+            log.err(tagged);
         },
         .warn => log.warn(tagged),
         .debug => log.debug(tagged),

@@ -45,7 +45,7 @@ pub fn setConfig(
     config_state.config.writeValue(arena, io, .{ .path = file_path, .key_path = request.path }, valueOrNull(request.value)) catch |err| switch (err) {
         error.ConfigFileInvalid => {
             if (try config_state.config.problem(arena, io, file_path)) |problem| {
-                log.@"error"(try std.fmt.allocPrint(arena, "The config file {s} has an error on line {d}, column {d}: {s}. The file is left as it is.", .{ file_path, problem.line, problem.column, problem.reason }));
+                log.err(try std.fmt.allocPrint(arena, "The config file {s} has an error on line {d}, column {d}: {s}. The file is left as it is.", .{ file_path, problem.line, problem.column, problem.reason }));
             }
             return err;
         },

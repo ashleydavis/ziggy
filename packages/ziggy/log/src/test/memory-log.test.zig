@@ -15,7 +15,7 @@ test "a memory log with no options records info and event as stdout, error, warn
     defer memory.deinit();
     memory.log.info("info message");
     memory.log.verbose("verbose message");
-    memory.log.@"error"("error message");
+    memory.log.err("error message");
     memory.log.warn("warn message");
     memory.log.debug("debug message");
     memory.log.event("something happened");

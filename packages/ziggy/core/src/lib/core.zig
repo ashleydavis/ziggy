@@ -1005,13 +1005,13 @@ fn startFileLog(allocator: std.mem.Allocator, name: []const u8, title: []const u
 //
 fn logFileProblems(arena: std.mem.Allocator, io: std.Io, log: logging.ILog, config_file_path: []const u8, state_file_path: []const u8) !void {
     if (try config_state.config.problem(arena, io, config_file_path)) |problem| {
-        log.@"error"(try std.fmt.allocPrint(arena, "The config file {s} has an error on line {d}, column {d}: {s}. Every setting is at its default and the file is left as it is.", .{ config_file_path, problem.line, problem.column, problem.reason }));
+        log.err(try std.fmt.allocPrint(arena, "The config file {s} has an error on line {d}, column {d}: {s}. Every setting is at its default and the file is left as it is.", .{ config_file_path, problem.line, problem.column, problem.reason }));
     }
     const status = try config_state.state.status(arena, io, state_file_path);
     switch (status) {
         .present => {},
         .missing => log.info(try std.fmt.allocPrint(arena, "The state file {s} does not exist yet, so the app starts with an empty state.", .{state_file_path})),
-        .unreadable => |problem| log.@"error"(try std.fmt.allocPrint(arena, "The state file {s} could not be read ({s}), so the app starts with an empty state. The first write keeps the file's bytes beside it as {s}.unreadable-<id>.", .{ state_file_path, problem, state_file_path })),
+        .unreadable => |problem| log.err(try std.fmt.allocPrint(arena, "The state file {s} could not be read ({s}), so the app starts with an empty state. The first write keeps the file's bytes beside it as {s}.unreadable-<id>.", .{ state_file_path, problem, state_file_path })),
     }
 }
 
@@ -1183,7 +1183,7 @@ fn mainThread(given: MainStart) void {
         var setting: theme_lib.Setting = given_setting orelse .system;
         if (main_services.config_path) |theme_config_path| {
             const stored = config_state.config.get(?[]const u8, start_arena, io, theme_config_path, "theme") catch |err| blk: {
-                main_services.log.@"error"(std.fmt.allocPrint(start_arena, "The config file's theme could not be read ({s}), so the theme setting is system.", .{@errorName(err)}) catch @panic("out of memory logging the theme"));
+                main_services.log.err(std.fmt.allocPrint(start_arena, "The config file's theme could not be read ({s}), so the theme setting is system.", .{@errorName(err)}) catch @panic("out of memory logging the theme"));
                 break :blk null;
             };
             if (stored) |value| {
@@ -1192,7 +1192,7 @@ fn mainThread(given: MainStart) void {
                         setting = parsed;
                     }
                 } else |_| {
-                    main_services.log.@"error"(std.fmt.allocPrint(start_arena, "The config file's theme \"{s}\" is not light, dark or system, so the theme setting is system.", .{value}) catch @panic("out of memory logging the theme"));
+                    main_services.log.err(std.fmt.allocPrint(start_arena, "The config file's theme \"{s}\" is not light, dark or system, so the theme setting is system.", .{value}) catch @panic("out of memory logging the theme"));
                 }
             }
         }
@@ -1741,10 +1741,10 @@ fn applyThemeSetting(arena: std.mem.Allocator, frontend: Frontend, io: std.Io, s
         if (theme_lib.parseSetting(value.string)) |parsed| {
             setting = parsed;
         } else |_| {
-            log.@"error"(std.fmt.allocPrint(arena, "The config file's theme \"{s}\" is not light, dark or system, so the theme setting is system.", .{value.string}) catch @panic("out of memory logging the theme"));
+            log.err(std.fmt.allocPrint(arena, "The config file's theme \"{s}\" is not light, dark or system, so the theme setting is system.", .{value.string}) catch @panic("out of memory logging the theme"));
         }
     } else if (value != .null) {
-        log.@"error"(std.fmt.allocPrint(arena, "The config file's theme is not a string, so the theme setting is system.", .{}) catch @panic("out of memory logging the theme"));
+        log.err(std.fmt.allocPrint(arena, "The config file's theme is not a string, so the theme setting is system.", .{}) catch @panic("out of memory logging the theme"));
     }
     if (state.applySetting(setting)) {
         try sendThemeToNative(arena, frontend, io, state.*, backgrounds);
