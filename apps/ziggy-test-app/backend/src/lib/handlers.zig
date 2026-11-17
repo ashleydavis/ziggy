@@ -399,7 +399,7 @@ pub fn helloFailHandler(services: TaskServices, timers: Timers, io: std.Io, allo
     _ = allocator;
     _ = context;
     _ = payload;
-    services.log.@"error"("the failing task is failing");
+    services.log.err("the failing task is failing");
     return error.HelloFailure;
 }
 

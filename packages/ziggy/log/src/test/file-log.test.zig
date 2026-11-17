@@ -187,7 +187,7 @@ test "every level reaches the log file, and errors, exceptions and warnings the 
     const log = logger.ilog();
     log.info("info line");
     log.verbose("verbose line");
-    log.@"error"("error line");
+    log.err("error line");
     throwRootCause() catch |err| {
         log.exception("exception line", err);
     };

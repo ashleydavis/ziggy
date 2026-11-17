@@ -19,6 +19,7 @@ fn importPhotos(services: ziggy.core.HandlerServices, timers: ziggy.timers.Timer
     const log = services.log;
     log.info("Imported 12 photos");
     log.warn("The thumbnail is missing");
+    log.err("The album could not be opened");
     try readThumbnail(io, log, request.path);
 }
 
@@ -32,7 +33,7 @@ fn readThumbnail(io: std.Io, log: ziggy.log.ILog, path: []const u8) !void {
 
 Code that has been given no log, such as a test or a thread of a program's own, makes a `ziggy.log.ConsoleLog` where it starts (`var console_log: ConsoleLog = .{};`, every option off unless it sets one) and passes `console_log.ilog()` down.
 
-`ILog` has a function for each kind of line. `log.verboseEnabled()` says whether verbose lines are shown on the console, so a caller can skip building an expensive verbose line.
+`ILog` has a function for each kind of line: `info(message)`, `verbose(message)`, `err(message)`, `exception(message, err)`, `warn(message)`, `debug(message)`, `tool(tool, output)` and `event(message)`. The error line's function is `err`, matching `std.log.err`, because `error` is a reserved word in Zig. `log.verboseEnabled()` says whether verbose lines are shown on the console, so a caller can skip building an expensive verbose line.
 
 ## Where a line goes
 
