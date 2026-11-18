@@ -78,6 +78,13 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
     // under it.
     private let backdrop: UIImageView
 
+    // True from start until the splash fades: the web view's background, which shows beside the page under the status bar and the
+    // home indicator, is the splash colour. Read and written on the main thread only.
+    private var splashBarsShowing: Bool
+
+    // The background colour of the last theme call. Read and written on the main thread only.
+    private var themeColour: UIColor = .white
+
     // The core's handle, from start until shutdown.
     private var core: UnsafeMutableRawPointer?
 
@@ -194,6 +201,16 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         backdropView.isHidden = splashImage == nil
         self.backdrop = backdropView
         self.hasSplash = splashImage != nil
+        self.splashBarsShowing = splashImage != nil
+        if splashImage != nil {
+            // The splash background colour, from the colour set the launch screen uses.
+            guard let splashColour = UIColor(named: "SplashBackground") else {
+                ZiggyBridge.fail("the app has a Splash image but no SplashBackground colour")
+            }
+            createdWebView.isOpaque = false
+            createdWebView.backgroundColor = splashColour
+            createdWebView.scrollView.backgroundColor = splashColour
+        }
         container.addSubview(createdWebView)
         container.addSubview(backdropView)
         self.view = container
@@ -440,8 +457,22 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         case "frontend-ready":
             revealAppView()
         case "splash-fading":
-            // The frontend's overlay, at full opacity, has started to fade, so the backdrop over it goes. iOS has no menu bar.
+            // The frontend's overlay, at full opacity, has started to fade, so the backdrop over it goes. iOS has no menu bar. The web
+            // view's background, which shows beside the page under the status bar and the home indicator, fades from the splash colour
+            // to the theme's on the overlay's curve over the same time.
+            guard let duration = call["durationMilliseconds"] as? Int else {
+                ZiggyBridge.fail("the core sent a splash-fading call with no durationMilliseconds: \(text)")
+            }
             backdrop.removeFromSuperview()
+            splashBarsShowing = false
+            let timing = UICubicTimingParameters(controlPoint1: CGPoint(x: 0.4, y: 0), controlPoint2: CGPoint(x: 0.2, y: 1))
+            let animator = UIViewPropertyAnimator(duration: Double(duration) / 1000.0, timingParameters: timing)
+            let colour = themeColour
+            animator.addAnimations { [weak self] in
+                self?.webView.backgroundColor = colour
+                self?.webView.scrollView.backgroundColor = colour
+            }
+            animator.startAnimation()
         default:
             ZiggyBridge.fail("the core sent a call the native app does not do: \(text)")
         }
@@ -598,8 +629,24 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
 
     // The frontend has painted its own splash overlay, so the app's web view is shown under the backdrop, and the frontend is told
     // the app is showing so it can fade its overlay. The backdrop goes as the fade starts (splash-fading).
+    //
+    // The backdrop covers the whole view and the page is laid out inside the safe area, so the frontend's overlay is told how far the
+    // view reaches past the page on each side, in CSS pixels (points), to place the art where the backdrop has it. It is set before
+    // the message that starts the overlay's fade, so it applies before the backdrop goes.
+    //
     private func revealAppView() {
         webView.isHidden = false
+        let insets = webView.safeAreaInsets
+        let script = "var style = document.documentElement.style;"
+            + "style.setProperty('--ziggy-window-inset-top', '\(insets.top)px');"
+            + "style.setProperty('--ziggy-window-inset-right', '\(insets.right)px');"
+            + "style.setProperty('--ziggy-window-inset-bottom', '\(insets.bottom)px');"
+            + "style.setProperty('--ziggy-window-inset-left', '\(insets.left)px');"
+        webView.evaluateJavaScript(script) { _, error in
+            if let error = error {
+                ZiggyBridge.report("setting the splash insets failed: \(error)")
+            }
+        }
         deliverToUi("{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}")
     }
 
@@ -755,6 +802,11 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         webView.window?.overrideUserInterfaceStyle = style
         webView.isOpaque = false
         let colour = ZiggyBridge.colour(background)
+        themeColour = colour
+        // While the splash shows, the web view's background stays the splash colour; splash-fading fades it to this one.
+        if splashBarsShowing {
+            return
+        }
         webView.backgroundColor = colour
         webView.scrollView.backgroundColor = colour
     }

@@ -46,6 +46,7 @@ export interface ISplashStyle {
     height: string;
     objectFit: string;
     objectPosition: string;
+    transform: string;
 }
 
 //
@@ -143,17 +144,24 @@ export function installSplashScreen(documentLike: IDocumentLike | Document, opti
     const portrait = documentInterface.createElement("img");
     portrait.setAttribute("src", "/ziggy-splash-portrait.png");
     portrait.setAttribute("alt", "");
-    // The image covers the whole window, not only the page: on Android the page is kept clear of the system bars, and the native
-    // app sets --ziggy-window-inset-<side> to how far the window reaches past the page on that side, so the art sits where the
-    // native splash picture, which covers the whole window, has it. Elsewhere they are unset and the image covers the page.
+    // The image's box is the whole window, not only the page: on Android and iOS the page is kept clear of the system bars, and the
+    // native app sets --ziggy-window-inset-<side> to how far the window reaches past the page on that side, so the art sits where
+    // the native splash picture, which covers the whole window, has it. Elsewhere they are unset and the box is the page. The image
+    // covers the box, except on Android, where the native app sets --ziggy-splash-fit to none and --ziggy-splash-scale to the
+    // fixed scale its system splash draws the art at, so the image is centred at that scale instead: the box is made larger by one
+    // over the scale, around the same centre, so the image is not cut at the box's edges before it is scaled down to fit them.
+    const windowWidth = "(100% + var(--ziggy-window-inset-left, 0px) + var(--ziggy-window-inset-right, 0px))";
+    const windowHeight = "(100% + var(--ziggy-window-inset-top, 0px) + var(--ziggy-window-inset-bottom, 0px))";
+    const scale = "var(--ziggy-splash-scale, 1)";
     portrait.style.display = "block";
     portrait.style.position = "absolute";
-    portrait.style.top = "calc(-1 * var(--ziggy-window-inset-top, 0px))";
-    portrait.style.left = "calc(-1 * var(--ziggy-window-inset-left, 0px))";
-    portrait.style.width = "calc(100% + var(--ziggy-window-inset-left, 0px) + var(--ziggy-window-inset-right, 0px))";
-    portrait.style.height = "calc(100% + var(--ziggy-window-inset-top, 0px) + var(--ziggy-window-inset-bottom, 0px))";
-    portrait.style.objectFit = "cover";
+    portrait.style.top = `calc(-1 * var(--ziggy-window-inset-top, 0px) + ${windowHeight} * (1 - 1 / ${scale}) / 2)`;
+    portrait.style.left = `calc(-1 * var(--ziggy-window-inset-left, 0px) + ${windowWidth} * (1 - 1 / ${scale}) / 2)`;
+    portrait.style.width = `calc(${windowWidth} / ${scale})`;
+    portrait.style.height = `calc(${windowHeight} / ${scale})`;
+    portrait.style.objectFit = "var(--ziggy-splash-fit, cover)";
     portrait.style.objectPosition = "center";
+    portrait.style.transform = `scale(${scale})`;
     picture.appendChild(landscape);
     picture.appendChild(portrait);
     overlay.appendChild(picture);

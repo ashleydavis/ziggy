@@ -22,6 +22,7 @@ class FakeElement implements ISplashElement {
         height: "",
         objectFit: "",
         objectPosition: "",
+        transform: "",
     };
 
     attributes: Record<string, string> = {};
@@ -118,12 +119,13 @@ describe("installSplashScreen", () => {
         const image = picture.children[1];
         expect(image.attributes["src"]).toBe("/ziggy-splash-portrait.png");
         expect(image.attributes["alt"]).toBe("");
-        expect(image.style.objectFit).toBe("cover");
+        expect(image.style.objectFit).toBe("var(--ziggy-splash-fit, cover)");
+        expect(image.style.transform).toBe("scale(var(--ziggy-splash-scale, 1))");
         expect(image.style.position).toBe("absolute");
-        expect(image.style.top).toBe("calc(-1 * var(--ziggy-window-inset-top, 0px))");
-        expect(image.style.left).toBe("calc(-1 * var(--ziggy-window-inset-left, 0px))");
-        expect(image.style.width).toBe("calc(100% + var(--ziggy-window-inset-left, 0px) + var(--ziggy-window-inset-right, 0px))");
-        expect(image.style.height).toBe("calc(100% + var(--ziggy-window-inset-top, 0px) + var(--ziggy-window-inset-bottom, 0px))");
+        expect(image.style.top).toBe("calc(-1 * var(--ziggy-window-inset-top, 0px) + (100% + var(--ziggy-window-inset-top, 0px) + var(--ziggy-window-inset-bottom, 0px)) * (1 - 1 / var(--ziggy-splash-scale, 1)) / 2)");
+        expect(image.style.left).toBe("calc(-1 * var(--ziggy-window-inset-left, 0px) + (100% + var(--ziggy-window-inset-left, 0px) + var(--ziggy-window-inset-right, 0px)) * (1 - 1 / var(--ziggy-splash-scale, 1)) / 2)");
+        expect(image.style.width).toBe("calc((100% + var(--ziggy-window-inset-left, 0px) + var(--ziggy-window-inset-right, 0px)) / var(--ziggy-splash-scale, 1))");
+        expect(image.style.height).toBe("calc((100% + var(--ziggy-window-inset-top, 0px) + var(--ziggy-window-inset-bottom, 0px)) / var(--ziggy-splash-scale, 1))");
     });
 
     test("an image that fails to load removes the overlay at once", async () => {

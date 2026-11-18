@@ -10,6 +10,7 @@ import android.graphics.Color;
 import android.content.ClipData;
 import android.database.Cursor;
 import android.graphics.Bitmap;
+import android.graphics.Matrix;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.provider.OpenableColumns;
@@ -120,6 +121,10 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
 
     // True while the system bars' strips show the splash colour, from when the splash is put up until its cover has faded.
     private boolean barsOverSplash;
+
+    // The scale, in dp per image pixel, at which the system splash shows the splash image through its icon: scripts/
+    // generate-app-assets.sh cuts the icon as 287.4 * 2796 / 872 pixels of the image, which the system draws 287.4 dp across.
+    private static final float SPLASH_DP_PER_IMAGE_PIXEL = 872f / 2796f;
 
     // Whether the app's theme is dark, from its last theme call.
     private boolean themeDark;
@@ -271,9 +276,22 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         // The picture covers the whole window, under the status bar and the navigation bar, as the system splash does. Kept clear
         // of them like the web view, it left their strips showing the window's background colour beside the art, which reads as a
         // bar above the picture.
+        //
+        // The art is drawn at the scale the system splash draws its icon, SPLASH_DP_PER_IMAGE_PIXEL, centred on the window, not
+        // scaled to cover the window: the system splash icon has a fixed size in dp, so only a fixed scale matches it on every
+        // screen. Where the image does not reach the window's edges, the splash background colour fills them.
+        //
         ImageView picture = new ImageView(activity);
         picture.setImageBitmap(image);
-        picture.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        picture.setBackgroundColor(Color.parseColor(new String(coverColour, StandardCharsets.UTF_8)));
+        picture.setScaleType(ImageView.ScaleType.MATRIX);
+        float pixelsPerImagePixel = SPLASH_DP_PER_IMAGE_PIXEL * activity.getResources().getDisplayMetrics().density;
+        picture.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            Matrix placement = new Matrix();
+            placement.setScale(pixelsPerImagePixel, pixelsPerImagePixel);
+            placement.postTranslate(((right - left) - image.getWidth() * pixelsPerImagePixel) / 2f, ((bottom - top) - image.getHeight() * pixelsPerImagePixel) / 2f);
+            ((ImageView) view).setImageMatrix(placement);
+        });
         splashContainer.addView(picture, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         splashPicture = picture;
     }
@@ -288,7 +306,8 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         webView.setVisibility(View.VISIBLE);
         // The splash picture covers the whole window, and the web view is kept clear of the system bars, so the frontend's overlay
         // is told how far the window reaches past the page on each side, in CSS pixels, to place the art where the picture has it.
-        // It is set in the same script as the message that starts the overlay's fade, so it applies before the picture goes.
+        // It is also told to draw the art at the picture's fixed scale, in CSS pixels (dp) per image pixel, instead of covering the
+        // window. It is set in the same script as the message that starts the overlay's fade, so it applies before the picture goes.
         ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) webView.getLayoutParams();
         float density = activity.getResources().getDisplayMetrics().density;
         String insets = String.format(Locale.ROOT,
@@ -296,8 +315,11 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
                 + "style.setProperty('--ziggy-window-inset-top', '%spx');"
                 + "style.setProperty('--ziggy-window-inset-right', '%spx');"
                 + "style.setProperty('--ziggy-window-inset-bottom', '%spx');"
-                + "style.setProperty('--ziggy-window-inset-left', '%spx');",
-            margins.topMargin / density, margins.rightMargin / density, margins.bottomMargin / density, margins.leftMargin / density);
+                + "style.setProperty('--ziggy-window-inset-left', '%spx');"
+                + "style.setProperty('--ziggy-splash-fit', 'none');"
+                + "style.setProperty('--ziggy-splash-scale', '%s');",
+            margins.topMargin / density, margins.rightMargin / density, margins.bottomMargin / density, margins.leftMargin / density,
+            SPLASH_DP_PER_IMAGE_PIXEL);
         webView.evaluateJavascript(insets + "window.__ziggyReceive({\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}});", null);
     }
 

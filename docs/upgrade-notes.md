@@ -2,6 +2,10 @@
 
 What an app has to change to move to each version of Ziggy, newest first. The `/ziggy:upgrade` Claude Code command reads this, along with the release notes. A version with nothing listed needs no change to the app beyond taking the new version.
 
+## v0.0.29
+
+- **Take the template's `frontend/src/lib/splash.ts` and its test again.** The overlay now reads `--ziggy-splash-fit` and `--ziggy-splash-scale`, which the Android native app sets so the art keeps the fixed scale of Android's system splash on every screen, and the iOS native app now sets `--ziggy-window-inset-<side>` too. Without it the art changes size on Android as the overlay takes over, and jumps on iOS.
+
 ## v0.0.28
 
 - **Android: give the system splash the splash art at its full size.** Run `scripts/generate-app-assets.sh` for the app, which writes `splash_icon.png` in `drawable-nodpi`, `drawable-port-nodpi` and `drawable-land-nodpi` and points `android:windowSplashScreenAnimatedIcon` in `values-v31/styles.xml` at `@drawable/splash_icon`. Without it the system splash shows the small launcher icon, which jumps in size when the native splash picture replaces it. Keep the art inside the middle 192 dp circle, about 616 pixels across the middle of a 1290x2796 portrait image, as the template's art is: Android clips the system splash icon to that circle.
