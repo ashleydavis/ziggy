@@ -366,6 +366,13 @@ export interface IZiggyBridge {
     frontendReady(): void;
 
     //
+    // Tells the native app the frontend has started to fade its splash overlay out over the duration in milliseconds, or 0 when the
+    // overlay is already gone. The native app fades what it covered with the splash colour (the menu bar on Linux and Windows) over the
+    // same time. An app with a splash calls it as its overlay starts to fade.
+    //
+    splashFading(durationMilliseconds: number): void;
+
+    //
     // Returns the absolute path of a file from the drop event of a file dropped on the window, or undefined for a File that was not dropped. The same as
     // Electron's webUtils.getPathForFile, and synchronous like it.
     //

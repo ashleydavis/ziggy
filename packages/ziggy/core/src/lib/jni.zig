@@ -64,6 +64,8 @@ const Bridge = struct {
     native_call_method: c.jmethodID,
     // ZiggyNativeCalls.frontendReady().
     frontend_ready_method: c.jmethodID,
+    // ZiggyNativeCalls.splashFading(int).
+    splash_fading_method: c.jmethodID,
     // The core's main thread's queue, which the web view thread posts the frontend's messages to. It lives in pages of its own, so the
     // web view thread needs nothing of the Bridge to reach it.
     main_queue: *MessageQueue,
@@ -314,6 +316,9 @@ fn createBridge(env: *c.JNIEnv, arguments: CreateArguments, app: core.Registered
     bridge.frontend_ready_method = envTable(env).GetMethodID.?(env, native_calls_class, "frontendReady", "()V") orelse {
         return error.JniMethodMissing;
     };
+    bridge.splash_fading_method = envTable(env).GetMethodID.?(env, native_calls_class, "splashFading", "(I)V") orelse {
+        return error.JniMethodMissing;
+    };
     bridge.native_call_method = envTable(env).GetMethodID.?(env, native_calls_class, "nativeCall", "([B[BJ)V") orelse {
         return error.JavaException;
     };
@@ -550,6 +555,15 @@ fn doCall(env: *c.JNIEnv, bridge: *Bridge, arena: std.mem.Allocator, call: nativ
         .frontend_ready => {
             envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.frontend_ready_method, null);
             failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.frontendReady threw");
+        },
+        .splash_fading => |duration| {
+            var arguments = [1]c.jvalue{
+                .{
+                    .i = @intCast(duration),
+                },
+            };
+            envTable(env).CallVoidMethodA.?(env, bridge.native_calls, bridge.splash_fading_method, &arguments);
+            failOnPendingException(env, "Ziggy JNI: ZiggyNativeCalls.splashFading threw");
         },
         .screenshot, .key_press, .new_window, .stopped => std.debug.panic("Ziggy JNI: the core sent a call the native app does not do", .{}),
     }

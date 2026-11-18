@@ -3,7 +3,7 @@
     .name = "ziggy-template",
     .title = "Ziggy template",
     .splash = .{
-        .background = "#FFFFFF",
+        .background = "#1B1035",
         .portrait = "assets/splash-portrait.png",
         .landscape = "assets/splash-landscape.png",
     },
