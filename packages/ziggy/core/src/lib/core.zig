@@ -1635,18 +1635,6 @@ fn runSystem(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: F
         try frontend.native.call(io, allocator, .frontend_ready, null);
         return try respond(arena, {});
     }
-    if (std.mem.eql(u8, name, "splash-fading")) {
-        const duration = switch (try handlers_lib.parsePayload(u32, arena, data)) {
-            .parsed => |value| value,
-            .invalid => |text| return .{
-                .invalid_data = text,
-            },
-        };
-        try frontend.native.call(io, allocator, .{
-            .splash_fading = duration,
-        }, null);
-        return try respond(arena, {});
-    }
     if (std.mem.eql(u8, name, "get-config")) {
         const path = switch (try handlers_lib.parsePayload([]const u8, arena, data)) {
             .parsed => |value| value,

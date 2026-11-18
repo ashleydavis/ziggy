@@ -705,7 +705,6 @@ describe("ziggy-inject", () => {
             "sendTestResult",
             "setConfig",
             "setState",
-            "splashFading",
             "testUiReady",
         ]);
         expect(() => {

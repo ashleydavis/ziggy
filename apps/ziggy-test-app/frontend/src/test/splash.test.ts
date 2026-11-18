@@ -100,7 +100,6 @@ describe("installSplashScreen", () => {
             background: "#1B1035",
             minimumDisplayMilliseconds: 600,
             fadeDurationMilliseconds: 400,
-            onFadeStart: () => {},
         });
         expect(documentLike.body.children.length).toBe(1);
         const overlay = documentLike.body.children[0];
@@ -125,7 +124,6 @@ describe("installSplashScreen", () => {
             background: "#1B1035",
             minimumDisplayMilliseconds: 600,
             fadeDurationMilliseconds: 400,
-            onFadeStart: () => {},
         });
         const overlay = documentLike.body.children[0];
         const image = overlay.children[0].children[1];
@@ -144,7 +142,6 @@ describe("installSplashScreen", () => {
             background: "#1B1035",
             minimumDisplayMilliseconds: 600,
             fadeDurationMilliseconds: 400,
-            onFadeStart: () => {},
         });
         const overlay = documentLike.body.children[0];
         let resolved = false;
@@ -171,35 +168,5 @@ describe("installSplashScreen", () => {
         await removal;
         expect(resolved).toBe(true);
         clock.mockRestore();
-    });
-
-    test("onFadeStart is told the fade's duration as the fade starts, not before", () => {
-        const documentLike = new FakeDocument();
-        const durations: number[] = [];
-        const splash = installSplashScreen(documentLike, {
-            background: "#1B1035",
-            minimumDisplayMilliseconds: 600,
-            fadeDurationMilliseconds: 400,
-            onFadeStart: durationMilliseconds => durations.push(durationMilliseconds),
-        });
-        splash.remove();
-        expect(durations).toEqual([]);
-        documentLike.defaultView.timeouts[0].callback();
-        expect(durations).toEqual([400]);
-    });
-
-    test("onFadeStart is told 0 when the overlay is already gone", async () => {
-        const documentLike = new FakeDocument();
-        const durations: number[] = [];
-        const splash = installSplashScreen(documentLike, {
-            background: "#1B1035",
-            minimumDisplayMilliseconds: 600,
-            fadeDurationMilliseconds: 400,
-            onFadeStart: durationMilliseconds => durations.push(durationMilliseconds),
-        });
-        const image = documentLike.body.children[0].children[0].children[1];
-        image.listeners["error"][0]();
-        await splash.remove();
-        expect(durations).toEqual([0]);
     });
 });

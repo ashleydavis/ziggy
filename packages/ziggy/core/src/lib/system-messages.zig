@@ -77,7 +77,6 @@ pub const names = [_][]const u8{
     "get-config-problem",
     "system-theme",
     "frontend-ready",
-    "splash-fading",
 };
 
 //

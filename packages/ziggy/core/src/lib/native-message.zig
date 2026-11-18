@@ -86,9 +86,6 @@ pub const Call = union(enum) {
     // The app's frontend has loaded and painted its own splash overlay: the native app reveals the app's web view and tells the
     // frontend it has. No result.
     frontend_ready,
-    // The frontend has started to fade its own splash overlay out, over this many milliseconds (0 when the overlay is already
-    // gone): the native app fades what it covered with the splash colour over the same time. No result.
-    splash_fading: u32,
     // The core's main thread has stopped and sends nothing more. Only the core's own side of the queue reads it (see NativeSide).
     stopped,
 };
@@ -112,7 +109,6 @@ const Wire = struct {
     setting: ?[]const u8 = null,
     theme: ?[]const u8 = null,
     background: ?[]const u8 = null,
-    durationMilliseconds: ?u32 = null,
 };
 
 //
@@ -126,7 +122,6 @@ pub fn encode(allocator: std.mem.Allocator, call: Call, call_id: ?u64) ![]u8 {
     };
     switch (call) {
         .quit, .os_version, .frontend_ready, .stopped => {},
-        .splash_fading => |duration| wire.durationMilliseconds = duration,
         .menu_action => |action| wire.action = action,
         .keep_alive => |keep_running| wire.keepRunning = keep_running,
         .pick_paths => |pick| {
@@ -217,11 +212,6 @@ pub fn parse(arena: std.mem.Allocator, text: []const u8) !Call {
     if (std.mem.eql(u8, wire.type, "frontend-ready")) {
         return .frontend_ready;
     }
-    if (std.mem.eql(u8, wire.type, "splash-fading")) {
-        return .{
-            .splash_fading = wire.durationMilliseconds orelse return error.InvalidCall,
-        };
-    }
     if (std.mem.eql(u8, wire.type, "stopped")) {
         return .stopped;
     }
@@ -272,7 +262,6 @@ fn typeName(call: Call) []const u8 {
         .new_window => "new-window",
         .theme => "theme",
         .frontend_ready => "frontend-ready",
-        .splash_fading => "splash-fading",
         .stopped => "stopped",
     };
 }

@@ -84,15 +84,16 @@ async function freePort(): Promise<number> {
 }
 
 //
-// Starts a server on two ports the system chooses, with the given wait for the app. Asking for two free ports first and closing them
-// could be given the same port twice, which the server refuses, so the server takes port 0 for both and reports the ports it has.
+// Starts a server on two free ports, with the given wait for the app.
 //
 async function startServer(appWaitTimeoutMs: number): Promise<IStartedServer> {
+    const appPort = await freePort();
+    const scriptPort = await freePort();
     const errors: string[] = [];
     const errorQueue = createQueue();
     const started = await startRemoteControlServer({
-        appPort: 0,
-        scriptPort: 0,
+        appPort,
+        scriptPort,
         appWaitTimeoutMs,
         writeError: message => {
             errors.push(message);
@@ -102,8 +103,8 @@ async function startServer(appWaitTimeoutMs: number): Promise<IStartedServer> {
     assert(started.ok);
     return {
         server: started.value,
-        appPort: started.value.appPort,
-        scriptPort: started.value.scriptPort,
+        appPort,
+        scriptPort,
         errors,
         nextError: () => errorQueue.next(),
     };

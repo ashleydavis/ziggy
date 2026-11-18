@@ -895,12 +895,6 @@ pub fn addLinuxNativeApp(
         .target = target,
         .optimize = optimize,
     }));
-    // The curve the native app fades the splash colour over the menu bar with, the one the frontend fades its overlay with.
-    native_app.addImport("splash-fade", b.createModule(.{
-        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/splash-fade.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
     native_app.addImport("remote-control-arguments", b.createModule(.{
         .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/remote-control-arguments.zig"),
         .target = target,
@@ -991,12 +985,6 @@ pub fn addWindowsNativeApp(
     // The messages the core sends the native app, which the native app reads.
     native_app.addImport("native-message", b.createModule(.{
         .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/native-message.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
-    // The curve the native app fades the splash colour over the menu bar with, the one the frontend fades its overlay with.
-    native_app.addImport("splash-fade", b.createModule(.{
-        .root_source_file = ziggy.dependency.path("packages/ziggy/core/src/lib/splash-fade.zig"),
         .target = target,
         .optimize = optimize,
     }));

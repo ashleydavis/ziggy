@@ -181,8 +181,6 @@ pub extern fn gtk_main() void;
 pub extern fn gtk_main_quit() void;
 pub extern fn g_idle_add(function: GSourceFunc, data: gpointer) c_uint;
 pub extern fn g_get_real_time() i64;
-// Microseconds on a clock that never jumps, which the menu bar's splash cover times its fade with.
-pub extern fn g_get_monotonic_time() i64;
 pub extern fn g_timeout_add(interval: c_uint, function: GSourceFunc, data: gpointer) c_uint;
 pub extern fn g_getenv(variable: [*:0]const u8) ?[*:0]const u8;
 pub extern fn g_file_read_link(filename: [*:0]const u8, err: ?*?*GError) ?[*:0]u8;
@@ -218,10 +216,6 @@ pub const GTK_WIN_POS_CENTER: c_int = 1;
 pub extern fn gtk_window_set_position(window: *GtkWindow, position: c_int) void;
 pub extern fn gtk_container_add(container: *GtkWidget, widget: *GtkWidget) void;
 pub extern fn gtk_widget_show_all(widget: *GtkWidget) void;
-// The height a widget asks for, which the menu bar's space is reserved at before the menu exists.
-pub extern fn gtk_widget_get_preferred_height(widget: *GtkWidget, minimum_height: ?*c_int, natural_height: ?*c_int) void;
-pub extern fn gtk_widget_set_size_request(widget: *GtkWidget, width: c_int, height: c_int) void;
-pub extern fn g_object_ref_sink(object: ?*anyopaque) ?*anyopaque;
 pub extern fn gtk_window_present(window: *GtkWindow) void;
 pub extern fn gtk_window_close(window: *GtkWindow) void;
 pub extern fn gtk_show_uri_on_window(parent: ?*GtkWindow, uri: [*:0]const u8, timestamp: u32, err: ?*?*GError) gboolean;
@@ -403,8 +397,6 @@ pub extern fn webkit_web_view_set_background_color(web_view: *WebKitWebView, rgb
 
 pub extern fn gtk_overlay_new() *GtkWidget;
 pub extern fn gtk_overlay_add_overlay(overlay: *GtkWidget, widget: *GtkWidget) void;
-// Moves an overlay child to the position in the overlay's stack, 0 being the lowest.
-pub extern fn gtk_overlay_reorder_overlay(overlay: *GtkWidget, child: *GtkWidget, index: c_int) void;
 pub extern fn gtk_widget_set_hexpand(widget: *GtkWidget, expand: gboolean) void;
 pub extern fn gtk_widget_set_vexpand(widget: *GtkWidget, expand: gboolean) void;
 pub extern fn gtk_widget_set_halign(widget: *GtkWidget, alignment: c_int) void;
@@ -426,10 +418,6 @@ pub extern fn gdk_pixbuf_get_width(pixbuf: *GdkPixbuf) c_int;
 pub extern fn gdk_pixbuf_get_height(pixbuf: *GdkPixbuf) c_int;
 pub extern fn gdk_cairo_set_source_pixbuf(cr: *Cairo, pixbuf: *GdkPixbuf, pixbuf_x: f64, pixbuf_y: f64) void;
 pub extern fn cairo_paint(cr: *Cairo) void;
-pub extern fn cairo_set_source_rgba(cr: *Cairo, red: f64, green: f64, blue: f64, alpha: f64) void;
-pub extern fn cairo_rectangle(cr: *Cairo, x: f64, y: f64, width: f64, height: f64) void;
-pub extern fn cairo_clip(cr: *Cairo) void;
-pub extern fn gtk_widget_queue_draw(widget: *GtkWidget) void;
 pub extern fn cairo_scale(cr: *Cairo, sx: f64, sy: f64) void;
 pub extern fn cairo_translate(cr: *Cairo, dx: f64, dy: f64) void;
 pub extern fn cairo_create(surface: *CairoSurface) *Cairo;

@@ -21,7 +21,6 @@ pub const new_instance = @import("lib/new_instance.zig");
 pub const app_windows = @import("lib/app_windows.zig");
 pub const theme = @import("lib/theme.zig");
 pub const native_message = @import("lib/native-message.zig");
-pub const splash_fade = @import("lib/splash-fade.zig");
 pub const native_call_result = @import("lib/native-call-result.zig");
 pub const fake_native_app = @import("lib/fake-native-app.zig");
 pub const shortcut = @import("lib/shortcut.zig");

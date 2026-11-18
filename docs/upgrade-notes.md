@@ -4,8 +4,6 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 
 ## v0.0.26
 
-- **iOS: show the splash art on the launch screen.** Copy the template's `native/ios/ZiggyTemplate/LaunchScreen.storyboard` into the app, add it to the app target's resources, and in `Info.plist` replace the `UILaunchScreen` entry with `UILaunchStoryboardName` set to `LaunchScreen`. Without it the launch screen is only the `SplashBackground` colour and the art appears after it.
-- **An app with a splash calls `window.ziggy.splashFading(durationMilliseconds)` as its frontend overlay starts to fade.** Take the template's `frontend/src/lib/splash.ts` and its test, which add the `onFadeStart` option, and pass `onFadeStart: durationMilliseconds => window.ziggy.splashFading(durationMilliseconds)` to `installSplashScreen`, as the template's `frontend/src/main.ts` does. Until the app calls it, the Linux native splash picture stays over the app. A fake of `IZiggyBridge` in the app's tests adds `splashFading`.
 - **Take `android:postSplashScreenTheme` out of `native/android/app/src/main/res/values-v31/styles.xml`.** The Android framework has no such attribute, so with it the Android build fails in `:app:processDebugResources`. `scripts/generate-app-assets.sh` no longer writes it.
 - **Add `native/android/app/src/main/res/drawable/splash.png`, a copy of `drawable-port/splash.png`.** Without a default splash image, release lint fails the Android release build with `MissingDefaultResource`. `scripts/generate-app-assets.sh` now writes it.
 - **`ILog`'s error function is `err`,** matching `std.log.err`: every call of `@"error"` on an `ILog` becomes a call of `err`. A log of the app's own that builds an `ILog.VTable` names the field `.err`.

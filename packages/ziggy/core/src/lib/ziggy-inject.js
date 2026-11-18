@@ -509,11 +509,6 @@
             frontendReady: function () {
                 postSystem("frontend-ready", null);
             },
-            // Tells the native app the frontend has started to fade its splash overlay out over the duration in milliseconds (0 when
-            // the overlay is already gone), so it fades what it covered with the splash colour over the same time.
-            splashFading: function (durationMilliseconds) {
-                postSystem("splash-fading", durationMilliseconds);
-            },
             getPathForFile: getPathForFile,
             // Registers the frontend's handler of one of the app's actions. A name that already has a handler throws.
             registerAction: function (name, handler) {

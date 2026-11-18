@@ -18,7 +18,6 @@ const remote_control_arguments = @import("remote-control-arguments");
 const system_theme = @import("system-theme.zig");
 const web_view_theme = @import("web-view-theme.zig");
 const splash = @import("splash");
-const splash_fade = @import("splash-fade");
 
 // The URL scheme the bundled frontend is served under. WebKitGTK calls the native app's scheme handler for each file instead of reading a directory.
 const app_scheme = "ziggy-app";
@@ -80,20 +79,8 @@ const NativeApp = struct {
     splash_picture: ?*c.GtkWidget,
     // The pixbuf the splash picture draws. Owned while the picture exists.
     splash_pixbuf: ?*c.GdkPixbuf,
-    // With a splash, the overlay at the top of the window that holds the menu bar's space, the menu bar over it and the cover over
-    // both; null with no splash.
-    menu_space_holder: ?*c.GtkWidget,
-    // The height of the menu bar's space, which the splash art is drawn below; 0 with no splash.
-    menu_space_height: c_int,
-    // With a splash, the menu bar, hidden until the splash picture goes; null with no splash or no menu.
-    menu_bar: ?*c.GtkWidget,
-    // The cover in the splash colour over the menu bar, until it has faded out with the frontend's splash overlay.
-    menu_cover: ?*c.GtkWidget,
-    // How opaque the cover is, from 1 down to 0 as it fades.
-    menu_cover_opacity: f64,
-    // When the cover's fade started and how long it takes, in microseconds on the monotonic clock.
-    menu_cover_fade_started: i64,
-    menu_cover_fade_duration: i64,
+    // The frames the app's web view has started since it was shown, counted until the splash picture is removed.
+    splash_frames: u8,
     // Whether the app's own frontend has loaded.
     main_loaded: bool,
     // The core's handle, until it is destroyed.
@@ -159,13 +146,7 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .overlay = null,
         .splash_picture = null,
         .splash_pixbuf = null,
-        .menu_space_holder = null,
-        .menu_space_height = 0,
-        .menu_bar = null,
-        .menu_cover = null,
-        .menu_cover_opacity = 1.0,
-        .menu_cover_fade_started = 0,
-        .menu_cover_fade_duration = 0,
+        .splash_frames = 0,
         .main_loaded = false,
         .core = null,
         .open_pick = null,
@@ -314,11 +295,10 @@ fn start(native_app: *NativeApp) !void {
     c.gtk_container_add(overlay_widget, box_widget);
     c.gtk_container_add(window_widget, overlay_widget);
     native_app.overlay = overlay_widget;
-    reserveMenuSpace(native_app, box_widget);
     addSplashPicture(native_app, overlay_widget, width, height);
     applySplashBackground(window_widget);
     if (splash.configured) {
-        configureSplashWindow(window_widget, width, height, native_app.menu_space_height);
+        configureSplashWindow(window_widget, width, height);
         c.gtk_widget_show_all(window_widget);
         c.gtk_window_present(window);
         splashEvent("app-started");
@@ -455,7 +435,7 @@ fn addSplashPicture(native_app: *NativeApp, overlay_widget: *c.GtkWidget, width:
 // Sets the splash image as the window's X background pixmap, scaled to cover it, so the first frame the window maps is the
 // art. X paints the pixmap itself, before GTK or the compositor has drawn any child, so no solid colour comes first.
 //
-fn configureSplashWindow(window_widget: *c.GtkWidget, width: c_int, height: c_int, menu_space_height: c_int) void {
+fn configureSplashWindow(window_widget: *c.GtkWidget, width: c_int, height: c_int) void {
     if (width <= 0 or height <= 0) {
         return;
     }
@@ -485,7 +465,18 @@ fn configureSplashWindow(window_widget: *c.GtkWidget, width: c_int, height: c_in
     }
     const surface = c.cairo_xlib_surface_create(display, pixmap, xvisual, width, height);
     const cairo = c.cairo_create(surface);
-    paintSplash(cairo, pixbuf, width, height, menu_space_height);
+    const image_width = c.gdk_pixbuf_get_width(pixbuf);
+    const image_height = c.gdk_pixbuf_get_height(pixbuf);
+    if (image_width > 0 and image_height > 0) {
+        const scale = @max(
+            @as(f64, @floatFromInt(width)) / @as(f64, @floatFromInt(image_width)),
+            @as(f64, @floatFromInt(height)) / @as(f64, @floatFromInt(image_height)),
+        );
+        c.cairo_scale(cairo, scale, scale);
+        c.cairo_translate(cairo, (@as(f64, @floatFromInt(width)) / scale - @as(f64, @floatFromInt(image_width))) / 2.0, (@as(f64, @floatFromInt(height)) / scale - @as(f64, @floatFromInt(image_height))) / 2.0);
+        c.gdk_cairo_set_source_pixbuf(cairo, pixbuf, 0.0, 0.0);
+        c.cairo_paint(cairo);
+    }
     c.cairo_destroy(cairo);
     c.cairo_surface_destroy(surface);
     _ = c.XSetWindowBackgroundPixmap(display, xid, pixmap);
@@ -493,45 +484,31 @@ fn configureSplashWindow(window_widget: *c.GtkWidget, width: c_int, height: c_in
 }
 
 //
-// Draws the splash picture over the whole window.
+// Draws the splash image into its drawing area, scaled to cover it and centred, as the CSS object-fit: cover does.
 //
 fn onSplashPictureDraw(widget: *c.GtkWidget, cairo: *c.Cairo, user_data: ?*anyopaque) callconv(.c) c.gboolean {
     const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
     const pixbuf = native_app.splash_pixbuf orelse {
         return 0;
     };
-    paintSplash(cairo, pixbuf, c.gtk_widget_get_allocated_width(widget), c.gtk_widget_get_allocated_height(widget), native_app.menu_space_height);
-    return 1;
-}
-
-//
-// Paints the splash over an area of the width and height: the splash colour over all of it, and the image scaled to cover the part
-// below the top rows and centred in it, as the frontend's overlay draws it with the CSS object-fit: cover in the web view, which is
-// below the menu bar's space. The native picture and the frontend's overlay then match, so the art does not move as one replaces
-// the other.
-//
-fn paintSplash(cairo: *c.Cairo, pixbuf: *c.GdkPixbuf, width: c_int, height: c_int, top: c_int) void {
-    const background = parseBackground(splash.background);
-    c.cairo_set_source_rgba(cairo, background.red, background.green, background.blue, 1.0);
-    c.cairo_paint(cairo);
+    const width = c.gtk_widget_get_allocated_width(widget);
+    const height = c.gtk_widget_get_allocated_height(widget);
     const image_width = c.gdk_pixbuf_get_width(pixbuf);
     const image_height = c.gdk_pixbuf_get_height(pixbuf);
-    const area_height = height - top;
-    if (width <= 0 or area_height <= 0 or image_width <= 0 or image_height <= 0) {
-        return;
+    if (width <= 0 or height <= 0 or image_width <= 0 or image_height <= 0) {
+        return 0;
     }
     const scale = @max(
         @as(f64, @floatFromInt(width)) / @as(f64, @floatFromInt(image_width)),
-        @as(f64, @floatFromInt(area_height)) / @as(f64, @floatFromInt(image_height)),
+        @as(f64, @floatFromInt(height)) / @as(f64, @floatFromInt(image_height)),
     );
     const drawn_width = @as(f64, @floatFromInt(image_width)) * scale;
     const drawn_height = @as(f64, @floatFromInt(image_height)) * scale;
-    c.cairo_rectangle(cairo, 0.0, @floatFromInt(top), @floatFromInt(width), @floatFromInt(area_height));
-    c.cairo_clip(cairo);
-    c.cairo_translate(cairo, (@as(f64, @floatFromInt(width)) - drawn_width) / 2.0, @as(f64, @floatFromInt(top)) + (@as(f64, @floatFromInt(area_height)) - drawn_height) / 2.0);
+    c.cairo_translate(cairo, (@as(f64, @floatFromInt(width)) - drawn_width) / 2.0, (@as(f64, @floatFromInt(height)) - drawn_height) / 2.0);
     c.cairo_scale(cairo, scale, scale);
     c.gdk_cairo_set_source_pixbuf(cairo, pixbuf, 0.0, 0.0);
     c.cairo_paint(cairo);
+    return 1;
 }
 
 //
@@ -555,8 +532,8 @@ fn onMainLoadChanged(web_view: *c.WebKitWebView, load_event: c.WebKitLoadEvent, 
 }
 
 //
-// The frontend's frontend-ready message: the app's web view, with the frontend's own splash overlay painted in it, is shown under
-// the native picture, and the frontend is told the app is showing so it can fade its overlay. The picture goes as the fade starts.
+// The frontend's frontend-ready message: the app's web view, with the frontend's own splash overlay painted in it, is shown,
+// the native picture goes, and the frontend is told the app is showing so it can fade its overlay.
 //
 fn revealAppView(native_app: *NativeApp) void {
     if (!splash.configured) {
@@ -568,14 +545,30 @@ fn revealAppView(native_app: *NativeApp) void {
         // does not either. Without this no key reached the page: the smoke tests 32 to 35 failed with the key log empty.
         c.gtk_widget_grab_focus(@ptrCast(web_view));
         splashEvent("app-web-view-visible");
-        // The picture stays over the web view until the frontend's overlay starts to fade (startMenuCoverFade), by when the web
-        // view has drawn under it. Removed two frames after the web view was shown, it went before the web view had drawn, and
-        // with the menu bar's space above the web view the flash test caught a frame with neither in 5 of 5 runs.
+        // The picture stays until the web view's first frame is drawn over it, then goes on the next frame.
+        native_app.splash_frames = 0;
+        _ = c.gtk_widget_add_tick_callback(@ptrCast(web_view), &removeSplashAfterFirstFrame, native_app, null);
     }
     else {
         destroySplashPicture(native_app);
     }
     deliverToWebView(native_app, "{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}");
+}
+
+//
+// Runs before each frame of the app's web view once it is shown. The first call comes before its first frame; the second
+// comes once that frame is drawn, so the splash picture is removed then and the callback stops.
+//
+fn removeSplashAfterFirstFrame(widget: *c.GtkWidget, frame_clock: ?*anyopaque, user_data: ?*anyopaque) callconv(.c) c.gboolean {
+    _ = widget;
+    _ = frame_clock;
+    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
+    native_app.splash_frames += 1;
+    if (native_app.splash_frames < 2) {
+        return 1;
+    }
+    destroySplashPicture(native_app);
+    return 0;
 }
 
 //
@@ -590,31 +583,10 @@ fn destroySplashPicture(native_app: *NativeApp) void {
         native_app.splash_pixbuf = null;
         c.g_object_unref(pixbuf);
     }
-    // The menu bar comes as the picture goes, under its cover in the splash colour. Shown with the web view, while the picture is
-    // still up, the window drew a frame of the theme's colour with no picture in 3 of 5 runs of the flash test.
-    showMenuBar(native_app);
-    // The splash colour and image come off the window too, so the menu bar shows the theme's colour, focused or not.
+    // The splash's background colour on the window goes too, so the menu bar shows the theme's colour, focused or not.
     if (native_app.window) |window| {
         c.gtk_widget_override_background_color(@ptrCast(window), c.GTK_STATE_FLAG_NORMAL, null);
-        clearSplashWindowBackground(@ptrCast(window));
     }
-}
-
-//
-// Takes the splash image off the window's X background, which configureSplashWindow put there. X paints that background
-// into every newly exposed part of the window before GTK draws, so while it stays the splash flashes in the new area each
-// time the window grows, for example when it is maximised.
-//
-fn clearSplashWindowBackground(window_widget: *c.GtkWidget) void {
-    const gdk_window = c.gtk_widget_get_window(window_widget) orelse {
-        return;
-    };
-    const display = c.gdk_x11_get_default_xdisplay() orelse {
-        return;
-    };
-    // None is the background GDK gives its own windows: X leaves exposed areas for GTK to paint.
-    const no_pixmap: c_ulong = 0;
-    _ = c.XSetWindowBackgroundPixmap(display, c.gdk_x11_window_get_xid(gdk_window), no_pixmap);
 }
 
 //
@@ -849,7 +821,6 @@ fn doCall(native_app: *NativeApp, text: []const u8, reply: u64) !void {
             splashEvent("frontend-ready-received");
             revealAppView(native_app);
         },
-        .splash_fading => |duration| startMenuCoverFade(native_app, duration),
         .keep_alive, .stopped => fatal("the core sent a call the native app does not do: {s}", .{text}),
     }
 }
@@ -1032,136 +1003,10 @@ fn buildMenu(native_app: *NativeApp, box_widget: *c.GtkWidget) !void {
         }
         c.gtk_menu_shell_append(container, menu_item);
     }
-    if (!splash.configured) {
-        c.gtk_box_pack_start(box_widget, menu_bar, 0, 0, 0);
-        c.gtk_box_reorder_child(box_widget, menu_bar, 0);
-        // The box was shown before the menu existed, so the menu bar, its menus and their items are shown here.
-        c.gtk_widget_show_all(menu_bar);
-        return;
-    }
-    // With a splash the menu bar goes over the space reserveMenuSpace kept for it, under the cover, and stays hidden until the splash
-    // picture goes (showMenuBar). It is an overlay child, so it takes the space's size and showing it changes no size in the window.
-    const holder = native_app.menu_space_holder orelse {
-        return error.MenuSpaceMissing;
-    };
-    c.gtk_overlay_add_overlay(holder, menu_bar);
-    c.gtk_overlay_reorder_overlay(holder, menu_bar, 0);
-    native_app.menu_bar = menu_bar;
-}
-
-//
-// With a splash, keeps the menu bar's space at the top of the window before the window is first shown, under a cover in the splash
-// colour, so the app's web view never changes size while the splash shows. The menu does not exist yet (the core holds it and is
-// made after the window shows), so the space is as tall as a menu bar with one item. The cover fades out with the frontend's splash
-// overlay (startMenuCoverFade).
-//
-fn reserveMenuSpace(native_app: *NativeApp, box_widget: *c.GtkWidget) void {
-    if (!splash.configured) {
-        return;
-    }
-    const menu_overlay = c.gtk_overlay_new();
-    const space = c.gtk_drawing_area_new();
-    native_app.menu_space_height = menuBarHeight();
-    c.gtk_widget_set_size_request(space, -1, native_app.menu_space_height);
-    c.gtk_container_add(menu_overlay, space);
-    const cover = c.gtk_drawing_area_new();
-    _ = c.g_signal_connect_data(cover, "draw", @ptrCast(&onMenuCoverDraw), native_app, null, 0);
-    c.gtk_overlay_add_overlay(menu_overlay, cover);
-    c.gtk_box_pack_start(box_widget, menu_overlay, 0, 0, 0);
-    native_app.menu_space_holder = menu_overlay;
-    native_app.menu_cover = cover;
-}
-
-//
-// The height of a menu bar with one item in the theme, which is the height of the app's menu bar.
-//
-fn menuBarHeight() c_int {
-    const menu_bar = c.gtk_menu_bar_new();
-    _ = c.g_object_ref_sink(menu_bar);
-    defer c.g_object_unref(menu_bar);
-    defer c.gtk_widget_destroy(menu_bar);
-    const item = c.gtk_menu_item_new_with_label("M");
-    c.gtk_menu_shell_append(menu_bar, item);
+    c.gtk_box_pack_start(box_widget, menu_bar, 0, 0, 0);
+    c.gtk_box_reorder_child(box_widget, menu_bar, 0);
+    // The box was shown before the menu existed, so the menu bar, its menus and their items are shown here.
     c.gtk_widget_show_all(menu_bar);
-    var height: c_int = 0;
-    c.gtk_widget_get_preferred_height(menu_bar, null, &height);
-    return height;
-}
-
-//
-// As the splash picture goes: the menu bar shows over its space, under the cover. An app with no menu keeps the space, under the
-// cover, until the cover has faded.
-//
-fn showMenuBar(native_app: *NativeApp) void {
-    if (native_app.menu_bar) |menu_bar| {
-        c.gtk_widget_show_all(menu_bar);
-    }
-}
-
-//
-// Paints the menu bar's cover in the splash background colour, as opaque as the fade has left it.
-//
-fn onMenuCoverDraw(widget: *c.GtkWidget, cairo: *c.Cairo, user_data: ?*anyopaque) callconv(.c) c.gboolean {
-    _ = widget;
-    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
-    const background = parseBackground(splash.background);
-    c.cairo_set_source_rgba(cairo, background.red, background.green, background.blue, native_app.menu_cover_opacity);
-    c.cairo_paint(cairo);
-    return 1;
-}
-
-//
-// The frontend's splash-fading message: its splash overlay has started to fade over the duration, so the menu bar's cover fades
-// over the same time on the same curve, then goes. A duration of 0 takes the cover away at once.
-//
-fn startMenuCoverFade(native_app: *NativeApp, duration_milliseconds: u32) void {
-    // The frontend's overlay, at full opacity, shows the splash under the native picture, so the picture goes now.
-    destroySplashPicture(native_app);
-    const cover = native_app.menu_cover orelse {
-        return;
-    };
-    if (duration_milliseconds == 0) {
-        destroyMenuCover(native_app);
-        return;
-    }
-    native_app.menu_cover_fade_started = c.g_get_monotonic_time();
-    native_app.menu_cover_fade_duration = @as(i64, duration_milliseconds) * 1000;
-    _ = c.gtk_widget_add_tick_callback(cover, &stepMenuCoverFade, native_app, null);
-}
-
-//
-// Runs before each frame while the menu bar's cover fades: sets its opacity for the time gone and redraws it, and removes it once
-// the fade is over.
-//
-fn stepMenuCoverFade(widget: *c.GtkWidget, frame_clock: ?*anyopaque, user_data: ?*anyopaque) callconv(.c) c.gboolean {
-    _ = frame_clock;
-    const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
-    const elapsed = c.g_get_monotonic_time() - native_app.menu_cover_fade_started;
-    const progress = @as(f64, @floatFromInt(elapsed)) / @as(f64, @floatFromInt(native_app.menu_cover_fade_duration));
-    if (progress >= 1.0) {
-        destroyMenuCover(native_app);
-        return 0;
-    }
-    native_app.menu_cover_opacity = 1.0 - splash_fade.fadeEasing(progress);
-    c.gtk_widget_queue_draw(widget);
-    return 1;
-}
-
-//
-// Removes the menu bar's cover, showing the menu bar under it.
-//
-fn destroyMenuCover(native_app: *NativeApp) void {
-    if (native_app.menu_cover) |cover| {
-        native_app.menu_cover = null;
-        c.gtk_widget_destroy(cover);
-    }
-    // An app with no menu has nothing to show in the space, so it goes with the cover.
-    if (native_app.menu_bar == null) {
-        if (native_app.menu_space_holder) |holder| {
-            native_app.menu_space_holder = null;
-            c.gtk_widget_destroy(holder);
-        }
-    }
 }
 
 //
