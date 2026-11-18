@@ -142,6 +142,8 @@ These are Ziggy's own messages, defined in `worker-messages.zig`. An app's own d
 - A child task goes to the main thread, which queues it in the same pool. Its end is sent back to the worker whose task queued it, which reads it while the task waits.
 - Cancelling is cooperative. A thread cannot be stopped from outside it, so `cancel-tasks` sets a flag the task reads through `isCancelled(io, allocator)` or `checkCancelled(io, allocator)`. A pending task of the source is dropped without running.
 - When the backend stops, the main thread drops the pending tasks, cancels the running ones and reads its queue until each has ended. Then it sends every worker `shutdown` and waits for its thread to end.
+- The core's main loop reads every message on the main thread's queue, from the frontend, the native app, remote control and the workers, and hands each worker message to the pool (`WorkerPool.receive`), which holds the one copy of the pool's logic.
+- A program or a test with no Ziggy core makes its pool with `WorkerPool.create`, which gives the pool a queue that only its workers post to. The pool reads that queue itself while its caller waits for a task (`waitForMessage`).
 
 ## Threads of the app's own
 

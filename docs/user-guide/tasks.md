@@ -249,6 +249,10 @@ The core library implements the task queue's `IQueueBackend` on each worker, whi
 - A task queued through a worker's backend runs at the priority of the task that queued it, unless the code passes one.
 - `onTaskComplete` callbacks hear of every task that ran, a cancelled one as failed with the message `Cancelled`.
 
+A program or a test with no Ziggy core, such as a command line tool, runs its tasks on a `WorkerPool` (`@import("ziggy").worker_pool.WorkerPool`) made with `WorkerPool.create`, which takes the same `WorkerPoolOptions` as the core's pool and gives the pool a queue of its own. `queueBackend()` gives the `IQueueBackend` to register with `setQueueBackend`. The pool has no thread of its own: it waits for the workers' messages while its caller waits for a task (`waitForMessage`, which `TaskQueue` calls through the backend), and `drainMessages` handles the messages already sent without waiting. `destroy` waits for the tasks still queued or running, then stops the workers and frees the pool, and `stopWorkers` stops them at once for a process that is ending.
+
+`WorkerPoolOptions.task_timeout_ms` fails a task that runs past it with the message `Task timeout`. A thread cannot be stopped from outside it, so the task's worker is abandoned, left running with whatever it still sends dropped, and a new worker with the same number takes its place.
+
 
 ## See also
 
