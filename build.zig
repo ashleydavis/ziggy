@@ -551,8 +551,10 @@ pub fn embedUi(b: *std.Build, native_app: *std.Build.Module, native_app_import_n
                 has_index = true;
             }
         }
-        if (details.splash != null) {
+        if (details.splash) |splash_details| {
             try source.appendSlice(b.allocator, "    .{\n        .path = \"ziggy-splash-portrait.png\",\n        .content = @embedFile(\"splash-portrait\"),\n    },\n    .{\n        .path = \"ziggy-splash-landscape.png\",\n        .content = @embedFile(\"splash-landscape\"),\n    },\n    .{\n        .path = \"ziggy-splash.html\",\n        .content = @embedFile(\"splash-html\"),\n    },\n");
+            // The splash background colour, as #RRGGBB, for the Android native app, which fills the system bars' strips with it.
+            try source.appendSlice(b.allocator, b.fmt("    .{{\n        .path = \"ziggy-splash-background.txt\",\n        .content = \"{f}\",\n    }},\n", .{std.zig.fmtString(splash_details.background)}));
         }
         try source.appendSlice(b.allocator, "};\n");
     } else |err| {

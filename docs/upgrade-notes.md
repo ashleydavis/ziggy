@@ -2,6 +2,11 @@
 
 What an app has to change to move to each version of Ziggy, newest first. The `/ziggy:upgrade` Claude Code command reads this, along with the release notes. A version with nothing listed needs no change to the app beyond taking the new version.
 
+## v0.0.28
+
+- **Android: give the system splash the splash art at its full size.** Run `scripts/generate-app-assets.sh` for the app, which writes `splash_icon.png` in `drawable-nodpi`, `drawable-port-nodpi` and `drawable-land-nodpi` and points `android:windowSplashScreenAnimatedIcon` in `values-v31/styles.xml` at `@drawable/splash_icon`. Without it the system splash shows the small launcher icon, which jumps in size when the native splash picture replaces it. Keep the art inside the middle 192 dp circle, about 616 pixels across the middle of a 1290x2796 portrait image, as the template's art is: Android clips the system splash icon to that circle.
+- **Take the template's `frontend/src/lib/splash.ts` and its test.** The overlay's image now covers the whole window: on Android the native app sets `--ziggy-window-inset-<side>`, and the image reaches past the page by those amounts, so the art stays where the native splash picture has it when the overlay takes over. Without it, on Android the art jumps as the overlay starts to fade.
+
 ## v0.0.26
 
 - **iOS: show the splash art on the launch screen.** Copy the template's `native/ios/ZiggyTemplate/LaunchScreen.storyboard` into the app, add it to the app target's resources, and in `Info.plist` replace the `UILaunchScreen` entry with `UILaunchStoryboardName` set to `LaunchScreen`. Without it the launch screen is only the `SplashBackground` colour and the art appears after it.

@@ -280,6 +280,18 @@ printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <style name="Ap
 # No android:postSplashScreenTheme: the Android framework has no such attribute (it belongs to AndroidX
 # core-splashscreen, without the android: prefix), so writing it failed every app's :app:processDebugResources with
 # "style attribute 'android:attr/postSplashScreenTheme' not found".
-printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">\n        <item name="android:windowSplashScreenBackground">@color/splash_background</item>\n        <item name="android:windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>\n    </style>\n</resources>\n' > "$android_res/values-v31/styles.xml"
+printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <style name="AppTheme" parent="@android:style/Theme.DeviceDefault.NoActionBar">\n        <item name="android:windowSplashScreenBackground">@color/splash_background</item>\n        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>\n    </style>\n</resources>\n' > "$android_res/values-v31/styles.xml"
+
+# The Android 12 system splash icon: the middle of the splash image, at the scale the native app's splash picture
+# shows it, so the art keeps its size when the picture replaces the system splash. The system draws the icon in the
+# middle of the screen, 288 dp square by its documentation and 0.2% under that as measured on an Android 15 emulator
+# (1080x2400 at 440 dpi), and the picture scales the image to cover the screen, which on a mobile with the common long
+# side of 872 dp puts the icon across 287.4 * 2796 / 872 pixels of it. The system clips the icon to a circle 192 dp
+# across, so art wider than that loses its edges until the picture replaces it.
+splash_icon_size=$(( 2874 * 2796 / 8720 ))
+mkdir -p "$android_res/drawable-nodpi" "$android_res/drawable-port-nodpi" "$android_res/drawable-land-nodpi"
+convert "$assets_root/splash-portrait.png" -gravity center -crop "${splash_icon_size}x${splash_icon_size}+0+0" +repage -strip "$android_res/drawable-nodpi/splash_icon.png"
+convert "$assets_root/splash-portrait.png" -gravity center -crop "${splash_icon_size}x${splash_icon_size}+0+0" +repage -strip "$android_res/drawable-port-nodpi/splash_icon.png"
+convert "$assets_root/splash-landscape.png" -gravity center -crop "${splash_icon_size}x${splash_icon_size}+0+0" +repage -strip "$android_res/drawable-land-nodpi/splash_icon.png"
 
 printf 'Generated the assets for %s.\n' "$app_name"

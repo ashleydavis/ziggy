@@ -33,6 +33,7 @@ When `.splash` is present, Ziggy adds three files to the app's UI files, the lis
 - `ziggy-splash.html`: the generated page, a `<picture>` with the landscape image for a landscape window and the portrait image otherwise, and the background colour.
 - `ziggy-splash-portrait.png`: the portrait image.
 - `ziggy-splash-landscape.png`: the landscape image.
+- `ziggy-splash-background.txt`: the background colour as `#RRGGBB`, which the Android native app fills the system bars' strips with while the splash fades.
 
 Those three paths are reserved: an app's own built frontend must not contain files with those names. Every native app serves them through the same path it serves the app's frontend, so the frontend's own overlay shows the same art as the native picture.
 
@@ -40,7 +41,7 @@ Those three paths are reserved: an app's own built frontend must not contain fil
 
 Each platform shows the splash in five steps:
 
-1. The window opens showing the native picture of the splash art, scaled to cover the area the app's web view will have, as the frontend's overlay draws it, so nothing moves when the overlay replaces it. On Linux, Windows, macOS and iOS it renders on the first frame, with no solid colour (no white, black or anything else) shown before the image: on iOS the launch screen is the same art, scaled the same way. On Android the system splash, which shows the launcher icon on the background colour, comes first. On Linux the top of the window, where the menu bar will be, is kept at the menu bar's height in the splash background colour from the first frame, and the art is drawn below it as the frontend's overlay will draw it, so nothing moves when the menu bar arrives.
+1. The window opens showing the native picture of the splash art, scaled to cover the area the app's web view will have, as the frontend's overlay draws it, so nothing moves when the overlay replaces it. On Linux, Windows, macOS and iOS it renders on the first frame, with no solid colour (no white, black or anything else) shown before the image: on iOS the launch screen is the same art, scaled the same way. On Android the system splash comes first: the middle of the splash art at the same size, on the background colour. The system clips it to a circle a little over half the narrow side of a mobile screen across, so the art fits inside that circle to look the same all the way through. On Linux the top of the window, where the menu bar will be, is kept at the menu bar's height in the splash background colour from the first frame, and the art is drawn below it as the frontend's overlay will draw it, so nothing moves when the menu bar arrives.
 2. The app's web view is created behind the native picture and loads the frontend. The frontend sends `frontend-ready` when it has loaded and rendered.
 3. The app's web view, which shows the frontend's own splash overlay, is shown under the native picture, and the native app sends `frontend-visible` to the frontend. The native picture stays until step 5, so the web view has drawn before it goes.
 4. On `frontend-visible`, the frontend fades its own splash overlay out over two seconds.
@@ -52,7 +53,7 @@ What each platform uses:
 - **Windows**: a child window over the web view paints the BMP cover-scaled with `StretchDIBits`. The window is cloaked until it has painted, so the desktop never shows it before the image.
 - **macOS**: the bridge's `view` is an `NSView` containing a layer-backed backdrop, cover-scaled, from `SplashPortrait` and `SplashLandscape` in the app's asset catalog, over the app's web view.
 - **iOS**: the bridge's `view` is a `UIView` containing a cover-scaled `UIImageView` backdrop from the `Splash` image set, over the app's web view. The launch screen, `LaunchScreen.storyboard` in the app, shows the same `Splash` image over the `SplashBackground` colour, scaled to cover the screen.
-- **Android**: the system splash theme uses the background colour and the launcher foreground. Then an `ImageView` over the web view shows the splash image from the core's UI files, cropped to cover it, with the same margins the web view keeps from the system bars.
+- **Android**: the system splash theme uses the background colour and `splash_icon`, the middle of the splash image at the scale the native picture shows it. Then an `ImageView` over the whole window, under the system bars, shows the splash image from the core's UI files, cropped to cover it. A cover in the splash background colour fills the status bar and navigation bar strips beside the web view, and fades with the overlay.
 
 On macOS and iOS, put `newBridge.view` on screen, not `newBridge.webView`. `webView` remains the app's own web view.
 

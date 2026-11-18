@@ -78,3 +78,4 @@ Run it after adding or changing any of the art. It writes every output every tim
 - `drawable/splash.png`: the default splash image, the portrait one, which release lint requires.
 - `values/styles.xml`: `AppTheme` with the splash background as the window background.
 - `values-v31/styles.xml`: `AppTheme` with the Android 12 system splash settings.
+- `drawable-nodpi`, `drawable-port-nodpi` and `drawable-land-nodpi`, each with `splash_icon.png`: the Android 12 system splash icon, the middle of the splash image at the size the native app's splash picture shows it.

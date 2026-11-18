@@ -25,6 +25,8 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.webkit.ConsoleMessage;
@@ -42,6 +44,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
+import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
@@ -111,6 +114,15 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
 
     // The container that holds the app's web view and the splash picture, or null when the app has no splash.
     private FrameLayout splashContainer;
+
+    // The cover in the splash's background colour behind the web view, while the splash is showing, or null when it has ended.
+    private View barCover;
+
+    // True while the system bars' strips show the splash colour, from when the splash is put up until its cover has faded.
+    private boolean barsOverSplash;
+
+    // Whether the app's theme is dark, from its last theme call.
+    private boolean themeDark;
 
     // The messages the core sent before the frontend finished loading, held for the main thread to deliver when it has.
     private final ArrayList<String> beforeUi = new ArrayList<String>();
@@ -229,6 +241,11 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         if (image == null) {
             throw new IllegalStateException("Ziggy: the splash image in the core's UI files could not be decoded");
         }
+        // The system splash shows the same art in the same place as the splash picture, so it goes at once when the activity has
+        // drawn. Left to its own exit, it fades out as the activity fades in, and the art dims between the two.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            activity.getSplashScreen().setOnExitAnimationListener(systemSplash -> systemSplash.remove());
+        }
         splashContainer = new FrameLayout(activity);
         activity.setContentView(splashContainer);
         ViewGroup parent = (ViewGroup) webView.getParent();
@@ -236,6 +253,19 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
             parent.removeView(webView);
         }
         webView.setVisibility(View.INVISIBLE);
+
+        // The web view is kept clear of the system bars, so their strips show what is under it. This cover, in the splash's
+        // background colour, fills them while the frontend's overlay fades, and fades with it to the window's own background.
+        byte[] coverColour = ZiggyNative.uiFileContent("/ziggy-splash-background.txt".getBytes(StandardCharsets.UTF_8));
+        if (coverColour == null) {
+            throw new IllegalStateException("Ziggy: the core's UI files have the splash images but not the splash background colour");
+        }
+        View cover = new View(activity);
+        cover.setBackgroundColor(Color.parseColor(new String(coverColour, StandardCharsets.UTF_8)));
+        splashContainer.addView(cover, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        barCover = cover;
+        barsOverSplash = true;
+
         splashContainer.addView(webView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
         // The picture covers the whole window, under the status bar and the navigation bar, as the system splash does. Kept clear
@@ -256,7 +286,19 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
             return;
         }
         webView.setVisibility(View.VISIBLE);
-        webView.evaluateJavascript("window.__ziggyReceive({\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}});", null);
+        // The splash picture covers the whole window, and the web view is kept clear of the system bars, so the frontend's overlay
+        // is told how far the window reaches past the page on each side, in CSS pixels, to place the art where the picture has it.
+        // It is set in the same script as the message that starts the overlay's fade, so it applies before the picture goes.
+        ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) webView.getLayoutParams();
+        float density = activity.getResources().getDisplayMetrics().density;
+        String insets = String.format(Locale.ROOT,
+            "var style = document.documentElement.style;"
+                + "style.setProperty('--ziggy-window-inset-top', '%spx');"
+                + "style.setProperty('--ziggy-window-inset-right', '%spx');"
+                + "style.setProperty('--ziggy-window-inset-bottom', '%spx');"
+                + "style.setProperty('--ziggy-window-inset-left', '%spx');",
+            margins.topMargin / density, margins.rightMargin / density, margins.bottomMargin / density, margins.leftMargin / density);
+        webView.evaluateJavascript(insets + "window.__ziggyReceive({\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}});", null);
     }
 
     // The frontend's overlay, at full opacity, has started to fade, so the splash picture over it goes.
@@ -267,11 +309,31 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         }
         splashContainer.removeView(splashPicture);
         splashPicture = null;
+        View cover = barCover;
+        barCover = null;
+        cover.animate()
+            .alpha(0f)
+            .setDuration(durationMilliseconds)
+            .setInterpolator(new PathInterpolator(0.4f, 0f, 0.2f, 1f))
+            .withEndAction(() -> {
+                splashContainer.removeView(cover);
+                barsOverSplash = false;
+                applyBarAppearance();
+            });
+    }
+
+    // Draws the status bar's and the navigation bar's icons dark over a light page and light over a dark one, or over the splash
+    // colour while the splash shows. Left as they are, they stay light, and over a light page they cannot be seen.
+    private void applyBarAppearance() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            int lightBars = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+            activity.getWindow().getInsetsController().setSystemBarsAppearance(barsOverSplash || themeDark ? 0 : lightBars, lightBars);
+        }
     }
 
     // Gives the view margins of the system bars and the keyboard. An app targeting Android 15 or later is drawn edge to edge, with
     // its views running under the status bar, the navigation bar and the keyboard. The frontend is shared with platforms that have
-    // no such bars, so the native app keeps the web view, and the splash picture that matches it, clear of them, which also keeps
+    // no such bars, so the native app keeps the web view clear of them, which also keeps
     // working once the platform stops letting an app opt out of edge to edge. Before Android 11 the window insets have no per-bar
     // types, and before Android 15 the system keeps an app inside the bars by itself, so there is nothing to do there.
     private static void keepClearOfBars(View view) {
@@ -298,6 +360,8 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
             int colour = Color.parseColor(background);
             webView.setBackgroundColor(colour);
             activity.getWindow().getDecorView().setBackgroundColor(colour);
+            themeDark = dark;
+            applyBarAppearance();
             if (Build.VERSION.SDK_INT >= 29) {
                 activity.getTheme().applyStyle(dark ? R.style.ZiggyWebViewDark : R.style.ZiggyWebViewLight, true);
                 webView.dispatchConfigurationChanged(activity.getResources().getConfiguration());
@@ -405,6 +469,7 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         }
         nativeCallThread.shutdown();
         splashPicture = null;
+        barCover = null;
         webView.destroy();
     }
 
