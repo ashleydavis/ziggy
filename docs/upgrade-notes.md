@@ -2,6 +2,13 @@
 
 What an app has to change to move to each version of Ziggy, newest first. The `/ziggy:upgrade` Claude Code command reads this, along with the release notes. A version with nothing listed needs no change to the app beyond taking the new version.
 
+## v0.0.31
+
+- **`ILog`'s error function is `err`,** matching `std.log.err`: every call of `@"error"` on an `ILog` becomes a call of `err`. A log of the app's own that builds an `ILog.VTable` names the field `.err`.
+- **`task_queue.mock_worker_pool.MockWorkerPool` is replaced by a `WorkerPool` made with `WorkerPool.create`.** `WorkerPool.create(allocator, options)` takes `WorkerPoolOptions`: the session id and the child task limit go in `worker_options`, the task types in `tasks` and the function that describes a task's error in `describe_error`. `deinit` is `destroy`, `cancelTasks` is the backend's (`queueBackend().cancelTasks`), and `handleQueuedMessages` is `drainMessages`. `mock_worker_pool.handlers` and `IBaseContext` are gone: list task types as `TaskHandlerEntry` values made with `task_runner.fromQueueHandler` or `task_runner.wrapTask`.
+- **`WorkerPool.waitForWorkerMessage` is `WorkerPool.waitForMessage`,** and it and `WorkerPool.queueBackend` work only on a pool made with `create`.
+- **`LogHandler.write` takes the worker's number and the id of the task it runs:** `write(user_data, worker_id, task_id, message_json)`, where `task_id` is null between tasks. A handler of the app's own adds the two arguments.
+
 ## v0.0.30
 
 - **The window background and the menu cover are no longer red and blue: each app sets its own, or gets its splash or theme colour.** To keep red and blue for splash recordings, as the template does, add `.window_background = "#FF0000"` and `.menu_cover = "#0000FF"` to `.splash` in `app.zon`, `ZiggyWindowBackground` set to `#FF0000` in the macOS and iOS `Info.plist`, and `<meta-data android:name="dev.ziggy.WINDOW_BACKGROUND" android:value="#FF0000" />` in the `<application>` of the Android `AndroidManifest.xml`. See [app icons and splash](user-guide/app-icons-and-splash.md).
@@ -25,7 +32,6 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 - **An app with a splash calls `window.ziggy.splashFading(durationMilliseconds)` as its frontend overlay starts to fade.** Take the template's `frontend/src/lib/splash.ts` and its test, which add the `onFadeStart` option, and pass `onFadeStart: durationMilliseconds => window.ziggy.splashFading(durationMilliseconds)` to `installSplashScreen`, as the template's `frontend/src/main.ts` does. Until the app calls it, the Linux native splash picture stays over the app. A fake of `IZiggyBridge` in the app's tests adds `splashFading`.
 - **Take `android:postSplashScreenTheme` out of `native/android/app/src/main/res/values-v31/styles.xml`.** The Android framework has no such attribute, so with it the Android build fails in `:app:processDebugResources`. `scripts/generate-app-assets.sh` no longer writes it.
 - **Add `native/android/app/src/main/res/drawable/splash.png`, a copy of `drawable-port/splash.png`.** Without a default splash image, release lint fails the Android release build with `MissingDefaultResource`. `scripts/generate-app-assets.sh` now writes it.
-- **`ILog`'s error function is `err`,** matching `std.log.err`: every call of `@"error"` on an `ILog` becomes a call of `err`. A log of the app's own that builds an `ILog.VTable` names the field `.err`.
 
 ## v0.0.24
 

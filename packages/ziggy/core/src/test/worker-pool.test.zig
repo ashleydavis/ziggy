@@ -1,6 +1,8 @@
 const std = @import("std");
 const ziggy = @import("ziggy");
 
+const test_tasks = @import("test-tasks.zig");
+
 const MessageQueue = ziggy.message_queue.MessageQueue;
 const WorkerPool = ziggy.worker_pool.WorkerPool;
 const TaskContext = ziggy.task_runner.TaskContext;
@@ -122,7 +124,8 @@ fn pickTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.m
 }
 
 //
-// The task types of these tests.
+// The task types of these tests: their own, and the core tests' (test-tasks.zig), among them "sleep", which sleeps for the
+// milliseconds its data gives.
 //
 const tasks = [_]ziggy.task_runner.TaskHandlerEntry{
     .{ .name = "echo", .handler = ziggy.task_runner.wrapTask("echo", echoTask) },
@@ -134,7 +137,7 @@ const tasks = [_]ziggy.task_runner.TaskHandlerEntry{
     .{ .name = "log-detail", .handler = ziggy.task_runner.wrapTask("log-detail", logDetailTask) },
     .{ .name = "os-version", .handler = ziggy.task_runner.wrapTask("os-version", osVersionTask) },
     .{ .name = "pick", .handler = ziggy.task_runner.wrapTask("pick", pickTask) },
-};
+} ++ test_tasks.task_handlers;
 
 //
 // A pool run by the test's thread, as its main thread, with what it tells the frontend and its observer recorded.
@@ -668,9 +671,10 @@ test "a worker that cannot start reports why and ends, and the pool logs it and 
         _ = fixture.receive(timer_list.interface(), message);
     }
 
-    // The worker that could not start is gone, and the task has not run.
+    // The worker that could not start, the first started, whose messages came under sender id 1, is gone, and the task has not run.
+    // The worker started in its place may be numbered 1 in log lines too, so the worker is told apart by its sender id.
     for (fixture.pool.workers.items) |state| {
-        try std.testing.expect(state.workerId != 1);
+        try std.testing.expect(state.sender_id != 1);
     }
     try std.testing.expect(fixture.indexOf("end|t1") == null);
 }
@@ -763,5 +767,304 @@ test "writeTaggedLine gives a log the line with its source in front, and an exce
         .tool_output = null,
     });
     try std.testing.expectEqualStrings("[Worker 4] failed\nError: Boom", last_error.buffer[0..last_error.length]);
+}
+
+//
+// Goal: each worker is numbered in log lines with the lowest number not in use, and a message reaches the state of the worker that
+// sent it.
+// Method: run two tasks that wait to be cancelled on a pool of two workers, check the workers are numbered 1 and 2, have different
+// sender ids and run the first and second task, then cancel the first task and check only the first worker counts a finished task.
+//
+test "two workers get display ids 1 and 2 and their messages reach the right state" {
+    const console_log = logging.mute_log.MuteLog.init();
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(2, false, console_log);
+    defer fixture.deinit(timer_list.interface());
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "a", "wait-for-cancel", "first", "null", .background, null);
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "b", "wait-for-cancel", "second", "null", .background, null);
+    while (fixture.pool.pending_tasks.items.len > 0) {
+        const message = fixture.queue.take(std.testing.io, std.testing.allocator, .none).?;
+        defer std.testing.allocator.free(message.text);
+        try std.testing.expect(fixture.receive(timer_list.interface(), message));
+    }
+    try std.testing.expectEqual(@as(usize, 2), fixture.pool.workers.items.len);
+    const first = fixture.pool.workers.items[0];
+    const second = fixture.pool.workers.items[1];
+    try std.testing.expectEqual(@as(u32, 1), first.workerId);
+    try std.testing.expectEqual(@as(u32, 2), second.workerId);
+    try std.testing.expect(first.sender_id != second.sender_id);
+    try std.testing.expectEqualStrings("a", first.currentTask.?.id);
+    try std.testing.expectEqualStrings("b", second.currentTask.?.id);
+    fixture.pool.cancelSource(std.testing.io, std.testing.allocator, console_log, "first");
+    fixture.takeNotices();
+    try fixture.waitFor(timer_list.interface(), "end|a|wait-for-cancel|cancelled");
+    try std.testing.expectEqual(@as(u64, 1), first.tasksProcessed);
+    try std.testing.expectEqual(@as(u64, 0), second.tasksProcessed);
+}
+
+//
+// What a timeout test saw end, from the notices the pool kept: how many tasks ended, how many failed, and the result of the last that
+// succeeded.
+//
+const Ends = struct {
+    // How many tasks ended.
+    ended: usize = 0,
+    // How many of them failed.
+    failed: usize = 0,
+    // The JSON text of the result of the last task that succeeded, in a buffer of its own.
+    result_buffer: [256]u8 = undefined,
+    // How much of the buffer the last result fills.
+    result_length: usize = 0,
+
+    //
+    // Takes the notices the pool kept, freeing each with the pool's allocator.
+    //
+    fn take(self: *Ends, pool: *WorkerPool, allocator: std.mem.Allocator) void {
+        while (pool.takeNotice()) |notice| {
+            defer notice.deinit(allocator);
+            switch (notice) {
+                .task_end => |end| {
+                    self.ended += 1;
+                    if (end.status == .failed) {
+                        self.failed += 1;
+                    }
+                    else {
+                        if (end.result_json) |text| {
+                            @memcpy(self.result_buffer[0..text.len], text);
+                            self.result_length = text.len;
+                        }
+                    }
+                },
+                .task_event => {},
+            }
+        }
+    }
+
+    //
+    // The JSON text of the result of the last task that succeeded.
+    //
+    fn lastResult(self: *const Ends) []const u8 {
+        return self.result_buffer[0..self.result_length];
+    }
+};
+
+//
+// Reads the pool's messages as an owner with a task timeout does, failing the tasks that run past it after each wait of up to 10 ms,
+// until the given number of tasks have ended. A pool that never gets there fails the test after a thousand waits.
+//
+fn readUntilEnded(pool: *WorkerPool, queue: *MessageQueue, allocator: std.mem.Allocator, timers: Timers, log: logging.ILog, ends: *Ends, count: usize) !void {
+    var turns: u32 = 0;
+    while (ends.ended < count) : (turns += 1) {
+        if (turns == 1000) {
+            return error.TimedOut;
+        }
+        if (queue.take(std.testing.io, allocator, .{
+            .duration = .{
+                .raw = .fromMilliseconds(10),
+                .clock = .awake,
+            },
+        })) |message| {
+            defer allocator.free(message.text);
+            try std.testing.expect(pool.receive(std.testing.io, allocator, timers, log, message));
+        }
+        pool.failTimedOutTasks(std.testing.io, allocator, timers, log);
+        ends.take(pool, allocator);
+    }
+}
+
+//
+// Makes a pool of one worker with a 50 ms task timeout on the queue, which keeps a notice of every task that ends.
+//
+fn timeoutPool(queue: *MessageQueue) WorkerPool {
+    return WorkerPool.init(queue, .{
+        .max_workers = 1,
+        .tasks = &tasks,
+        .worker_options = .{
+            .workerId = 0,
+            .sessionId = "pool-test",
+            .maxConcurrentChildTasks = 4,
+        },
+        .observe = true,
+        .task_timeout_ms = 50,
+    });
+}
+
+//
+// Goal: a task that runs past the pool's timeout is failed and logged, its worker is replaced under the same number, and the tasks
+// waiting run on the replacement.
+// Method: on a pool of one worker with a 50 ms timeout, queue a task that sleeps for 300 ms and then one that returns its input, read
+// the pool's messages until both have ended, and look at how they ended, what was logged and the workers the pool has.
+//
+test "times out a task, reports it failed and replaces the worker" {
+    const memory = try logging.memory_log.MemoryLog.init(std.testing.allocator, .{
+        .verbose = false,
+        .debug = false,
+        .tools = false,
+    });
+    defer memory.deinit();
+    // The pool abandons the timed out worker, whose memory is never freed and which its thread goes on using, so the pool is made
+    // with an allocator that is never freed and does not count leaks, and its queue is closed rather than freed.
+    const allocator = std.heap.smp_allocator;
+    var timer_list = TimerList.init();
+    const queue = try allocator.create(MessageQueue);
+    queue.* = MessageQueue.init();
+    defer queue.close(std.testing.io);
+    var pool = timeoutPool(queue);
+    defer pool.shutdown(std.testing.io, allocator, timer_list.interface(), memory.log, null);
+    try pool.addTask(std.testing.io, allocator, memory.log, "slow-task", "sleep", "source", "{\"ms\":300}", .background, null);
+    try pool.addTask(std.testing.io, allocator, memory.log, "echo-task", "echo", "source", "\"after\"", .background, null);
+    var ends: Ends = .{};
+    try readUntilEnded(&pool, queue, allocator, timer_list.interface(), memory.log, &ends, 2);
+    try std.testing.expectEqual(@as(usize, 1), ends.failed);
+    try std.testing.expectEqualStrings("\"after\"", ends.lastResult());
+    try std.testing.expect(std.mem.indexOf(u8, memory.stderr(), "[Task Queue] Task slow-task timed out after 50ms\n") != null);
+    try std.testing.expectEqual(@as(usize, 1), pool.workers.items.len);
+    try std.testing.expectEqual(@as(u32, 1), pool.workers.items[0].workerId);
+}
+
+//
+// Goal: what a worker abandoned at its task's timeout sends afterwards is dropped, not taken for its replacement's.
+// Method: time out a task that sleeps for 300 ms, then read the pool's messages until the abandoned worker's end of that task
+// arrives, checking the pool takes each message, and that no second end of the task is reported.
+//
+test "a message an abandoned worker sends after its timeout is dropped" {
+    const console_log = logging.mute_log.MuteLog.init();
+    // The pool abandons the timed out worker, so it is made with an allocator that is never freed and does not count leaks (see the
+    // test above).
+    const allocator = std.heap.smp_allocator;
+    var timer_list = TimerList.init();
+    const queue = try allocator.create(MessageQueue);
+    queue.* = MessageQueue.init();
+    defer queue.close(std.testing.io);
+    var pool = timeoutPool(queue);
+    defer pool.shutdown(std.testing.io, allocator, timer_list.interface(), console_log, null);
+    try pool.addTask(std.testing.io, allocator, console_log, "slow-task", "sleep", "source", "{\"ms\":300}", .background, null);
+    var ends: Ends = .{};
+    try readUntilEnded(&pool, queue, allocator, timer_list.interface(), console_log, &ends, 1);
+    try std.testing.expect(pool.hasAbandonedWorkers());
+    const abandoned = pool.abandoned_sender_ids.items[0];
+    var turns: u32 = 0;
+    var late_end_seen = false;
+    while (!late_end_seen) : (turns += 1) {
+        if (turns == 1000) {
+            return error.TimedOut;
+        }
+        const message = queue.take(std.testing.io, allocator, .{
+            .duration = .{
+                .raw = .fromMilliseconds(10),
+                .clock = .awake,
+            },
+        }) orelse {
+            continue;
+        };
+        defer allocator.free(message.text);
+        try std.testing.expect(pool.receive(std.testing.io, allocator, timer_list.interface(), console_log, message));
+        if (message.from == abandoned and std.mem.indexOf(u8, message.text, "\"type\":\"task-completed\"") != null) {
+            late_end_seen = true;
+        }
+    }
+    ends.take(&pool, allocator);
+    try std.testing.expectEqual(@as(usize, 1), ends.ended);
+    try std.testing.expectEqual(@as(usize, 1), ends.failed);
+}
+
+//
+// A log handler that keeps where its last line came from: the worker's number and the id of the task it ran.
+//
+const LineOrigins = struct {
+    // How many lines it was given.
+    count: usize = 0,
+    // The number of the worker that sent the last line.
+    worker_id: u32 = 0,
+    // The id of the task the worker ran when it sent the last line, in a buffer of its own.
+    task_id_buffer: [64]u8 = undefined,
+    // How much of the buffer the task id fills, or null when the worker ran no task.
+    task_id_length: ?usize = null,
+
+    //
+    // The handler's write: keeps the worker's number and the task's id.
+    //
+    fn write(user_data: ?*anyopaque, worker_id: u32, task_id: ?[]const u8, message_json: []const u8) void {
+        _ = message_json;
+        const self: *LineOrigins = @ptrCast(@alignCast(user_data.?));
+        self.count += 1;
+        self.worker_id = worker_id;
+        self.task_id_length = null;
+        if (task_id) |id| {
+            @memcpy(self.task_id_buffer[0..id.len], id);
+            self.task_id_length = id.len;
+        }
+    }
+};
+
+//
+// Goal: a pool's log handler is told which worker sent a line and which task it was running, or that it was running none.
+// Method: run a task that logs a line, then post a log line under the worker's sender id while it is idle, as it sends one between
+// tasks, and look at what the handler was given for each.
+//
+test "a log handler receives the worker id and the task id of the running task, and null between tasks" {
+    const console_log = logging.mute_log.MuteLog.init();
+    var timer_list = TimerList.init();
+    var fixture: Fixture = undefined;
+    fixture.init(1, false, console_log);
+    defer fixture.deinit(timer_list.interface());
+    var origins: LineOrigins = .{};
+    fixture.pool.options.on_log = .{
+        .user_data = &origins,
+        .write = LineOrigins.write,
+    };
+    try fixture.pool.addTask(std.testing.io, std.testing.allocator, fixture.log, "l1", "log", "s", "null", .background, null);
+    try fixture.waitFor(timer_list.interface(), "end|l1|log|succeeded");
+    try std.testing.expectEqual(@as(usize, 1), origins.count);
+    try std.testing.expectEqual(@as(u32, 1), origins.worker_id);
+    try std.testing.expectEqualStrings("l1", origins.task_id_buffer[0..origins.task_id_length.?]);
+    const state = fixture.pool.workers.items[0];
+    try fixture.queue.post(std.testing.io, state.sender_id, "{\"type\":\"log\",\"level\":\"info\",\"message\":\"between tasks\"}");
+    while (origins.count < 2) {
+        const message = fixture.queue.take(std.testing.io, std.testing.allocator, .none).?;
+        defer std.testing.allocator.free(message.text);
+        try std.testing.expect(fixture.receive(timer_list.interface(), message));
+    }
+    try std.testing.expectEqual(@as(u32, 1), origins.worker_id);
+    try std.testing.expect(origins.task_id_length == null);
+}
+
+//
+// Goal: stopWorkers tells the running task to cancel and returns only once every worker's thread has ended.
+// Method: run a task that waits to be cancelled, call stopWorkers, then read what is left in the queue: the worker's thread has ended,
+// so the end of its task, cancelled, is already there. The pool is made with an arena, because stopWorkers frees nothing.
+//
+test "stopWorkers cancels the running task and returns once every worker thread has ended" {
+    const console_log = logging.mute_log.MuteLog.init();
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const allocator = arena_state.allocator();
+    var timer_list = TimerList.init();
+    var queue = MessageQueue.init();
+    defer queue.deinit();
+    var pool = WorkerPool.init(&queue, .{
+        .max_workers = 1,
+        .tasks = &tasks,
+        .worker_options = .{
+            .workerId = 0,
+            .sessionId = "pool-test",
+            .maxConcurrentChildTasks = 4,
+        },
+    });
+    try pool.addTask(std.testing.io, allocator, console_log, "w1", "wait-for-cancel", "held", "null", .background, null);
+    while (pool.pending_tasks.items.len > 0) {
+        const message = queue.take(std.testing.io, allocator, .none).?;
+        try std.testing.expect(pool.receive(std.testing.io, allocator, timer_list.interface(), console_log, message));
+    }
+    pool.stopWorkers(std.testing.io);
+    try std.testing.expectEqual(@as(usize, 0), pool.workers.items.len);
+    var cancelled_end_seen = false;
+    while (queue.tryTake(std.testing.io, allocator)) |message| {
+        if (std.mem.indexOf(u8, message.text, "\"type\":\"task-completed\"") != null and std.mem.indexOf(u8, message.text, "\"Cancelled\"") != null) {
+            cancelled_end_seen = true;
+        }
+    }
+    try std.testing.expect(cancelled_end_seen);
 }
 

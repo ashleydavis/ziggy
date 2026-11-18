@@ -19,7 +19,7 @@ const TimerList = ziggy.timers.TimerList;
 const setQueueBackend = task_queue_zig.queue_backend.setQueueBackend;
 const getQueueBackend = task_queue_zig.queue_backend.getQueueBackend;
 const IQueueBackend = task_queue_zig.queue_backend.IQueueBackend;
-const MockWorkerPool = task_queue_zig.mock_worker_pool.MockWorkerPool;
+const WorkerPool = ziggy.worker_pool.WorkerPool;
 const errors = utils.errors;
 
 //
@@ -53,26 +53,59 @@ const test_task_types = [_]ziggy.task_runner.TaskHandlerEntry{
 };
 
 //
-// The context every task of these tests shares.
+// Makes a pool of the given number of workers, run by the calling thread, with the task types of these tests and the session every
+// task of these tests shares.
 //
-const test_base_context: task_queue_zig.mock_worker_pool.IBaseContext = .{
-    .sessionId = "test-session",
-};
+fn createPool(allocator: std.mem.Allocator, workers: usize) !*WorkerPool {
+    return try WorkerPool.create(allocator, .{
+        .max_workers = @intCast(workers),
+        .tasks = &test_task_types,
+        .describe_error = describeError,
+        .worker_options = .{
+            .workerId = 0,
+            .sessionId = "test-session",
+            .maxConcurrentChildTasks = 2,
+        },
+    });
+}
+
+//
+// Gives the text of a failed task's error: the message the handler recorded (the task queue's throwError), or the error's name, so
+// the tests see the messages their handlers throw.
+//
+fn describeError(err: anyerror) ?[]const u8 {
+    const message = errors.errorMessage(err);
+    if (message.len == 0) {
+        return null;
+    }
+    return message;
+}
+
+//
+// The types of the tasks still waiting for a worker of the pool, in the order they will be dispatched, copied with the allocator.
+//
+fn pendingTaskTypes(allocator: std.mem.Allocator, pool: *WorkerPool) ![]const []const u8 {
+    const task_types = try allocator.alloc([]const u8, pool.pending_tasks.items.len);
+    for (pool.pending_tasks.items, task_types) |task, *task_type| {
+        task_type.* = try allocator.dupe(u8, task.task_type);
+    }
+    return task_types;
+}
 
 //
 // What each test runs on: a pool of workers, registered as the test thread's backend, and a queue of the source "test" on it.
 //
 const Setup = struct {
     // The in-process backend.
-    backend: *MockWorkerPool,
+    backend: *WorkerPool,
     // The queue under test (source "test").
     queue: *TaskQueue,
 
     //
-    // beforeEach: creates a MockWorkerPool(maxConcurrent), registers it and creates the queue, with the test thread's allocator.
+    // beforeEach: creates a WorkerPool(maxConcurrent), registers it and creates the queue, with the test thread's allocator.
     //
     fn init(allocator: std.mem.Allocator, maxConcurrent: usize) !Setup {
-        const backend = try MockWorkerPool.init(allocator, maxConcurrent, test_base_context, &test_task_types);
+        const backend = try createPool(allocator, maxConcurrent);
         setQueueBackend(backend.queueBackend());
         var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
         return .{
@@ -88,7 +121,7 @@ const Setup = struct {
         const console_log = logging.mute_log.MuteLog.init();
         self.queue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        self.backend.deinit(io, allocator, timers, console_log);
+        self.backend.destroy(io, allocator, timers, console_log);
     }
 
     //
@@ -97,7 +130,7 @@ const Setup = struct {
     //
     fn waitUntilDispatched(self: Setup, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
         const console_log = logging.mute_log.MuteLog.init();
-        while (self.backend.pool.pending_tasks.items.len > 0) {
+        while (self.backend.pending_tasks.items.len > 0) {
             self.backend.waitForMessage(io, allocator, timers, console_log);
         }
     }
@@ -107,7 +140,7 @@ const Setup = struct {
     //
     fn waitUntilIdle(self: Setup, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
         const console_log = logging.mute_log.MuteLog.init();
-        while (self.backend.pool.isBusy()) {
+        while (self.backend.isBusy()) {
             self.backend.waitForMessage(io, allocator, timers, console_log);
         }
     }
@@ -440,8 +473,8 @@ fn cancelTestSource(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocat
     const console_log = logging.mute_log.MuteLog.init();
     _ = log;
     _ = result;
-    const pool: *MockWorkerPool = @ptrCast(@alignCast(context.?));
-    pool.cancelTasks(io, allocator, console_log, "test");
+    const pool: *WorkerPool = @ptrCast(@alignCast(context.?));
+    pool.queueBackend().cancelTasks(io, allocator, console_log, "test");
 }
 
 test "should add a task and return a UUID" {
@@ -535,30 +568,30 @@ test "an interactive task is dispatched before background tasks already waiting"
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
 
     // A pool of one, so the first task holds the only slot and the rest queue behind it.
-    const serialBackend = try MockWorkerPool.init(allocator, 1, test_base_context, &test_task_types);
+    const serialBackend = try createPool(allocator, 1);
     setQueueBackend(serialBackend.queueBackend());
     const serialQueue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "serial");
     defer {
         serialQueue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        serialBackend.deinit(io, allocator, timers, console_log);
+        serialBackend.destroy(io, allocator, timers, console_log);
     }
     var results: ResultsRecorder = .empty;
     _ = try serialQueue.onTaskComplete(allocator, .{ .context = &results, .function = ResultsRecorder.record });
 
     _ = try serialQueue.addTask(io, allocator, console_log, "ordered-task", try json(allocator, "{\"name\":\"running\"}"), null, null);
     // The first task is sent to the worker once the worker reports it is ready, and holds it while the rest are queued.
-    while (serialBackend.pool.pending_tasks.items.len > 0) {
+    while (serialBackend.pending_tasks.items.len > 0) {
         serialBackend.waitForMessage(io, allocator, timers, console_log);
     }
     _ = try serialQueue.addTask(io, allocator, console_log, "ordered-task", try json(allocator, "{\"name\":\"background-1\"}"), null, null);
     _ = try serialQueue.addTask(io, allocator, console_log, "ordered-task", try json(allocator, "{\"name\":\"background-2\"}"), null, null);
     _ = try serialQueue.addTask(io, allocator, console_log, "ordered-task", try json(allocator, "{\"name\":\"interactive\"}"), null, .Interactive);
 
-    const pendingTypes = try serialBackend.getPendingTaskTypes(allocator);
+    const pendingTypes = try pendingTaskTypes(allocator, serialBackend);
     try std.testing.expectEqual(@as(usize, 3), pendingTypes.len);
 
-    serialBackend.cancelTasks(io, allocator, console_log, release_source);
+    serialBackend.queueBackend().cancelTasks(io, allocator, console_log, release_source);
     try serialQueue.awaitAllTasks(io, allocator, timers, console_log);
 
     // One worker runs the tasks one after another, so they end in the order they started.
@@ -616,7 +649,7 @@ test "awaitTask resolves for each task awaited in turn, the second after the fir
     const quickId = try setup.queue.addTask(io, allocator, console_log, "test-task", .null, null, null);
     const quick = (try setup.queue.awaitTask(io, allocator, timers, console_log, quickId)).?;
     try std.testing.expectEqual(TaskStatus.Succeeded, quick.status);
-    setup.backend.cancelTasks(io, allocator, console_log, release_source);
+    setup.backend.queueBackend().cancelTasks(io, allocator, console_log, release_source);
     const slow = (try setup.queue.awaitTask(io, allocator, timers, console_log, slowId)).?;
     try std.testing.expectEqualStrings("done", slow.outputs.?.string);
 }
@@ -631,7 +664,7 @@ test "awaitTask resolves immediately when shutdown is called while waiting" {
     const timers = timer_list.interface();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    defer setup.backend.cancelTasks(io, allocator, console_log, release_source);
+    defer setup.backend.queueBackend().cancelTasks(io, allocator, console_log, release_source);
 
     const taskId = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
     // The queue is shut down while awaitTask waits, by the callback of another task's completion, before the slow task completes.
@@ -722,7 +755,7 @@ test "awaitAllTasks resolves immediately when shutdown is called while waiting" 
     const timers = timer_list.interface();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    defer setup.backend.cancelTasks(io, allocator, console_log, release_source);
+    defer setup.backend.queueBackend().cancelTasks(io, allocator, console_log, release_source);
 
     _ = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
     // Shut down before the slow task completes, from the callback of another task's completion: awaitAllTasks should return then.
@@ -741,7 +774,7 @@ test "onTasksCancelled fires resolveAllWaiters, unblocking awaitAllTasks and awa
     const timers = timer_list.interface();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    defer setup.backend.cancelTasks(io, allocator, console_log, release_source);
+    defer setup.backend.queueBackend().cancelTasks(io, allocator, console_log, release_source);
 
     const taskId = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
     // cancelTasks fires onTasksCancelled, which calls resolveAllWaiters, while the queue waits. Each quick task's completion cancels
@@ -807,7 +840,7 @@ test "should execute tasks in parallel up to maxWorkers" {
         setup.backend.waitForMessage(io, allocator, timers, console_log);
     }
     try std.testing.expectEqual(@as(u32, 2), counter.running);
-    setup.backend.cancelTasks(io, allocator, console_log, release_source);
+    setup.backend.queueBackend().cancelTasks(io, allocator, console_log, release_source);
 
     // Three more, which run in the workers the first two leave.
     while (task_number <= 5) : (task_number += 1) {
@@ -834,13 +867,13 @@ test "should respect maxWorkers limit" {
     const timers = timer_list.interface();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
 
-    const limitedBackend = try MockWorkerPool.init(allocator, 2, test_base_context, &test_task_types);
+    const limitedBackend = try createPool(allocator, 2);
     setQueueBackend(limitedBackend.queueBackend());
     const queueWithLimit = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "test-limited");
     defer {
         queueWithLimit.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        limitedBackend.deinit(io, allocator, timers, console_log);
+        limitedBackend.destroy(io, allocator, timers, console_log);
     }
     var counter: RunningCounter = .empty;
     _ = try queueWithLimit.onAnyTaskEvent(allocator, .{ .context = &counter, .function = RunningCounter.taskStarted });
@@ -872,13 +905,13 @@ test "should process tasks in FIFO order" {
     const timers = timer_list.interface();
     var uuid_generator: utils.random_uuid_generator.RandomUuidGenerator = .{};
 
-    const singleWorkerBackend = try MockWorkerPool.init(allocator, 1, test_base_context, &test_task_types);
+    const singleWorkerBackend = try createPool(allocator, 1);
     setQueueBackend(singleWorkerBackend.queueBackend());
     const singleQueue = try TaskQueue.init(allocator, uuid_generator.uuidGenerator(), "test-fifo");
     defer {
         singleQueue.deinit(io, allocator, console_log);
         setQueueBackend(null);
-        singleWorkerBackend.deinit(io, allocator, timers, console_log);
+        singleWorkerBackend.destroy(io, allocator, timers, console_log);
     }
     var results: ResultsRecorder = .empty;
     _ = try singleQueue.onTaskComplete(allocator, .{ .context = &results, .function = ResultsRecorder.record });
@@ -1698,16 +1731,16 @@ test "callers awaiting different tasks each resolve when their own task complete
     const timers = timer_list.interface();
     const setup = try Setup.init(allocator, 2);
     defer setup.deinit(io, allocator, timers);
-    defer setup.backend.cancelTasks(io, allocator, console_log, second_release_source);
+    defer setup.backend.queueBackend().cancelTasks(io, allocator, console_log, second_release_source);
 
     const firstTaskId = try setup.queue.addTask(io, allocator, console_log, "slow-task", .null, null, null);
     const secondTaskId = try setup.queue.addTask(io, allocator, console_log, "second-slow-task", .null, null, null);
     // The second task is held until the first has been awaited. A task that ends while nothing waits for it is no longer tracked, and
     // awaitTask returns null for it. A release reaches only the workers that have been sent their task, so both are sent first.
     setup.waitUntilDispatched(io, allocator, timers);
-    setup.backend.cancelTasks(io, allocator, console_log, release_source);
+    setup.backend.queueBackend().cancelTasks(io, allocator, console_log, release_source);
     const first = (try setup.queue.awaitTask(io, allocator, timers, console_log, firstTaskId)).?;
-    setup.backend.cancelTasks(io, allocator, console_log, second_release_source);
+    setup.backend.queueBackend().cancelTasks(io, allocator, console_log, second_release_source);
     const second = (try setup.queue.awaitTask(io, allocator, timers, console_log, secondTaskId)).?;
     try std.testing.expectEqualStrings(firstTaskId, first.taskId);
     try std.testing.expectEqualStrings(secondTaskId, second.taskId);

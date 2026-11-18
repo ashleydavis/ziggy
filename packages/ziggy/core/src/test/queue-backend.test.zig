@@ -1,7 +1,7 @@
 //
-// Tests of the queue backend: handlers written against the task queue run on the core's workers when the app lists them in its
-// `.tasks`, code written against IQueueBackend and TaskQueue works on a worker and on the worker pool, and the callbacks TaskQueue is
-// built on fire.
+// Tests of the queue backend on the core: handlers written against the task queue run on the core's workers when the app lists them
+// in its `.tasks`, and code written against IQueueBackend and TaskQueue works on a worker. The callbacks of the backend a WorkerPool
+// gives are tested in worker-pool-loop.test.zig.
 //
 
 const std = @import("std");
@@ -15,9 +15,7 @@ const FakeNativeApp = ziggy.fake_native_app.FakeNativeApp;
 const types = task_queue.types;
 const getQueueBackend = task_queue.queue_backend.getQueueBackend;
 const TaskQueue = task_queue.task_queue.TaskQueue;
-const MockWorkerPool = task_queue.mock_worker_pool.MockWorkerPool;
 const Timers = ziggy.timers.Timers;
-const TimerList = ziggy.timers.TimerList;
 
 fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: logging.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = timers;
@@ -109,14 +107,14 @@ fn childReportTask(services: ziggy.task_runner.TaskServices, timers: ziggy.timer
 //
 // The task types of these tests written against the task queue, as an app lists them.
 //
-const queue_tasks = task_queue.mock_worker_pool.handlers(.{
-    .@"registered-echo" = echoHandler,
-    .@"registered-wait" = waitForCancelHandler,
-    .@"registered-parent" = parentHandler,
-    .@"registered-child" = childHandler,
-    .@"queue-through-backend" = queueThroughBackendTask,
-    .@"child-report" = childReportTask,
-});
+const queue_tasks = [_]ziggy.task_runner.TaskHandlerEntry{
+    .{ .name = "registered-echo", .handler = ziggy.task_runner.fromQueueHandler(echoHandler) },
+    .{ .name = "registered-wait", .handler = ziggy.task_runner.fromQueueHandler(waitForCancelHandler) },
+    .{ .name = "registered-parent", .handler = ziggy.task_runner.fromQueueHandler(parentHandler) },
+    .{ .name = "registered-child", .handler = ziggy.task_runner.fromQueueHandler(childHandler) },
+    .{ .name = "queue-through-backend", .handler = ziggy.task_runner.wrapTask("queue-through-backend", queueThroughBackendTask) },
+    .{ .name = "child-report", .handler = ziggy.task_runner.wrapTask("child-report", childReportTask) },
+};
 
 //
 // The app of these tests: the tests' app (test-app.zig) with the task types above as well.
@@ -212,212 +210,3 @@ test "a task queued through the backend by a running task runs at that task's pr
     const second_waiting_end = native_app.indexOfContaining(std.testing.io, std.testing.allocator, "\"taskId\":\"b2\",\"status\":\"succeeded\"").?;
     try std.testing.expect(second_waiting_end < second_child_end);
 }
-
-//
-// Records what the callbacks are given, for the tests to look at.
-//
-const Recorder = struct {
-    // One line per call, as "kind|taskId|detail".
-    lines: std.ArrayList([]u8) = .empty,
-
-    fn record(self: *Recorder, line: []u8) void {
-        self.lines.append(std.testing.allocator, line) catch @panic("out of memory");
-    }
-
-    fn deinit(self: *Recorder) void {
-        for (self.lines.items) |line| {
-            std.testing.allocator.free(line);
-        }
-        self.lines.deinit(std.testing.allocator);
-    }
-
-    fn count(self: *Recorder, prefix: []const u8) usize {
-        var found: usize = 0;
-        for (self.lines.items) |line| {
-            if (std.mem.startsWith(u8, line, prefix)) {
-                found += 1;
-            }
-        }
-        return found;
-    }
-
-    //
-    // Reads the pool's messages until a line starting with the prefix has been recorded.
-    //
-    fn waitFor(self: *Recorder, pool: *MockWorkerPool, timers: Timers, prefix: []const u8) void {
-        const console_log = logging.mute_log.MuteLog.init();
-        while (self.count(prefix) == 0) {
-            pool.waitForMessage(std.testing.io, std.testing.allocator, timers, console_log);
-        }
-    }
-
-    fn onComplete(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, result: types.ITaskResult) anyerror!void {
-        _ = log;
-        _ = io;
-        _ = allocator;
-        const self: *Recorder = @ptrCast(@alignCast(context.?));
-        const outputs = if (result.outputs) |value| try std.json.Stringify.valueAlloc(std.testing.allocator, value, .{}) else try std.testing.allocator.dupe(u8, "none");
-        defer std.testing.allocator.free(outputs);
-        const inputs = try std.json.Stringify.valueAlloc(std.testing.allocator, result.inputs, .{});
-        defer std.testing.allocator.free(inputs);
-        self.record(try std.fmt.allocPrint(std.testing.allocator, "complete|{s}|{s}|{s}|{s}|{s}|{s}", .{ result.taskId, result.type, result.status.toString(), result.errorMessage orelse "no error", outputs, inputs }));
-    }
-
-    fn onEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
-        _ = log;
-        _ = io;
-        _ = allocator;
-        const self: *Recorder = @ptrCast(@alignCast(context.?));
-        const event = try std.json.Stringify.valueAlloc(std.testing.allocator, data.event, .{});
-        defer std.testing.allocator.free(event);
-        self.record(try std.fmt.allocPrint(std.testing.allocator, "event|{s}|{s}", .{ data.taskId, event }));
-    }
-
-    fn onTypedEvent(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator, _: Timers, log: ziggy.log.ILog, data: types.ITaskEventData) anyerror!void {
-        _ = log;
-        _ = io;
-        _ = allocator;
-        const self: *Recorder = @ptrCast(@alignCast(context.?));
-        self.record(try std.fmt.allocPrint(std.testing.allocator, "typed|{s}", .{data.taskId}));
-    }
-
-    fn onAdded(context: ?*anyopaque, allocator: std.mem.Allocator, log: ziggy.log.ILog, task_id: []const u8) void {
-        _ = log;
-        _ = allocator;
-        const self: *Recorder = @ptrCast(@alignCast(context.?));
-        self.record(std.fmt.allocPrint(std.testing.allocator, "added|{s}", .{task_id}) catch @panic("out of memory"));
-    }
-
-    fn onCancelled(context: ?*anyopaque, io: std.Io, allocator: std.mem.Allocator) void {
-        _ = io;
-        _ = allocator;
-        const self: *Recorder = @ptrCast(@alignCast(context.?));
-        self.record(std.fmt.allocPrint(std.testing.allocator, "cancelled|", .{}) catch @panic("out of memory"));
-    }
-};
-
-//
-// Makes a pool of workers, run by the calling thread, with the task types of these tests.
-//
-fn createPool(workers: usize) !*MockWorkerPool {
-    return try MockWorkerPool.init(std.testing.allocator, workers, .{
-        .sessionId = "queue-backend-test",
-    }, &queue_tasks[0..queue_tasks.len].*);
-}
-
-test "the completion callback gets the task's type, input, status and outputs, and stops after it is unsubscribed" {
-    const console_log = logging.mute_log.MuteLog.init();
-    var timer_list = TimerList.init();
-    const pool = try createPool(2);
-    defer pool.deinit(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
-    var recorder: Recorder = .{};
-    defer recorder.deinit();
-    const backend = pool.queueBackend();
-    const unsubscribe = try backend.onTaskComplete(std.testing.allocator, .{
-        .context = &recorder,
-        .function = Recorder.onComplete,
-    });
-    var data: std.json.ObjectMap = .empty;
-    defer data.deinit(std.testing.allocator);
-    try data.put(std.testing.allocator, "a", .{ .integer = 1 });
-    const first = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "registered-echo", .{ .object = data }, "s", "c1", null);
-    defer std.testing.allocator.free(first);
-    recorder.waitFor(pool, timer_list.interface(), "complete|c1|registered-echo|succeeded|no error|{\"taskId\":\"c1\",\"echo\":{\"a\":1}}|{\"a\":1}");
-    unsubscribe.call(std.testing.allocator);
-    const second = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "registered-echo", .{ .object = data }, "s", "c2", null);
-    defer std.testing.allocator.free(second);
-    while (pool.pool.isBusy()) {
-        pool.waitForMessage(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
-    }
-    try std.testing.expectEqual(@as(usize, 0), recorder.count("complete|c2"));
-}
-
-test "a task that fails or is cancelled while running is reported as failed, and one cancelled while queued is not reported" {
-    const console_log = logging.mute_log.MuteLog.init();
-    var timer_list = TimerList.init();
-    const pool = try createPool(1);
-    defer pool.deinit(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
-    var recorder: Recorder = .{};
-    defer recorder.deinit();
-    const backend = pool.queueBackend();
-    const unsubscribe = try backend.onTaskComplete(std.testing.allocator, .{
-        .context = &recorder,
-        .function = Recorder.onComplete,
-    });
-    defer unsubscribe.call(std.testing.allocator);
-    const running = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "registered-wait", .null, "gone", "running", null);
-    defer std.testing.allocator.free(running);
-    // The first task is sent to the worker once the worker reports it is ready.
-    while (pool.pool.pending_tasks.items.len > 0) {
-        pool.waitForMessage(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
-    }
-    const queued = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "registered-echo", .null, "gone", "queued", null);
-    defer std.testing.allocator.free(queued);
-    backend.cancelTasks(std.testing.io, std.testing.allocator, console_log, "gone");
-    recorder.waitFor(pool, timer_list.interface(), "complete|running|registered-wait|failed|Cancelled|none|null");
-    try std.testing.expectEqual(@as(usize, 0), recorder.count("complete|queued"));
-}
-
-test "event callbacks get the events of a type, and every event" {
-    const console_log = logging.mute_log.MuteLog.init();
-    var timer_list = TimerList.init();
-    const pool = try createPool(2);
-    defer pool.deinit(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
-    var recorder: Recorder = .{};
-    defer recorder.deinit();
-    const backend = pool.queueBackend();
-    const any = try backend.onAnyTaskEvent(std.testing.allocator, .{
-        .context = &recorder,
-        .function = Recorder.onEvent,
-    });
-    defer any.call(std.testing.allocator);
-    const typed = try backend.onTaskEvent(std.testing.allocator, "registered-hello", .{
-        .context = &recorder,
-        .function = Recorder.onTypedEvent,
-    });
-    defer typed.call(std.testing.allocator);
-    const other = try backend.onTaskEvent(std.testing.allocator, "something-else", .{
-        .context = &recorder,
-        .function = Recorder.onTypedEvent,
-    });
-    defer other.call(std.testing.allocator);
-    const id = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "registered-echo", .null, "s", "m1", null);
-    defer std.testing.allocator.free(id);
-    recorder.waitFor(pool, timer_list.interface(), "event|m1|{\"type\":\"registered-hello\"}");
-    recorder.waitFor(pool, timer_list.interface(), "typed|m1");
-    while (pool.pool.isBusy()) {
-        pool.waitForMessage(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
-    }
-    try std.testing.expectEqual(@as(usize, 1), recorder.count("typed|"));
-}
-
-test "callbacks for a source fire when a task is added under it and when the source is cancelled" {
-    const console_log = logging.mute_log.MuteLog.init();
-    var timer_list = TimerList.init();
-    const pool = try createPool(2);
-    defer pool.deinit(std.testing.io, std.testing.allocator, timer_list.interface(), console_log);
-    var recorder: Recorder = .{};
-    defer recorder.deinit();
-    const backend = pool.queueBackend();
-    const added = try backend.onTaskAdded(std.testing.allocator, "watched", .{
-        .context = &recorder,
-        .function = Recorder.onAdded,
-    });
-    defer added.call(std.testing.allocator);
-    const cancelled = try backend.onTasksCancelled(std.testing.allocator, "watched", .{
-        .context = &recorder,
-        .function = Recorder.onCancelled,
-    });
-    defer cancelled.call(std.testing.allocator);
-    const unwatched_id = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "registered-echo", .null, "unwatched", "u1", null);
-    defer std.testing.allocator.free(unwatched_id);
-    const id = try backend.addTask(std.testing.allocator, std.testing.io, console_log, "registered-echo", .null, "watched", "w1", null);
-    defer std.testing.allocator.free(id);
-    try std.testing.expectEqual(@as(usize, 1), recorder.count("added|w1"));
-    try std.testing.expectEqual(@as(usize, 0), recorder.count("added|u1"));
-    backend.cancelTasks(std.testing.io, std.testing.allocator, console_log, "unwatched");
-    try std.testing.expectEqual(@as(usize, 0), recorder.count("cancelled|"));
-    backend.cancelTasks(std.testing.io, std.testing.allocator, console_log, "watched");
-    try std.testing.expectEqual(@as(usize, 1), recorder.count("cancelled|"));
-}
-
