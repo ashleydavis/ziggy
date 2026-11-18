@@ -24,8 +24,11 @@ public interface ZiggyNativeCalls {
     // Sets the web view's colour scheme and background from the theme call's JSON: the setting, the theme and the background colour.
     void theme(byte[] callJson);
 
-    // The app's frontend has loaded and painted its own splash overlay, so the splash screen can go and the app's web view can show.
+    // The app's frontend has loaded and painted its own splash overlay, so the app's web view is shown under the splash picture.
     void frontendReady();
+
+    // The frontend's splash overlay has started to fade out over the duration in milliseconds, so the splash picture goes.
+    void splashFading(int durationMilliseconds);
 
     // Has the app's own code do one thing only it can do, named by method, and returns at once. Both arguments are UTF-8 text as bytes
     // (the method name and the JSON text of its argument). The result goes to ZiggyNative.nativeResult with the number reply, on the

@@ -38,20 +38,21 @@ Those three paths are reserved: an app's own built frontend must not contain fil
 
 ## The native sequence
 
-Each platform shows the splash in four steps:
+Each platform shows the splash in five steps:
 
-1. The window opens showing the native picture of the splash art. It renders on the first frame, with no solid colour (no white, black or anything else) shown before the image.
+1. The window opens showing the native picture of the splash art, scaled to cover the area the app's web view will have, as the frontend's overlay draws it, so nothing moves when the overlay replaces it. On Linux, Windows, macOS and iOS it renders on the first frame, with no solid colour (no white, black or anything else) shown before the image: on iOS the launch screen is the same art, scaled the same way. On Android the system splash, which shows the launcher icon on the background colour, comes first. On Linux the top of the window, where the menu bar will be, is kept at the menu bar's height in the splash background colour from the first frame, and the art is drawn below it as the frontend's overlay will draw it, so nothing moves when the menu bar arrives.
 2. The app's web view is created behind the native picture and loads the frontend. The frontend sends `frontend-ready` when it has loaded and rendered.
-3. The native picture is removed to reveal the app's web view, which shows the frontend's own splash overlay. The native app sends `frontend-visible` to the frontend.
+3. The app's web view, which shows the frontend's own splash overlay, is shown under the native picture, and the native app sends `frontend-visible` to the frontend. The native picture stays until step 5, so the web view has drawn before it goes.
 4. On `frontend-visible`, the frontend fades its own splash overlay out over two seconds.
+5. As the fade starts, the frontend calls `window.ziggy.splashFading(durationMilliseconds)`. The native picture goes then, on every platform. On Linux the menu bar appears under a cover in the splash background colour. The native app fades the splash colour over the menu bar on the same curve over the same time, so the menu bar appears with the app's UI. On Linux the cover then goes. On Windows the menu bar's background goes from the splash colour to the system's menu colour; its labels show throughout, because a Win32 menu bar cannot be covered. macOS shows the menu in the system menu bar at the top of the screen, outside the window, so there is nothing to fade. Android and iOS have no menu.
 
 What each platform uses:
 
 - **Linux**: a `GtkDrawingArea` paints the image cover-scaled, because GTK 3 has no `GtkPicture`.
-- **Windows**: the window's `WM_PAINT` fills the client area with the background brush and stretches the BMP with `StretchDIBits`.
-- **macOS**: the bridge's `view` is an `NSView` containing an `NSImageView` backdrop from `SplashPortrait` and `SplashLandscape` in the app's asset catalog.
-- **iOS**: the bridge's `view` is a `UIView` containing a `UIImageView` backdrop from the `Splash` image set. The system launch screen uses the `SplashBackground` colour.
-- **Android**: the system splash theme uses the background colour and the launcher foreground.
+- **Windows**: a child window over the web view paints the BMP cover-scaled with `StretchDIBits`. The window is cloaked until it has painted, so the desktop never shows it before the image.
+- **macOS**: the bridge's `view` is an `NSView` containing a layer-backed backdrop, cover-scaled, from `SplashPortrait` and `SplashLandscape` in the app's asset catalog, over the app's web view.
+- **iOS**: the bridge's `view` is a `UIView` containing a cover-scaled `UIImageView` backdrop from the `Splash` image set, over the app's web view. The launch screen, `LaunchScreen.storyboard` in the app, shows the same `Splash` image over the `SplashBackground` colour, scaled to cover the screen.
+- **Android**: the system splash theme uses the background colour and the launcher foreground. Then an `ImageView` over the web view shows the splash image from the core's UI files, cropped to cover it, with the same margins the web view keeps from the system bars.
 
 On macOS and iOS, put `newBridge.view` on screen, not `newBridge.webView`. `webView` remains the app's own web view.
 
@@ -66,6 +67,8 @@ const splash = installSplashScreen(document, {
     background: "#140A24",
     minimumDisplayMilliseconds: 2000,
     fadeDurationMilliseconds: 2000,
+    // The native app fades the splash colour over its menu bar with the overlay.
+    onFadeStart: durationMilliseconds => window.ziggy.splashFading(durationMilliseconds),
 });
 
 // Once the app has rendered its first frame:
@@ -76,7 +79,7 @@ splash.remove().catch(error => {
 
 `installSplashScreen(documentLike, options)` accepts either the browser's `Document` or the minimal `IDocumentLike` interface its tests use. It creates a `div` with `data-id="ziggy-splash"` at `z-index: 2147483647`, with a `<picture>` holding the portrait image and a landscape `<source>`.
 
-`remove()` waits until `minimumDisplayMilliseconds` has passed since the overlay was installed, fades the overlay's opacity from 1 to 0 over `fadeDurationMilliseconds` with the cubic-bezier(0.4, 0, 0.2, 1) curve, then removes it. Calling it twice, or after the overlay has gone, resolves at once.
+`remove()` waits until `minimumDisplayMilliseconds` has passed since the overlay was installed, fades the overlay's opacity from 1 to 0 over `fadeDurationMilliseconds` with the cubic-bezier(0.4, 0, 0.2, 1) curve, then removes it. Calling it twice, or after the overlay has gone, resolves at once. As the fade starts it calls `onFadeStart` with `fadeDurationMilliseconds`, or with 0 when the overlay is already gone.
 
 In dev mode the frontend runs in an ordinary browser, where the core serves no splash files. The overlay's image request fails, its `error` listener removes the overlay, and the app loads straight into its UI.
 

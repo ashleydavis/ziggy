@@ -271,6 +271,19 @@ test "frontend-ready sends the native app a frontend-ready call and answers null
     try std.testing.expectEqualStrings("{\"type\":\"frontend-ready\"}", call.?);
 }
 
+test "splash-fading sends the native app a splash-fading call with the duration and answers null" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try test_app.createCore(&native_app, 1, 1);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try sendSystem(&native_app, 1, "splash-fading", "500");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":true");
+    const call = try native_app.lastCall(std.testing.io, std.testing.allocator, "splash-fading");
+    defer if (call) |text| std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"type\":\"splash-fading\",\"durationMilliseconds\":500}", call.?);
+}
+
 test "a message without an id gets no reply" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();

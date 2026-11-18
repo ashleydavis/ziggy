@@ -94,3 +94,21 @@ test "a new-window call without arguments is InvalidCall" {
     defer arena_state.deinit();
     try std.testing.expectError(error.InvalidCall, native_message.parse(arena_state.allocator(), "{\"type\":\"new-window\"}"));
 }
+
+test "a splash-fading call encodes to the fade's duration and parses back to it" {
+    const text = try native_message.encode(std.testing.allocator, .{
+        .splash_fading = 2000,
+    }, null);
+    defer std.testing.allocator.free(text);
+    try std.testing.expectEqualStrings("{\"type\":\"splash-fading\",\"durationMilliseconds\":2000}", text);
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    const call = try native_message.parse(arena_state.allocator(), text);
+    try std.testing.expectEqual(@as(u32, 2000), call.splash_fading);
+}
+
+test "a splash-fading call with no duration is not a call" {
+    var arena_state = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena_state.deinit();
+    try std.testing.expectError(error.InvalidCall, native_message.parse(arena_state.allocator(), "{\"type\":\"splash-fading\"}"));
+}
