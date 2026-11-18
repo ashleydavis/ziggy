@@ -238,10 +238,12 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         webView.setVisibility(View.INVISIBLE);
         splashContainer.addView(webView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        // The picture covers the whole window, under the status bar and the navigation bar, as the system splash does. Kept clear
+        // of them like the web view, it left their strips showing the window's background colour beside the art, which reads as a
+        // bar above the picture.
         ImageView picture = new ImageView(activity);
         picture.setImageBitmap(image);
         picture.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        keepClearOfBars(picture);
         splashContainer.addView(picture, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         splashPicture = picture;
     }
