@@ -705,7 +705,7 @@ pub const WorkerPool = struct {
             const task = state.currentTask.?;
             const line = std.fmt.allocPrint(allocator, "[Task Queue] Task {s} timed out after {d}ms", .{ task.id, timeout_ms }) catch @panic("out of memory logging a task's timeout");
             defer allocator.free(line);
-            log.@"error"(line);
+            log.err(line);
             state.worker.abandon();
             self.abandoned_sender_ids.append(allocator, state.sender_id) catch @panic("out of memory abandoning a worker");
             // The replacement takes the abandoned worker's place in the list, with no task yet.
