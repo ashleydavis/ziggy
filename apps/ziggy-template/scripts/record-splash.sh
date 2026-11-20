@@ -58,6 +58,48 @@ require() {
     fi
 }
 
+# Prints the average colour of a band of each frame of a video, one "red green blue" line per frame. Usage: band_colours <video>
+# <top of the band, as an ffmpeg expression of ih>
+band_colours() {
+    ffmpeg -v error -i "$1" -vf "crop=iw:ih/6:0:$2,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -v -tu1 -w3
+}
+
+# Writes the video from the first frame in which the app's splash fills the screen, so the recording does not show what was on the
+# screen before the app opened (on Android, the launcher). That frame is the first whose bands near the top and the bottom both
+# have the splash colour from assets/assets.json, which the art in the middle does not reach. Fails when no frame has it.
+# Usage: trim_to_splash <video> <output>
+trim_to_splash() {
+    require ffmpeg
+    require jq
+    local colour
+    colour="$(jq -r '.background' "$(dirname "${BASH_SOURCE[0]}")/../assets/assets.json")"
+    local want_red=$((16#${colour:1:2}))
+    local want_green=$((16#${colour:3:2}))
+    local want_blue=$((16#${colour:5:2}))
+    local frame=0
+    local first=""
+    local top_red top_green top_blue bottom_red bottom_green bottom_blue
+    while read -r top_red top_green top_blue bottom_red bottom_green bottom_blue; do
+        if near "$top_red" "$want_red" && near "$top_green" "$want_green" && near "$top_blue" "$want_blue" \
+            && near "$bottom_red" "$want_red" && near "$bottom_green" "$want_green" && near "$bottom_blue" "$want_blue"; then
+            first=$frame
+            break
+        fi
+        frame=$((frame + 1))
+    done < <(paste <(band_colours "$1" "ih/20") <(band_colours "$1" "ih*3/4"))
+    if [ -z "$first" ]; then
+        echo "ERROR: no frame of the recording shows the splash colour $colour" >&2
+        exit 1
+    fi
+    ffmpeg -loglevel error -y -i "$1" -vf "select=gte(n\,$first),setpts=PTS-STARTPTS" -c:v libx264 -pix_fmt yuv420p "$2"
+}
+
+# Succeeds when two colour channel values are within 16 of each other. Usage: near <value> <value>
+near() {
+    local difference=$(($1 - $2))
+    [ "${difference#-}" -le 16 ]
+}
+
 # Stops a process this script started, and does not complain when it has already ended.
 stop() {
     kill "$@" 2> /dev/null || true
@@ -94,11 +136,14 @@ case "$platform" in
         ;;
     windows)
         require ffmpeg
-        ffmpeg -loglevel error -y -f gdigrab -framerate 30 -i desktop -t "$((seconds + 1))" -c:v libx264 -pix_fmt yuv420p \
-            -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" "$output" &
+        # The window is put at a known place and size (its outer edge at 112,20, its frontend 800x560, which with the title bar
+        # and the menu bar fits a 1024x768 screen above the taskbar), and only the area around it is recorded: the title bar and
+        # the menu bar are in the video, and the desktop's icons and the taskbar are not.
+        ffmpeg -loglevel error -y -f gdigrab -framerate 30 -offset_x 96 -offset_y 0 -video_size 848x704 -i desktop \
+            -t "$((seconds + 1))" -c:v libx264 -pix_fmt yuv420p "$output" &
         ffmpeg_pid=$!
         sleep 1
-        "$app" &
+        "$app" "-geometry=800x560+112+20" &
         app_pid=$!
         wait "$ffmpeg_pid"
         stop "$app_pid"
@@ -108,10 +153,12 @@ case "$platform" in
         # screencapture records the main display for the number of seconds given. The app is the .app bundle, run by its executable
         # so this script owns its process.
         executable="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$app/Contents/Info.plist")"
-        screencapture -v -V "$((seconds + 1))" "$output" &
+        # The window's content is put at a known place and size, and only that area is recorded: the title bar, whose close
+        # button is red, the Dock and the rest of the desktop are not in the video. The menu bar is the system's, outside the window.
+        screencapture -v -V "$((seconds + 1))" -R 112,60,800,560 "$output" &
         capture_pid=$!
         sleep 1
-        "$executable" &
+        "$executable" "-geometry=800x560+112+60" &
         app_pid=$!
         wait "$capture_pid"
         stop "$app_pid"
@@ -163,9 +210,12 @@ case "$platform" in
         wait "$record_pid"
         # screenrecord finishes writing the file a moment after it exits.
         sleep 1
-        adb pull "$on_device" "$output" > /dev/null
+        whole="$(mktemp --suffix .mp4)"
+        adb pull "$on_device" "$whole" > /dev/null
         adb shell rm -f "$on_device"
         adb shell am force-stop "$package"
+        trim_to_splash "$whole" "$output"
+        rm -f "$whole"
         ;;
     *)
         usage

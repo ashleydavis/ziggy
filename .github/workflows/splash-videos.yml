@@ -264,6 +264,13 @@ jobs:
         with:
           run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" > /dev/null
 
+      # record-splash.sh cuts the recording to start where the app's splash fills the screen, with ffmpeg.
+      - name: Install the video tools (Android)
+        uses: ./.github/actions/install-apt-packages
+        with:
+          packages: ffmpeg
+          verify: ffmpeg
+
       - name: Enable KVM (Android)
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
