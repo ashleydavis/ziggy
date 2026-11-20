@@ -23,6 +23,7 @@ What it needs and does on each platform:
   available iPhone, and records it with `simctl io recordVideo`.
 - **Android**: `adb`, `ffmpeg` and `jq`. Installs the app on the device `ANDROID_SERIAL` names (else adb's only device) and records it with
   `screenrecord`. The video starts at the first frame in which the splash colour from `assets/assets.json` fills the bands near
-  the top and the bottom of the screen, so the launcher shown before the app opens is not in it.
+  the top and the bottom of the screen, its left and right edges and the middle of its top edge, so the launcher, shown before the
+  app opens and around its window as it opens, is not in it.
 
 It fails when no video was recorded.

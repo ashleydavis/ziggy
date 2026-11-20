@@ -58,18 +58,20 @@ require() {
     fi
 }
 
-# Prints the average colour of a band of each frame of a video, one "red green blue" line per frame, and no more lines than the
+# Prints the average colour of an area of each frame of a video, one "red green blue" line per frame, and no more lines than the
 # video has frames: at a constant frame rate ffmpeg would repeat frames, and the count would not match the frame numbers. Usage:
-# band_colours <video>
-# <top of the band, as an ffmpeg expression of ih>
-band_colours() {
-    ffmpeg -v error -i "$1" -vf "crop=iw:ih/6:0:$2,scale=1:1:flags=area" -fps_mode passthrough -enc_time_base demux -f rawvideo \
-        -pix_fmt rgb24 - | od -An -v -tu1 -w3
+# area_colours <video> <the area, as ffmpeg's crop filter takes it>
+area_colours() {
+    ffmpeg -v error -i "$1" -vf "crop=$2,scale=1:1:flags=area" -fps_mode passthrough -enc_time_base demux -f rawvideo -pix_fmt rgb24 - \
+        | od -An -v -tu1 -w3
 }
 
 # Writes the video from the first frame in which the app's splash fills the screen, so the recording does not show what was on the
-# screen before the app opened (on Android, the launcher). That frame is the first whose bands near the top and the bottom both
-# have the splash colour from assets/assets.json, which the art in the middle does not reach. Fails when no frame has it.
+# screen before the app opened (on Android, the launcher, which shows around the app's window as it opens). That frame is the first
+# in which five areas all have the splash colour from assets/assets.json: bands across the screen near its top and its bottom,
+# the two pixel columns at its left and right edges from below the status bar to above the navigation bar, where the opening
+# window's rounded corners show last, and the middle of the two pixel rows at its top edge. The art in the middle reaches none of
+# them. Fails when no frame has it.
 # Usage: trim_to_splash <video> <output>
 trim_to_splash() {
     require ffmpeg
@@ -81,15 +83,27 @@ trim_to_splash() {
     local want_blue=$((16#${colour:5:2}))
     local frame=0
     local first=""
-    local top_red top_green top_blue bottom_red bottom_green bottom_blue
-    while read -r top_red top_green top_blue bottom_red bottom_green bottom_blue; do
-        if near "$top_red" "$want_red" && near "$top_green" "$want_green" && near "$top_blue" "$want_blue" \
-            && near "$bottom_red" "$want_red" && near "$bottom_green" "$want_green" && near "$bottom_blue" "$want_blue"; then
+    local line
+    local values
+    while read -r line; do
+        read -r -a values <<< "$line"
+        local matches=true
+        local index
+        for index in 0 3 6 9 12; do
+            if ! near "${values[index]}" "$want_red" || ! near "${values[index + 1]}" "$want_green" \
+                || ! near "${values[index + 2]}" "$want_blue"; then
+                matches=false
+                break
+            fi
+        done
+        if [ "$matches" = true ]; then
             first=$frame
             break
         fi
         frame=$((frame + 1))
-    done < <(paste <(band_colours "$1" "ih/20") <(band_colours "$1" "ih*3/4"))
+    done < <(paste <(area_colours "$1" "iw:ih/6:0:ih/20") <(area_colours "$1" "iw:ih/6:0:ih*3/4") \
+        <(area_colours "$1" "2:ih*9/10:0:ih/20") <(area_colours "$1" "2:ih*9/10:iw-2:ih/20") \
+        <(area_colours "$1" "iw/2:2:iw/4:0"))
     if [ -z "$first" ]; then
         echo "ERROR: no frame of the recording shows the splash colour $colour" >&2
         exit 1
@@ -100,10 +114,11 @@ trim_to_splash() {
         -video_track_timescale 90000 -c:v libx264 -pix_fmt yuv420p "$2"
 }
 
-# Succeeds when two colour channel values are within 16 of each other. Usage: near <value> <value>
+# Succeeds when two colour channel values are within 6 of each other, which the video's compression keeps the splash colour within
+# and the opening window's last frames, still blending the launcher in at its edges, are not. Usage: near <value> <value>
 near() {
     local difference=$(($1 - $2))
-    [ "${difference#-}" -le 16 ]
+    [ "${difference#-}" -le 6 ]
 }
 
 # Stops a process this script started, and does not complain when it has already ended.
