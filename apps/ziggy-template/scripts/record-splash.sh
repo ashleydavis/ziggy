@@ -86,6 +86,12 @@ trim_to_splash() {
     local first=""
     local line
     local values
+    # The areas' colours, one line per frame, are written out first, so a recording with no splash frame can show what it had.
+    local areas
+    areas="$(mktemp)"
+    paste <(area_colours "$1" "iw:ih/6:0:ih/10") <(area_colours "$1" "iw:ih/6:0:ih*3/4") \
+        <(area_colours "$1" "2:ih*9/10:0:ih/20") <(area_colours "$1" "2:ih*9/10:iw-2:ih/20") \
+        <(area_colours "$1" "$3") > "$areas"
     while read -r line; do
         read -r -a values <<< "$line"
         local matches=true
@@ -102,13 +108,16 @@ trim_to_splash() {
             break
         fi
         frame=$((frame + 1))
-    done < <(paste <(area_colours "$1" "iw:ih/6:0:ih/10") <(area_colours "$1" "iw:ih/6:0:ih*3/4") \
-        <(area_colours "$1" "2:ih*9/10:0:ih/20") <(area_colours "$1" "2:ih*9/10:iw-2:ih/20") \
-        <(area_colours "$1" "$3"))
+    done < "$areas"
     if [ -z "$first" ]; then
-        echo "ERROR: no frame of the recording shows the splash colour $colour" >&2
+        echo "ERROR: no frame of the recording shows the splash colour $colour ($want_red $want_green $want_blue) in all five areas." >&2
+        echo "The recording's $(wc -l < "$areas") frames, every tenth, with the red, green and blue of the band near the top, the" \
+            "band near the bottom, the left edge, the right edge and the rows near the top:" >&2
+        sed -n '1~10p' "$areas" >&2
+        rm -f "$areas"
         exit 1
     fi
+    rm -f "$areas"
     # Each frame keeps its own time: screenrecord writes a frame only when the screen changes, and at a constant frame rate ffmpeg
     # dropped frames from a fade and repeated others.
     ffmpeg -loglevel error -y -i "$1" -vf "select=gte(n\,$first),setpts=PTS-STARTPTS" -fps_mode passthrough -enc_time_base demux \
