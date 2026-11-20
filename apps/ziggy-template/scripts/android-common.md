@@ -7,7 +7,7 @@ It resolves a JDK 17 and the Android SDK by sourcing `lib/android-env.sh` (which
 - `ziggy_android_require_commands <command...>`: fails unless each command is on the PATH.
 - `ziggy_android_ndk_version`: the NDK version the app's Android project pins in `native/android/variables.gradle`, so the Zig library is linked against the NDK Gradle builds with.
 - `ziggy_android_min_sdk`: the minimum SDK level, from the same `variables.gradle`.
-- `ziggy_android_gradle <arguments...>`: runs the app's Android project's Gradle wrapper.
+- `ziggy_android_gradle <arguments...>`: runs the app's Android project's Gradle wrapper, running it again (up to three times in all) when it failed because a Maven repository refused a download.
 - `ziggy_android_version`: the version in the app's `package.json`.
 - `ziggy_android_abi <x86_64|arm64>`: the Android ABI directory name.
 - `ziggy_android_write_libc_file <x86_64|arm64> <file> <sdk level>`: writes the libc file Zig is given for an Android target, from the NDK's sysroot.
