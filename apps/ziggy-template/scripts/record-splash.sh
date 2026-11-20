@@ -187,7 +187,31 @@ case "$platform" in
         sleep 1
         "$executable" "-geometry=800x560+112+60" &
         app_pid=$!
-        wait "$capture_pid"
+        # screencapture has gone on running long after the time it was given, until the job's time ran out: on a Splash videos run
+        # it was still running after 38 minutes. Given 20 seconds more than its time, it is interrupted, which ends a recording and
+        # writes it out, and if that does not end it either it is killed and the recording fails, naming it.
+        waited=0
+        while kill -0 "$capture_pid" 2> /dev/null && [ "$waited" -lt $((seconds + 21)) ]; do
+            sleep 1
+            waited=$((waited + 1))
+        done
+        if kill -0 "$capture_pid" 2> /dev/null; then
+            echo "screencapture was still recording $waited seconds after it started, so it is interrupted." >&2
+            kill -INT "$capture_pid" 2> /dev/null || true
+            for _ in $(seq 1 10); do
+                if ! kill -0 "$capture_pid" 2> /dev/null; then
+                    break
+                fi
+                sleep 1
+            done
+        fi
+        if kill -0 "$capture_pid" 2> /dev/null; then
+            kill -KILL "$capture_pid" 2> /dev/null || true
+            stop "$app_pid"
+            echo "ERROR: screencapture did not stop when it was interrupted." >&2
+            exit 1
+        fi
+        wait "$capture_pid" || true
         stop "$app_pid"
         ;;
     ios)
