@@ -191,11 +191,12 @@ case "$platform" in
         fi
         # The window's content is put at a known place and size, and only that area is kept: the title bar, whose close button is
         # red, the Dock and the rest of the desktop are not in the video. The menu bar is the system's, outside the window. The
-        # area is in pixels, which on the 1024x768 display of CI's runners are points. The encoder runs at its fastest setting, so
-        # it takes less of the runner while it records: at its default a CI runner kept 13 frames a second, with gaps of up to 300
-        # milliseconds in the fade.
-        ffmpeg -loglevel error -y -f avfoundation -capture_cursor 0 -framerate 30 -i "$screen:none" -t "$((seconds + 1))" \
-            -vf "crop=800:560:112:60" -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p "$output" &
+        # area is in pixels, which on the 1024x768 display of CI's runners are points. A CI runner kept 13 frames a second, with gaps
+        # of up to 466 milliseconds in the fade, where screencapture had kept a frame every 16 on the same app, both at the encoder's
+        # default setting and at its fastest. The input's queue of captured frames is made larger, since ffmpeg drops frames when
+        # it fills, and its warnings are printed so a recording that still drops frames says why.
+        ffmpeg -loglevel warning -y -f avfoundation -thread_queue_size 1024 -capture_cursor 0 -framerate 30 -i "$screen:none" \
+            -t "$((seconds + 1))" -vf "crop=800:560:112:60" -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p "$output" &
         ffmpeg_pid=$!
         sleep 1
         "$executable" "-geometry=800x560+112+60" &
