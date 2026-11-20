@@ -215,6 +215,12 @@ export function installSplashScreen(documentLike: IDocumentLike | Document, opti
 export function fadeOut(documentLike: IDocumentLike, overlay: ISplashElement, fadeDurationMilliseconds: number, onStarted: () => void, onRemoved: () => void): void {
     let fadeStartedAt = 0;
     let frames = 0;
+    let opacity = 1;
+    // The most the opacity moves in one frame: 100 milliseconds of the fade at its average speed. The curve's steepest part is 2.96
+    // times its average, so at 30 frames a second a frame moves it at most 99 milliseconds' worth and the fade keeps its timing.
+    // After the web view draws no frames for a while, which a slow device does, the fade goes on from where it was rather than
+    // jumping to where the clock says it should be.
+    const largestStep = Math.min(1, 100 / Math.max(1, fadeDurationMilliseconds));
 
     function step(): void {
         if (frames === 0) {
@@ -226,8 +232,9 @@ export function fadeOut(documentLike: IDocumentLike, overlay: ISplashElement, fa
         frames += 1;
         const elapsed = Date.now() - fadeStartedAt;
         const progress = Math.min(1, elapsed / Math.max(1, fadeDurationMilliseconds));
-        overlay.style.opacity = String(1 - fadeEasing(progress));
-        if (progress >= 1) {
+        opacity = Math.max(1 - fadeEasing(progress), opacity - largestStep);
+        overlay.style.opacity = String(opacity);
+        if (opacity <= 0) {
             if (frames === 1) {
                 onStarted();
             }
