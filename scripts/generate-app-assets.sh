@@ -284,14 +284,44 @@ printf '<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <style name="Ap
 
 # The Android 12 system splash icon: the middle of the splash image, at the scale the native app's splash picture
 # shows it, so the art keeps its size when the picture replaces the system splash. The system draws the icon in the
-# middle of the screen, 288 dp square by its documentation and 0.2% under that as measured on an Android 15 emulator
-# (1080x2400 at 440 dpi), and the picture scales the image to cover the screen, which on a mobile with the common long
-# side of 872 dp puts the icon across 287.4 * 2796 / 872 pixels of it. The system clips the icon to a circle 192 dp
-# across, so art wider than that loses its edges until the picture replaces it.
-splash_icon_size=$(( 2874 * 2796 / 8720 ))
-mkdir -p "$android_res/drawable-nodpi" "$android_res/drawable-port-nodpi" "$android_res/drawable-land-nodpi"
-convert "$assets_root/splash-portrait.png" -gravity center -crop "${splash_icon_size}x${splash_icon_size}+0+0" +repage -strip "$android_res/drawable-nodpi/splash_icon.png"
-convert "$assets_root/splash-portrait.png" -gravity center -crop "${splash_icon_size}x${splash_icon_size}+0+0" +repage -strip "$android_res/drawable-port-nodpi/splash_icon.png"
-convert "$assets_root/splash-landscape.png" -gravity center -crop "${splash_icon_size}x${splash_icon_size}+0+0" +repage -strip "$android_res/drawable-land-nodpi/splash_icon.png"
+# middle of the screen, 288 dp square: the foreground of a 160 dp icon enlarged by 1.2 when it has no background, with
+# the adaptive icon's extra quarter on each side. The picture draws the image at 288 / 923 dp per image pixel, so the
+# icon is the middle 923 pixels of the image. The system clips the icon to a circle 192 dp across, so art wider than
+# that loses its edges.
+#
+# The icon is written for each screen density at 288 dp, cut from the splash rendered at twice its size. One large icon
+# for every density was shrunk with coarse filtering on a low density screen and came out with its fine lines broken.
+# The system draws a still icon from a bitmap it renders at 108 dp and enlarges, so on a low density screen it is
+# softer than the native picture that replaces it. Wrapped in a one-frame animation it is drawn at full size, but then
+# the system sometimes shows its splash window before the icon, and the art pops in, so the icon is a still image.
+splash_icon_size=$(( 923 * 2 ))
+# The browser draws an SVG at the size its root element gives, so the twice-size render is of a copy whose root width and
+# height are doubled. Its viewBox scales the art to them.
+render_double_size() {
+    local source="$1"
+    local width="$2"
+    local height="$3"
+    local output="$4"
+    if ! head -c 1000 "$source" | grep -q "viewBox="; then
+        printf 'generate-app-assets: %s has no viewBox on its root element, so it cannot be drawn at twice its size.\n' "$source" >&2
+        exit 1
+    fi
+    local doubled="$app_directory/tmp/generate-app-assets-$(basename "$source")"
+    sed "0,/width=\"$width\" height=\"$height\"/s//width=\"$((width * 2))\" height=\"$((height * 2))\"/" "$source" > "$doubled"
+    if ! grep -q "width=\"$((width * 2))\" height=\"$((height * 2))\"" "$doubled"; then
+        printf 'generate-app-assets: the root element of %s does not say width="%s" height="%s".\n' "$source" "$width" "$height" >&2
+        exit 1
+    fi
+    render_svg "$doubled" "$((width * 2))" "$((height * 2))" "$output"
+}
+render_double_size "$assets_root/$portrait" 1290 2796 "$app_directory/tmp/generate-app-assets-splash-portrait-2x.png"
+render_double_size "$assets_root/$landscape" 2796 1290 "$app_directory/tmp/generate-app-assets-splash-landscape-2x.png"
+for entry in "mdpi 288" "hdpi 432" "xhdpi 576" "xxhdpi 864" "xxxhdpi 1152"; do
+    read -r density icon_size <<< "$entry"
+    mkdir -p "$android_res/drawable-$density" "$android_res/drawable-port-$density" "$android_res/drawable-land-$density"
+    convert "$app_directory/tmp/generate-app-assets-splash-portrait-2x.png" -gravity center -crop "${splash_icon_size}x${splash_icon_size}+0+0" +repage -resize "${icon_size}x${icon_size}" -strip "$android_res/drawable-$density/splash_icon.png"
+    cp "$android_res/drawable-$density/splash_icon.png" "$android_res/drawable-port-$density/splash_icon.png"
+    convert "$app_directory/tmp/generate-app-assets-splash-landscape-2x.png" -gravity center -crop "${splash_icon_size}x${splash_icon_size}+0+0" +repage -resize "${icon_size}x${icon_size}" -strip "$android_res/drawable-land-$density/splash_icon.png"
+done
 
 printf 'Generated the assets for %s.\n' "$app_name"

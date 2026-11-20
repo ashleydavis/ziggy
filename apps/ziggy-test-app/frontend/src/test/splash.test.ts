@@ -23,6 +23,7 @@ class FakeElement implements ISplashElement {
         objectFit: "",
         objectPosition: "",
         transform: "",
+        maxWidth: "",
     };
 
     attributes: Record<string, string> = {};
@@ -121,6 +122,7 @@ describe("installSplashScreen", () => {
         expect(image.attributes["alt"]).toBe("");
         expect(image.style.objectFit).toBe("var(--ziggy-splash-fit, cover)");
         expect(image.style.transform).toBe("scale(var(--ziggy-splash-scale, 1))");
+        expect(image.style.maxWidth).toBe("none");
         expect(image.style.position).toBe("absolute");
         expect(image.style.top).toBe("calc(-1 * var(--ziggy-window-inset-top, 0px) + (100% + var(--ziggy-window-inset-top, 0px) + var(--ziggy-window-inset-bottom, 0px)) * (1 - 1 / var(--ziggy-splash-scale, 1)) / 2)");
         expect(image.style.left).toBe("calc(-1 * var(--ziggy-window-inset-left, 0px) + (100% + var(--ziggy-window-inset-left, 0px) + var(--ziggy-window-inset-right, 0px)) * (1 - 1 / var(--ziggy-splash-scale, 1)) / 2)");
@@ -182,7 +184,7 @@ describe("installSplashScreen", () => {
         clock.mockRestore();
     });
 
-    test("onFadeStart is told the fade's duration as the fade starts, not before", () => {
+    test("onFadeStart is told the fade's duration at the fade's second frame, once its first is drawn, not before", () => {
         const documentLike = new FakeDocument();
         const durations: number[] = [];
         const splash = installSplashScreen(documentLike, {
@@ -194,6 +196,12 @@ describe("installSplashScreen", () => {
         splash.remove();
         expect(durations).toEqual([]);
         documentLike.defaultView.timeouts[0].callback();
+        expect(durations).toEqual([]);
+        documentLike.defaultView.frames[0](0);
+        expect(durations).toEqual([]);
+        documentLike.defaultView.frames[1](0);
+        expect(durations).toEqual([400]);
+        documentLike.defaultView.frames[2](0);
         expect(durations).toEqual([400]);
     });
 

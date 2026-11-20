@@ -2372,13 +2372,11 @@ fn revealAppView(native_app: *NativeApp) void {
         return;
     }
     // The picture goes above the web view's window, which WebView2 made after it, before that window is shown. Shown first, it
-    // drew one frame of its default background, the theme's, over the picture before the picture was raised. It is raised again
-    // after, in case showing the web view raises its window.
+    // drew one frame of its default background, the theme's, over the picture before the picture was raised.
     keepSplashPictureOnTop(native_app);
     if (native_app.controller) |controller| {
         check("put_IsVisible", controller.lpVtbl.*.put_IsVisible.?(controller, 1));
     }
-    keepSplashPictureOnTop(native_app);
     deliverToWebView(native_app, "{\"kind\":\"app\",\"data\":{\"type\":\"frontend-visible\"}}");
 }
 

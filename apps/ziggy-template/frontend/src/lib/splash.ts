@@ -47,6 +47,7 @@ export interface ISplashStyle {
     objectFit: string;
     objectPosition: string;
     transform: string;
+    maxWidth: string;
 }
 
 //
@@ -154,6 +155,9 @@ export function installSplashScreen(documentLike: IDocumentLike | Document, opti
     const windowHeight = "(100% + var(--ziggy-window-inset-top, 0px) + var(--ziggy-window-inset-bottom, 0px))";
     const scale = "var(--ziggy-splash-scale, 1)";
     portrait.style.display = "block";
+    // An app's base styles may cap every image at the width of its box (Tailwind gives img max-width: 100%), which shrank the
+    // enlarged box above back to the window and moved the art off screen on Android.
+    portrait.style.maxWidth = "none";
     portrait.style.position = "absolute";
     portrait.style.top = `calc(-1 * var(--ziggy-window-inset-top, 0px) + ${windowHeight} * (1 - 1 / ${scale}) / 2)`;
     portrait.style.left = `calc(-1 * var(--ziggy-window-inset-left, 0px) + ${windowWidth} * (1 - 1 / ${scale}) / 2)`;
@@ -193,8 +197,7 @@ export function installSplashScreen(documentLike: IDocumentLike | Document, opti
                     resolve();
                     return;
                 }
-                options.onFadeStart(options.fadeDurationMilliseconds);
-                fadeOut(documentInterface, overlay, options.fadeDurationMilliseconds, resolve);
+                fadeOut(documentInterface, overlay, options.fadeDurationMilliseconds, () => options.onFadeStart(options.fadeDurationMilliseconds), resolve);
             }, remaining);
         });
     }
@@ -205,16 +208,29 @@ export function installSplashScreen(documentLike: IDocumentLike | Document, opti
 }
 
 //
-// Fades the overlay out with easeOutCubic and removes it, resolving once it is gone.
+// Fades the overlay out with easeOutCubic and removes it, resolving once it is gone. The fade's clock starts at its first
+// frame, and onStarted is called at the frame after it, once the web view has drawn the fade's first step, so what the native
+// app fades with it (the menu bar's cover, the system bars' strips) starts with what is on screen rather than ahead of it.
 //
-export function fadeOut(documentLike: IDocumentLike, overlay: ISplashElement, fadeDurationMilliseconds: number, onRemoved: () => void): void {
-    const fadeStartedAt = Date.now();
+export function fadeOut(documentLike: IDocumentLike, overlay: ISplashElement, fadeDurationMilliseconds: number, onStarted: () => void, onRemoved: () => void): void {
+    let fadeStartedAt = 0;
+    let frames = 0;
 
     function step(): void {
+        if (frames === 0) {
+            fadeStartedAt = Date.now();
+        }
+        else if (frames === 1) {
+            onStarted();
+        }
+        frames += 1;
         const elapsed = Date.now() - fadeStartedAt;
         const progress = Math.min(1, elapsed / Math.max(1, fadeDurationMilliseconds));
         overlay.style.opacity = String(1 - fadeEasing(progress));
         if (progress >= 1) {
+            if (frames === 1) {
+                onStarted();
+            }
             overlay.remove();
             onRemoved();
             return;

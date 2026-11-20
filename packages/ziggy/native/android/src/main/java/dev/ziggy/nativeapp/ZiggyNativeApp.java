@@ -1,5 +1,8 @@
 package dev.ziggy.nativeapp;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.ValueAnimator;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -116,18 +119,26 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
     // The container that holds the app's web view and the splash picture, or null when the app has no splash.
     private FrameLayout splashContainer;
 
-    // The cover in the splash's background colour behind the web view, while the splash is showing, or null when it has ended.
+    // The view behind the web view that fills the system bars' strips beside it: the splash colour while the splash shows, then
+    // the theme's background, so the window's own background never shows there. Null when the app has no splash.
     private View barCover;
+
+    // The splash background colour, while the app has a splash.
+    private int splashColour;
+
+    // The background colour of the last theme call.
+    private int themeColour = Color.WHITE;
 
     // True while the system bars' strips show the splash colour, from when the splash is put up until its cover has faded.
     private boolean barsOverSplash;
 
     // The scale, in dp per image pixel, at which the system splash shows the splash image through its icon: scripts/
-    // generate-app-assets.sh cuts the icon as 287.4 * 2796 / 872 pixels of the image, which the system draws 287.4 dp across.
-    private static final float SPLASH_DP_PER_IMAGE_PIXEL = 872f / 2796f;
+    // generate-app-assets.sh cuts the icon as the middle 923 pixels of the image, which the system draws 288 dp across.
+    private static final float SPLASH_DP_PER_IMAGE_PIXEL = 288f / 923f;
 
-    // Whether the app's theme is dark, from its last theme call.
-    private boolean themeDark;
+    // The colour the system bars' strips show: the splash colour while the splash shows, the theme's background otherwise. The
+    // bars' icons are drawn dark over it when it is light.
+    private int barColour = Color.WHITE;
 
     // The messages the core sent before the frontend finished loading, held for the main thread to deliver when it has.
     private final ArrayList<String> beforeUi = new ArrayList<String>();
@@ -259,17 +270,19 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         }
         webView.setVisibility(View.INVISIBLE);
 
-        // The web view is kept clear of the system bars, so their strips show what is under it. This cover, in the splash's
-        // background colour, fills them while the frontend's overlay fades, and fades with it to the window's own background.
+        // The web view is kept clear of the system bars, so their strips show what is under it. This cover fills them in the
+        // splash colour while the splash shows, and changes with the frontend's overlay to the theme's background, which it keeps.
         byte[] coverColour = ZiggyNative.uiFileContent("/ziggy-splash-background.txt".getBytes(StandardCharsets.UTF_8));
         if (coverColour == null) {
             throw new IllegalStateException("Ziggy: the core's UI files have the splash images but not the splash background colour");
         }
+        splashColour = Color.parseColor(new String(coverColour, StandardCharsets.UTF_8));
         View cover = new View(activity);
-        cover.setBackgroundColor(Color.parseColor(new String(coverColour, StandardCharsets.UTF_8)));
+        cover.setBackgroundColor(splashColour);
         splashContainer.addView(cover, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         barCover = cover;
         barsOverSplash = true;
+        barColour = splashColour;
 
         splashContainer.addView(webView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -281,15 +294,26 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         // scaled to cover the window: the system splash icon has a fixed size in dp, so only a fixed scale matches it on every
         // screen. Where the image does not reach the window's edges, the splash background colour fills them.
         //
+        // The image is drawn at under half its size on most screens. Shrunk in one step it came out jagged, with its fine lines
+        // broken into dots, so it is first halved, smoothly, until what is left to shrink is no more than half.
+        float pixelsPerImagePixel = SPLASH_DP_PER_IMAGE_PIXEL * activity.getResources().getDisplayMetrics().density;
+        Bitmap shown = image;
+        float remainingScale = pixelsPerImagePixel;
+        while (remainingScale < 0.5f) {
+            shown = Bitmap.createScaledBitmap(shown, Math.max(1, shown.getWidth() / 2), Math.max(1, shown.getHeight() / 2), true);
+            remainingScale *= 2f;
+        }
+        float scaleX = pixelsPerImagePixel * image.getWidth() / shown.getWidth();
+        float scaleY = pixelsPerImagePixel * image.getHeight() / shown.getHeight();
+        Bitmap drawn = shown;
         ImageView picture = new ImageView(activity);
-        picture.setImageBitmap(image);
+        picture.setImageBitmap(drawn);
         picture.setBackgroundColor(Color.parseColor(new String(coverColour, StandardCharsets.UTF_8)));
         picture.setScaleType(ImageView.ScaleType.MATRIX);
-        float pixelsPerImagePixel = SPLASH_DP_PER_IMAGE_PIXEL * activity.getResources().getDisplayMetrics().density;
         picture.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             Matrix placement = new Matrix();
-            placement.setScale(pixelsPerImagePixel, pixelsPerImagePixel);
-            placement.postTranslate(((right - left) - image.getWidth() * pixelsPerImagePixel) / 2f, ((bottom - top) - image.getHeight() * pixelsPerImagePixel) / 2f);
+            placement.setScale(scaleX, scaleY);
+            placement.postTranslate(((right - left) - drawn.getWidth() * scaleX) / 2f, ((bottom - top) - drawn.getHeight() * scaleY) / 2f);
             ((ImageView) view).setImageMatrix(placement);
         });
         splashContainer.addView(picture, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -331,25 +355,73 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         }
         splashContainer.removeView(splashPicture);
         splashPicture = null;
-        View cover = barCover;
-        barCover = null;
-        cover.animate()
-            .alpha(0f)
-            .setDuration(durationMilliseconds)
-            .setInterpolator(new PathInterpolator(0.4f, 0f, 0.2f, 1f))
-            .withEndAction(() -> {
-                splashContainer.removeView(cover);
-                barsOverSplash = false;
-                applyBarAppearance();
-            });
+        // The bars' strips change from the splash colour to the theme's background on the overlay's curve over the same time,
+        // starting when the web view's frame with the fade's first step is drawn: the web view shows its frames later than the
+        // views beside it, so started at once the strips ran ahead of the page. Faded out instead of changing colour, they
+        // showed the window's own background.
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.VISUAL_STATE_CALLBACK)) {
+            WebViewCompat.postVisualStateCallback(webView, 0, requestId -> recolourBars(durationMilliseconds));
+        }
+        else {
+            recolourBars(durationMilliseconds);
+        }
     }
 
-    // Draws the status bar's and the navigation bar's icons dark over a light page and light over a dark one, or over the splash
-    // colour while the splash shows. Left as they are, they stay light, and over a light page they cannot be seen.
+    // Changes the system bars' strips from the splash colour to the theme's background over the duration, on the overlay's curve.
+    private void recolourBars(int durationMilliseconds) {
+        View cover = barCover;
+        if (cover == null) {
+            return;
+        }
+        // The colours are mixed in sRGB, as the web view mixes the overlay's opacity. ValueAnimator.ofArgb mixes in linear light,
+        // which made the strips lighter than the page all through the fade.
+        int from = splashColour;
+        int to = themeColour;
+        ValueAnimator recolour = ValueAnimator.ofFloat(0f, 1f);
+        recolour.setDuration(durationMilliseconds);
+        recolour.setInterpolator(new PathInterpolator(0.4f, 0f, 0.2f, 1f));
+        recolour.addUpdateListener(animation -> {
+            float progress = (float) animation.getAnimatedValue();
+            int colour = Color.rgb(
+                Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * progress),
+                Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * progress),
+                Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * progress));
+            cover.setBackgroundColor(colour);
+            setBarColour(colour);
+        });
+        recolour.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                barsOverSplash = false;
+                cover.setBackgroundColor(themeColour);
+                setBarColour(themeColour);
+            }
+        });
+        recolour.start();
+    }
+
+    // Records the colour the system bars' strips show and, when it crosses between dark and light, switches the bars' icons, so
+    // they turn dark as the strips turn light. Switched only once the strips had finished changing, they stayed white over the
+    // light page for a moment.
+    private void setBarColour(int colour) {
+        boolean wasLight = isLight(barColour);
+        barColour = colour;
+        if (isLight(colour) != wasLight) {
+            applyBarAppearance();
+        }
+    }
+
+    // Whether a colour is light, so that dark icons show over it.
+    private static boolean isLight(int colour) {
+        return Color.luminance(colour) > 0.5f;
+    }
+
+    // Draws the status bar's and the navigation bar's icons dark over light strips and light over dark ones. Left as they are,
+    // they stay light, and over a light page they cannot be seen.
     private void applyBarAppearance() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             int lightBars = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
-            activity.getWindow().getInsetsController().setSystemBarsAppearance(barsOverSplash || themeDark ? 0 : lightBars, lightBars);
+            activity.getWindow().getInsetsController().setSystemBarsAppearance(isLight(barColour) ? lightBars : 0, lightBars);
         }
     }
 
@@ -382,7 +454,14 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
             int colour = Color.parseColor(background);
             webView.setBackgroundColor(colour);
             activity.getWindow().getDecorView().setBackgroundColor(colour);
-            themeDark = dark;
+            themeColour = colour;
+            // While the splash shows, the strips keep the splash colour; splashFading changes them to this one.
+            if (!barsOverSplash) {
+                if (barCover != null) {
+                    barCover.setBackgroundColor(colour);
+                }
+                barColour = colour;
+            }
             applyBarAppearance();
             if (Build.VERSION.SDK_INT >= 29) {
                 activity.getTheme().applyStyle(dark ? R.style.ZiggyWebViewDark : R.style.ZiggyWebViewLight, true);

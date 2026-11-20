@@ -4,7 +4,9 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 
 ## v0.0.29
 
-- **Take the template's `frontend/src/lib/splash.ts` and its test again.** The overlay now reads `--ziggy-splash-fit` and `--ziggy-splash-scale`, which the Android native app sets so the art keeps the fixed scale of Android's system splash on every screen, and the iOS native app now sets `--ziggy-window-inset-<side>` too. Without it the art changes size on Android as the overlay takes over, and jumps on iOS.
+- **Android: run `scripts/generate-app-assets.sh` again, then delete `splash_icon.png` from `drawable-nodpi`, `drawable-port-nodpi` and `drawable-land-nodpi`.** The system splash icon is now written for each screen density (`drawable-mdpi` to `drawable-xxxhdpi`, with `-port` and `-land` versions), so the system no longer shrinks one large icon with coarse filtering, which blurred it and broke its fine lines on low density screens. A splash SVG needs a `viewBox` on its root element, because the generator draws it at twice its size.
+
+- **Take the template's `frontend/src/lib/splash.ts` and its test again.** The overlay now reads `--ziggy-splash-fit` and `--ziggy-splash-scale`, which the Android native app sets so the art keeps the fixed scale of Android's system splash on every screen, and the iOS native app now sets `--ziggy-window-inset-<side>` too. The overlay's image also sets `max-width: none`, so base styles that cap every image at the width of its box, as Tailwind's do, cannot shrink it. Without it the art changes size on Android as the overlay takes over, or vanishes before the fade, and jumps on iOS.
 
 ## v0.0.28
 
