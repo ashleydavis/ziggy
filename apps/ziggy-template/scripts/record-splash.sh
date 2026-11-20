@@ -206,6 +206,10 @@ case "$platform" in
             done
         fi
         if kill -0 "$capture_pid" 2> /dev/null; then
+            # What it is doing, so the cause can be found, and whether it has written the recording.
+            echo "screencapture's threads as it hangs:" >&2
+            sample "$capture_pid" 2 -mayDie >&2 || true
+            ls -la "$output" >&2 || true
             kill -KILL "$capture_pid" 2> /dev/null || true
             stop "$app_pid"
             echo "ERROR: screencapture did not stop when it was interrupted." >&2
