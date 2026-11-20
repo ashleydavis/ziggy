@@ -182,8 +182,9 @@ case "$platform" in
         # ffmpeg records the main display through AVFoundation, which names it "Capture screen 0" in its list of devices.
         # screencapture, which records through replayd, the system's screen recording service, hung on several Splash videos runs
         # waiting for replayd and wrote no recording.
-        screen="$(ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 \
-            | sed -n 's/.*\[\([0-9][0-9]*\)\] Capture screen 0$/\1/p' | head -n 1)"
+        # Listing the devices, ffmpeg opens no input and exits with an error, which is not a failure here.
+        devices="$(ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 || true)"
+        screen="$(printf '%s\n' "$devices" | sed -n 's/.*\[\([0-9][0-9]*\)\] Capture screen 0$/\1/p' | head -n 1)"
         if [ -z "$screen" ]; then
             echo "ERROR: ffmpeg lists no \"Capture screen 0\" device to record the main display." >&2
             exit 1
