@@ -53,6 +53,11 @@ pub const AppConfig = struct {
 const WM_ZIGGY_NATIVE: c.UINT = c.WM_APP + 1;
 // The timer that steps the fade of the splash colour on the menu bar.
 const menu_cover_timer: c.UINT_PTR = 1;
+// The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a recording.
+// A COLORREF is 0x00BBGGRR.
+const window_background_red: c.COLORREF = 0x000000FF;
+// The menu bar's cover is blue, so recordings show where it is and that it fades.
+const menu_cover_blue: c.COLORREF = 0x00FF0000;
 
 //
 // The name of the window class the native app registers.
@@ -622,7 +627,7 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
         window_class.hIconSm = window_class.hIcon;
     }
     window_class.lpszClassName = window_class_name.ptr;
-    window_class.hbrBackground = native_app.splash_background_brush;
+    window_class.hbrBackground = c.CreateSolidBrush(window_background_red);
     if (c.RegisterClassExW(&window_class) == 0) {
         return error.WindowClassFailed;
     }
@@ -1457,7 +1462,7 @@ fn buildMenu(native_app: *NativeApp, core: *anyopaque) !void {
             return error.MenuBuildFailed;
         }
         if (splash.configured) {
-            setMenuBarBackground(native_app, splashColour());
+            setMenuBarBackground(native_app, menu_cover_blue);
         }
         resizeWebView(native_app);
     }
@@ -2349,7 +2354,7 @@ fn stepMenuCoverFade(native_app: *NativeApp) void {
         return;
     }
     const eased = splash_fade.fadeEasing(progress);
-    const from = splashColour();
+    const from = menu_cover_blue;
     const to = c.GetSysColor(c.COLOR_MENUBAR);
     var blended: c.COLORREF = 0;
     var shift: u5 = 0;
@@ -2922,7 +2927,7 @@ fn applyTheme(native_app: *NativeApp, theme_call: native_message.ThemeCall) void
     if (native_app.background_brush) |old| {
         _ = c.DeleteObject(old);
     }
-    native_app.background_brush = c.CreateSolidBrush(@as(u32, background.red) | (@as(u32, background.green) << 8) | (@as(u32, background.blue) << 16));
+    native_app.background_brush = c.CreateSolidBrush(window_background_red);
     if (native_app.controller) |controller| {
         var controller2: ?*c.ICoreWebView2Controller2 = null;
         if (controller.lpVtbl.*.QueryInterface.?(controller, &c.IID_ICoreWebView2Controller2, @ptrCast(&controller2)) == c.S_OK) {

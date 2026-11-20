@@ -211,6 +211,8 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             createdWebView.backgroundColor = splashColour
             createdWebView.scrollView.backgroundColor = splashColour
         }
+        // The view behind the splash and the web view is red, so any frame in which they leave it showing is red in a recording.
+        container.backgroundColor = UIColor(red: 1, green: 0, blue: 0, alpha: 1)
         container.addSubview(createdWebView)
         container.addSubview(backdropView)
         self.view = container

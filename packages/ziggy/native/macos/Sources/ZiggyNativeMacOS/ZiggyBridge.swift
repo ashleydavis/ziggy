@@ -257,6 +257,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         if core != nil || destroyed {
             ZiggyBridge.fail("start was called more than once")
         }
+        // The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a
+        // recording.
+        view.window?.backgroundColor = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
 
         // Another window's Quit, or anything else that sends SIGTERM, ends this window, and only this window, as its own Quit
         // would. The empty C handler replaces the default action, which ends the process at once, so the dispatch source runs;
@@ -753,7 +756,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             NSApp.appearance = NSAppearance(named: .aqua)
         }
         let colour = ZiggyBridge.colour(background)
-        webView.window?.backgroundColor = colour
+        // The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a
+        // recording.
+        webView.window?.backgroundColor = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
         if #available(macOS 12.0, *) {
             webView.underPageBackgroundColor = colour
         }

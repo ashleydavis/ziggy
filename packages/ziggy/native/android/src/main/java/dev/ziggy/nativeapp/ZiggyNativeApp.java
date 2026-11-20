@@ -453,7 +453,9 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
             boolean dark = "dark".equals(theme);
             int colour = Color.parseColor(background);
             webView.setBackgroundColor(colour);
-            activity.getWindow().getDecorView().setBackgroundColor(colour);
+            // The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a
+            // recording.
+            activity.getWindow().getDecorView().setBackgroundColor(Color.RED);
             themeColour = colour;
             // While the splash shows, the strips keep the splash colour; splashFading changes them to this one.
             if (!barsOverSplash) {

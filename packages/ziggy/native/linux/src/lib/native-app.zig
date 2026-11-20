@@ -316,7 +316,9 @@ fn start(native_app: *NativeApp) !void {
     native_app.overlay = overlay_widget;
     reserveMenuSpace(native_app, box_widget);
     addSplashPicture(native_app, overlay_widget, width, height);
-    applySplashBackground(window_widget);
+    // The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a recording.
+    const window_background_red = c.GdkRGBA{ .red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0 };
+    c.gtk_widget_override_background_color(window_widget, c.GTK_STATE_FLAG_NORMAL, &window_background_red);
     if (splash.configured) {
         configureSplashWindow(window_widget, width, height, native_app.menu_space_height);
         c.gtk_widget_show_all(window_widget);
@@ -1104,7 +1106,8 @@ fn showMenuBar(native_app: *NativeApp) void {
 fn onMenuCoverDraw(widget: *c.GtkWidget, cairo: *c.Cairo, user_data: ?*anyopaque) callconv(.c) c.gboolean {
     _ = widget;
     const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
-    const background = parseBackground(splash.background);
+    // The menu bar's cover is blue, so recordings show where it is and that it fades.
+    const background = c.GdkRGBA{ .red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0 };
     c.cairo_set_source_rgba(cairo, background.red, background.green, background.blue, native_app.menu_cover_opacity);
     c.cairo_paint(cairo);
     return 1;
