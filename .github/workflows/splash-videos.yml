@@ -208,6 +208,13 @@ jobs:
         with:
           run: bun install
 
+      # record-splash.sh cuts the recording to start where the app's splash fills the screen, with ffmpeg.
+      - name: Install the video tools (iOS)
+        uses: ./.github/actions/retry-install
+        with:
+          run: brew install ffmpeg
+          verify: ffmpeg
+
       - name: Build the template for the simulator
         shell: bash
         working-directory: apps/ziggy-template
@@ -217,7 +224,7 @@ jobs:
       - name: Record the splash
         shell: bash
         working-directory: apps/ziggy-template
-        run: bash scripts/record-splash.sh --platform ios --app "$GITHUB_WORKSPACE/splash-build/xcode/Build/Products/Release-iphonesimulator/ZiggyTemplate.app" --seconds 20 --output "$GITHUB_WORKSPACE/splash-videos/ziggy-template-ios.mp4"
+        run: bash scripts/record-splash.sh --platform ios --app "$GITHUB_WORKSPACE/splash-build/xcode/Build/Products/Release-iphonesimulator/ZiggyTemplate.app" --seconds 40 --output "$GITHUB_WORKSPACE/splash-videos/ziggy-template-ios.mp4"
 
       - name: Upload the video
         uses: actions/upload-artifact@v4

@@ -67,12 +67,13 @@ area_colours() {
 }
 
 # Writes the video from the first frame in which the app's splash fills the screen, so the recording does not show what was on the
-# screen before the app opened (on Android, the launcher, which shows around the app's window as it opens). That frame is the first
-# in which five areas all have the splash colour from assets/assets.json: bands across the screen near its top and its bottom,
-# the two pixel columns at its left and right edges from below the status bar to above the navigation bar, where the opening
-# window's rounded corners show last, and the middle of the two pixel rows at its top edge. The art in the middle reaches none of
-# them. Fails when no frame has it.
-# Usage: trim_to_splash <video> <output>
+# screen before the app opened (the launcher on Android and the home screen on iOS, which show around the app's window as it
+# opens). That frame is the first in which five areas all have the splash colour from assets/assets.json: bands across the screen
+# near its top and its bottom, the two pixel columns at its left and right edges from below the status bar to above the
+# navigation bar, where the opening window's rounded corners show last, and the middle of two pixel rows near its top, which the
+# caller gives: the top edge on Android, and on iOS a tenth of the way down, below its status bar and camera cut-out, which are
+# not in the splash colour. The art in the middle reaches none of them. Fails when no frame has it.
+# Usage: trim_to_splash <video> <output> <the rows near the top, as ffmpeg's crop filter takes them>
 trim_to_splash() {
     require ffmpeg
     require jq
@@ -101,9 +102,9 @@ trim_to_splash() {
             break
         fi
         frame=$((frame + 1))
-    done < <(paste <(area_colours "$1" "iw:ih/6:0:ih/20") <(area_colours "$1" "iw:ih/6:0:ih*3/4") \
+    done < <(paste <(area_colours "$1" "iw:ih/6:0:ih/10") <(area_colours "$1" "iw:ih/6:0:ih*3/4") \
         <(area_colours "$1" "2:ih*9/10:0:ih/20") <(area_colours "$1" "2:ih*9/10:iw-2:ih/20") \
-        <(area_colours "$1" "iw/2:2:iw/4:0"))
+        <(area_colours "$1" "$3"))
     if [ -z "$first" ]; then
         echo "ERROR: no frame of the recording shows the splash colour $colour" >&2
         exit 1
@@ -209,6 +210,7 @@ case "$platform" in
         ;;
     ios)
         require xcrun
+        require ffmpeg
         require jq
         # The simulator ZIGGY_IOS_SIMULATOR names, otherwise one already booted, otherwise the first available iPhone.
         simulator="${ZIGGY_IOS_SIMULATOR:-}"
@@ -227,7 +229,8 @@ case "$platform" in
         bundle_id="$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$app/Info.plist")"
         xcrun simctl terminate "$simulator" "$bundle_id" 2> /dev/null || true
         xcrun simctl install "$simulator" "$app"
-        xcrun simctl io "$simulator" recordVideo --codec h264 --force "$output" &
+        whole="$(mktemp -t record-splash).mp4"
+        xcrun simctl io "$simulator" recordVideo --codec h264 --force "$whole" &
         record_pid=$!
         sleep 2
         xcrun simctl launch "$simulator" "$bundle_id" > /dev/null
@@ -236,6 +239,9 @@ case "$platform" in
         kill -INT "$record_pid"
         wait "$record_pid" || true
         xcrun simctl terminate "$simulator" "$bundle_id" 2> /dev/null || true
+        # The rows near the top are a tenth of the way down, below the status bar and the camera cut-out.
+        trim_to_splash "$whole" "$output" "iw/2:2:iw/4:ih/10"
+        rm -f "$whole"
         ;;
     android)
         require adb
@@ -260,7 +266,7 @@ case "$platform" in
         adb pull "$on_device" "$whole" > /dev/null
         adb shell rm -f "$on_device"
         adb shell am force-stop "$package"
-        trim_to_splash "$whole" "$output"
+        trim_to_splash "$whole" "$output" "iw/2:2:iw/4:0"
         rm -f "$whole"
         ;;
     *)
