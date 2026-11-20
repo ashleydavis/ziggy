@@ -58,10 +58,13 @@ require() {
     fi
 }
 
-# Prints the average colour of a band of each frame of a video, one "red green blue" line per frame. Usage: band_colours <video>
+# Prints the average colour of a band of each frame of a video, one "red green blue" line per frame, and no more lines than the
+# video has frames: at a constant frame rate ffmpeg would repeat frames, and the count would not match the frame numbers. Usage:
+# band_colours <video>
 # <top of the band, as an ffmpeg expression of ih>
 band_colours() {
-    ffmpeg -v error -i "$1" -vf "crop=iw:ih/6:0:$2,scale=1:1:flags=area" -f rawvideo -pix_fmt rgb24 - | od -An -v -tu1 -w3
+    ffmpeg -v error -i "$1" -vf "crop=iw:ih/6:0:$2,scale=1:1:flags=area" -fps_mode passthrough -enc_time_base demux -f rawvideo \
+        -pix_fmt rgb24 - | od -An -v -tu1 -w3
 }
 
 # Writes the video from the first frame in which the app's splash fills the screen, so the recording does not show what was on the
