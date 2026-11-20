@@ -194,8 +194,11 @@ case "$platform" in
         # area is in pixels, which on the 1024x768 display of CI's runners are points. A CI runner kept 13 frames a second, with gaps
         # of up to 466 milliseconds in the fade, where screencapture had kept a frame every 16 on the same app, both at the encoder's
         # default setting and at its fastest. The input's queue of captured frames is made larger, since ffmpeg drops frames when
-        # it fills, and its warnings are printed so a recording that still drops frames says why.
-        ffmpeg -loglevel warning -y -f avfoundation -thread_queue_size 1024 -capture_cursor 0 -framerate 30 -i "$screen:none" \
+        # it fills, and its warnings are printed so a recording that still drops frames says why. The frames are taken as bgr0, the
+        # display's own layout: with none asked for, AVFoundation converted each to uyvy422, with no hardware scaler on the runner
+        # ("IOServiceMatchingfailed for: AppleM2ScalerParavirtDriver"), and the recording still kept under 13 frames a second.
+        ffmpeg -loglevel warning -y -f avfoundation -thread_queue_size 1024 -pixel_format bgr0 -capture_cursor 0 -framerate 30 \
+            -i "$screen:none" \
             -t "$((seconds + 1))" -vf "crop=800:560:112:60" -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p "$output" &
         ffmpeg_pid=$!
         sleep 1
