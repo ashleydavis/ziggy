@@ -188,38 +188,36 @@ describe("installSplashScreen", () => {
         clock.mockRestore();
     });
 
-    test("after frames stop coming the fade goes on from where it was, 100 milliseconds of its average speed a frame at most", async () => {
+    test("after frames stop coming the fade goes on from where it was, at its own speed, by at most 100 milliseconds a frame", async () => {
         let now = 1000;
         const clock = jest.spyOn(Date, "now").mockImplementation(() => now);
         const documentLike = new FakeDocument();
+        const durations: number[] = [];
         const splash = installSplashScreen(documentLike, {
             background: "#1B1035",
             minimumDisplayMilliseconds: 600,
             fadeDurationMilliseconds: 400,
-            onFadeStart: () => {},
+            onFadeStart: durationMilliseconds => durations.push(durationMilliseconds),
         });
         const overlay = documentLike.body.children[0];
         const removal = splash.remove();
         documentLike.defaultView.timeouts[0].callback();
         documentLike.defaultView.frames[0](0);
         expect(overlay.style.opacity).toBe("1");
-        // No frame for 300 milliseconds, by when the curve is at 0.05: a quarter of the fade is the most one frame moves.
+        // No frame for 300 milliseconds: the fade moves on by 100 of them.
         now = 1300;
         documentLike.defaultView.frames[1](0);
-        expect(parseFloat(overlay.style.opacity)).toBeCloseTo(0.75, 5);
-        now = 1316;
-        documentLike.defaultView.frames[2](0);
-        expect(parseFloat(overlay.style.opacity)).toBeCloseTo(0.5, 5);
-        now = 1332;
-        documentLike.defaultView.frames[3](0);
-        expect(parseFloat(overlay.style.opacity)).toBeCloseTo(0.25, 5);
-        expect(overlay.removed).toBe(false);
-        now = 1348;
-        documentLike.defaultView.frames[4](0);
-        expect(parseFloat(overlay.style.opacity)).toBeCloseTo(1 - fadeEasing(348 / 400), 5);
-        expect(overlay.removed).toBe(false);
-        now = 1400;
-        documentLike.defaultView.frames[5](0);
+        expect(parseFloat(overlay.style.opacity)).toBeCloseTo(1 - fadeEasing(100 / 400), 5);
+        expect(durations).toEqual([400]);
+        // Then frames 25 milliseconds apart go on from there at the fade's own speed.
+        for (let frame = 2; frame < 13; frame++) {
+            now = 1300 + (frame - 1) * 25;
+            documentLike.defaultView.frames[frame](0);
+            expect(parseFloat(overlay.style.opacity)).toBeCloseTo(1 - fadeEasing((100 + (frame - 1) * 25) / 400), 5);
+            expect(overlay.removed).toBe(false);
+        }
+        now = 1300 + 12 * 25;
+        documentLike.defaultView.frames[13](0);
         expect(overlay.style.opacity).toBe("0");
         expect(overlay.removed).toBe(true);
         await removal;

@@ -208,33 +208,34 @@ export function installSplashScreen(documentLike: IDocumentLike | Document, opti
 }
 
 //
-// Fades the overlay out with easeOutCubic and removes it, resolving once it is gone. The fade's clock starts at its first
-// frame, and onStarted is called at the frame after it, once the web view has drawn the fade's first step, so what the native
-// app fades with it (the menu bar's cover, the system bars' strips) starts with what is on screen rather than ahead of it.
+// Fades the overlay out with easeOutCubic and removes it, resolving once it is gone. The fade starts at its first frame, and
+// onStarted is called at the frame after it, once the web view has drawn the fade's first step, so what the native app fades with
+// it (the menu bar's cover, the system bars' strips) starts with what is on screen rather than ahead of it.
+//
+// Each frame moves the fade on by the time since the frame before it, but by no more than largestFrameMilliseconds, a frame at 10
+// frames a second, so a slow device keeps the fade's timing. After the web view draws no frames for a while, which a slow device
+// does, the fade goes on from where it was at its own speed: following the clock, it jumped, or, kept to small steps, it hurried
+// through the rest and left the native app's fades behind.
 //
 export function fadeOut(documentLike: IDocumentLike, overlay: ISplashElement, fadeDurationMilliseconds: number, onStarted: () => void, onRemoved: () => void): void {
-    let fadeStartedAt = 0;
+    const largestFrameMilliseconds = 100;
+    let lastFrameAt = 0;
+    let elapsed = 0;
     let frames = 0;
-    let opacity = 1;
-    // The most the opacity moves in one frame: 100 milliseconds of the fade at its average speed. The curve's steepest part is 2.96
-    // times its average, so at 30 frames a second a frame moves it at most 99 milliseconds' worth and the fade keeps its timing.
-    // After the web view draws no frames for a while, which a slow device does, the fade goes on from where it was rather than
-    // jumping to where the clock says it should be.
-    const largestStep = Math.min(1, 100 / Math.max(1, fadeDurationMilliseconds));
 
     function step(): void {
-        if (frames === 0) {
-            fadeStartedAt = Date.now();
+        const now = Date.now();
+        if (frames > 0) {
+            elapsed += Math.min(largestFrameMilliseconds, Math.max(0, now - lastFrameAt));
         }
-        else if (frames === 1) {
+        if (frames === 1) {
             onStarted();
         }
+        lastFrameAt = now;
         frames += 1;
-        const elapsed = Date.now() - fadeStartedAt;
         const progress = Math.min(1, elapsed / Math.max(1, fadeDurationMilliseconds));
-        opacity = Math.max(1 - fadeEasing(progress), opacity - largestStep);
-        overlay.style.opacity = String(opacity);
-        if (opacity <= 0) {
+        overlay.style.opacity = String(1 - fadeEasing(progress));
+        if (progress >= 1) {
             if (frames === 1) {
                 onStarted();
             }
