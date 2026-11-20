@@ -513,6 +513,14 @@ fn onSplashPictureDraw(widget: *c.GtkWidget, cairo: *c.Cairo, user_data: ?*anyop
 // the other.
 //
 fn paintSplash(cairo: *c.Cairo, pixbuf: *c.GdkPixbuf, width: c_int, height: c_int, top: c_int) void {
+    // The top rows are the menu bar's space, in the cover's colour, so the cover is seen from the window's first frame and does not
+    // change as the picture over it goes. All of it is painted in that colour, then the splash only below the top rows.
+    if (top > 0) {
+        c.cairo_set_source_rgba(cairo, menu_cover_colour.red, menu_cover_colour.green, menu_cover_colour.blue, 1.0);
+        c.cairo_paint(cairo);
+        c.cairo_rectangle(cairo, 0.0, @floatFromInt(top), @floatFromInt(width), @floatFromInt(height - top));
+        c.cairo_clip(cairo);
+    }
     const background = parseBackground(splash.background);
     c.cairo_set_source_rgba(cairo, background.red, background.green, background.blue, 1.0);
     c.cairo_paint(cairo);
@@ -1101,14 +1109,17 @@ fn showMenuBar(native_app: *NativeApp) void {
 }
 
 //
-// Paints the menu bar's cover in the splash background colour, as opaque as the fade has left it.
+// The menu bar's cover is blue, so recordings show where it is and that it fades.
+//
+const menu_cover_colour = c.GdkRGBA{ .red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0 };
+
+//
+// Paints the menu bar's cover in its colour, as opaque as the fade has left it.
 //
 fn onMenuCoverDraw(widget: *c.GtkWidget, cairo: *c.Cairo, user_data: ?*anyopaque) callconv(.c) c.gboolean {
     _ = widget;
     const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
-    // The menu bar's cover is blue, so recordings show where it is and that it fades.
-    const background = c.GdkRGBA{ .red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0 };
-    c.cairo_set_source_rgba(cairo, background.red, background.green, background.blue, native_app.menu_cover_opacity);
+    c.cairo_set_source_rgba(cairo, menu_cover_colour.red, menu_cover_colour.green, menu_cover_colour.blue, native_app.menu_cover_opacity);
     c.cairo_paint(cairo);
     return 1;
 }
