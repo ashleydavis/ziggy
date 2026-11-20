@@ -69,9 +69,11 @@ const splash_picture_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggyS
 const menu_cover_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggyMenuCover");
 
 //
-// The window style: a normal top level window with a title bar, borders and the sizing and minimize and maximize buttons.
+// The window style: a normal top level window with a title bar, borders and the sizing and minimize and maximize buttons. It
+// clips its children, so erasing its background never paints over the splash picture or the web view: without it a recording
+// showed one frame of the window's background over the whole splash while the splash held.
 //
-const window_style: c.DWORD = c.WS_OVERLAPPEDWINDOW;
+const window_style: c.DWORD = c.WS_OVERLAPPEDWINDOW | c.WS_CLIPCHILDREN;
 
 //
 // Implements the parts of IUnknown that every handler object shares. A handler lives inside the NativeApp, which outlives
