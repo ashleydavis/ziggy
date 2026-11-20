@@ -91,7 +91,10 @@ trim_to_splash() {
         echo "ERROR: no frame of the recording shows the splash colour $colour" >&2
         exit 1
     fi
-    ffmpeg -loglevel error -y -i "$1" -vf "select=gte(n\,$first),setpts=PTS-STARTPTS" -c:v libx264 -pix_fmt yuv420p "$2"
+    # Each frame keeps its own time: screenrecord writes a frame only when the screen changes, and at a constant frame rate ffmpeg
+    # dropped frames from a fade and repeated others.
+    ffmpeg -loglevel error -y -i "$1" -vf "select=gte(n\,$first),setpts=PTS-STARTPTS" -fps_mode passthrough -enc_time_base demux \
+        -video_track_timescale 90000 -c:v libx264 -pix_fmt yuv420p "$2"
 }
 
 # Succeeds when two colour channel values are within 16 of each other. Usage: near <value> <value>
