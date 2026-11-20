@@ -50,104 +50,7 @@ if [ ! -e "$app" ]; then
 fi
 mkdir -p "$(dirname "$output")"
 
-# Fails naming the command when it is not installed.
-require() {
-    if ! command -v "$1" > /dev/null 2>&1; then
-        echo "ERROR: record-splash.sh needs $1, which is not on PATH." >&2
-        exit 1
-    fi
-}
-
-# Prints the average colours of five areas of each frame of a video, one line of fifteen values per frame (the red, green and blue
-# of each area in turn). Each area is read by an ffmpeg of its own, as macOS's ffmpeg crashed on one filter graph that read them
-# all, and in a time base fine enough to keep every frame apart, so ffmpeg writes each frame once. Fails, naming the counts, when
-# the areas do not all have the same number of frames. The values are put three to a line by xargs, as macOS's od has no -w.
-# Usage: area_colours <video> <area> <area> <area> <area> <area>, each as ffmpeg's crop filter takes it
-area_colours() {
-    local video="$1"
-    shift
-    local files=()
-    local counts=""
-    local area
-    local file
-    for area in "$@"; do
-        file="$(mktemp)"
-        ffmpeg -v error -i "$video" -vf "crop=$area,scale=1:1:flags=area" -fps_mode passthrough -enc_time_base 1/90000 -f rawvideo \
-            -pix_fmt rgb24 - | od -An -v -tu1 | xargs -n 3 > "$file"
-        files+=("$file")
-        counts="$counts $(wc -l < "$file" | tr -d ' ')"
-    done
-    if [ "$(printf '%s\n' $counts | sort -u | wc -l)" -ne 1 ]; then
-        echo "ERROR: the areas of $video have different numbers of frames:$counts" >&2
-        rm -f "${files[@]}"
-        exit 1
-    fi
-    paste -d ' ' "${files[@]}"
-    rm -f "${files[@]}"
-}
-
-# Writes the video from the first frame in which the app's splash fills the screen, so the recording does not show what was on the
-# screen before the app opened (the launcher on Android and the home screen on iOS, which show around the app's window as it
-# opens). That frame is the first in which five areas all have the splash colour from assets/assets.json: bands across the screen
-# near its top and its bottom, the two pixel columns at its left and right edges from below the status bar to above the
-# navigation bar, where the opening window's rounded corners show last, and the middle of two pixel rows near its top, which the
-# caller gives: the top edge on Android, and on iOS a tenth of the way down, below its status bar and camera cut-out, which are
-# not in the splash colour. The art in the middle reaches none of them. Fails when no frame has it.
-# Usage: trim_to_splash <video> <output> <the rows near the top, as ffmpeg's crop filter takes them>
-trim_to_splash() {
-    require ffmpeg
-    require jq
-    local colour
-    colour="$(jq -r '.background' "$(dirname "${BASH_SOURCE[0]}")/../assets/assets.json")"
-    local want_red=$((16#${colour:1:2}))
-    local want_green=$((16#${colour:3:2}))
-    local want_blue=$((16#${colour:5:2}))
-    local frame=0
-    local first=""
-    local line
-    local values
-    # The areas' colours, one line per frame, are written out first, so a recording with no splash frame can show what it had.
-    local areas
-    areas="$(mktemp)"
-    area_colours "$1" "iw:ih/6:0:ih/10" "iw:ih/6:0:ih*3/4" "2:ih*9/10:0:ih/20" "2:ih*9/10:iw-2:ih/20" "$3" > "$areas"
-    while read -r line; do
-        read -r -a values <<< "$line"
-        local matches=true
-        local index
-        for index in 0 3 6 9 12; do
-            if ! near "${values[index]}" "$want_red" || ! near "${values[index + 1]}" "$want_green" \
-                || ! near "${values[index + 2]}" "$want_blue"; then
-                matches=false
-                break
-            fi
-        done
-        if [ "$matches" = true ]; then
-            first=$frame
-            break
-        fi
-        frame=$((frame + 1))
-    done < "$areas"
-    if [ -z "$first" ]; then
-        echo "ERROR: no frame of the recording shows the splash colour $colour ($want_red $want_green $want_blue) in all five areas." >&2
-        echo "The recording's $(wc -l < "$areas") frames, every tenth, with the red, green and blue of the band near the top, the" \
-            "band near the bottom, the left edge, the right edge and the rows near the top:" >&2
-        sed -n '1~10p' "$areas" >&2
-        rm -f "$areas"
-        exit 1
-    fi
-    rm -f "$areas"
-    # Each frame keeps its own time: screenrecord writes a frame only when the screen changes, and at a constant frame rate ffmpeg
-    # dropped frames from a fade and repeated others.
-    ffmpeg -loglevel error -y -i "$1" -vf "select=gte(n\,$first),setpts=PTS-STARTPTS" -fps_mode passthrough -enc_time_base demux \
-        -video_track_timescale 90000 -c:v libx264 -pix_fmt yuv420p "$2"
-}
-
-# Succeeds when two colour channel values are within 6 of each other, which the video's compression keeps the splash colour within
-# and the opening window's last frames, still blending the launcher in at its edges, are not. Usage: near <value> <value>
-near() {
-    local difference=$(($1 - $2))
-    [ "${difference#-}" -le 6 ]
-}
+source "$(dirname "${BASH_SOURCE[0]}")/cut-to-splash.sh"
 
 # Stops a process this script started, and does not complain when it has already ended.
 stop() {
@@ -237,7 +140,6 @@ case "$platform" in
         ;;
     ios)
         require xcrun
-        require ffmpeg
         require jq
         # The simulator ZIGGY_IOS_SIMULATOR names, otherwise one already booted, otherwise the first available iPhone.
         simulator="${ZIGGY_IOS_SIMULATOR:-}"
@@ -256,8 +158,9 @@ case "$platform" in
         bundle_id="$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$app/Info.plist")"
         xcrun simctl terminate "$simulator" "$bundle_id" 2> /dev/null || true
         xcrun simctl install "$simulator" "$app"
-        whole="$(mktemp -t record-splash).mp4"
-        xcrun simctl io "$simulator" recordVideo --codec h264 --force "$whole" &
+        # The whole recording, home screen included: macOS's ffmpeg crashed cutting it, so it is cut on Linux with cut-to-splash.sh,
+        # with the rows near the top a tenth of the way down, below the status bar and the camera cut-out.
+        xcrun simctl io "$simulator" recordVideo --codec h264 --force "$output" &
         record_pid=$!
         sleep 2
         xcrun simctl launch "$simulator" "$bundle_id" > /dev/null
@@ -266,9 +169,6 @@ case "$platform" in
         kill -INT "$record_pid"
         wait "$record_pid" || true
         xcrun simctl terminate "$simulator" "$bundle_id" 2> /dev/null || true
-        # The rows near the top are a tenth of the way down, below the status bar and the camera cut-out.
-        trim_to_splash "$whole" "$output" "iw/2:2:iw/4:ih/10"
-        rm -f "$whole"
         ;;
     android)
         require adb

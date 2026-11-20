@@ -208,13 +208,6 @@ jobs:
         with:
           run: bun install
 
-      # record-splash.sh cuts the recording to start where the app's splash fills the screen, with ffmpeg.
-      - name: Install the video tools (iOS)
-        uses: ./.github/actions/retry-install
-        with:
-          run: brew install ffmpeg
-          verify: ffmpeg
-
       - name: Build the template for the simulator
         shell: bash
         working-directory: apps/ziggy-template
@@ -225,6 +218,41 @@ jobs:
         shell: bash
         working-directory: apps/ziggy-template
         run: bash scripts/record-splash.sh --platform ios --app "$GITHUB_WORKSPACE/splash-build/xcode/Build/Products/Release-iphonesimulator/ZiggyTemplate.app" --seconds 40 --output "$GITHUB_WORKSPACE/splash-videos/ziggy-template-ios.mp4"
+
+      # The whole recording, home screen included, which splash-video-ios-cut cuts to start on the splash.
+      - name: Upload the recording
+        uses: actions/upload-artifact@v4
+        with:
+          name: splash-recording-ios
+          path: splash-videos/ziggy-template-ios.mp4
+          retention-days: 3
+          if-no-files-found: error
+
+  # Cuts the iOS recording to start where the app's splash fills the screen, on Linux: macOS's ffmpeg crashed cutting it.
+  splash-video-ios-cut:
+    timeout-minutes: 15
+    runs-on: ubuntu-24.04
+    needs: splash-video-ios
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install the video tools
+        uses: ./.github/actions/install-apt-packages
+        with:
+          packages: ffmpeg jq
+          verify: ffmpeg jq
+
+      - name: Download the recording
+        uses: actions/download-artifact@v4
+        with:
+          name: splash-recording-ios
+          path: splash-recording
+
+      - name: Cut the recording to the splash
+        shell: bash
+        working-directory: apps/ziggy-template
+        run: bash scripts/cut-to-splash.sh "$GITHUB_WORKSPACE/splash-recording/ziggy-template-ios.mp4" "$GITHUB_WORKSPACE/splash-videos/ziggy-template-ios.mp4" "iw/2:2:iw/4:ih/10"
 
       - name: Upload the video
         uses: actions/upload-artifact@v4
