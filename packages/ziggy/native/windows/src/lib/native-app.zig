@@ -280,6 +280,10 @@ const NativeApp = struct {
     menu_actions: std.ArrayList(MenuAction),
     // The menu bar, or null when the app has no menu. Windows destroys it with the window.
     menu_bar: c.HMENU,
+    // True while the window paints its menu bar blue itself, from its first frame until the menu cover is over it.
+    menu_bar_blue: bool,
+    // The blue the window paints its menu bar in. Lives as long as the window.
+    menu_bar_blue_brush: c.HBRUSH,
     // With a splash, the window that covers the menu bar until the end of the splash's fade, or null when there is none. Windows
     // destroys it with the window, which owns it.
     menu_cover: c.HWND,
@@ -360,6 +364,8 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .menu_actions = .empty,
         .menu_bar = null,
         .menu_cover = null,
+        .menu_bar_blue = false,
+        .menu_bar_blue_brush = c.CreateSolidBrush(menu_cover_blue),
         .menu_cover_fade_started = 0,
         .menu_cover_fade_duration = 0,
         .accelerator_table = null,
@@ -739,6 +745,18 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
         return c.DefWindowProcW(window, message, wparam, lparam);
     };
     switch (message) {
+        WM_UAHDRAWMENU => {
+            if (paintMenuBarBlue(native_app, lparam)) {
+                return 1;
+            }
+            return c.DefWindowProcW(window, message, wparam, lparam);
+        },
+        WM_UAHDRAWMENUITEM => {
+            if (paintMenuItemBlue(native_app, lparam)) {
+                return 1;
+            }
+            return c.DefWindowProcW(window, message, wparam, lparam);
+        },
         c.WM_SIZE => {
             resizeWebView(native_app);
             placeMenuCover(native_app);
@@ -1259,19 +1277,17 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     check("add_NewWindowRequested", created_web_view.lpVtbl.*.add_NewWindowRequested.?(created_web_view, &native_app.new_window_handler.interface, &token));
     check("AddScriptToExecuteOnDocumentCreated", created_web_view.lpVtbl.*.AddScriptToExecuteOnDocumentCreated.?(created_web_view, native_app.inject_script.ptr, &native_app.script_added_handler.interface));
     addSplashPicture(native_app);
-    addMenuCover(native_app);
+    startMenuBarBlue(native_app);
     // The window is cloaked while it is shown and painted, so the first frame the desktop composes is the painted splash picture,
     // not the erase colour before it.
     const cloaked: c.BOOL = 1;
     _ = c.DwmSetWindowAttribute(native_app.window, c.DWMWA_CLOAK, &cloaked, @sizeOf(c.BOOL));
     _ = c.ShowWindow(native_app.window, c.SW_SHOW);
-    if (c.RedrawWindow(native_app.window, null, null, c.RDW_INVALIDATE | c.RDW_ERASE | c.RDW_UPDATENOW | c.RDW_ALLCHILDREN) == 0) {
+    if (c.RedrawWindow(native_app.window, null, null, c.RDW_INVALIDATE | c.RDW_ERASE | c.RDW_UPDATENOW | c.RDW_ALLCHILDREN | c.RDW_FRAME) == 0) {
         fatal("RedrawWindow failed", .{});
     }
-    showMenuCover(native_app);
     const uncloaked: c.BOOL = 0;
     _ = c.DwmSetWindowAttribute(native_app.window, c.DWMWA_CLOAK, &uncloaked, @sizeOf(c.BOOL));
-    uncloakMenuCover(native_app);
 }
 
 //
@@ -2312,15 +2328,74 @@ fn mainNavigationCompletedInvoke(this: [*c]c.ICoreWebView2NavigationCompletedEve
 }
 
 //
-// Puts the menu cover, a blue window, over the menu bar before the window is first shown, cloaked like the window so the desktop
-// first composes the two together. A Win32 menu bar is in the window's frame, which no child window can cover, and Windows paints it
-// in its theme's colours whatever background the menu asks for, so the cover is a window of its own, owned by the app's window so it
-// stays above it, and it fades by its transparency as the Linux cover does.
+// The undocumented messages Windows sends a window to draw its menu bar, which a window can answer to draw the bar itself. A
+// UAHMENU, which the first gives, starts with the menu and then the device context of the window's frame; a UAHDRAWMENUITEM,
+// which the second gives, starts with a DRAWITEMSTRUCT.
 //
-fn addMenuCover(native_app: *NativeApp) void {
+const WM_UAHDRAWMENU: c.UINT = 0x0091;
+const WM_UAHDRAWMENUITEM: c.UINT = 0x0092;
+const UahMenu = extern struct {
+    menu: c.HMENU,
+    device_context: c.HDC,
+    flags: c.DWORD,
+};
+
+//
+// With a splash, the window paints its own menu bar blue from its first frame, labels and all, as the Linux cover hides it. A
+// Win32 menu bar is in the window's frame, which no child window can cover, Windows paints it in its theme's colours whatever
+// background the menu asks for, and a window of its own over it was shown a frame after the window.
+//
+fn startMenuBarBlue(native_app: *NativeApp) void {
     if (!splash.configured or native_app.menu_bar == null) {
         return;
     }
+    native_app.menu_bar_blue = true;
+}
+
+//
+// Answers WM_UAHDRAWMENU while the menu bar is blue: fills the whole bar. Returns false when the menu bar is drawn as usual.
+//
+fn paintMenuBarBlue(native_app: *NativeApp, lparam: c.LPARAM) bool {
+    if (!native_app.menu_bar_blue) {
+        return false;
+    }
+    const menu: *const UahMenu = @ptrFromInt(@as(usize, @bitCast(lparam)));
+    var info = std.mem.zeroes(MenuBarInfo);
+    info.cbSize = @sizeOf(MenuBarInfo);
+    // -3 is OBJID_MENU, the window's menu bar.
+    if (GetMenuBarInfo(native_app.window, -3, 0, &info) == 0) {
+        fatal("GetMenuBarInfo failed, error {d}", .{c.GetLastError()});
+    }
+    var window_rect: c.RECT = undefined;
+    if (c.GetWindowRect(native_app.window, &window_rect) == 0) {
+        fatal("GetWindowRect failed, error {d}", .{c.GetLastError()});
+    }
+    // The bar is in screen coordinates and the device context is the window's, frame included.
+    var bar = info.rcBar;
+    _ = c.OffsetRect(&bar, -window_rect.left, -window_rect.top);
+    _ = FillRect(menu.device_context, &bar, native_app.menu_bar_blue_brush);
+    return true;
+}
+
+//
+// Answers WM_UAHDRAWMENUITEM while the menu bar is blue: fills the item, with no label. Returns false when the item is drawn as
+// usual.
+//
+fn paintMenuItemBlue(native_app: *NativeApp, lparam: c.LPARAM) bool {
+    if (!native_app.menu_bar_blue) {
+        return false;
+    }
+    const item: *const c.DRAWITEMSTRUCT = @ptrFromInt(@as(usize, @bitCast(lparam)));
+    _ = FillRect(item.hDC, &item.rcItem, native_app.menu_bar_blue_brush);
+    return true;
+}
+
+//
+// Shows the menu cover, a blue window owned by the app's window so it stays above it, over the blue menu bar, and once the desktop
+// has composed it gives the menu bar back to Windows under it. The cover then fades by its transparency, as the Linux cover does.
+// Shown late, it shows the same blue as the bar under it.
+//
+fn addMenuCover(native_app: *NativeApp) void {
     const cover = c.CreateWindowExW(
         c.WS_EX_LAYERED | c.WS_EX_TRANSPARENT | c.WS_EX_NOACTIVATE | c.WS_EX_TOOLWINDOW,
         menu_cover_class_name.ptr,
@@ -2340,34 +2415,17 @@ fn addMenuCover(native_app: *NativeApp) void {
     if (c.SetLayeredWindowAttributes(cover, 0, 255, c.LWA_ALPHA) == 0) {
         fatal("SetLayeredWindowAttributes failed for the menu cover, error {d}", .{c.GetLastError()});
     }
-    const cloaked: c.BOOL = 1;
-    _ = c.DwmSetWindowAttribute(cover, c.DWMWA_CLOAK, &cloaked, @sizeOf(c.BOOL));
     native_app.menu_cover = cover;
-}
-
-//
-// Shows the menu cover over the menu bar, where the window now is. Called while the window is still cloaked.
-//
-fn showMenuCover(native_app: *NativeApp) void {
-    const cover = native_app.menu_cover orelse {
-        return;
-    };
     placeMenuCover(native_app);
     _ = c.ShowWindow(cover, c.SW_SHOWNOACTIVATE);
     if (c.RedrawWindow(cover, null, null, c.RDW_INVALIDATE | c.RDW_ERASE | c.RDW_UPDATENOW) == 0) {
         fatal("RedrawWindow failed for the menu cover", .{});
     }
-}
-
-//
-// Uncloaks the menu cover, straight after the window, so the desktop shows them in the same frame.
-//
-fn uncloakMenuCover(native_app: *NativeApp) void {
-    const cover = native_app.menu_cover orelse {
-        return;
-    };
-    const uncloaked: c.BOOL = 0;
-    _ = c.DwmSetWindowAttribute(cover, c.DWMWA_CLOAK, &uncloaked, @sizeOf(c.BOOL));
+    // Two passes of the desktop's composition: the cover was a frame late when shown with the window.
+    _ = c.DwmFlush();
+    _ = c.DwmFlush();
+    native_app.menu_bar_blue = false;
+    _ = c.DrawMenuBar(native_app.window);
 }
 
 //
@@ -2403,21 +2461,23 @@ fn destroyMenuCover(native_app: *NativeApp) void {
 }
 
 //
-// The frontend's splash-fading message: its splash overlay has started to fade over the duration, so the menu cover fades out over
-// the same time on the same curve. A duration of 0 ends it at once.
+// The frontend's splash-fading message: its splash overlay has started to fade over the duration, so the blue over the menu bar fades
+// out over the same time on the same curve. A duration of 0 ends it at once.
 //
 fn startMenuCoverFade(native_app: *NativeApp, duration_milliseconds: u32) void {
     // The frontend's overlay, at full opacity, shows the splash under the picture, so the picture goes now.
     destroySplashPicture(native_app);
-    if (native_app.menu_cover == null) {
+    if (!native_app.menu_bar_blue) {
         return;
     }
     if (duration_milliseconds == 0) {
-        destroyMenuCover(native_app);
+        native_app.menu_bar_blue = false;
+        _ = c.DrawMenuBar(native_app.window);
         return;
     }
     native_app.menu_cover_fade_started = c.GetTickCount64();
     native_app.menu_cover_fade_duration = duration_milliseconds;
+    addMenuCover(native_app);
     if (c.SetTimer(native_app.window, menu_cover_timer, 16, null) == 0) {
         fatal("SetTimer failed, error {d}", .{c.GetLastError()});
     }
