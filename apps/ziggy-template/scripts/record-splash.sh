@@ -120,12 +120,18 @@ case "$platform" in
         display_file="$(mktemp)"
         Xvfb -displayfd 3 -screen 0 1280x1000x24 -nolisten tcp 3> "$display_file" > /dev/null 2>&1 &
         xvfb_pid=$!
-        for _ in $(seq 1 50); do
+        # Up to 30 seconds: on a CI runner Xvfb once took more than 5, and the recording and the app were given an empty display.
+        for _ in $(seq 1 300); do
             if [ -s "$display_file" ]; then
                 break
             fi
             sleep 0.1
         done
+        if [ ! -s "$display_file" ]; then
+            echo "ERROR: Xvfb did not start a display within 30 seconds." >&2
+            stop "$xvfb_pid"
+            exit 1
+        fi
         display=":$(cat "$display_file")"
         rm -f "$display_file"
         ffmpeg -loglevel error -y -f x11grab -framerate 30 -video_size 1280x1000 -i "$display" -t "$((seconds + 1))" \
