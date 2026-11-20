@@ -59,24 +59,31 @@ require() {
 }
 
 # Prints the average colours of five areas of each frame of a video, one line of fifteen values per frame (the red, green and blue
-# of each area in turn), from one decode of the video, so every area has a value for every frame. Each frame's areas are cropped,
-# scaled to one pixel each and put side by side, and the values are put fifteen to a line by xargs, as macOS's od has no -w. With
-# each frame's own time, in a time base fine enough to keep every frame apart, ffmpeg writes no repeated frames, which would put
-# the count out of step with the frame numbers.
+# of each area in turn). Each area is read by an ffmpeg of its own, as macOS's ffmpeg crashed on one filter graph that read them
+# all, and in a time base fine enough to keep every frame apart, so ffmpeg writes each frame once. Fails, naming the counts, when
+# the areas do not all have the same number of frames. The values are put three to a line by xargs, as macOS's od has no -w.
 # Usage: area_colours <video> <area> <area> <area> <area> <area>, each as ffmpeg's crop filter takes it
 area_colours() {
     local video="$1"
     shift
-    local graph="[0:v]split=5[s0][s1][s2][s3][s4]"
-    local index=0
+    local files=()
+    local counts=""
     local area
+    local file
     for area in "$@"; do
-        graph="$graph;[s$index]crop=$area,scale=1:1:flags=area[a$index]"
-        index=$((index + 1))
+        file="$(mktemp)"
+        ffmpeg -v error -i "$video" -vf "crop=$area,scale=1:1:flags=area" -fps_mode passthrough -enc_time_base 1/90000 -f rawvideo \
+            -pix_fmt rgb24 - | od -An -v -tu1 | xargs -n 3 > "$file"
+        files+=("$file")
+        counts="$counts $(wc -l < "$file" | tr -d ' ')"
     done
-    graph="$graph;[a0][a1][a2][a3][a4]hstack=inputs=5"
-    ffmpeg -v error -i "$video" -filter_complex "$graph" -fps_mode passthrough -enc_time_base 1/90000 -f rawvideo -pix_fmt rgb24 - \
-        | od -An -v -tu1 | xargs -n 15
+    if [ "$(printf '%s\n' $counts | sort -u | wc -l)" -ne 1 ]; then
+        echo "ERROR: the areas of $video have different numbers of frames:$counts" >&2
+        rm -f "${files[@]}"
+        exit 1
+    fi
+    paste -d ' ' "${files[@]}"
+    rm -f "${files[@]}"
 }
 
 # Writes the video from the first frame in which the app's splash fills the screen, so the recording does not show what was on the
