@@ -8,6 +8,8 @@ What an app has to change to move to each version of Ziggy, newest first. The `/
 
 - **Take the template's `frontend/src/lib/splash.ts` and its test again.** The overlay now reads `--ziggy-splash-fit` and `--ziggy-splash-scale`, which the Android native app sets so the art keeps the fixed scale of Android's system splash on every screen, and the iOS native app now sets `--ziggy-window-inset-<side>` too. The overlay's image also sets `max-width: none`, so base styles that cap every image at the width of its box, as Tailwind's do, cannot shrink it. Without it the art changes size on Android as the overlay takes over, or vanishes before the fade, and jumps on iOS.
 
+- **Android: add Google's mirror of Maven Central to `native/android/build.gradle`.** In both `repositories` blocks, put `maven { url 'https://maven-central.storage-download.googleapis.com/maven2/' }` before `mavenCentral()`, as the template does. Maven Central refuses busy networks with "429 Too Many Requests", which failed every Android build on CI's runners; Ziggy's own Android build already uses the mirror.
+
 ## v0.0.28
 
 - **Android: give the system splash the splash art at its full size.** Run `scripts/generate-app-assets.sh` for the app, which writes `splash_icon.png` in `drawable-nodpi`, `drawable-port-nodpi` and `drawable-land-nodpi` and points `android:windowSplashScreenAnimatedIcon` in `values-v31/styles.xml` at `@drawable/splash_icon`. Without it the system splash shows the small launcher icon, which jumps in size when the native splash picture replaces it. Keep the art inside the middle 192 dp circle, about 616 pixels across the middle of a 1290x2796 portrait image, as the template's art is: Android clips the system splash icon to that circle.
