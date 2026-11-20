@@ -757,6 +757,11 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
             }
             return c.DefWindowProcW(window, message, wparam, lparam);
         },
+        c.WM_NCPAINT, c.WM_NCACTIVATE => {
+            const result = c.DefWindowProcW(window, message, wparam, lparam);
+            paintMenuBarLineBlue(native_app);
+            return result;
+        },
         c.WM_SIZE => {
             resizeWebView(native_app);
             placeMenuCover(native_app);
@@ -2378,6 +2383,35 @@ fn paintMenuBarBlue(native_app: *NativeApp, lparam: c.LPARAM) bool {
 }
 
 //
+// While the menu bar is blue, paints over the one-pixel line Windows draws under the menu bar with its frame, which the menu bar's
+// own drawing does not reach: the recordings showed it as a light line between the blue bar and the splash. Called after Windows
+// has painted the frame, in the same message, so the line is never seen.
+//
+fn paintMenuBarLineBlue(native_app: *NativeApp) void {
+    if (!native_app.menu_bar_blue) {
+        return;
+    }
+    var info = std.mem.zeroes(MenuBarInfo);
+    info.cbSize = @sizeOf(MenuBarInfo);
+    // -3 is OBJID_MENU, the window's menu bar.
+    if (GetMenuBarInfo(native_app.window, -3, 0, &info) == 0) {
+        fatal("GetMenuBarInfo failed, error {d}", .{c.GetLastError()});
+    }
+    var window_rect: c.RECT = undefined;
+    if (c.GetWindowRect(native_app.window, &window_rect) == 0) {
+        fatal("GetWindowRect failed, error {d}", .{c.GetLastError()});
+    }
+    // The line is the row just below the bar. The bar is in screen coordinates and the window's device context includes the frame.
+    var line = c.RECT{ .left = info.rcBar.left, .top = info.rcBar.bottom, .right = info.rcBar.right, .bottom = info.rcBar.bottom + 1 };
+    _ = c.OffsetRect(&line, -window_rect.left, -window_rect.top);
+    const device_context = c.GetWindowDC(native_app.window) orelse {
+        fatal("GetWindowDC failed", .{});
+    };
+    _ = FillRect(device_context, &line, native_app.menu_bar_blue_brush);
+    _ = c.ReleaseDC(native_app.window, device_context);
+}
+
+//
 // Answers WM_UAHDRAWMENUITEM while the menu bar is blue: fills the item, with no label. Returns false when the item is drawn as
 // usual.
 //
@@ -2442,7 +2476,8 @@ fn placeMenuCover(native_app: *NativeApp) void {
         fatal("GetMenuBarInfo failed, error {d}", .{c.GetLastError()});
     }
     const bar = info.rcBar;
-    if (c.SetWindowPos(cover, null, bar.left, bar.top, bar.right - bar.left, bar.bottom - bar.top, c.SWP_NOACTIVATE | c.SWP_NOZORDER) == 0) {
+    // One row taller than the bar, to cover the line Windows draws under it (paintMenuBarLineBlue).
+    if (c.SetWindowPos(cover, null, bar.left, bar.top, bar.right - bar.left, bar.bottom - bar.top + 1, c.SWP_NOACTIVATE | c.SWP_NOZORDER) == 0) {
         fatal("SetWindowPos failed for the menu cover, error {d}", .{c.GetLastError()});
     }
 }
