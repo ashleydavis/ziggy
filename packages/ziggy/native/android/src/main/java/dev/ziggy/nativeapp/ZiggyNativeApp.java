@@ -1,8 +1,6 @@
 package dev.ziggy.nativeapp;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ValueAnimator;
+import android.animation.TimeAnimator;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
@@ -377,25 +375,27 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         // which made the strips lighter than the page all through the fade.
         int from = splashColour;
         int to = themeColour;
-        ValueAnimator recolour = ValueAnimator.ofFloat(0f, 1f);
-        recolour.setDuration(durationMilliseconds);
-        recolour.setInterpolator(new PathInterpolator(0.4f, 0f, 0.2f, 1f));
-        recolour.addUpdateListener(animation -> {
-            float progress = (float) animation.getAnimatedValue();
-            int colour = Color.rgb(
-                Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * progress),
-                Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * progress),
-                Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * progress));
-            cover.setBackgroundColor(colour);
-            setBarColour(colour);
-        });
-        recolour.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
+        PathInterpolator curve = new PathInterpolator(0.4f, 0f, 0.2f, 1f);
+        // A TimeAnimator gives the time gone, which the system's animation scale does not change: the web view's fade does not
+        // follow that setting, so with animations turned off a ValueAnimator jumped the strips to the theme's colour as the page
+        // started to fade.
+        TimeAnimator recolour = new TimeAnimator();
+        recolour.setTimeListener((animation, totalTime, deltaTime) -> {
+            float progress = Math.min(1f, totalTime / (float) Math.max(1, durationMilliseconds));
+            if (progress >= 1f) {
+                animation.end();
                 barsOverSplash = false;
                 cover.setBackgroundColor(themeColour);
                 setBarColour(themeColour);
+                return;
             }
+            float eased = curve.getInterpolation(progress);
+            int colour = Color.rgb(
+                Math.round(Color.red(from) + (Color.red(to) - Color.red(from)) * eased),
+                Math.round(Color.green(from) + (Color.green(to) - Color.green(from)) * eased),
+                Math.round(Color.blue(from) + (Color.blue(to) - Color.blue(from)) * eased));
+            cover.setBackgroundColor(colour);
+            setBarColour(colour);
         });
         recolour.start();
     }
