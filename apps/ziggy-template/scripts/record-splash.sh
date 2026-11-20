@@ -60,10 +60,11 @@ require() {
 
 # Prints the average colour of an area of each frame of a video, one "red green blue" line per frame, and no more lines than the
 # video has frames: at a constant frame rate ffmpeg would repeat frames, and the count would not match the frame numbers. Usage:
-# area_colours <video> <the area, as ffmpeg's crop filter takes it>
+# area_colours <video> <the area, as ffmpeg's crop filter takes it>. The values are put three to a line by xargs, as macOS's od
+# has no -w.
 area_colours() {
     ffmpeg -v error -i "$1" -vf "crop=$2,scale=1:1:flags=area" -fps_mode passthrough -enc_time_base demux -f rawvideo -pix_fmt rgb24 - \
-        | od -An -v -tu1 -w3
+        | od -An -v -tu1 | xargs -n 3
 }
 
 # Writes the video from the first frame in which the app's splash fills the screen, so the recording does not show what was on the
