@@ -128,9 +128,12 @@ case "$platform" in
         # it fills, and its warnings are printed so a recording that still drops frames says why. The frames are taken as bgr0, the
         # display's own layout: with none asked for, AVFoundation converted each to uyvy422, with no hardware scaler on the runner
         # ("IOServiceMatchingfailed for: AppleM2ScalerParavirtDriver"), and the recording still kept under 13 frames a second.
+        # The area kept starts four rows below the content's place, as on a CI runner the content started three rows lower than
+        # placed and the bottom of the light title bar showed as a line across the top of the video. It is 552 rows tall, an even
+        # number as the encoder needs, so it ends inside the content.
         ffmpeg -loglevel warning -y -f avfoundation -thread_queue_size 1024 -pixel_format bgr0 -capture_cursor 0 -framerate 30 \
             -i "$screen:none" \
-            -t "$((seconds + 1))" -vf "crop=800:560:112:60" -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p "$output" &
+            -t "$((seconds + 1))" -vf "crop=800:552:112:64" -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p "$output" &
         ffmpeg_pid=$!
         sleep 1
         "$executable" "-geometry=800x560+112+60" &
