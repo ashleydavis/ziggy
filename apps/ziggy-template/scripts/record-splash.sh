@@ -176,46 +176,28 @@ case "$platform" in
         stop "$app_pid"
         ;;
     macos)
-        require screencapture
-        # screencapture records the main display for the number of seconds given. The app is the .app bundle, run by its executable
-        # so this script owns its process.
+        require ffmpeg
+        # The app is the .app bundle, run by its executable so this script owns its process.
         executable="$app/Contents/MacOS/$(/usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$app/Contents/Info.plist")"
-        # The window's content is put at a known place and size, and only that area is recorded: the title bar, whose close
-        # button is red, the Dock and the rest of the desktop are not in the video. The menu bar is the system's, outside the window.
-        screencapture -v -V "$((seconds + 1))" -R 112,60,800,560 "$output" &
-        capture_pid=$!
+        # ffmpeg records the main display through AVFoundation, which names it "Capture screen 0" in its list of devices.
+        # screencapture, which records through replayd, the system's screen recording service, hung on several Splash videos runs
+        # waiting for replayd and wrote no recording.
+        screen="$(ffmpeg -hide_banner -f avfoundation -list_devices true -i "" 2>&1 \
+            | sed -n 's/.*\[\([0-9][0-9]*\)\] Capture screen 0$/\1/p' | head -n 1)"
+        if [ -z "$screen" ]; then
+            echo "ERROR: ffmpeg lists no \"Capture screen 0\" device to record the main display." >&2
+            exit 1
+        fi
+        # The window's content is put at a known place and size, and only that area is kept: the title bar, whose close button is
+        # red, the Dock and the rest of the desktop are not in the video. The menu bar is the system's, outside the window. The
+        # area is in pixels, which on the 1024x768 display of CI's runners are points.
+        ffmpeg -loglevel error -y -f avfoundation -capture_cursor 0 -framerate 30 -i "$screen:none" -t "$((seconds + 1))" \
+            -vf "crop=800:560:112:60" -c:v libx264 -pix_fmt yuv420p "$output" &
+        ffmpeg_pid=$!
         sleep 1
         "$executable" "-geometry=800x560+112+60" &
         app_pid=$!
-        # screencapture has gone on running long after the time it was given, until the job's time ran out: on a Splash videos run
-        # it was still running after 38 minutes. Given 20 seconds more than its time, it is interrupted, which ends a recording and
-        # writes it out, and if that does not end it either it is killed and the recording fails, naming it.
-        waited=0
-        while kill -0 "$capture_pid" 2> /dev/null && [ "$waited" -lt $((seconds + 21)) ]; do
-            sleep 1
-            waited=$((waited + 1))
-        done
-        if kill -0 "$capture_pid" 2> /dev/null; then
-            echo "screencapture was still recording $waited seconds after it started, so it is interrupted." >&2
-            kill -INT "$capture_pid" 2> /dev/null || true
-            for _ in $(seq 1 10); do
-                if ! kill -0 "$capture_pid" 2> /dev/null; then
-                    break
-                fi
-                sleep 1
-            done
-        fi
-        if kill -0 "$capture_pid" 2> /dev/null; then
-            # What it is doing, so the cause can be found, and whether it has written the recording.
-            echo "screencapture's threads as it hangs:" >&2
-            sample "$capture_pid" 2 -mayDie >&2 || true
-            ls -la "$output" >&2 || true
-            kill -KILL "$capture_pid" 2> /dev/null || true
-            stop "$app_pid"
-            echo "ERROR: screencapture did not stop when it was interrupted." >&2
-            exit 1
-        fi
-        wait "$capture_pid" || true
+        wait "$ffmpeg_pid"
         stop "$app_pid"
         ;;
     ios)

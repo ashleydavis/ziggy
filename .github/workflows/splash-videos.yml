@@ -156,6 +156,13 @@ jobs:
         with:
           run: bun install
 
+      # record-splash.sh records macOS with ffmpeg: screencapture hung waiting on replayd, the system's screen recording service.
+      - name: Install the recorder (macOS)
+        uses: ./.github/actions/retry-install
+        with:
+          run: brew install ffmpeg
+          verify: ffmpeg
+
       - name: Build the template
         shell: bash
         working-directory: apps/ziggy-template

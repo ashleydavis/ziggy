@@ -18,7 +18,7 @@ What it needs and does on each platform:
 - **Linux**: `Xvfb` and `ffmpeg`. Records a display of its own, 1280x1000, with `ffmpeg`'s x11grab, and starts the app on it with
   `ZIGGY_THEME=dark` unless `ZIGGY_THEME` is already set.
 - **Windows**: `ffmpeg`. Starts the app with `-geometry=800x560+112+20` and records the 848x704 area at 96,0 around its window with `ffmpeg`'s gdigrab: the window's title bar and menu bar are in the video, and the desktop's icons and the taskbar are not.
-- **macOS**: starts the app with `-geometry=800x560+112+60`, which puts the window's content at 112,60, and records only that area with `screencapture`, which needs the screen recording permission. The title bar and the Dock are not in the video. A `screencapture` still running 20 seconds after its time is interrupted, and killed with the recording failing if that does not stop it.
+- **macOS**: `ffmpeg`. Starts the app with `-geometry=800x560+112+60`, which puts the window's content at 112,60, and records the main display through ffmpeg's AVFoundation input ("Capture screen 0"), which needs the screen recording permission, keeping only that area. The title bar and the Dock are not in the video. The area is in pixels, which are points on the 1024x768 display of CI's runners.
 - **iOS**: `xcrun` and `jq`. Installs the app on the simulator `ZIGGY_IOS_SIMULATOR` names, else one already booted, else the first
   available iPhone, and records it with `simctl io recordVideo`.
 - **Android**: `adb`, `ffmpeg` and `jq`. Installs the app on the device `ANDROID_SERIAL` names (else adb's only device) and records it with
