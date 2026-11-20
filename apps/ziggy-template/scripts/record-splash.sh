@@ -58,13 +58,25 @@ require() {
     fi
 }
 
-# Prints the average colour of an area of each frame of a video, one "red green blue" line per frame, and no more lines than the
-# video has frames: at a constant frame rate ffmpeg would repeat frames, and the count would not match the frame numbers. Usage:
-# area_colours <video> <the area, as ffmpeg's crop filter takes it>. The values are put three to a line by xargs, as macOS's od
-# has no -w.
+# Prints the average colours of five areas of each frame of a video, one line of fifteen values per frame (the red, green and blue
+# of each area in turn), from one decode of the video, so every area has a value for every frame. Each frame's areas are cropped,
+# scaled to one pixel each and put side by side, and the values are put fifteen to a line by xargs, as macOS's od has no -w. With
+# each frame's own time, in a time base fine enough to keep every frame apart, ffmpeg writes no repeated frames, which would put
+# the count out of step with the frame numbers.
+# Usage: area_colours <video> <area> <area> <area> <area> <area>, each as ffmpeg's crop filter takes it
 area_colours() {
-    ffmpeg -v error -i "$1" -vf "crop=$2,scale=1:1:flags=area" -fps_mode passthrough -enc_time_base demux -f rawvideo -pix_fmt rgb24 - \
-        | od -An -v -tu1 | xargs -n 3
+    local video="$1"
+    shift
+    local graph="[0:v]split=5[s0][s1][s2][s3][s4]"
+    local index=0
+    local area
+    for area in "$@"; do
+        graph="$graph;[s$index]crop=$area,scale=1:1:flags=area[a$index]"
+        index=$((index + 1))
+    done
+    graph="$graph;[a0][a1][a2][a3][a4]hstack=inputs=5"
+    ffmpeg -v error -i "$video" -filter_complex "$graph" -fps_mode passthrough -enc_time_base 1/90000 -f rawvideo -pix_fmt rgb24 - \
+        | od -An -v -tu1 | xargs -n 15
 }
 
 # Writes the video from the first frame in which the app's splash fills the screen, so the recording does not show what was on the
@@ -90,9 +102,7 @@ trim_to_splash() {
     # The areas' colours, one line per frame, are written out first, so a recording with no splash frame can show what it had.
     local areas
     areas="$(mktemp)"
-    paste <(area_colours "$1" "iw:ih/6:0:ih/10") <(area_colours "$1" "iw:ih/6:0:ih*3/4") \
-        <(area_colours "$1" "2:ih*9/10:0:ih/20") <(area_colours "$1" "2:ih*9/10:iw-2:ih/20") \
-        <(area_colours "$1" "$3") > "$areas"
+    area_colours "$1" "iw:ih/6:0:ih/10" "iw:ih/6:0:ih*3/4" "2:ih*9/10:0:ih/20" "2:ih*9/10:iw-2:ih/20" "$3" > "$areas"
     while read -r line; do
         read -r -a values <<< "$line"
         local matches=true
@@ -265,10 +275,28 @@ case "$platform" in
         # The shell's own folder, which is always writable: on CI's emulator, just after it booted, screenrecord could not open a
         # file in /sdcard ("Operation not permitted").
         on_device="/data/local/tmp/record-splash-$$.mp4"
+        # The app's launcher activity, once Android can find it: on CI's emulator, just after it booted and the app was installed,
+        # monkey found no activity to start and failed. Up to 60 seconds.
+        launcher=""
+        for _ in $(seq 1 60); do
+            launcher="$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$package" | tail -n 1 | tr -d '\r')"
+            case "$launcher" in
+                "$package"/*)
+                    break
+                    ;;
+            esac
+            launcher=""
+            sleep 1
+        done
+        if [ -z "$launcher" ]; then
+            echo "ERROR: Android found no launcher activity for $package within 60 seconds of installing it." >&2
+            exit 1
+        fi
         adb shell screenrecord --time-limit "$((seconds + 1))" "$on_device" &
         record_pid=$!
         sleep 1
-        adb shell monkey -p "$package" -c android.intent.category.LAUNCHER 1 > /dev/null
+        # Started as the launcher starts it.
+        adb shell am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n "$launcher" > /dev/null
         wait "$record_pid"
         # screenrecord finishes writing the file a moment after it exits.
         sleep 1
