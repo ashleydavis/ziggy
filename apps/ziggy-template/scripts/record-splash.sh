@@ -208,7 +208,9 @@ case "$platform" in
         # ANDROID_SERIAL picks the device, as it does for adb itself.
         adb install -r "$app" > /dev/null
         adb shell am force-stop "$package"
-        on_device="/sdcard/record-splash-$$.mp4"
+        # The shell's own folder, which is always writable: on CI's emulator, just after it booted, screenrecord could not open a
+        # file in /sdcard ("Operation not permitted").
+        on_device="/data/local/tmp/record-splash-$$.mp4"
         adb shell screenrecord --time-limit "$((seconds + 1))" "$on_device" &
         record_pid=$!
         sleep 1
