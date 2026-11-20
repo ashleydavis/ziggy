@@ -65,6 +65,8 @@ const menu_cover_blue: c.COLORREF = 0x00FF0000;
 const window_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggyNativeAppWindow");
 // The class of the child window that shows the splash picture over the web view.
 const splash_picture_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggySplashPicture");
+// The class of the window that covers the menu bar while the splash shows.
+const menu_cover_class_name = std.unicode.utf8ToUtf16LeStringLiteral("ZiggyMenuCover");
 
 //
 // The window style: a normal top level window with a title bar, borders and the sizing and minimize and maximize buttons.
@@ -276,10 +278,10 @@ const NativeApp = struct {
     menu_actions: std.ArrayList(MenuAction),
     // The menu bar, or null when the app has no menu. Windows destroys it with the window.
     menu_bar: c.HMENU,
-    // With a splash, the brush the menu bar's background is painted in, the splash colour fading to the system's menu colour, or
-    // null once the menu bar has its own background. Owned.
-    menu_cover_brush: c.HBRUSH,
-    // When the fade of the menu bar's splash colour started and how long it takes, in milliseconds of GetTickCount64.
+    // With a splash, the window that covers the menu bar until the end of the splash's fade, or null when there is none. Windows
+    // destroys it with the window, which owns it.
+    menu_cover: c.HWND,
+    // When the fade of the menu cover started and how long it takes, in milliseconds of GetTickCount64.
     menu_cover_fade_started: u64,
     menu_cover_fade_duration: u64,
     // The shortcuts of the menu as a table for the message loop, or null for none. Owned.
@@ -355,7 +357,7 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .remote_control = taken.remote_control,
         .menu_actions = .empty,
         .menu_bar = null,
-        .menu_cover_brush = null,
+        .menu_cover = null,
         .menu_cover_fade_started = 0,
         .menu_cover_fade_duration = 0,
         .accelerator_table = null,
@@ -639,6 +641,15 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
     if (c.RegisterClassExW(&picture_class) == 0) {
         return error.WindowClassFailed;
     }
+    var cover_class = std.mem.zeroes(c.WNDCLASSEXW);
+    cover_class.cbSize = @sizeOf(c.WNDCLASSEXW);
+    cover_class.lpfnWndProc = c.DefWindowProcW;
+    cover_class.hInstance = instance;
+    cover_class.hbrBackground = c.CreateSolidBrush(menu_cover_blue);
+    cover_class.lpszClassName = menu_cover_class_name.ptr;
+    if (c.RegisterClassExW(&cover_class) == 0) {
+        return error.WindowClassFailed;
+    }
 
     // The size the command line gives is the size of the frontend, and a pixel here is a pixel at 96 DPI.
     const dpi = c.GetDpiForSystem();
@@ -728,9 +739,11 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
     switch (message) {
         c.WM_SIZE => {
             resizeWebView(native_app);
+            placeMenuCover(native_app);
             return 0;
         },
         c.WM_MOVE => {
+            placeMenuCover(native_app);
             if (native_app.controller) |controller| {
                 check("NotifyParentWindowPositionChanged", controller.lpVtbl.*.NotifyParentWindowPositionChanged.?(controller));
             }
@@ -868,6 +881,19 @@ fn paintSplash(native_app: *NativeApp, window: c.HWND) void {
 //
 extern "user32" fn FillRect(device_context: ?*anyopaque, rect: *const c.RECT, brush: c.HBRUSH) callconv(.winapi) c_int;
 
+//
+// MENUBARINFO, which C's translation leaves opaque because it ends in bit fields: fBarFocused and fFocused share the last DWORD.
+//
+const MenuBarInfo = extern struct {
+    cbSize: c.DWORD,
+    rcBar: c.RECT,
+    hMenu: c.HMENU,
+    hwndMenu: c.HWND,
+    focus_bits: c.DWORD,
+};
+
+extern "user32" fn GetMenuBarInfo(window: c.HWND, object: c.LONG, item: c.LONG, info: *MenuBarInfo) callconv(.winapi) c.BOOL;
+
 extern "gdi32" fn StretchDIBits(device_context: c.HDC, x_dest: c_int, y_dest: c_int, dest_width: c_int, dest_height: c_int, x_src: c_int, y_src: c_int, src_width: c_int, src_height: c_int, bits: ?*const anyopaque, info: ?*const anyopaque, usage: c.UINT, rop: c.DWORD) callconv(.winapi) c_int;
 
 //
@@ -896,10 +922,6 @@ fn closeWebView(native_app: *NativeApp) void {
     if (native_app.splash_background_brush) |brush| {
         _ = c.DeleteObject(brush);
         native_app.splash_background_brush = null;
-    }
-    if (native_app.menu_cover_brush) |brush| {
-        _ = c.DeleteObject(brush);
-        native_app.menu_cover_brush = null;
     }
     if (native_app.web_view) |web_view| {
         _ = web_view.lpVtbl.*.Release.?(web_view);
@@ -1235,6 +1257,7 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     check("add_NewWindowRequested", created_web_view.lpVtbl.*.add_NewWindowRequested.?(created_web_view, &native_app.new_window_handler.interface, &token));
     check("AddScriptToExecuteOnDocumentCreated", created_web_view.lpVtbl.*.AddScriptToExecuteOnDocumentCreated.?(created_web_view, native_app.inject_script.ptr, &native_app.script_added_handler.interface));
     addSplashPicture(native_app);
+    addMenuCover(native_app);
     // The window is cloaked while it is shown and painted, so the first frame the desktop composes is the painted splash picture,
     // not the erase colour before it.
     const cloaked: c.BOOL = 1;
@@ -1243,8 +1266,10 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     if (c.RedrawWindow(native_app.window, null, null, c.RDW_INVALIDATE | c.RDW_ERASE | c.RDW_UPDATENOW | c.RDW_ALLCHILDREN) == 0) {
         fatal("RedrawWindow failed", .{});
     }
+    showMenuCover(native_app);
     const uncloaked: c.BOOL = 0;
     _ = c.DwmSetWindowAttribute(native_app.window, c.DWMWA_CLOAK, &uncloaked, @sizeOf(c.BOOL));
+    uncloakMenuCover(native_app);
 }
 
 //
@@ -1460,9 +1485,6 @@ fn buildMenu(native_app: *NativeApp, core: *anyopaque) !void {
         native_app.menu_bar = menu_bar;
         if (c.SetMenu(native_app.window, menu_bar) == 0) {
             return error.MenuBuildFailed;
-        }
-        if (splash.configured) {
-            setMenuBarBackground(native_app, menu_cover_blue);
         }
         resizeWebView(native_app);
     }
@@ -2288,50 +2310,108 @@ fn mainNavigationCompletedInvoke(this: [*c]c.ICoreWebView2NavigationCompletedEve
 }
 
 //
-// The splash background colour as a COLORREF.
+// Puts the menu cover, a blue window, over the menu bar before the window is first shown, cloaked like the window so the desktop
+// first composes the two together. A Win32 menu bar is in the window's frame, which no child window can cover, and Windows paints it
+// in its theme's colours whatever background the menu asks for, so the cover is a window of its own, owned by the app's window so it
+// stays above it, and it fades by its transparency as the Linux cover does.
 //
-fn splashColour() c.COLORREF {
-    const colour = splash_windows.parseColor(splash.background) catch {
-        fatal("the splash background {s} is not a #RRGGBB colour", .{splash.background});
+fn addMenuCover(native_app: *NativeApp) void {
+    if (!splash.configured or native_app.menu_bar == null) {
+        return;
+    }
+    const cover = c.CreateWindowExW(
+        c.WS_EX_LAYERED | c.WS_EX_TRANSPARENT | c.WS_EX_NOACTIVATE | c.WS_EX_TOOLWINDOW,
+        menu_cover_class_name.ptr,
+        null,
+        c.WS_POPUP,
+        0,
+        0,
+        0,
+        0,
+        native_app.window,
+        null,
+        c.GetModuleHandleW(null),
+        null,
+    ) orelse {
+        fatal("the menu cover window could not be created, error {d}", .{c.GetLastError()});
     };
-    return @as(c.COLORREF, colour.red) | (@as(c.COLORREF, colour.green) << 8) | (@as(c.COLORREF, colour.blue) << 16);
+    if (c.SetLayeredWindowAttributes(cover, 0, 255, c.LWA_ALPHA) == 0) {
+        fatal("SetLayeredWindowAttributes failed for the menu cover, error {d}", .{c.GetLastError()});
+    }
+    const cloaked: c.BOOL = 1;
+    _ = c.DwmSetWindowAttribute(cover, c.DWMWA_CLOAK, &cloaked, @sizeOf(c.BOOL));
+    native_app.menu_cover = cover;
 }
 
 //
-// Paints the menu bar's background in the colour, or gives it back its own background for null. A Win32 menu bar cannot be covered
-// as the Linux one is, so with a splash its background takes the splash colour and fades from it; its labels show throughout.
+// Shows the menu cover over the menu bar, where the window now is. Called while the window is still cloaked.
 //
-fn setMenuBarBackground(native_app: *NativeApp, colour: ?c.COLORREF) void {
-    const menu_bar = native_app.menu_bar orelse {
+fn showMenuCover(native_app: *NativeApp) void {
+    const cover = native_app.menu_cover orelse {
         return;
     };
-    const brush: c.HBRUSH = if (colour) |value| c.CreateSolidBrush(value) else null;
-    var info = std.mem.zeroes(c.MENUINFO);
-    info.cbSize = @sizeOf(c.MENUINFO);
-    info.fMask = c.MIM_BACKGROUND;
-    info.hbrBack = brush;
-    if (c.SetMenuInfo(menu_bar, &info) == 0) {
-        fatal("SetMenuInfo failed, error {d}", .{c.GetLastError()});
+    placeMenuCover(native_app);
+    _ = c.ShowWindow(cover, c.SW_SHOWNOACTIVATE);
+    if (c.RedrawWindow(cover, null, null, c.RDW_INVALIDATE | c.RDW_ERASE | c.RDW_UPDATENOW) == 0) {
+        fatal("RedrawWindow failed for the menu cover", .{});
     }
-    if (native_app.menu_cover_brush) |old_brush| {
-        _ = c.DeleteObject(old_brush);
-    }
-    native_app.menu_cover_brush = brush;
-    _ = c.DrawMenuBar(native_app.window);
 }
 
 //
-// The frontend's splash-fading message: its splash overlay has started to fade over the duration, so the menu bar's background
-// fades from the splash colour to the system's menu colour over the same time on the same curve. A duration of 0 ends it at once.
+// Uncloaks the menu cover, straight after the window, so the desktop shows them in the same frame.
+//
+fn uncloakMenuCover(native_app: *NativeApp) void {
+    const cover = native_app.menu_cover orelse {
+        return;
+    };
+    const uncloaked: c.BOOL = 0;
+    _ = c.DwmSetWindowAttribute(cover, c.DWMWA_CLOAK, &uncloaked, @sizeOf(c.BOOL));
+}
+
+//
+// Moves the menu cover onto the menu bar, which moves with the window.
+//
+fn placeMenuCover(native_app: *NativeApp) void {
+    const cover = native_app.menu_cover orelse {
+        return;
+    };
+    var info = std.mem.zeroes(MenuBarInfo);
+    info.cbSize = @sizeOf(MenuBarInfo);
+    // -3 is OBJID_MENU, the window's menu bar.
+    if (GetMenuBarInfo(native_app.window, -3, 0, &info) == 0) {
+        fatal("GetMenuBarInfo failed, error {d}", .{c.GetLastError()});
+    }
+    const bar = info.rcBar;
+    if (c.SetWindowPos(cover, null, bar.left, bar.top, bar.right - bar.left, bar.bottom - bar.top, c.SWP_NOACTIVATE | c.SWP_NOZORDER) == 0) {
+        fatal("SetWindowPos failed for the menu cover, error {d}", .{c.GetLastError()});
+    }
+}
+
+//
+// Destroys the menu cover, showing the menu bar under it.
+//
+fn destroyMenuCover(native_app: *NativeApp) void {
+    const cover = native_app.menu_cover orelse {
+        return;
+    };
+    native_app.menu_cover = null;
+    if (c.DestroyWindow(cover) == 0) {
+        fatal("DestroyWindow failed for the menu cover, error {d}", .{c.GetLastError()});
+    }
+}
+
+//
+// The frontend's splash-fading message: its splash overlay has started to fade over the duration, so the menu cover fades out over
+// the same time on the same curve. A duration of 0 ends it at once.
 //
 fn startMenuCoverFade(native_app: *NativeApp, duration_milliseconds: u32) void {
     // The frontend's overlay, at full opacity, shows the splash under the picture, so the picture goes now.
     destroySplashPicture(native_app);
-    if (native_app.menu_cover_brush == null) {
+    if (native_app.menu_cover == null) {
         return;
     }
     if (duration_milliseconds == 0) {
-        setMenuBarBackground(native_app, null);
+        destroyMenuCover(native_app);
         return;
     }
     native_app.menu_cover_fade_started = c.GetTickCount64();
@@ -2342,29 +2422,24 @@ fn startMenuCoverFade(native_app: *NativeApp, duration_milliseconds: u32) void {
 }
 
 //
-// One step of the menu bar's fade, on its timer: paints the background in the colour for the time gone, and gives the menu bar back
-// its own background once the fade is over.
+// One step of the menu cover's fade, on its timer: sets its opacity for the time gone, and destroys it once the fade is over.
 //
 fn stepMenuCoverFade(native_app: *NativeApp) void {
+    const cover = native_app.menu_cover orelse {
+        _ = c.KillTimer(native_app.window, menu_cover_timer);
+        return;
+    };
     const elapsed = c.GetTickCount64() - native_app.menu_cover_fade_started;
     const progress = @as(f64, @floatFromInt(elapsed)) / @as(f64, @floatFromInt(native_app.menu_cover_fade_duration));
     if (progress >= 1.0) {
         _ = c.KillTimer(native_app.window, menu_cover_timer);
-        setMenuBarBackground(native_app, null);
+        destroyMenuCover(native_app);
         return;
     }
-    const eased = splash_fade.fadeEasing(progress);
-    const from = menu_cover_blue;
-    const to = c.GetSysColor(c.COLOR_MENUBAR);
-    var blended: c.COLORREF = 0;
-    var shift: u5 = 0;
-    while (shift <= 16) : (shift += 8) {
-        const from_channel: f64 = @floatFromInt((from >> shift) & 0xff);
-        const to_channel: f64 = @floatFromInt((to >> shift) & 0xff);
-        const channel: c.COLORREF = @intFromFloat(@round(from_channel + (to_channel - from_channel) * eased));
-        blended |= channel << shift;
+    const alpha: u8 = @intFromFloat(@round(255.0 * (1.0 - splash_fade.fadeEasing(progress))));
+    if (c.SetLayeredWindowAttributes(cover, 0, alpha, c.LWA_ALPHA) == 0) {
+        fatal("SetLayeredWindowAttributes failed for the menu cover, error {d}", .{c.GetLastError()});
     }
-    setMenuBarBackground(native_app, blended);
 }
 
 //
