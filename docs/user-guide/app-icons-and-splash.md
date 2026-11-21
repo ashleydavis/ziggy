@@ -21,6 +21,15 @@ Add `.splash` to the app's `app.zon`:
 - `background` is the CSS colour behind the images. It is also the colour the native window and the system launch screen use, so the change from the system splash to the app's is invisible.
 - `portrait` is the PNG shown when the window is taller than it is wide.
 - `landscape` is the PNG shown when the window is at least as wide as it is tall.
+- `window_background`, optional, is the `#RRGGBB` colour of the window's own background on Linux and Windows, which shows only where the splash and the web view leave the window uncovered. Without it that is the splash background, and on Windows the theme's background once the frontend gives it.
+- `menu_cover`, optional, is the `#RRGGBB` colour of the cover over the menu bar on Linux and Windows, which fades out with the frontend's splash overlay. Without it the cover is the splash background.
+
+The window background on the other platforms is set in the app's own files, and without it is the theme's background:
+
+- **macOS and iOS**: `ZiggyWindowBackground`, a `#RRGGBB` string, in the app's `Info.plist`.
+- **Android**: `<meta-data android:name="dev.ziggy.WINDOW_BACKGROUND" android:value="#RRGGBB" />` in the `<application>` of the app's `AndroidManifest.xml`.
+
+The template sets the window background to red and the menu cover to blue on every platform, so a splash recording shows any frame that leaves the window uncovered and where the menu cover is as it fades. An app made from the template sets its own colours or removes these settings.
 
 The paths are relative to the app's build root. A 1290x2796 portrait image and a 2796x1290 landscape image match every screen the app runs on.
 

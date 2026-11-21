@@ -332,6 +332,13 @@ pub const ISplash = struct {
     portrait: []const u8,
     // The landscape image, a PNG, relative to the app's build root. A matching .bmp sits beside it for Windows.
     landscape: []const u8,
+    // The "#RRGGBB" colour of the window's own background on Linux and Windows, which shows wherever the splash and the web view
+    // leave the window uncovered, or null for the splash background, and on Windows the theme's background once the frontend gives
+    // it.
+    window_background: ?[]const u8 = null,
+    // The "#RRGGBB" colour of the cover over the menu bar on Linux and Windows, which fades out with the frontend's splash overlay,
+    // or null for the splash background.
+    menu_cover: ?[]const u8 = null,
 };
 
 //
@@ -827,10 +834,14 @@ fn addSplashModule(b: *std.Build, details: IAppDetails) !*std.Build.Module {
     const generated = b.addWriteFiles();
     const splash_details = details.splash orelse {
         return b.createModule(.{
-            .root_source_file = generated.add("splash.zig", "pub const configured = false;\npub const background = \"#000000\";\npub const portrait_png = \"\";\npub const landscape_png = \"\";\npub const portrait_bmp = \"\";\npub const landscape_bmp = \"\";\n"),
+            .root_source_file = generated.add("splash.zig", "pub const configured = false;\npub const background = \"#000000\";\npub const window_background: ?[]const u8 = null;\npub const menu_cover = \"#000000\";\npub const portrait_png = \"\";\npub const landscape_png = \"\";\npub const portrait_bmp = \"\";\npub const landscape_bmp = \"\";\n"),
         });
     };
-    const source = try std.fmt.allocPrint(b.allocator, "pub const configured = true;\npub const background = \"{f}\";\npub const portrait_png = @embedFile(\"splash-portrait-png\");\npub const landscape_png = @embedFile(\"splash-landscape-png\");\npub const portrait_bmp = @embedFile(\"splash-portrait-bmp\");\npub const landscape_bmp = @embedFile(\"splash-landscape-bmp\");\n", .{std.zig.fmtString(splash_details.background)});
+    checkSplashColour("window_background", splash_details.window_background);
+    checkSplashColour("menu_cover", splash_details.menu_cover);
+    const window_background = if (splash_details.window_background) |colour| b.fmt("\"{f}\"", .{std.zig.fmtString(colour)}) else "null";
+    const menu_cover = splash_details.menu_cover orelse splash_details.background;
+    const source = try std.fmt.allocPrint(b.allocator, "pub const configured = true;\npub const background = \"{f}\";\npub const window_background: ?[]const u8 = {s};\npub const menu_cover = \"{f}\";\npub const portrait_png = @embedFile(\"splash-portrait-png\");\npub const landscape_png = @embedFile(\"splash-landscape-png\");\npub const portrait_bmp = @embedFile(\"splash-portrait-bmp\");\npub const landscape_bmp = @embedFile(\"splash-landscape-bmp\");\n", .{ std.zig.fmtString(splash_details.background), window_background, std.zig.fmtString(menu_cover) });
     const module = b.createModule(.{
         .root_source_file = generated.add("splash.zig", source),
     });
@@ -847,6 +858,25 @@ fn addSplashModule(b: *std.Build, details: IAppDetails) !*std.Build.Module {
         .root_source_file = b.path(splashBmpPath(b, splash_details.landscape)),
     });
     return module;
+}
+
+//
+// Fails the build, naming the field, when a colour the app's app.zon gives for its splash is not "#RRGGBB", which is the only form
+// the native apps read.
+//
+fn checkSplashColour(field: []const u8, colour: ?[]const u8) void {
+    const text = colour orelse {
+        return;
+    };
+    const valid = text.len == 7 and text[0] == '#' and for (text[1..]) |character| {
+        if (!std.ascii.isHex(character)) {
+            break false;
+        }
+    }
+    else true;
+    if (!valid) {
+        std.debug.panic("the splash {s} \"{s}\" in the app's app.zon is not a #RRGGBB colour", .{ field, text });
+    }
 }
 
 //

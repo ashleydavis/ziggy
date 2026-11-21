@@ -211,8 +211,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             createdWebView.backgroundColor = splashColour
             createdWebView.scrollView.backgroundColor = splashColour
         }
-        // The view behind the splash and the web view is red, so any frame in which they leave it showing is red in a recording.
-        container.backgroundColor = UIColor(red: 1, green: 0, blue: 0, alpha: 1)
+        if let windowBackground = ZiggyBridge.windowBackground {
+            container.backgroundColor = windowBackground
+        }
         container.addSubview(createdWebView)
         container.addSubview(backdropView)
         self.view = container
@@ -812,6 +813,18 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         webView.backgroundColor = colour
         webView.scrollView.backgroundColor = colour
     }
+
+    // The colour of the view behind the splash and the web view, which shows wherever they leave it uncovered: the "#RRGGBB" the
+    // app's Info.plist gives as ZiggyWindowBackground, or nil when it gives none.
+    private static let windowBackground: UIColor? = {
+        guard let text = Bundle.main.object(forInfoDictionaryKey: "ZiggyWindowBackground") as? String else {
+            return nil
+        }
+        guard text.count == 7, text.hasPrefix("#"), UInt32(text.dropFirst(), radix: 16) != nil else {
+            ZiggyBridge.fail("the ZiggyWindowBackground \(text) in the app's Info.plist is not a #RRGGBB colour")
+        }
+        return colour(text)
+    }()
 
     // A colour from a "#rrggbb" background.
     private static func colour(_ text: String) -> UIColor {

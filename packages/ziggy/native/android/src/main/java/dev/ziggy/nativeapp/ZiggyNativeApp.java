@@ -6,6 +6,7 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.IntentSender;
 import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.content.ClipData;
@@ -127,6 +128,13 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
     // The background colour of the last theme call.
     private int themeColour = Color.WHITE;
 
+    // The meta-data in the app's manifest that gives the colour of the window's own background, which shows wherever the splash and
+    // the web view leave the window uncovered.
+    private static final String WINDOW_BACKGROUND = "dev.ziggy.WINDOW_BACKGROUND";
+
+    // The colour of the window's own background from the app's manifest, or null when it gives none, for the theme's background.
+    private Integer windowBackground;
+
     // True while the system bars' strips show the splash colour, from when the splash is put up until its cover has faded.
     private boolean barsOverSplash;
 
@@ -198,6 +206,7 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
     // Creates the core, configures the web view and loads the frontend. Call it once, on the main thread.
     public void start() {
         System.loadLibrary(nativeLibraryName);
+        windowBackground = readWindowBackground();
         Intent intent = activity.getIntent();
         String remoteControl = RemoteControlExtra.address(intent.getStringExtra(RemoteControlExtra.NAME));
         // The test app's smoke tests keep the app's config and state files apart from other runs by starting it with these two
@@ -443,6 +452,26 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         }
     }
 
+    // The colour the app's manifest gives as the WINDOW_BACKGROUND meta-data, or null when it gives none. A "#RRGGBB" meta-data value
+    // is stored as a colour, so any other value fails here.
+    private Integer readWindowBackground() {
+        ApplicationInfo info;
+        try {
+            info = activity.getPackageManager().getApplicationInfo(activity.getPackageName(), PackageManager.GET_META_DATA);
+        }
+        catch (PackageManager.NameNotFoundException error) {
+            throw new IllegalStateException("Ziggy: the app's own package " + activity.getPackageName() + " was not found", error);
+        }
+        if (info.metaData == null || !info.metaData.containsKey(WINDOW_BACKGROUND)) {
+            return null;
+        }
+        Object value = info.metaData.get(WINDOW_BACKGROUND);
+        if (!(value instanceof Integer)) {
+            throw new IllegalStateException("Ziggy: the " + WINDOW_BACKGROUND + " meta-data " + value + " in the app's manifest is not a #RRGGBB colour");
+        }
+        return (Integer) value;
+    }
+
     // Sets the web view's colour scheme and background from a theme call's JSON.
     private void applyTheme(String json) {
         try {
@@ -453,9 +482,7 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
             boolean dark = "dark".equals(theme);
             int colour = Color.parseColor(background);
             webView.setBackgroundColor(colour);
-            // The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a
-            // recording.
-            activity.getWindow().getDecorView().setBackgroundColor(Color.RED);
+            activity.getWindow().getDecorView().setBackgroundColor(windowBackground != null ? windowBackground : colour);
             themeColour = colour;
             // While the splash shows, the strips keep the splash colour; splashFading changes them to this one.
             if (!barsOverSplash) {

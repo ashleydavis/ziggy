@@ -2,6 +2,10 @@
 
 What an app has to change to move to each version of Ziggy, newest first. The `/ziggy:upgrade` Claude Code command reads this, along with the release notes. A version with nothing listed needs no change to the app beyond taking the new version.
 
+## v0.0.30
+
+- **The window background and the menu cover are no longer red and blue: each app sets its own, or gets its splash or theme colour.** To keep red and blue for splash recordings, as the template does, add `.window_background = "#FF0000"` and `.menu_cover = "#0000FF"` to `.splash` in `app.zon`, `ZiggyWindowBackground` set to `#FF0000` in the macOS and iOS `Info.plist`, and `<meta-data android:name="dev.ziggy.WINDOW_BACKGROUND" android:value="#FF0000" />` in the `<application>` of the Android `AndroidManifest.xml`. See [app icons and splash](user-guide/app-icons-and-splash.md).
+
 ## v0.0.29
 
 - **Android: run `scripts/generate-app-assets.sh` again, then delete `splash_icon.png` from `drawable-nodpi`, `drawable-port-nodpi` and `drawable-land-nodpi`.** The system splash icon is now written for each screen density (`drawable-mdpi` to `drawable-xxxhdpi`, with `-port` and `-land` versions), so the system no longer shrinks one large icon with coarse filtering, which blurred it and broke its fine lines on low density screens. A splash SVG needs a `viewBox` on its root element, because the generator draws it at twice its size.

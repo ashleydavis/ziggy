@@ -316,10 +316,11 @@ fn start(native_app: *NativeApp) !void {
     native_app.overlay = overlay_widget;
     reserveMenuSpace(native_app, box_widget);
     addSplashPicture(native_app, overlay_widget, width, height);
-    // The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a recording.
-    const window_background_red = c.GdkRGBA{ .red = 1.0, .green = 0.0, .blue = 0.0, .alpha = 1.0 };
-    c.gtk_widget_override_background_color(window_widget, c.GTK_STATE_FLAG_NORMAL, &window_background_red);
     if (splash.configured) {
+        // The window's own background, which shows wherever the splash and the web view leave the window uncovered: the app's
+        // window background colour, else the splash background.
+        const window_background = parseBackground(splash.window_background orelse splash.background);
+        c.gtk_widget_override_background_color(window_widget, c.GTK_STATE_FLAG_NORMAL, &window_background);
         configureSplashWindow(window_widget, width, height, native_app.menu_space_height);
         c.gtk_widget_show_all(window_widget);
         c.gtk_window_present(window);
@@ -516,6 +517,7 @@ fn paintSplash(cairo: *c.Cairo, pixbuf: *c.GdkPixbuf, width: c_int, height: c_in
     // The top rows are the menu bar's space, in the cover's colour, so the cover is seen from the window's first frame and does not
     // change as the picture over it goes. All of it is painted in that colour, then the splash only below the top rows.
     if (top > 0) {
+        const menu_cover_colour = parseBackground(splash.menu_cover);
         c.cairo_set_source_rgba(cairo, menu_cover_colour.red, menu_cover_colour.green, menu_cover_colour.blue, 1.0);
         c.cairo_paint(cairo);
         c.cairo_rectangle(cairo, 0.0, @floatFromInt(top), @floatFromInt(width), @floatFromInt(height - top));
@@ -1109,16 +1111,12 @@ fn showMenuBar(native_app: *NativeApp) void {
 }
 
 //
-// The menu bar's cover is blue, so recordings show where it is and that it fades.
-//
-const menu_cover_colour = c.GdkRGBA{ .red = 0.0, .green = 0.0, .blue = 1.0, .alpha = 1.0 };
-
-//
 // Paints the menu bar's cover in its colour, as opaque as the fade has left it.
 //
 fn onMenuCoverDraw(widget: *c.GtkWidget, cairo: *c.Cairo, user_data: ?*anyopaque) callconv(.c) c.gboolean {
     _ = widget;
     const native_app: *NativeApp = @ptrCast(@alignCast(user_data.?));
+    const menu_cover_colour = parseBackground(splash.menu_cover);
     c.cairo_set_source_rgba(cairo, menu_cover_colour.red, menu_cover_colour.green, menu_cover_colour.blue, native_app.menu_cover_opacity);
     c.cairo_paint(cairo);
     return 1;

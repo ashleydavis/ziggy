@@ -257,9 +257,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         if core != nil || destroyed {
             ZiggyBridge.fail("start was called more than once")
         }
-        // The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a
-        // recording.
-        view.window?.backgroundColor = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
+        if let windowBackground = ZiggyBridge.windowBackground {
+            view.window?.backgroundColor = windowBackground
+        }
 
         // Another window's Quit, or anything else that sends SIGTERM, ends this window, and only this window, as its own Quit
         // would. The empty C handler replaces the default action, which ends the process at once, so the dispatch source runs;
@@ -756,13 +756,23 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
             NSApp.appearance = NSAppearance(named: .aqua)
         }
         let colour = ZiggyBridge.colour(background)
-        // The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a
-        // recording.
-        webView.window?.backgroundColor = NSColor(srgbRed: 1, green: 0, blue: 0, alpha: 1)
+        webView.window?.backgroundColor = ZiggyBridge.windowBackground ?? colour
         if #available(macOS 12.0, *) {
             webView.underPageBackgroundColor = colour
         }
     }
+
+    // The colour of the window's own background, which shows wherever the splash and the web view leave the window uncovered: the
+    // "#RRGGBB" the app's Info.plist gives as ZiggyWindowBackground, or nil when it gives none, for the theme's background.
+    private static let windowBackground: NSColor? = {
+        guard let text = Bundle.main.object(forInfoDictionaryKey: "ZiggyWindowBackground") as? String else {
+            return nil
+        }
+        guard text.count == 7, text.hasPrefix("#"), UInt32(text.dropFirst(), radix: 16) != nil else {
+            ZiggyBridge.fail("the ZiggyWindowBackground \(text) in the app's Info.plist is not a #RRGGBB colour")
+        }
+        return colour(text)
+    }()
 
     // A colour from a "#rrggbb" background.
     private static func colour(_ text: String) -> NSColor {

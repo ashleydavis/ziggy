@@ -53,11 +53,6 @@ pub const AppConfig = struct {
 const WM_ZIGGY_NATIVE: c.UINT = c.WM_APP + 1;
 // The timer that steps the fade of the splash colour on the menu bar.
 const menu_cover_timer: c.UINT_PTR = 1;
-// The window's own background is red, so any frame in which the splash and the web view leave it showing is red in a recording.
-// A COLORREF is 0x00BBGGRR.
-const window_background_red: c.COLORREF = 0x000000FF;
-// The menu bar's cover is blue, so recordings show where it is and that it fades.
-const menu_cover_blue: c.COLORREF = 0x00FF0000;
 
 //
 // The name of the window class the native app registers.
@@ -280,10 +275,10 @@ const NativeApp = struct {
     menu_actions: std.ArrayList(MenuAction),
     // The menu bar, or null when the app has no menu. Windows destroys it with the window.
     menu_bar: c.HMENU,
-    // True while the window paints its menu bar blue itself, from its first frame until the menu cover is over it.
-    menu_bar_blue: bool,
-    // The blue the window paints its menu bar in. Lives as long as the window.
-    menu_bar_blue_brush: c.HBRUSH,
+    // True while the window paints its menu bar in the menu cover's colour itself, from its first frame until the menu cover is over it.
+    menu_bar_covered: bool,
+    // The brush of the menu cover's colour, which the window paints its menu bar in. Lives as long as the window.
+    menu_cover_brush: c.HBRUSH,
     // With a splash, the window that covers the menu bar until the end of the splash's fade, or null when there is none. Windows
     // destroys it with the window, which owns it.
     menu_cover: c.HWND,
@@ -364,8 +359,8 @@ pub fn run(app_config: AppConfig, args: []const [:0]const u8) !u8 {
         .menu_actions = .empty,
         .menu_bar = null,
         .menu_cover = null,
-        .menu_bar_blue = false,
-        .menu_bar_blue_brush = c.CreateSolidBrush(menu_cover_blue),
+        .menu_bar_covered = false,
+        .menu_cover_brush = c.CreateSolidBrush(colourRef(parseBackground(splash.menu_cover))),
         .menu_cover_fade_started = 0,
         .menu_cover_fade_duration = 0,
         .accelerator_table = null,
@@ -637,7 +632,8 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
         window_class.hIconSm = window_class.hIcon;
     }
     window_class.lpszClassName = window_class_name.ptr;
-    window_class.hbrBackground = c.CreateSolidBrush(window_background_red);
+    // The app's window background colour, else the splash background.
+    window_class.hbrBackground = if (splash.window_background) |colour| c.CreateSolidBrush(colourRef(parseBackground(colour))) else native_app.splash_background_brush;
     if (c.RegisterClassExW(&window_class) == 0) {
         return error.WindowClassFailed;
     }
@@ -653,7 +649,7 @@ fn start(native_app: *NativeApp, allocator: std.mem.Allocator) !u8 {
     cover_class.cbSize = @sizeOf(c.WNDCLASSEXW);
     cover_class.lpfnWndProc = c.DefWindowProcW;
     cover_class.hInstance = instance;
-    cover_class.hbrBackground = c.CreateSolidBrush(menu_cover_blue);
+    cover_class.hbrBackground = c.CreateSolidBrush(colourRef(parseBackground(splash.menu_cover)));
     cover_class.lpszClassName = menu_cover_class_name.ptr;
     if (c.RegisterClassExW(&cover_class) == 0) {
         return error.WindowClassFailed;
@@ -746,20 +742,20 @@ fn windowProc(window: c.HWND, message: c.UINT, wparam: c.WPARAM, lparam: c.LPARA
     };
     switch (message) {
         WM_UAHDRAWMENU => {
-            if (paintMenuBarBlue(native_app, lparam)) {
+            if (paintMenuBarCovered(native_app, lparam)) {
                 return 1;
             }
             return c.DefWindowProcW(window, message, wparam, lparam);
         },
         WM_UAHDRAWMENUITEM => {
-            if (paintMenuItemBlue(native_app, lparam)) {
+            if (paintMenuItemCovered(native_app, lparam)) {
                 return 1;
             }
             return c.DefWindowProcW(window, message, wparam, lparam);
         },
         c.WM_NCPAINT, c.WM_NCACTIVATE => {
             const result = c.DefWindowProcW(window, message, wparam, lparam);
-            paintMenuBarLineBlue(native_app);
+            paintMenuBarLineCovered(native_app);
             return result;
         },
         c.WM_SIZE => {
@@ -1282,7 +1278,7 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     check("add_NewWindowRequested", created_web_view.lpVtbl.*.add_NewWindowRequested.?(created_web_view, &native_app.new_window_handler.interface, &token));
     check("AddScriptToExecuteOnDocumentCreated", created_web_view.lpVtbl.*.AddScriptToExecuteOnDocumentCreated.?(created_web_view, native_app.inject_script.ptr, &native_app.script_added_handler.interface));
     addSplashPicture(native_app);
-    startMenuBarBlue(native_app);
+    startMenuBarCovered(native_app);
     // The window is cloaked while it is shown and painted, so the first frame the desktop composes is the painted splash picture,
     // not the erase colour before it.
     const cloaked: c.BOOL = 1;
@@ -2346,22 +2342,22 @@ const UahMenu = extern struct {
 };
 
 //
-// With a splash, the window paints its own menu bar blue from its first frame, labels and all, as the Linux cover hides it. A
+// With a splash, the window paints its own menu bar in the menu cover's colour from its first frame, labels and all, as the Linux cover hides it. A
 // Win32 menu bar is in the window's frame, which no child window can cover, Windows paints it in its theme's colours whatever
 // background the menu asks for, and a window of its own over it was shown a frame after the window.
 //
-fn startMenuBarBlue(native_app: *NativeApp) void {
+fn startMenuBarCovered(native_app: *NativeApp) void {
     if (!splash.configured or native_app.menu_bar == null) {
         return;
     }
-    native_app.menu_bar_blue = true;
+    native_app.menu_bar_covered = true;
 }
 
 //
-// Answers WM_UAHDRAWMENU while the menu bar is blue: fills the whole bar. Returns false when the menu bar is drawn as usual.
+// Answers WM_UAHDRAWMENU while the menu bar is covered: fills the whole bar. Returns false when the menu bar is drawn as usual.
 //
-fn paintMenuBarBlue(native_app: *NativeApp, lparam: c.LPARAM) bool {
-    if (!native_app.menu_bar_blue) {
+fn paintMenuBarCovered(native_app: *NativeApp, lparam: c.LPARAM) bool {
+    if (!native_app.menu_bar_covered) {
         return false;
     }
     const menu: *const UahMenu = @ptrFromInt(@as(usize, @bitCast(lparam)));
@@ -2378,17 +2374,17 @@ fn paintMenuBarBlue(native_app: *NativeApp, lparam: c.LPARAM) bool {
     // The bar is in screen coordinates and the device context is the window's, frame included.
     var bar = info.rcBar;
     _ = c.OffsetRect(&bar, -window_rect.left, -window_rect.top);
-    _ = FillRect(menu.device_context, &bar, native_app.menu_bar_blue_brush);
+    _ = FillRect(menu.device_context, &bar, native_app.menu_cover_brush);
     return true;
 }
 
 //
-// While the menu bar is blue, paints over the one-pixel line Windows draws under the menu bar with its frame, which the menu bar's
-// own drawing does not reach: the recordings showed it as a light line between the blue bar and the splash. Called after Windows
+// While the menu bar is covered, paints over the one-pixel line Windows draws under the menu bar with its frame, which the menu bar's
+// own drawing does not reach: the recordings showed it as a light line between the covered bar and the splash. Called after Windows
 // has painted the frame, in the same message, so the line is never seen.
 //
-fn paintMenuBarLineBlue(native_app: *NativeApp) void {
-    if (!native_app.menu_bar_blue) {
+fn paintMenuBarLineCovered(native_app: *NativeApp) void {
+    if (!native_app.menu_bar_covered) {
         return;
     }
     var info = std.mem.zeroes(MenuBarInfo);
@@ -2407,27 +2403,27 @@ fn paintMenuBarLineBlue(native_app: *NativeApp) void {
     const device_context = c.GetWindowDC(native_app.window) orelse {
         fatal("GetWindowDC failed", .{});
     };
-    _ = FillRect(device_context, &line, native_app.menu_bar_blue_brush);
+    _ = FillRect(device_context, &line, native_app.menu_cover_brush);
     _ = c.ReleaseDC(native_app.window, device_context);
 }
 
 //
-// Answers WM_UAHDRAWMENUITEM while the menu bar is blue: fills the item, with no label. Returns false when the item is drawn as
+// Answers WM_UAHDRAWMENUITEM while the menu bar is covered: fills the item, with no label. Returns false when the item is drawn as
 // usual.
 //
-fn paintMenuItemBlue(native_app: *NativeApp, lparam: c.LPARAM) bool {
-    if (!native_app.menu_bar_blue) {
+fn paintMenuItemCovered(native_app: *NativeApp, lparam: c.LPARAM) bool {
+    if (!native_app.menu_bar_covered) {
         return false;
     }
     const item: *const c.DRAWITEMSTRUCT = @ptrFromInt(@as(usize, @bitCast(lparam)));
-    _ = FillRect(item.hDC, &item.rcItem, native_app.menu_bar_blue_brush);
+    _ = FillRect(item.hDC, &item.rcItem, native_app.menu_cover_brush);
     return true;
 }
 
 //
-// Shows the menu cover, a blue window owned by the app's window so it stays above it, over the blue menu bar, and once the desktop
+// Shows the menu cover, a window in the cover's colour owned by the app's window so it stays above it, over the covered menu bar, and once the desktop
 // has composed it gives the menu bar back to Windows under it. The cover then fades by its transparency, as the Linux cover does.
-// Shown late, it shows the same blue as the bar under it.
+// Shown late, it shows the same colour as the bar under it.
 //
 fn addMenuCover(native_app: *NativeApp) void {
     const cover = c.CreateWindowExW(
@@ -2458,7 +2454,7 @@ fn addMenuCover(native_app: *NativeApp) void {
     // Two passes of the desktop's composition: the cover was a frame late when shown with the window.
     _ = c.DwmFlush();
     _ = c.DwmFlush();
-    native_app.menu_bar_blue = false;
+    native_app.menu_bar_covered = false;
     _ = c.DrawMenuBar(native_app.window);
 }
 
@@ -2476,7 +2472,7 @@ fn placeMenuCover(native_app: *NativeApp) void {
         fatal("GetMenuBarInfo failed, error {d}", .{c.GetLastError()});
     }
     const bar = info.rcBar;
-    // One row taller than the bar, to cover the line Windows draws under it (paintMenuBarLineBlue).
+    // One row taller than the bar, to cover the line Windows draws under it (paintMenuBarLineCovered).
     if (c.SetWindowPos(cover, null, bar.left, bar.top, bar.right - bar.left, bar.bottom - bar.top + 1, c.SWP_NOACTIVATE | c.SWP_NOZORDER) == 0) {
         fatal("SetWindowPos failed for the menu cover, error {d}", .{c.GetLastError()});
     }
@@ -2496,17 +2492,17 @@ fn destroyMenuCover(native_app: *NativeApp) void {
 }
 
 //
-// The frontend's splash-fading message: its splash overlay has started to fade over the duration, so the blue over the menu bar fades
+// The frontend's splash-fading message: its splash overlay has started to fade over the duration, so the cover over the menu bar fades
 // out over the same time on the same curve. A duration of 0 ends it at once.
 //
 fn startMenuCoverFade(native_app: *NativeApp, duration_milliseconds: u32) void {
     // The frontend's overlay, at full opacity, shows the splash under the picture, so the picture goes now.
     destroySplashPicture(native_app);
-    if (!native_app.menu_bar_blue) {
+    if (!native_app.menu_bar_covered) {
         return;
     }
     if (duration_milliseconds == 0) {
-        native_app.menu_bar_blue = false;
+        native_app.menu_bar_covered = false;
         _ = c.DrawMenuBar(native_app.window);
         return;
     }
@@ -3099,7 +3095,9 @@ fn applyTheme(native_app: *NativeApp, theme_call: native_message.ThemeCall) void
     if (native_app.background_brush) |old| {
         _ = c.DeleteObject(old);
     }
-    native_app.background_brush = c.CreateSolidBrush(window_background_red);
+    // The app's window background colour, else the theme's background.
+    const window_background = if (splash.window_background) |colour| parseBackground(colour) else background;
+    native_app.background_brush = c.CreateSolidBrush(colourRef(window_background));
     if (native_app.controller) |controller| {
         var controller2: ?*c.ICoreWebView2Controller2 = null;
         if (controller.lpVtbl.*.QueryInterface.?(controller, &c.IID_ICoreWebView2Controller2, @ptrCast(&controller2)) == c.S_OK) {
@@ -3152,4 +3150,11 @@ fn parseBackground(text: []const u8) Background {
         .green = @intCast((value >> 8) & 0xff),
         .blue = @intCast(value & 0xff),
     };
+}
+
+//
+// The COLORREF of a background, which is 0x00BBGGRR.
+//
+fn colourRef(background: Background) c.COLORREF {
+    return @as(u32, background.red) | (@as(u32, background.green) << 8) | (@as(u32, background.blue) << 16);
 }
