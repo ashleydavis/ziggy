@@ -29,7 +29,7 @@ The window background on the other platforms is set in the app's own files, and 
 - **macOS and iOS**: `ZiggyWindowBackground`, a `#RRGGBB` string, in the app's `Info.plist`.
 - **Android**: `<meta-data android:name="dev.ziggy.WINDOW_BACKGROUND" android:value="#RRGGBB" />` in the `<application>` of the app's `AndroidManifest.xml`.
 
-The template sets the window background to red and the menu cover to blue on every platform, so a splash recording shows any frame that leaves the window uncovered and where the menu cover is as it fades. An app made from the template sets its own colours or removes these settings.
+The template sets the window background and the menu cover to its splash background on every platform. An app made from the template sets them to its own splash background.
 
 The paths are relative to the app's build root. A 1290x2796 portrait image and a 2796x1290 landscape image match every screen the app runs on.
 
