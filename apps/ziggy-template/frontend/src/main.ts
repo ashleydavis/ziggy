@@ -5,8 +5,8 @@ import { ITestCommand, performTestCommand, testResultToJson } from "./lib/test-c
 
 const splash = installSplashScreen(document, {
     background: "#1B1035",
-    minimumDisplayMilliseconds: 2000,
-    fadeDurationMilliseconds: 2000,
+    minimumDisplayMilliseconds: 1000,
+    fadeDurationMilliseconds: 1000,
     // The native app fades the splash colour over its menu bar with the overlay.
     onFadeStart: durationMilliseconds => window.ziggy.splashFading(durationMilliseconds),
 });
