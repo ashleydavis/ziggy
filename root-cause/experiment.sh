@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Runs Android smoke scenarios 1 to 6 on the emulator the workflow started, while recording every change of the emulator's adb
+# Runs Android smoke scenario 5 eight times in a row on the emulator the workflow started, while recording every change of the emulator's adb
 # state with a timestamp, then saves the adb server's log and the device's logs to $EVIDENCE_DIR.
 
 set -u
@@ -28,8 +28,9 @@ poll_state &
 poller=$!
 
 result=0
-for scenario in 1-reply 2-short-task 3-long-task-with-children 4-cancel-long-task 5-cancel-one-of-several-sources 6-edges; do
-    bash ./smoke-tests/run.sh android "$scenario" || result=1
+for attempt in 1 2 3 4 5 6 7 8; do
+    echo "$(date -u +%H:%M:%S.%N) scenario 5, attempt $attempt"
+    bash ./smoke-tests/run.sh android 5-cancel-one-of-several-sources || result=1
 done
 
 kill "$poller"
