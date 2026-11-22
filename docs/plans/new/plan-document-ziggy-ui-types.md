@@ -37,5 +37,4 @@
 
 ## Notes
 
-- The plan `plan-one-message-handler.md` would change `IZiggyBridge` (`invoke` and `send` without a channel, `onEvent` and Ziggy's own calls). If that plan goes ahead first, this section documents the new API; if this one goes first, that plan's documentation step updates the section.
 - The types are taken from the comments in `ziggy-bridge.ts`, which `CLAUDE.md` requires on every interface and field, so the doc and the code describe each type the same way.
