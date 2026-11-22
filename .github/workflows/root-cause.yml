@@ -5,11 +5,8 @@ on:
     branches:
       - tmp-root-cause-android-offline
 
-env:
-  BUN_VERSION: "1.3.14"
-
 jobs:
-  android-offline:
+  android-offline-idle:
     strategy:
       fail-fast: false
       matrix:
@@ -19,39 +16,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: ${{ env.BUN_VERSION }}
-
-      - uses: jdx/mise-action@v2
-        with:
-          install_args: zig jq
-
-      - run: bun install
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-
-      # The build CI made for e0b4c37, the failing commit.
-      - uses: actions/cache/restore@v4
-        with:
-          path: |
-            ziggy-build
-            .zig-cache
-            apps/ziggy-template/.zig-cache
-            apps/ziggy-test-app/.zig-cache
-          key: ziggy-build-android-e0b4c3793a5d458b405ce853ff5b1fbae4f32e56
-          fail-on-cache-miss: true
-
-      - run: echo "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"
 
       - run: echo "EVIDENCE_DIR=$RUNNER_TEMP/evidence" >> "$GITHUB_ENV"
 
@@ -59,7 +28,7 @@ jobs:
         timeout-minutes: 20
         uses: reactivecircus/android-emulator-runner@v2
         env:
-          ZIGGY_ANDROID_DEVICES: emulator-5554
+          IDLE_SECONDS: "240"
         with:
           api-level: 35
           arch: x86_64
