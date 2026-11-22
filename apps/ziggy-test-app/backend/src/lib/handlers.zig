@@ -1,6 +1,6 @@
 //
 // Everything app.zig registers with Ziggy's core for the test app: its messages and their handlers, its task types, the media
-// server, the desktop menu and the functions it runs, the task observers, the error describer and the query of the frontend's address.
+// server, the desktop menu and the functions it runs, the task observers, the refuse message and the query of the frontend's address.
 //
 
 const std = @import("std");
@@ -145,7 +145,7 @@ pub fn failHandler(services: HandlerServices, timers: Timers, io: std.Io, alloca
 }
 
 //
-// The test app's error describer, which turns an error into the text of its reply, and the refuse message, whose error it describes.
+// The refuse message, which sets the text of its error reply with fail_with.
 //
 
 //
@@ -154,26 +154,15 @@ pub fn failHandler(services: HandlerServices, timers: Timers, io: std.Io, alloca
 pub const NoRequest = struct {};
 
 //
-// Always fails with an error the test app's describer has a sentence for, so the frontend can check the sentence is what reaches it.
+// Always fails, with a sentence set with fail_with, so the frontend can check the sentence is what reaches it.
 //
 pub fn refuseHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: NoRequest) !void {
-    _ = services;
     _ = timers;
     _ = io;
     _ = allocator;
     _ = payload;
+    services.fail_with("The test app refused, as the request told it to.");
     return error.Refused;
-}
-
-//
-// The test app's error describer: a sentence for the error the refuse message returns, and nothing for any other, which is then replied
-// to by name.
-//
-pub fn describeError(err: anyerror) ?[]const u8 {
-    if (err == error.Refused) {
-        return "The test app refused, as the request told it to.";
-    }
-    return null;
 }
 
 //

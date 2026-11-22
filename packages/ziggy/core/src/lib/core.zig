@@ -118,11 +118,6 @@ pub const handlerServicesOf = services_lib.handlerServicesOf;
 pub const TimerId = timers_lib.TimerId;
 
 //
-// A function that gives the text of the error response for an error a handler returned, or null to use the error's name.
-//
-pub const ErrorDescriber = types.ErrorDescriber;
-
-//
 // The number the frontend's messages, which the native app passes on with ziggy_send_message, reach the main thread's queue under.
 //
 const from_frontend: u32 = 0xFFFF_FFF0;
@@ -181,11 +176,11 @@ pub const Frontend = struct {
     }
 
     //
-    // Reports the error a handler returned: the text the app's describe_error gives for it, or else its name.
+    // Reports the error a handler returned: the text the handler set with fail_with, or else the error's own text (see
+    // types.failureText).
     //
-    fn reportHandlerError(self: Frontend, io: std.Io, arena: std.mem.Allocator, describe_error: ?ErrorDescriber, id: ?std.json.Value, err: anyerror) void {
-        const described: ?[]const u8 = if (describe_error) |describe| describe(err) else null;
-        self.reportError(io, arena, id, described orelse @errorName(err));
+    fn reportHandlerError(self: Frontend, io: std.Io, arena: std.mem.Allocator, failure: ?[]const u8, id: ?std.json.Value, err: anyerror) void {
+        self.reportError(io, arena, id, types.failureText(failure, err));
     }
 };
 
@@ -334,6 +329,9 @@ const MainServices = struct {
     // The command line the app was started with, after the program's name and without --remote-control: the user's options for
     // the run, which a window it starts gets too.
     arguments: []const []const u8,
+    // The text the running message handler set with HandlerServices.fail_with, which runAppMessage sends if the handler returns an
+    // error, or null for none. runAppMessage clears it before each handler runs, so text set outside a message handler is never sent.
+    failure: ?[]const u8,
 
     const vtable: services_lib.HandlerServices.VTable = .{
         .sendEvent = sendEvent,
@@ -350,6 +348,7 @@ const MainServices = struct {
         .isMobile = isMobile,
         .nativeCallbacks = nativeCallbacks,
         .configureLog = configureLog,
+        .fail_with = fail_with,
     };
 
     //
@@ -567,6 +566,14 @@ const MainServices = struct {
     }
 
     //
+    // Keeps the text a message handler set, for runAppMessage to send if the handler returns an error.
+    //
+    fn fail_with(ptr: *anyopaque, text: []const u8) void {
+        const self: *MainServices = @ptrCast(@alignCast(ptr));
+        self.failure = text;
+    }
+
+    //
     // The pool's sink: delivers a message the pool produced to the frontend.
     //
     fn emit(user_data: ?*anyopaque, io: std.Io, message: []const u8) void {
@@ -660,8 +667,6 @@ const NativeCalls = struct {
     tests: *TestCommands,
     // Set once the main thread has read the stop, so a request is refused instead of reaching the native app.
     stopping: *const bool,
-    // Gives the text of the reason a call failed, or null to use the error's name.
-    describe_error: ?ErrorDescriber,
 
     //
     // Handles a task's request to the native app: posts the native app a call of the function it names, whose result the native app
@@ -678,7 +683,7 @@ const NativeCalls = struct {
             std.debug.panic("could not read a native app request ({s}): {s}", .{ @errorName(err), request_json });
         };
         const handled = self.respondHere(allocator, arena, request) catch |err| worker_lib.NativeResponse{
-            .failure = if (self.describe_error) |describe| (describe(err) orelse @errorName(err)) else @errorName(err),
+            .failure = types.failureText(null, err),
         };
         const outcome = handled orelse {
             const call = callOf(arena, request) catch |err| {
@@ -1097,6 +1102,7 @@ fn mainThread(given: MainStart) void {
         .config_path = null,
         .state_path = null,
         .arguments = start_data.arguments,
+        .failure = null,
     };
     if (app.name) |name| {
         const app_names: config_state.platform.AppNames = .{ .name = name, .title = app.title orelse name };
@@ -1128,12 +1134,10 @@ fn mainThread(given: MainStart) void {
         .frontend = frontend,
         .tests = &tests,
         .stopping = &stopping,
-        .describe_error = app.describe_error,
     };
     pool = worker_pool.WorkerPool.init(queue, .{
         .max_workers = @max(config.worker_threads, 1),
         .tasks = app.tasks,
-        .describe_error = app.describe_error,
         .worker_options = .{
             .workerId = 0,
             .sessionId = session_id,
@@ -1233,7 +1237,7 @@ fn mainThread(given: MainStart) void {
             switch (message.from) {
                 from_frontend => {
                     if (!stopping) {
-                        handleFrontendMessage(allocator, frontend, app, &theme_state, app.backgrounds, main_services.config_path, main_services.state_path, services, timers, io, queue, &later_replies, &pool, &dropped, &tests, &next_request_task, message.text);
+                        handleFrontendMessage(allocator, frontend, app, &theme_state, app.backgrounds, main_services.config_path, main_services.state_path, services, &main_services.failure, timers, io, queue, &later_replies, &pool, &dropped, &tests, &next_request_task, message.text);
                     }
                 },
                 from_core => {
@@ -1358,7 +1362,7 @@ fn runUiQuery(arena: std.mem.Allocator, ui_query: ?UiQuery, services: services_l
 // passes it on by its kind, "app" to runAppMessage and "system" to runSystemMessage, and does nothing else. A message that is not a
 // JSON object, or has no kind or any other kind, is refused as InvalidMessage, reported as a core-error system event.
 //
-fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, next_request_task: *u64, text: []const u8) void {
+fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, theme_state: *theme_lib.ThemeState, backgrounds: theme_lib.Backgrounds, config_file_path: ?[]const u8, state_file_path: ?[]const u8, services: services_lib.HandlerServices, handler_failure: *?[]const u8, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, dropped: *dropped_files.DroppedFiles, tests: *TestCommands, next_request_task: *u64, text: []const u8) void {
     var arena_state = std.heap.ArenaAllocator.init(allocator);
     defer arena_state.deinit();
     const arena = arena_state.allocator();
@@ -1372,7 +1376,7 @@ fn handleFrontendMessage(allocator: std.mem.Allocator, frontend: Frontend, app: 
     }
     const kind = parsed.object.get("kind") orelse .null;
     if (kind == .string and std.mem.eql(u8, kind.string, "app")) {
-        runAppMessage(allocator, arena, frontend, app, services, timers, io, queue, later_replies, pool, next_request_task, parsed);
+        runAppMessage(allocator, arena, frontend, app, services, handler_failure, timers, io, queue, later_replies, pool, next_request_task, parsed);
         return;
     }
     if (kind == .string and std.mem.eql(u8, kind.string, "system")) {
@@ -1415,7 +1419,7 @@ fn findMessage(messages: []const handlers_lib.MessageEntry, name: []const u8) ?h
 // the app has no handler for is UnknownMessageName; neither runs a handler. The allocator is the main thread's, which what outlives the
 // message is allocated with, and the arena is freed when the message has been handled.
 //
-fn runAppMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, services: services_lib.HandlerServices, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, next_request_task: *u64, parsed: std.json.Value) void {
+fn runAppMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, frontend: Frontend, app: RegisteredApp, services: services_lib.HandlerServices, handler_failure: *?[]const u8, timers: timers_lib.Timers, io: std.Io, queue: *MessageQueue, later_replies: *LaterReplies, pool: *worker_pool.WorkerPool, next_request_task: *u64, parsed: std.json.Value) void {
     const request_id: ?std.json.Value = parsed.object.get("id");
     const name = messageName(parsed) orelse {
         frontend.reportError(io, arena, request_id, "MissingMessageName");
@@ -1438,17 +1442,19 @@ fn runAppMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fronten
         };
         reply = .{
             .queue = queue,
-            .describe_error = app.describe_error,
             .serial = serial,
         };
     }
+    handler_failure.* = null;
     const outcome = entry.handler(services, timers, io, arena, message, reply) catch |err| {
         if (reply) |target| {
             later_replies.close(allocator, target.serial);
         }
-        frontend.reportHandlerError(io, arena, app.describe_error, request_id, err);
+        frontend.reportHandlerError(io, arena, handler_failure.*, request_id, err);
+        handler_failure.* = null;
         return;
     };
+    handler_failure.* = null;
     const result = switch (outcome) {
         .result => |returned| returned,
         .invalid_data => |text| {
@@ -1483,11 +1489,11 @@ fn runAppMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fronten
         },
         .task => |task| {
             const id = request_id orelse {
-                frontend.reportHandlerError(io, arena, app.describe_error, null, error.MessageHasNoId);
+                frontend.reportHandlerError(io, arena, null, null, error.MessageHasNoId);
                 return;
             };
             queueResponseTask(io, allocator, arena, services.log, pool, next_request_task, id, task) catch |err| {
-                frontend.reportHandlerError(io, arena, app.describe_error, id, err);
+                frontend.reportHandlerError(io, arena, null, id, err);
             };
         },
         .later => {},
@@ -1532,7 +1538,7 @@ fn runSystemMessage(allocator: std.mem.Allocator, arena: std.mem.Allocator, fron
     };
     const data = parsed.object.get("data") orelse .null;
     const outcome = runSystem(allocator, arena, frontend, name, data, theme_state, backgrounds, app.menu_targets, app.actions, app.standard_menu_items, shortcuts, config_file_path, state_file_path, services, timers, io, pool, dropped, tests) catch |err| {
-        frontend.reportHandlerError(io, arena, app.describe_error, request_id, err);
+        frontend.reportHandlerError(io, arena, null, request_id, err);
         return;
     };
     switch (outcome) {

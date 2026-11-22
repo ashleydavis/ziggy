@@ -15,7 +15,6 @@ const types = task_queue.types;
 const WorkerPool = ziggy.worker_pool.WorkerPool;
 const Timers = ziggy.timers.Timers;
 const TimerList = ziggy.timers.TimerList;
-const errors = ziggy.utils.errors;
 
 fn echoHandler(allocator: std.mem.Allocator, io: std.Io, timers: ziggy.timers.Timers, log: logging.ILog, data: std.json.Value, context: types.ITaskContext) anyerror!std.json.Value {
     _ = timers;
@@ -131,17 +130,6 @@ const queue_tasks = [_]ziggy.task_runner.TaskHandlerEntry{
 } ++ test_tasks.task_handlers;
 
 //
-// Gives the text of a failed task's error: the message the handler recorded (the task queue's throwError), or the error's name.
-//
-fn describeError(err: anyerror) ?[]const u8 {
-    const message = errors.errorMessage(err);
-    if (message.len == 0) {
-        return null;
-    }
-    return message;
-}
-
-//
 // Makes a pool of workers, run by the calling thread, with the task types of these tests, allocated with the allocator, and the
 // task timeout given, or none.
 //
@@ -149,7 +137,6 @@ fn createPoolWith(allocator: std.mem.Allocator, workers: u32, task_timeout_ms: ?
     return try WorkerPool.create(allocator, .{
         .max_workers = workers,
         .tasks = &queue_tasks,
-        .describe_error = describeError,
         .worker_options = .{
             .workerId = 0,
             .sessionId = "queue-backend-test",

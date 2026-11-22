@@ -126,7 +126,19 @@ pub const HandlerServices = struct {
         isMobile: *const fn (ptr: *anyopaque) bool,
         nativeCallbacks: *const fn (ptr: *anyopaque) NativeCallbacks,
         configureLog: *const fn (ptr: *anyopaque, options: logging.ILogOptions) anyerror!void,
+        fail_with: *const fn (ptr: *anyopaque, text: []const u8) void,
     };
+
+    //
+    // Sets the text the frontend is sent if the message handler then returns an error, in place of the error's name, so the handler
+    // says what went wrong and what to do at the line that returns the error. A later call replaces it. It is ignored if the handler
+    // returns a result, and outside a message handler. The text must stay valid until the handler returns: a literal, or text
+    // allocated with the allocator the handler was given.
+    //
+    pub fn fail_with(self: HandlerServices, text: []const u8) void {
+        std.debug.assert(text.len > 0);
+        self.vtable.fail_with(self.ptr, text);
+    }
 
     //
     // The native app's callbacks that a thread of the app's own may call itself (see NativeCallbacks), copied for that thread.

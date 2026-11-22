@@ -106,7 +106,7 @@ pub fn lookUpHandler(services: ziggy.core.HandlerServices, timers: ziggy.timers.
 }
 ```
 
-- The reply is a small value that can be copied and stored anywhere. It sends the response once, from any thread, with `reply.send(io, allocator, value)` or with `reply.fail(io, allocator, err)`, which gives an error response as a handler's error does. The allocator is the calling thread's own and is used only during the call. Either posts the response to the main thread, which sends it.
+- The reply is a small value that can be copied and stored anywhere. It sends the response once, from any thread, with `reply.send(io, allocator, value)` or with `reply.fail(io, allocator, text)`, which gives an error response whose text is `text`. The allocator is the calling thread's own and is used only during the call. Either posts the response to the main thread, which sends it.
 - A second response is reported as a `core-error` system event naming `MessageAlreadyAnswered`, and is not sent.
 - A message whose reply never sends a response is reported, when the backend shuts down, as a `core-error` system event naming `MessageNotAnswered` and the message's name. The reply must not be used after that.
 - A handler that takes a reply may still return `.now` or `.task` and then must not use the reply. It returns an `Response` of the same `Result` its `Reply` has, or the build fails.
@@ -147,16 +147,21 @@ Ziggy refuses these before any handler runs. They fail the same way as a handler
 - `UnknownMessageName`: no message is registered under the name.
 - `InvalidMessageData`: the data does not fit the handler's request type. The error describes how: `InvalidMessageData: the data is not an object`, `InvalidMessageData: the field "name" is missing`, `InvalidMessageData: the field "name" does not fit (<error>)`, or for a request that is not a struct, `InvalidMessageData: <error>`, where `<error>` is the name of the error `std.json` gave.
 
-An app that can describe a failure in more detail gives `ziggy.core.App` a `describe_error` function. The backend calls it with the error a message handler or a task's handler returned, or a reply was failed with. It uses the text it returns in place of the error's name. It returns null for an error it has no description of. This is the test app's:
+A handler says what went wrong and what to do by setting the text of its error response with `fail_with(text)` on its services, on the line that returns the error. A message handler calls it on its handler services and a task's handler on its task services. The text is used in place of the error's name when the handler then returns an error, and is ignored when it returns a result. It must stay valid until the handler returns: a literal, or text allocated with the allocator the handler was given. This is the test app's:
 
 ```zig
-pub fn describeError(err: anyerror) ?[]const u8 {
-    if (err == error.Refused) {
-        return "The test app refused, as the request told it to.";
-    }
-    return null;
+pub fn refuseHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: NoRequest) !void {
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
+    services.fail_with("The test app refused, as the request told it to.");
+    return error.Refused;
 }
 ```
+
+A handler that sets no text and returns an error thrown with `ziggy.utils.errors.throwError` gets the message it was thrown with. Any other error is sent by its name.
+
 
 ## A message whose response is a task's result
 

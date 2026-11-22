@@ -52,11 +52,6 @@ pub const RegisteredApp = struct {
     // calling the core for each file (the MacOS, iOS and Android native apps). Empty for an app whose native app embeds the
     // frontend itself.
     ui_files: []const ui_files.UiFile,
-    // Turns the error a handler returned into the text of the error response, for an app whose code reports the reason for a failure
-    // somewhere other than the error's name (a Zig error carries no message). It returns null when it has nothing to add about the
-    // error, and the response then carries the error's name. It is called on the thread that handled the message (the main thread) or
-    // ran the task (a worker), straight after the handler failed, and the text is used before the call returns.
-    describe_error: ?types.ErrorDescriber = null,
     // Called on the main thread when a task has ended, after the frontend has been told. The values are valid only during the call.
     on_task_end: ?OnTaskEnd = null,
     // Called on the main thread when a task has sent an event, after the frontend has been told. The values are valid only during
@@ -165,10 +160,6 @@ const app_fields = [_]AppField{
         .required = true,
     },
     .{
-        .name = "describe_error",
-        .required = false,
-    },
-    .{
         .name = "on_task_end",
         .required = false,
     },
@@ -208,7 +199,7 @@ const app_fields = [_]AppField{
 //   .actions          optional: the app's actions, a []const ziggy.action.Action (see action.zig), checked when the app is built
 //   .ui_files         the files of the app's bundled frontend
 //   .backgrounds      optional: the window background colours for each theme (see theme.Backgrounds)
-//   .describe_error, .on_task_end, .on_task_event, .on_create, .on_destroy, .ui_query   optional, as RegisteredApp describes them
+//   .on_task_end, .on_task_event, .on_create, .on_destroy, .ui_query   optional, as RegisteredApp describes them
 //
 // Every field and every handler is checked when the app is built: a field App does not know, a missing one or a handler of the wrong
 // type fails the build with a message that names it. Ziggy's build exports the C interface and the Android entry points for the
@@ -228,7 +219,7 @@ pub fn App(comptime definition: anytype) RegisteredApp {
         }
         for (@typeInfo(Definition).@"struct".fields) |field| {
             if (!isAppField(field.name)) {
-                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, actions, backgrounds, ui_files, describe_error, on_task_end, on_task_event, on_create, on_destroy, ui_query.");
+                @compileError("ziggy.core.App: there is no field \"" ++ field.name ++ "\". The fields are messages, tasks, menu, actions, backgrounds, ui_files, on_task_end, on_task_event, on_create, on_destroy, ui_query.");
             }
         }
         for (app_fields) |field| {
@@ -249,7 +240,6 @@ pub fn App(comptime definition: anytype) RegisteredApp {
         .standard_menu_items = comptime menu_lib.standardMenuItems(definition.menu),
         .shortcuts = comptime shortcuts_lib.shortcut_list(definition.menu, actions),
         .ui_files = definition.ui_files,
-        .describe_error = if (@hasField(Definition, "describe_error")) definition.describe_error else null,
         .on_task_end = if (@hasField(Definition, "on_task_end")) definition.on_task_end else null,
         .on_task_event = if (@hasField(Definition, "on_task_event")) definition.on_task_event else null,
         .on_create = if (@hasField(Definition, "on_create")) definition.on_create else null,

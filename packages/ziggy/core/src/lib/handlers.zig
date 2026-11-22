@@ -74,8 +74,6 @@ pub const HandlerOutcome = union(enum) {
 pub const ReplyTarget = struct {
     // The main thread's queue.
     queue: *MessageQueue,
-    // Gives the text of an error response, or null to use the error's name. A constant of the app's code.
-    describe_error: ?types.ErrorDescriber,
     // Which of the main thread's recorded messages this is.
     serial: u64,
 };
@@ -162,14 +160,14 @@ pub fn Reply(comptime T: type) type {
         }
 
         //
-        // Sends an error response: the text the app's describe_error gives for the error, or else its name. The Io and the allocator are the calling
-        // thread's own, used only during the call.
+        // Sends an error response whose text is `text`: what went wrong and what to do, as the frontend shows it. The Io and the
+        // allocator are the calling thread's own, used only during the call.
         //
-        pub fn fail(self: @This(), io: std.Io, allocator: std.mem.Allocator, err: anyerror) !void {
+        pub fn fail(self: @This(), io: std.Io, allocator: std.mem.Allocator, text: []const u8) !void {
+            std.debug.assert(text.len > 0);
             var arena_state = std.heap.ArenaAllocator.init(allocator);
             defer arena_state.deinit();
-            const described: ?[]const u8 = if (self.target.describe_error) |describe| describe(err) else null;
-            try postLaterReply(io, self.target, arena_state.allocator(), null, described orelse @errorName(err));
+            try postLaterReply(io, self.target, arena_state.allocator(), null, text);
         }
     };
 }

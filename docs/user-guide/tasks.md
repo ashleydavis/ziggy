@@ -55,7 +55,7 @@ The `/ziggy:add-task` Claude Code command adds a task type to an app by followin
 
 ## Writing a handler
 
-A handler is a Zig function that takes the standard arguments of a task handler: the task services, its worker's timers, its worker's Io, an allocator, the task's context and the data the frontend queued it with, parsed into a payload type of the handler's own as a message's data is (see [Messages](messages.md#a-message-handler)), or `std.json.Value` for the data unparsed. It returns its result, which Ziggy turns into JSON, or `void` for none. Returning an error fails the task. The error message is the error's name, unless the app sets `describe_error` to a function that describes it.
+A handler is a Zig function that takes the standard arguments of a task handler: the task services, its worker's timers, its worker's Io, an allocator, the task's context and the data the frontend queued it with, parsed into a payload type of the handler's own as a message's data is (see [Messages](messages.md#a-message-handler)), or `std.json.Value` for the data unparsed. It returns its result, which Ziggy turns into JSON, or `void` for none. Returning an error fails the task. The error message is the text the handler set with `services.fail_with(text)` before it returned, or else the error's own text (see [When a handler fails](messages.md#when-a-handler-fails)).
 
 ```zig
 const std = @import("std");

@@ -124,6 +124,9 @@ pub const RunningTask = struct {
     inflight_children: u32,
     // The number of children queued so far, which names the next one.
     next_child: u32,
+    // The text the frontend is sent if the handler returns an error, as the handler set it with TaskServices.fail_with, or null to
+    // send the error's own text (see types.failureText).
+    failure: ?[]const u8,
 
     //
     // The limit on child tasks in flight for this task.
@@ -263,6 +266,18 @@ pub const TaskServices = struct {
     //
     pub fn waitUntilCancelled(self: TaskServices, io: std.Io, allocator: std.mem.Allocator, timers: Timers) void {
         self.task.worker.waitFor(io, allocator, timers, .cancelled);
+    }
+
+    //
+    // Sets the text the frontend is sent if the handler then returns an error, in place of the error's name, so the handler says
+    // what went wrong and what to do at the line that returns the error. A later call replaces it. It is ignored if the handler
+    // returns a result or error.Cancelled. The text must stay valid until the handler returns: a literal, or text allocated with the
+    // allocator the handler was given.
+    //
+    pub fn fail_with(self: TaskServices, text: []const u8) void {
+        std.debug.assert(text.len > 0);
+        self.task.failure = text;
+        std.debug.assert(self.task.failure != null);
     }
 
     //

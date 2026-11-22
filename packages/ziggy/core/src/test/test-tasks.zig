@@ -54,6 +54,20 @@ fn failTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.m
     return error.TestFailure;
 }
 
+//
+// Sets its failure text with fail_with, with characters JSON escapes, then fails with error.TestFailure, so a test sees the text in
+// place of the error's name.
+//
+fn failWithTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = context;
+    _ = payload;
+    services.fail_with("the task failed because \"the test\" chose to, at C:\\dir");
+    return error.TestFailure;
+}
+
 fn sleepTask(services: TaskServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, context: TaskContext, payload: std.json.Value) !void {
     _ = timers;
     _ = context;
@@ -217,6 +231,7 @@ pub const task_handlers = [_]task_runner.TaskHandlerEntry{
     .{ .name = "paths-queue", .handler = task_runner.fromQueueHandler(pathsQueueTask) },
     .{ .name = "spin", .handler = task_runner.wrapTask("spin", spinTask) },
     .{ .name = "fail", .handler = task_runner.wrapTask("fail", failTask) },
+    .{ .name = "fail-with", .handler = task_runner.wrapTask("fail-with", failWithTask) },
     .{ .name = "sleep", .handler = task_runner.wrapTask("sleep", sleepTask) },
     .{ .name = "parent", .handler = task_runner.wrapTask("parent", parentTask) },
     .{ .name = "child", .handler = task_runner.wrapTask("child", childTask) },

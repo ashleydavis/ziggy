@@ -37,6 +37,31 @@ fn failHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator:
 }
 
 //
+// fail-with: sets its failure text with fail_with, then fails with error.HandlerFailed, so a test sees the text in place of the
+// error's name.
+//
+fn failWithHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: std.json.Value) !void {
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
+    services.fail_with("the handler failed because the test chose to");
+    return error.HandlerFailed;
+}
+
+//
+// fail-with-then-succeed: sets failure text with fail_with and then succeeds, so a test sees the text is not sent and does not reach
+// the next message that fails.
+//
+fn failWithThenSucceedHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, payload: std.json.Value) !void {
+    _ = timers;
+    _ = io;
+    _ = allocator;
+    _ = payload;
+    services.fail_with("text a handler that succeeded set");
+}
+
+//
 // none: returns none, so a message with an id gets an empty successful message response.
 //
 fn noneHandler(services: HandlerServices, timers: Timers, io: std.Io, allocator: std.mem.Allocator, message: core.Message) !core.MessageResult {
@@ -276,8 +301,9 @@ pub const menu: []const ziggy.menu.Menu = &.{
 };
 
 //
-// The tests' messages: echo, fail, none, name, greet, forget, count, and quick-request, fail-request, pick-open-request and
-// pick-save-request, whose response is the result of the task quick, fail, pick-open or pick-save. App wants the task types as a
+// The tests' messages: echo, fail, fail-with, fail-with-then-succeed, none, name, greet, forget, count, and quick-request,
+// fail-request, fail-with-request, pick-open-request and pick-save-request, whose response is the result of the task quick, fail,
+// fail-with, pick-open or pick-save. App wants the task types as a
 // struct literal, and the tests also add task types of their own to the list in task_handlers, so the app takes that list after App
 // has made it.
 //
@@ -286,6 +312,8 @@ pub const app = registered: {
         .messages = .{
             .echo = echoHandler,
             .fail = failHandler,
+            .@"fail-with" = failWithHandler,
+            .@"fail-with-then-succeed" = failWithThenSucceedHandler,
             .none = noneHandler,
             .name = nameHandler,
             .raw = rawHandler,
@@ -294,6 +322,7 @@ pub const app = registered: {
             .count = countHandler,
             .@"quick-request" = respondedByTask("quick"),
             .@"fail-request" = respondedByTask("fail"),
+            .@"fail-with-request" = respondedByTask("fail-with"),
             .@"pick-open-request" = respondedByTask("pick-open"),
             .@"pick-save-request" = respondedByTask("pick-save"),
             .@"send-app-event" = sendAppEventHandler,

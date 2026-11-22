@@ -250,7 +250,7 @@ function startEdgeChecks(): void {
     });
 }
 //
-// What the app's own code in the backend does: an error it describes, a task that reads its own context, a task that runs children one
+// What the app's own code in the backend does: an error whose text it sets, a task that reads its own context, a task that runs children one
 // after another, tasks queued and cancelled from the app's code, the tasks the app observes ending and sending events, and an
 // event the app sends that the frontend stops listening for.
 //

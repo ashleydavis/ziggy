@@ -2,6 +2,11 @@
 
 What an app has to change to move to each version of Ziggy, newest first. The `/ziggy:upgrade` Claude Code command reads this, along with the release notes. A version with nothing listed needs no change to the app beyond taking the new version.
 
+## v0.0.32
+
+- **`describe_error` is gone: a handler sets the text of its error response itself, with `fail_with(text)`.** Remove `.describe_error` from `ziggy.core.App` and from `WorkerPoolOptions`. Where the describer gave text for an error, call `services.fail_with("...")` on the handler services or task services just before the line that returns that error. An error thrown with `ziggy.utils.errors.throwError` is sent with the message it was thrown with, so a describer that only returned `errors.errorMessage(err)` needs no replacement. Any other error is sent by its name. `ziggy.core.ErrorDescriber` and `types.ErrorDescriber` are gone.
+- **`Reply.fail` takes the text of the error response, not an error:** `reply.fail(io, allocator, text)`.
+
 ## v0.0.31
 
 - **`ILog`'s error function is `err`,** matching `std.log.err`: every call of `@"error"` on an `ILog` becomes a call of `err`. A log of the app's own that builds an `ILog.VTable` names the field `.err`.

@@ -102,8 +102,6 @@ pub const WorkerSetup = struct {
     options_json: []const u8,
     // The app's task types.
     tasks: []const TaskHandlerEntry,
-    // Gives the text to report for the error a task handler returned, or null to report the error's name.
-    describe_error: ?types.ErrorDescriber,
 };
 
 //
@@ -148,7 +146,7 @@ pub const Worker = struct {
         errdefer self.queue.deinit();
         // The worker's options are the first message in its queue, which it takes with its own allocator.
         try self.queue.post(io, 0, setup.options_json);
-        self.thread = try std.Thread.spawn(.{}, initWorker, .{ &self.queue, main_queue, id, setup.tasks, setup.describe_error });
+        self.thread = try std.Thread.spawn(.{}, initWorker, .{ &self.queue, main_queue, id, setup.tasks });
         return self;
     }
 
@@ -248,8 +246,6 @@ pub const WorkerRuntime = struct {
     port: ParentPort,
     // The app's task types.
     tasks: []const TaskHandlerEntry,
-    // Gives the text to report for the error a task handler returned, or null.
-    describe_error: ?types.ErrorDescriber,
     // Messages read while a task waited for another message, kept in the order they arrived until the task next looks.
     kept: std.ArrayList(Message),
     // The task being run, or null between tasks.
@@ -606,6 +602,7 @@ pub const WorkerRuntime = struct {
             .children = .empty,
             .inflight_children = 0,
             .next_child = 0,
+            .failure = null,
         };
         self.current = &task;
         const timers = timer_list.interface();
@@ -685,7 +682,7 @@ pub const WorkerRuntime = struct {
             return .{
                 .status = .failed,
                 .result_json = null,
-                .error_message = if (self.describe_error) |describe| (describe(err) orelse @errorName(err)) else @errorName(err),
+                .error_message = types.failureText(task.failure, err),
             };
         };
         return .{
@@ -721,7 +718,7 @@ const Timers = timers_lib.Timers;
 // The function a worker's thread runs, as `initWorker` is in TypeScript: sets the worker up from its options, sends the main thread
 // "worker-ready" and reads its messages until it is sent "shutdown".
 //
-fn initWorker(queue: *MessageQueue, main_queue: *MessageQueue, id: u32, tasks: []const TaskHandlerEntry, describe_error: ?types.ErrorDescriber) void {
+fn initWorker(queue: *MessageQueue, main_queue: *MessageQueue, id: u32, tasks: []const TaskHandlerEntry) void {
     // The worker's own allocator, which everything on its thread is allocated with.
     var thread_allocator: ThreadAllocator = .init;
     defer thread_allocator.deinit();
@@ -778,7 +775,6 @@ fn initWorker(queue: *MessageQueue, main_queue: *MessageQueue, id: u32, tasks: [
             .worker_id = id,
         },
         .tasks = tasks,
-        .describe_error = describe_error,
         .kept = .empty,
         .current = null,
         .shutdown_requested = false,

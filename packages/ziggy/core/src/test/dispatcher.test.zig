@@ -608,16 +608,6 @@ test "a list-shortcuts message on a mobile answers none" {
     try expectLastMessage(&native_app, "{\"id\":1,\"ok\":true,\"data\":[]}");
 }
 
-//
-// Describes a thrown error with the message it recorded, as an app whose errors carry a reason does.
-//
-fn describeThrownError(err: anyerror) ?[]const u8 {
-    if (err == error.Thrown) {
-        return ziggy.utils.errors.errorMessage(err);
-    }
-    return null;
-}
-
 test "a new-window message sends the native app the call with its arguments and responds with an empty object" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
@@ -635,9 +625,7 @@ test "a new-window answer that is not a process id fails with the text the nativ
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var described_app = test_app.app;
-    described_app.describe_error = describeThrownError;
-    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.setResult(std.testing.io, std.testing.allocator, "new-window", true, "0");
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[]}}");
@@ -651,9 +639,7 @@ test "a failed new-window call fails with the native app's reason" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var described_app = test_app.app;
-    described_app.describe_error = describeThrownError;
-    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     native_app.setResult(std.testing.io, std.testing.allocator, "new-window", false, "StartFailed");
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"system\",\"id\":1,\"name\":\"new-window\",\"data\":{\"arguments\":[]}}");
@@ -963,56 +949,61 @@ test "the native callbacks of a native app with no native call callback have no 
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"data\":{\"nativeCaller\":\"none\"}}");
 }
 
-fn describeTestError(err: anyerror) ?[]const u8 {
-    if (err == error.HandlerFailed) {
-        return "the handler failed because the test chose to";
-    }
-    return null;
-}
-
-test "an app's error describer gives the text of an error reply" {
+test "a message handler's fail_with text is the text of its error reply" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var described_app = test_app.app;
-    described_app.describe_error = describeTestError;
-    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":4,\"name\":\"fail-with\"}");
     const reply = try lastMessage(&native_app);
     defer std.testing.allocator.free(reply);
     try std.testing.expectEqualStrings("{\"id\":4,\"ok\":false,\"error\":\"the handler failed because the test chose to\"}", reply);
 }
 
-test "an error the describer has no description for is replied to by name" {
+test "a message handler that fails without fail_with text is replied to by the error's name" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var described_app = test_app.app;
-    described_app.describe_error = describeTaskError;
-    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":5,\"name\":\"fail\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":5,\"ok\":false,\"error\":\"HandlerFailed\"}");
 }
 
-fn describeTaskError(err: anyerror) ?[]const u8 {
-    if (err == error.TestFailure) {
-        return "the task failed because \"the test\" chose to, at C:\\dir";
-    }
-    return null;
-}
-
-test "an app's error describer gives the text of a failed request task's error reply" {
+test "fail_with text from a message that failed or succeeded never reaches the next message that fails" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     defer native_app.deinit(std.testing.io, std.testing.allocator);
-    var described_app = test_app.app;
-    described_app.describe_error = describeTaskError;
-    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), described_app);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
-    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":6,\"name\":\"fail-request\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"fail-with\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":2,\"name\":\"fail\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":false,\"error\":\"HandlerFailed\"}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":3,\"name\":\"fail-with-then-succeed\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":3,\"ok\":true,\"data\":null}");
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":4,\"name\":\"fail\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":4,\"ok\":false,\"error\":\"HandlerFailed\"}");
+}
+
+test "a task's fail_with text is the text of a failed request task's error reply" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":6,\"name\":\"fail-with-request\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":6,\"ok\":false,\"error\":\"the task failed because \\\"the test\\\" chose to, at C:\\\\dir\"}");
+}
+
+test "a task that fails without fail_with text is replied to by the error's name" {
+    var native_app: FakeNativeApp = undefined;
+    native_app.init();
+    defer native_app.deinit(std.testing.io, std.testing.allocator);
+    try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), test_app.app);
+    defer native_app.stop(std.testing.io, std.testing.allocator);
+    try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":7,\"name\":\"fail-request\"}");
+    try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":7,\"ok\":false,\"error\":\"TestFailure\"}");
 }
 
 //

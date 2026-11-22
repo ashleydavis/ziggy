@@ -160,7 +160,6 @@ test "App makes the task table from the task types, each with its handler and ki
     try std.testing.expectEqual(ziggy.task_runner.TaskKind.keep_alive, registered.tasks[1].kind);
     try std.testing.expect(registered.tasks[1].handler == ziggy.task_runner.wrapTask("the task type \"kept-alive\"", tableTask));
     try std.testing.expectEqual(@as(usize, 0), registered.messages.len);
-    try std.testing.expect(registered.describe_error == null);
     try std.testing.expect(registered.ui_query == null);
 }
 
@@ -192,13 +191,12 @@ test "App uses a task handler of the raw TaskHandler form as it is, so its JSON 
 //
 // The reply the later handler was given for the first message that sends its response later in a new core. The main thread numbers
 // those messages from 0, so the test holds the same reply as the handler, which a handler would hand to another thread: the main
-// thread's queue and the serial. The app has no describe_error.
+// thread's queue and the serial.
 //
 fn firstLaterReply(native_app: *FakeNativeApp) ziggy.core.Reply(test_app.GreetResponse) {
     return .{
         .target = .{
             .queue = &native_app.queue,
-            .describe_error = null,
             .serial = 0,
         },
     };
@@ -341,7 +339,7 @@ test "a handler that sends its response later through its reply, from another th
     });
     try native_app.handled(std.testing.io, std.testing.allocator);
     try expectLastMessage(&native_app, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MessageAlreadyAnswered\"}}");
-    try reply.fail(std.testing.io, std.testing.allocator, error.TooLate);
+    try reply.fail(std.testing.io, std.testing.allocator, "Too late.");
     try native_app.handled(std.testing.io, std.testing.allocator);
     try expectLastMessage(&native_app, "{\"kind\":\"system\",\"name\":\"core-error\",\"data\":{\"error\":\"MessageAlreadyAnswered\"}}");
     try std.testing.expectEqual(@as(usize, 1), native_app.countContaining(std.testing.io, std.testing.allocator, "\"ok\":true"));
@@ -372,9 +370,9 @@ test "a reply that fails gives the message an error response" {
     try native_app.start(std.testing.io, std.testing.allocator, native_app.config(1, 1), reply_app);
     defer native_app.stop(std.testing.io, std.testing.allocator);
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":2,\"name\":\"later\",\"data\":{\"name\":\"Ada\"}}");
-    try firstLaterReply(&native_app).fail(std.testing.io, std.testing.allocator, error.LaterFailure);
+    try firstLaterReply(&native_app).fail(std.testing.io, std.testing.allocator, "The later work failed.");
     try native_app.handled(std.testing.io, std.testing.allocator);
-    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":false,\"error\":\"LaterFailure\"}");
+    try expectLastMessage(&native_app, "{\"id\":2,\"ok\":false,\"error\":\"The later work failed.\"}");
 }
 
 test "a response through the reply and another by what the handler returns is reported as a core-error event, not a second response" {

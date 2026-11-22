@@ -3,6 +3,7 @@
 //
 
 const std = @import("std");
+const utils = @import("utils");
 
 //
 // Wakes the native app's UI thread to take the core's messages with ziggy_take_native_message (see native-message.zig). The core calls
@@ -158,10 +159,22 @@ pub const TaskError = error{
 };
 
 //
-// A function that gives the text to report for an error a handler returned, or null to report the error's name. An app supplies
-// one when its code records the reason for a failure somewhere other than the error's name, as a Zig error carries no message.
+// Gives the text the frontend is sent for an error a handler returned: the text the handler set with `fail_with` before it returned,
+// or else the message the error was thrown with (`ziggy.utils.errors.throwError`), or else the error's name. A Zig error carries no
+// text of its own, so a handler that wants the frontend to see more than the name sets it. It is called on the thread the handler ran
+// on, straight after it returned, as the message of a thrown error is that thread's.
 //
-pub const ErrorDescriber = *const fn (err: anyerror) ?[]const u8;
+pub fn failureText(failure: ?[]const u8, err: anyerror) []const u8 {
+    if (failure) |text| {
+        std.debug.assert(text.len > 0);
+        return text;
+    }
+    const text = utils.errors.errorMessage(err);
+    if (text.len == 0) {
+        return @errorName(err);
+    }
+    return text;
+}
 
 //
 // How a task ended, as reported to the app's observer: the task's type and input as well as its outcome, which the

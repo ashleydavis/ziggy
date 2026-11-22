@@ -519,10 +519,10 @@ test "a message with no name, or an empty one, is refused with MissingMessageNam
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":2,\"ok\":false,\"error\":\"MissingMessageName\"}");
 }
 //
-// The error describer.
+// The text of an error reply.
 //
 
-test "the refuse message's error reaches the UI as the sentence the test app's describer gives" {
+test "the refuse message's error reaches the UI as the sentence it set with fail_with" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);
@@ -533,7 +533,7 @@ test "the refuse message's error reaches the UI as the sentence the test app's d
     try native_app.send(std.testing.io, std.testing.allocator, "{\"kind\":\"app\",\"id\":1,\"name\":\"refuse\"}");
     try native_app.expectMessageContaining(std.testing.io, std.testing.allocator, "{\"id\":1,\"ok\":false,\"error\":\"The test app refused, as the request told it to.\"}");
 }
-test "an error the describer has no sentence for is replied to by name" {
+test "an error with no fail_with sentence is replied to by name" {
     var native_app: FakeNativeApp = undefined;
     native_app.init();
     const directories = try test_environment.useTestEnvironment(std.testing.allocator, native_app.data_tmp);

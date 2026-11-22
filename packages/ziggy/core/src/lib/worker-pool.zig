@@ -89,8 +89,6 @@ pub const WorkerPoolOptions = struct {
     max_workers: u32,
     // The app's task types.
     tasks: []const TaskHandlerEntry,
-    // Gives the text to report for the error a task handler returned, or null to report the error's name.
-    describe_error: ?types.ErrorDescriber = null,
     // The options every worker is started with. The pool fills in each worker's id.
     worker_options: worker_lib.IWorkerOptions,
     // Where the events for the frontend go, or null for none.
@@ -594,7 +592,6 @@ pub const WorkerPool = struct {
         const worker = try Worker.start(allocator, io, sender_id, self.main_queue, .{
             .options_json = options_json,
             .tasks = self.options.tasks,
-            .describe_error = self.options.describe_error,
         });
         const state = try allocator.create(IWorkerState);
         state.* = .{

@@ -46,7 +46,6 @@ The fields of `ziggy.core.App`:
 | `backgrounds` | No | The window's background colours for each theme, a `ziggy.theme.Backgrounds`. The default is white in the light theme and black in the dark one. See [Theme](theme.md). |
 | `ui_files` | Yes | The files of the app's built frontend, `&ui.files` from the `ui-files` module the build makes. |
 | `ui_query` | No | A function that gives the query the native app adds to the frontend's address, so the frontend's first render already holds what the backend tells it at start-up. |
-| `describe_error` | No | A function that turns an error a handler returned into the text of the error response (see [When a handler fails](messages.md#when-a-handler-fails)). |
 | `on_task_end`, `on_task_event` | No | Functions told of every task that ends and every event a task sends. |
 | `on_create` | No | A function called once when the backend is created, before any message or task reaches the app, so the app can make what its handlers and tasks need. See [When the backend is created](#when-the-backend-is-created). |
 | `on_destroy` | No | A function called twice when the backend is destroyed, so the app can stop its own threads and then free its own resources. See [When the backend is destroyed](#when-the-backend-is-destroyed). |

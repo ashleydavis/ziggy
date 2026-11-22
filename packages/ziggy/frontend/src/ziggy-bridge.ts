@@ -37,7 +37,8 @@ export interface ITaskEvent<TData> {
 // Why a task failed, inside its result.
 //
 export interface ITaskError {
-    // The text of the error: the Zig error's name, the text the app's describe_error gave, or "Cancelled".
+    // The text of the error: the text the handler set with fail_with, the message the error was thrown with, the Zig error's name,
+    // or "Cancelled".
     message: string;
 }
 
@@ -113,7 +114,7 @@ export type IActionHandler = () => void | Promise<void>;
 // What a core-error event carries: a message failed and had no message response to carry the error.
 //
 export interface ICoreErrorEvent {
-    // The error's name, or the text the app's describe_error gave for it.
+    // The text the handler set with fail_with, or else the message the error was thrown with, or else the error's name.
     error: string;
 }
 

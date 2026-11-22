@@ -1,6 +1,6 @@
 //
 // Everything the test app adds to Ziggy's core library: its messages, each with the handler for it, its task types and the
-// observers and error describer it gives the backend. Ziggy's build serves the app declared here.
+// observers it gives the backend. Ziggy's build serves the app declared here.
 //
 
 const std = @import("std");
@@ -46,7 +46,6 @@ pub const app = ziggy.core.App(.{
     },
     .on_task_end = handlers.onTaskEnd,
     .on_task_event = handlers.onTaskEvent,
-    .describe_error = handlers.describeError,
     .menu = handlers.menu,
     .actions = handlers.actions,
     .ui_files = &ui.files,
