@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 
-# The proof run: Android smoke scenario 5 eight times in a row on the emulator the workflow started, with the adb server traced.
-# When GUEST_TCP_RMEM_MAX is set, the guest's TCP receive buffers are first capped at that many bytes, so adbd on the device never
-# reads more than that from the app's connection at once and never forwards a larger adb packet to the host. Nothing else differs
-# between the two sides. Fails when the emulator's adb connection dropped at least once. Saves its evidence to $EVIDENCE_DIR.
+# The proof run: Android smoke scenario 5 eight times in a row on the emulator the workflow started, with the adb server traced,
+# against the build the workflow made (with or without small-get-text.patch). Fails when the emulator's adb connection dropped at
+# least once. Saves the adb server's log to $EVIDENCE_DIR.
 
 set -u
 
@@ -14,13 +13,6 @@ mkdir -p "$EVIDENCE_DIR"
 "$ADB" kill-server
 ADB_TRACE=all "$ADB" start-server
 "$ADB" -s $SERIAL wait-for-device
-
-if [ -n "${GUEST_TCP_RMEM_MAX:-}" ]; then
-    "$ADB" -s $SERIAL shell su 0 sh -c "'echo 4096 16384 $GUEST_TCP_RMEM_MAX > /proc/sys/net/ipv4/tcp_rmem'" || exit 1
-    "$ADB" -s $SERIAL shell su 0 sh -c "'echo $GUEST_TCP_RMEM_MAX > /proc/sys/net/core/rmem_max'" || exit 1
-fi
-echo "guest tcp_rmem: $("$ADB" -s $SERIAL shell su 0 cat /proc/sys/net/ipv4/tcp_rmem)"
-echo "guest rmem_max: $("$ADB" -s $SERIAL shell su 0 cat /proc/sys/net/core/rmem_max)"
 
 for attempt in 1 2 3 4 5 6 7 8; do
     echo "$(date -u +%H:%M:%S.%N) scenario 5, attempt $attempt"
