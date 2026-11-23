@@ -14,10 +14,14 @@ mkdir -p "$EVIDENCE_DIR"
 ADB_TRACE=all "$ADB" start-server
 "$ADB" -s $SERIAL wait-for-device
 
+passed=0
 for attempt in 1 2 3 4 5 6 7 8; do
     echo "$(date -u +%H:%M:%S.%N) scenario 5, attempt $attempt"
-    bash ./smoke-tests/run.sh android 5-cancel-one-of-several-sources
+    if bash ./smoke-tests/run.sh android 5-cancel-one-of-several-sources; then
+        passed=$((passed + 1))
+    fi
 done
+echo "=== attempts of scenario 5 passed: $passed of 8"
 
 cp /tmp/adb.*.log "$EVIDENCE_DIR/"
 log="$(ls /tmp/adb.*.log)"

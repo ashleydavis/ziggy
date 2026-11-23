@@ -7,7 +7,7 @@ index 7ce8dac..59c1635 100644
      }
      if (command.command === "get-text") {
 -        return { ok: true, value: element.textContent ?? "" };
-+        return { ok: true, value: (element.textContent ?? "").slice(-8000) };
++        return { ok: true, value: (element.textContent ?? "").slice(-30000) };
      }
      return { ok: false, error: `Unknown test command ${command.command}.` };
  }
