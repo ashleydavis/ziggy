@@ -1,0 +1,974 @@
+smoke-tests-android	Set up job	﻿2026-11-22T22:55:41.3105884Z Current runner version: '2.338.2'
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3125239Z ##[group]Runner Image Provisioner
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3125920Z Hosted Compute Agent
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3126322Z Version: 20261111.635
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3126793Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3127328Z Build Date: 2026-11-11T01:49:01Z
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3127820Z Worker ID: {0ced6501-b36f-4fcc-9db6-a4e1e5d5cc95}
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3128356Z Region: us-west-2
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3128727Z Cloud: AWS
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3129135Z ##[endgroup]
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3130003Z ##[group]Operating System
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3130434Z Ubuntu
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3130798Z 24.04.5
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3131159Z LTS
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3131534Z ##[endgroup]
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3131932Z ##[group]Runner Image
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3132336Z Image: ubuntu-24.04
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3132763Z Version: 20261116.133.1
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3133825Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261116.133/images/ubuntu/Ubuntu2404-Readme.md
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3135179Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261116.133
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3135829Z ##[endgroup]
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3136699Z ##[group]GITHUB_TOKEN Permissions
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3138283Z Contents: read
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3138710Z Metadata: read
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3139096Z Packages: read
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3139488Z ##[endgroup]
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3141172Z Secret source: Actions
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3141849Z Cache mode: write
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3142334Z Prepare workflow directory
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3410591Z Prepare all required actions
+smoke-tests-android	Set up job	2026-11-22T22:55:41.3448146Z Getting action download info
+smoke-tests-android	Set up job	2026-11-22T22:55:41.7061399Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+smoke-tests-android	Set up job	2026-11-22T22:55:42.8512356Z Download action repository 'oven-sh/setup-bun@v2' (SHA:0c5077e51419868618aeaa5fe8019c62421857d6)
+smoke-tests-android	Set up job	2026-11-22T22:55:43.1546104Z Download action repository 'actions/setup-node@v4' (SHA:49933ea5288caeca8642d1e84afbd3f7d6820020)
+smoke-tests-android	Set up job	2026-11-22T22:55:43.3206054Z Download action repository 'jdx/mise-action@v2' (SHA:c37c93293d6b742fc901e1406b8f764f6fb19dac)
+smoke-tests-android	Set up job	2026-11-22T22:55:43.6640317Z Download action repository 'actions/cache@v4' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+smoke-tests-android	Set up job	2026-11-22T22:55:43.8714387Z Download action repository 'actions/setup-java@v4' (SHA:cf277c60eb25467037889841efdb72551f06f6c3)
+smoke-tests-android	Set up job	2026-11-22T22:55:44.3001232Z Download action repository 'reactivecircus/android-emulator-runner@v2' (SHA:a421e43855164a8197daf9d8d40fe71c6996bb0d)
+smoke-tests-android	Set up job	2026-11-22T22:55:44.7227934Z Complete job name: smoke-tests-android
+smoke-tests-android	Checkout code	﻿2026-11-22T22:55:44.7826086Z ##[group]Run actions/checkout@v4
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7826784Z with:
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7827088Z   repository: ashleydavis/ziggy
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7829000Z   token: ***
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7829258Z   ssh-strict: true
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7829564Z   ssh-user: git
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7829830Z   persist-credentials: true
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7830126Z   clean: true
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7830443Z   sparse-checkout-cone-mode: true
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7830743Z   fetch-depth: 1
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7831007Z   fetch-tags: false
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7831262Z   show-progress: true
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7831533Z   lfs: false
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7831797Z   submodules: false
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7832056Z   set-safe-directory: true
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7832576Z   allow-unsafe-pr-checkout: false
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7832982Z env:
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7833230Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7833769Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Checkout code	2026-11-22T22:55:44.7834042Z ##[endgroup]
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.5098108Z Syncing repository: ashleydavis/ziggy
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.5099530Z ##[group]Getting Git version info
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.5099858Z Working directory is '/home/runner/work/ziggy/ziggy'
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.5100498Z [command]/usr/bin/git version
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.6278718Z git version 2.56.1
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.6291266Z ##[endgroup]
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.6302391Z Temporarily overriding HOME='/home/runner/work/_temp/861a2944-70a6-48e4-9f2a-849a043b7d32' before making global git config changes
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.6303714Z Adding repository directory to the temporary git global config as a safe directory
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.6306922Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/ziggy/ziggy
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.6347367Z Deleting the contents of '/home/runner/work/ziggy/ziggy'
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.6350749Z ##[group]Initializing the repository
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.6353806Z [command]/usr/bin/git init /home/runner/work/ziggy/ziggy
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7140430Z hint: Using 'master' as the name for the initial branch. This default branch name
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7141150Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7141766Z hint: to use in all of your new repositories, which will suppress this warning,
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7142273Z hint: call:
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7142601Z hint:
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7143018Z hint: 	git config --global init.defaultBranch <name>
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7143605Z hint:
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7144017Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7144573Z hint: 'development'. The just-created branch can be renamed via this command:
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7144995Z hint:
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7145264Z hint: 	git branch -m <name>
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7145498Z hint:
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7145815Z hint: Disable this message with "git config set advice.defaultBranchName false"
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7146351Z Initialized empty Git repository in /home/runner/work/ziggy/ziggy/.git/
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7154330Z [command]/usr/bin/git remote add origin https://github.com/ashleydavis/ziggy
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7197994Z ##[endgroup]
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7198645Z ##[group]Disabling automatic garbage collection
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7200767Z [command]/usr/bin/git config --local gc.auto 0
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7223002Z ##[endgroup]
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7223767Z ##[group]Setting up auth
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7228860Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.7252228Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.8231526Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.8257235Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.8410566Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.8437221Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.8585694Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.8611443Z ##[endgroup]
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.8612091Z ##[group]Fetching the repository
+smoke-tests-android	Checkout code	2026-11-22T22:55:47.8619007Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +e0b4c3793a5d458b405ce853ff5b1fbae4f32e56:refs/remotes/origin/main
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5814030Z From https://github.com/ashleydavis/ziggy
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5814848Z  * [new ref]         e0b4c3793a5d458b405ce853ff5b1fbae4f32e56 -> origin/main
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5817162Z ##[endgroup]
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5817833Z ##[group]Determining the checkout info
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5820390Z ##[endgroup]
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5825170Z [command]/usr/bin/git sparse-checkout disable
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5892458Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5895246Z ##[group]Checking out the ref
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.5899799Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.7567478Z Switched to a new branch 'main'
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.7571147Z branch 'main' set up to track 'origin/main'.
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.7589349Z ##[endgroup]
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.7621803Z [command]/usr/bin/git log -1 --format=%H
+smoke-tests-android	Checkout code	2026-11-22T22:55:48.7640015Z e0b4c3793a5d458b405ce853ff5b1fbae4f32e56
+smoke-tests-android	Setup Bun	﻿2026-11-22T22:55:48.7852700Z ##[group]Run oven-sh/setup-bun@v2
+smoke-tests-android	Setup Bun	2026-11-22T22:55:48.7853003Z with:
+smoke-tests-android	Setup Bun	2026-11-22T22:55:48.7853625Z   bun-version: 1.3.14
+smoke-tests-android	Setup Bun	2026-11-22T22:55:48.7853877Z   no-cache: false
+smoke-tests-android	Setup Bun	2026-11-22T22:55:48.7855677Z   token: ***
+smoke-tests-android	Setup Bun	2026-11-22T22:55:48.7855880Z env:
+smoke-tests-android	Setup Bun	2026-11-22T22:55:48.7856089Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Setup Bun	2026-11-22T22:55:48.7856311Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Setup Bun	2026-11-22T22:55:48.7856534Z ##[endgroup]
+smoke-tests-android	Setup Bun	2026-11-22T22:55:49.2619797Z Cache hit for: bun-fR4r1tsFeXfPQkusQwkKD2kGnsE=
+smoke-tests-android	Setup Bun	2026-11-22T22:55:50.6296986Z Received 0 of 33843769 (0.0%), 0.0 MBs/sec
+smoke-tests-android	Setup Bun	2026-11-22T22:55:51.3430227Z Received 33843769 of 33843769 (100.0%), 18.8 MBs/sec
+smoke-tests-android	Setup Bun	2026-11-22T22:55:51.3430815Z Cache Size: ~32 MB (33843769 B)
+smoke-tests-android	Setup Bun	2026-11-22T22:55:51.3451263Z [command]/usr/bin/tar -xf /home/runner/work/_temp/ced3f3e7-9dff-45eb-9f66-f58bf720c433/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+smoke-tests-android	Setup Bun	2026-11-22T22:55:51.4597725Z Cache restored successfully
+smoke-tests-android	Setup Bun	2026-11-22T22:55:51.4616034Z [command]/home/runner/.bun/bin/bun --revision
+smoke-tests-android	Setup Bun	2026-11-22T22:55:51.4656677Z 1.3.14+0d9b296af
+smoke-tests-android	Setup Bun	2026-11-22T22:55:51.4660954Z Using a cached version of Bun: 1.3.14+0d9b296af
+smoke-tests-android	Setup Node.js	﻿2026-11-22T22:55:51.4795213Z ##[group]Run actions/setup-node@v4
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4795511Z with:
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4795728Z   node-version: 24.15.0
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4795967Z   always-auth: false
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4796234Z   check-latest: false
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4797997Z   token: ***
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4798216Z env:
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4798464Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4798685Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.4798919Z ##[endgroup]
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.5841959Z Attempting to download 24.15.0...
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.5921928Z (node:2190) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:51.5922899Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:52.1542073Z Acquiring 24.15.0 - x64 from https://github.com/actions/node-versions/releases/download/24.15.0-24511264946/node-24.15.0-linux-x64.tar.gz
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:52.7939232Z Extracting ...
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:52.8035957Z [command]/usr/bin/tar xz --strip 1 --warning=no-unknown-keyword --overwrite -C /home/runner/work/_temp/bfe6af00-cde6-4e68-af3f-7903276a01ff -f /home/runner/work/_temp/2cb5fd20-6db3-468b-90fb-92badadf15e9
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:53.8302101Z Adding to the cache ...
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:54.7619418Z ##[group]Environment details
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:55.0846299Z node: v24.15.0
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:55.0846850Z npm: 11.12.1
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:55.0847278Z yarn: 1.22.22
+smoke-tests-android	Setup Node.js	2026-11-22T22:55:55.0847779Z ##[endgroup]
+smoke-tests-android	Setup Zig (version from mise.toml)	﻿2026-11-22T22:55:55.0983921Z ##[group]Run jdx/mise-action@v2
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0984285Z with:
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0984520Z   install_args: zig jq
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0984769Z   install: true
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0985005Z   cache: true
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0985246Z   cache_save: true
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0985480Z   cache_key_prefix: mise-v0
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0985743Z   experimental: false
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0985953Z   log_level: info
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0986186Z   reshim: false
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0988011Z   github_token: ***
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0988249Z   fetch_from_github: true
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0988525Z env:
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0988726Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0988955Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.0989177Z ##[endgroup]
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.1834209Z ##[group]Restoring mise cache
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.3339920Z [command]/usr/bin/ldd --version
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.3810845Z ldd (Ubuntu GLIBC 2.39-0ubuntu8.12) 2.39
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.3811385Z Copyright (C) 2024 Free Software Foundation, Inc.
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.3812100Z This is free software; see the source for copying conditions.  There is NO
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.3812845Z warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.3813569Z Written by Roland McGrath and Ulrich Drepper.
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:55.6597594Z Cache hit for: mise-v0-linux-x64-9ce104d02e7009dbe537b57fda0e747a54fedf18a2f45dff9c2c4209b85ea59d-3bf4a0d67d88dc5aa5be7ff0ac03c5258bf51c307989c5c5477fdc7134d93fb1
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:57.0092278Z Received 0 of 141227464 (0.0%), 0.0 MBs/sec
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:58.0095094Z Received 67108864 of 141227464 (47.5%), 32.0 MBs/sec
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:58.7630470Z Received 141227464 of 141227464 (100.0%), 48.9 MBs/sec
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:58.7631104Z Cache Size: ~135 MB (141227464 B)
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:58.7656406Z [command]/usr/bin/tar -xf /home/runner/work/_temp/a17f75db-215c-455e-802a-6d2603190fcb/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4263942Z Cache restored successfully
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4322830Z mise cache restored from key: mise-v0-linux-x64-9ce104d02e7009dbe537b57fda0e747a54fedf18a2f45dff9c2c4209b85ea59d-3bf4a0d67d88dc5aa5be7ff0ac03c5258bf51c307989c5c5477fdc7134d93fb1
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4326732Z ##[group]Setting env vars
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4327317Z Setting MISE_LOG_LEVEL=info
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4330705Z Setting GITHUB_TOKEN=***
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4331575Z Setting MISE_TRUSTED_CONFIG_PATHS=/home/runner/work/ziggy/ziggy
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4332360Z Setting MISE_YES=1
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4333045Z Adding /home/runner/.local/share/mise/shims to PATH
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4334234Z ##[group]Running mise --version
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4337663Z [command]/home/runner/.local/share/mise/bin/mise --version
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4415044Z 2026.10.20 linux-x64 (2026-10-26)
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4431401Z ##[endgroup]
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4431984Z ##[group]Running mise install zig jq
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4441560Z [command]/home/runner/.local/share/mise/bin/mise install zig jq
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.4541721Z ^[[2mmise^[[0m ^[[2mby @jdx^[[0m – installing 2 tools
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5123754Z ^[[2mmise^[[0m ^[[38;5;11m⇢^[[0m ^[[34mzig^[[0m@0.16.0  56ms · already installed
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5470776Z ^[[2mmise^[[0m ^[[38;5;11m⇢^[[0m ^[[34mjq^[[0m@1.7.1    91ms · already installed
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5471759Z ^[[2mmise^[[0m ^[[36m████████████████^[[0m^[[31m^[[0m^[[2m^[[0m 2/2 · installed 0 tools · 2 already installed in 92ms
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5806203Z ##[endgroup]
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5806786Z ##[group]Running mise ls
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5817433Z [command]/home/runner/.local/share/mise/bin/mise ls
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5938909Z bun                              1.3.14 (missing)   ~/work/ziggy/ziggy/mise.toml  1.3.14
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5939629Z github:ashleydavis/what-changed  0.0.6 (missing)    ~/work/ziggy/ziggy/mise.toml  0.0.6
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5940113Z jq                               1.7.1              ~/work/ziggy/ziggy/mise.toml  1.7.1
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5940563Z node                             24.15.0 (missing)  ~/work/ziggy/ziggy/mise.toml  24.15.0
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5941358Z zig                              0.16.0             ~/work/ziggy/ziggy/mise.toml  0.16.0
+smoke-tests-android	Setup Zig (version from mise.toml)	2026-11-22T22:55:59.5946740Z ##[endgroup]
+smoke-tests-android	Cache Bun dependencies	﻿2026-11-22T22:55:59.6570471Z ##[group]Run actions/cache@v4
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6570750Z with:
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6570955Z   path: ~/.bun/install/cache
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6571374Z   key: Linux-bun-277f04a92f230bc285b5f68495ca549fbb4f96f6c0b950efa161eebef736db2e
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6571760Z   restore-keys: Linux-bun-
+smoke-tests-android	Cache Bun dependencies	
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6572069Z   enableCrossOsArchive: false
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6572319Z   fail-on-cache-miss: false
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6572556Z   lookup-only: false
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6572819Z   save-always: false
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6573022Z env:
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6573753Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6573977Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6574218Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6575997Z   GITHUB_TOKEN: ***
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6576319Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6576761Z   MISE_YES: 1
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.6576952Z ##[endgroup]
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.7364463Z (node:2287) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:55:59.7365374Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:56:00.0046533Z Cache hit for: Linux-bun-277f04a92f230bc285b5f68495ca549fbb4f96f6c0b950efa161eebef736db2e
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:56:00.0131138Z (node:2287) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:56:01.3407466Z Received 0 of 20803360 (0.0%), 0.0 MBs/sec
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:56:02.0683833Z Received 20803360 of 20803360 (100.0%), 11.5 MBs/sec
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:56:02.0684718Z Cache Size: ~20 MB (20803360 B)
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:56:02.0704259Z [command]/usr/bin/tar -xf /home/runner/work/_temp/3d1a4613-fc61-4a61-b0af-41b49c12b39f/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:56:02.2125492Z Cache restored successfully
+smoke-tests-android	Cache Bun dependencies	2026-11-22T22:56:02.5510537Z Cache restored from key: Linux-bun-277f04a92f230bc285b5f68495ca549fbb4f96f6c0b950efa161eebef736db2e
+smoke-tests-android	Install dependencies	﻿2026-11-22T22:56:02.5663698Z Prepare all required actions
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5711640Z ##[group]Run ./.github/actions/retry-install
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5712028Z with:
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5712236Z   run: bun install
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5712509Z   attempts: 3
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5712738Z   delay-seconds: 15
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5712999Z env:
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5713230Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5713829Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5714088Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5716014Z   GITHUB_TOKEN: ***
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5716355Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5716652Z   MISE_YES: 1
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5716920Z ##[endgroup]
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5765425Z ##[start-action display=Run set -uo pipefail;id=__self.__run]
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5794617Z ##[group]Run set -uo pipefail
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5795080Z ^[[36;1mset -uo pipefail^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5795326Z ^[[36;1m^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5795563Z ^[[36;1m#^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5795921Z ^[[36;1m# Prints the verify entries that are not satisfied, each preceded by a space. Empty when they^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5796597Z ^[[36;1m# all resolve. Word splitting on the input is intended: it is a space-separated list. An entry^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5797110Z ^[[36;1m# holding "|"-separated alternatives is satisfied by any one of them.^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5797475Z ^[[36;1m#^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5797683Z ^[[36;1mmissing_tools() {^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5798038Z ^[[36;1m    local missing=""^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5798284Z ^[[36;1m    local entry^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5798563Z ^[[36;1m    local alternative^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5798811Z ^[[36;1m    local found^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5799134Z ^[[36;1m    for entry in $RETRY_INSTALL_VERIFY; do^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5799423Z ^[[36;1m        found=""^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5799712Z ^[[36;1m        for alternative in ${entry//|/ }; do^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5800070Z ^[[36;1m            if command -v "$alternative" >/dev/null 2>&1; then^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5800387Z ^[[36;1m                found="yes"^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5800686Z ^[[36;1m                break^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5800924Z ^[[36;1m            fi^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5801196Z ^[[36;1m        done^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5801432Z ^[[36;1m        if [ -z "$found" ]; then^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5801762Z ^[[36;1m            missing="$missing $entry"^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5802026Z ^[[36;1m        fi^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5802267Z ^[[36;1m    done^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5802493Z ^[[36;1m    echo "$missing"^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5802757Z ^[[36;1m}^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5802978Z ^[[36;1m^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5803210Z ^[[36;1minstallStatus=0^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5803635Z ^[[36;1mmissing=""^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5804060Z ^[[36;1mattempt=1^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5804279Z ^[[36;1m^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5804574Z ^[[36;1mwhile [ "$attempt" -le "$RETRY_INSTALL_ATTEMPTS" ]; do^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5804913Z ^[[36;1m    installStatus=0^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5805217Z ^[[36;1m    bash -c "$RETRY_INSTALL_RUN" || installStatus=$?^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5805564Z ^[[36;1m    missing="$(missing_tools)"^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5805836Z ^[[36;1m^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5806122Z ^[[36;1m    if [ "$installStatus" -eq 0 ] && [ -z "$missing" ]; then^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5806429Z ^[[36;1m        exit 0^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5806698Z ^[[36;1m    fi^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5807109Z ^[[36;1m^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5807376Z ^[[36;1m    if [ "$installStatus" -ne 0 ]; then^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5807749Z ^[[36;1m        echo "Attempt $attempt of $RETRY_INSTALL_ATTEMPTS exited $installStatus."^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5808166Z ^[[36;1m    fi^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5808451Z ^[[36;1m    if [ -n "$missing" ]; then^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5808892Z ^[[36;1m        echo "Attempt $attempt of $RETRY_INSTALL_ATTEMPTS reported success but left these missing:$missing"^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5809341Z ^[[36;1m    fi^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5809555Z ^[[36;1m^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5809848Z ^[[36;1m    if [ "$attempt" -eq "$RETRY_INSTALL_ATTEMPTS" ]; then^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5810366Z ^[[36;1m        break^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5810641Z ^[[36;1m    fi^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5810879Z ^[[36;1m^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5811140Z ^[[36;1m    delay=$((RETRY_INSTALL_DELAY * attempt))^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5811474Z ^[[36;1m    echo "Waiting ${delay}s before retrying."^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5811786Z ^[[36;1m    sleep "$delay"^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5812064Z ^[[36;1m    attempt=$((attempt + 1))^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5812342Z ^[[36;1mdone^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5812570Z ^[[36;1m^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5812779Z ^[[36;1mif [ -n "$missing" ]; then^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5813466Z ^[[36;1m    echo "::error::Install failed after $RETRY_INSTALL_ATTEMPTS attempts; still missing:$missing"^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5813926Z ^[[36;1melse^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5814307Z ^[[36;1m    echo "::error::Install failed after $RETRY_INSTALL_ATTEMPTS attempts (last exit $installStatus)."^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5814721Z ^[[36;1mfi^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.5814953Z ^[[36;1mexit 1^[[0m
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8708546Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8708950Z env:
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8709230Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8709504Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8709758Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8711719Z   GITHUB_TOKEN: ***
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8712018Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8712328Z   MISE_YES: 1
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8712598Z   RETRY_INSTALL_RUN: bun install
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8712872Z   RETRY_INSTALL_VERIFY: 
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8713189Z   RETRY_INSTALL_ATTEMPTS: 3
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8713588Z   RETRY_INSTALL_DELAY: 15
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8713901Z ##[endgroup]
+smoke-tests-android	Install dependencies	2026-11-22T22:56:02.8816058Z bun install v1.3.14 (0d9b296a)
+smoke-tests-android	Install dependencies	2026-11-22T22:56:03.0709917Z 
+smoke-tests-android	Install dependencies	2026-11-22T22:56:03.0711109Z + express@5.3.0
+smoke-tests-android	Install dependencies	2026-11-22T22:56:03.0711659Z + ws@8.22.0
+smoke-tests-android	Install dependencies	2026-11-22T22:56:03.0711897Z 
+smoke-tests-android	Install dependencies	2026-11-22T22:56:03.0712209Z 776 packages installed [189.00ms]
+smoke-tests-android	Install dependencies	2026-11-22T22:56:03.0733857Z ##[end-action id=__self.__run;outcome=success;conclusion=success;duration_ms=496]
+smoke-tests-android	Setup JDK 17 (Android)	﻿2026-11-22T22:56:03.0803115Z ##[group]Run actions/setup-java@v4
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0803617Z with:
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0803934Z   distribution: temurin
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0804202Z   java-version: 17
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0804474Z   java-package: jdk
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0804747Z   check-latest: false
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0804971Z   server-id: github
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0805282Z   server-username: GITHUB_ACTOR
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0805557Z   server-password: GITHUB_TOKEN
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0805859Z   overwrite-settings: true
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0806110Z   job-status: success
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0807947Z   token: ***
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0808380Z env:
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0808617Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0808887Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0809109Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0810867Z   GITHUB_TOKEN: ***
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0811155Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0811486Z   MISE_YES: 1
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.0811728Z ##[endgroup]
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2109063Z ##[warning]setup-java v4 is deprecated and will no longer receive updates. Please migrate to actions/setup-java@v5.
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2117348Z ##[group]Installed distributions
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2466633Z Resolved Java 17.0.21+9 from tool-cache
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2467545Z Setting Java 17.0.21+9 as the default
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2474831Z (node:2314) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2475689Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2477048Z Creating toolchains.xml for JDK version 17 from temurin
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2549547Z Writing to /home/runner/.m2/toolchains.xml
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2549886Z 
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2550073Z Java configuration:
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2550384Z   Distribution: temurin
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2550644Z   Version: 17.0.21+9
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2551042Z   Path: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2551347Z 
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2551805Z ##[endgroup]
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2555243Z Creating settings.xml with server-id: github
+smoke-tests-android	Setup JDK 17 (Android)	2026-11-22T22:56:03.2561474Z Writing to /home/runner/.m2/settings.xml
+smoke-tests-android	Cache the Android NDK	﻿2026-11-22T22:56:03.2669958Z ##[group]Run actions/cache@v4
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2670271Z with:
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2670513Z   path: /usr/local/lib/android/sdk/ndk/25.1.8937393
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2670888Z   key: Linux-android-ndk-25.1.8937393
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2671168Z   enableCrossOsArchive: false
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2671462Z   fail-on-cache-miss: false
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2671756Z   lookup-only: false
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2672033Z   save-always: false
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2672264Z env:
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2672499Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2672741Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2672989Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2675199Z   GITHUB_TOKEN: ***
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2675488Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2675842Z   MISE_YES: 1
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2676169Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2676639Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.2677068Z ##[endgroup]
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.3514208Z (node:2326) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.3569781Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.6276081Z Cache hit for: Linux-android-ndk-25.1.8937393
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:03.6391236Z (node:2326) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:04.9858741Z Received 0 of 497577927 (0.0%), 0.0 MBs/sec
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:05.9867068Z Received 83886080 of 497577927 (16.9%), 40.0 MBs/sec
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:06.9877991Z Received 159383552 of 497577927 (32.0%), 50.6 MBs/sec
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:07.9890675Z Received 268435456 of 497577927 (53.9%), 63.9 MBs/sec
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:08.9895005Z Received 381681664 of 497577927 (76.7%), 72.7 MBs/sec
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:09.9890486Z Received 472412103 of 497577927 (94.9%), 75.0 MBs/sec
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:10.1685894Z Received 497577927 of 497577927 (100.0%), 76.8 MBs/sec
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:10.1714790Z Cache Size: ~475 MB (497577927 B)
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:10.1809112Z [command]/usr/bin/tar -xf /home/runner/work/_temp/67d262f3-975d-4fa4-899d-cfda62f2aa97/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:12.2570469Z Cache restored successfully
+smoke-tests-android	Cache the Android NDK	2026-11-22T22:56:12.2785590Z Cache restored from key: Linux-android-ndk-25.1.8937393
+smoke-tests-android	Install Android NDK (Android)	﻿2026-11-22T22:56:12.2938023Z Prepare all required actions
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3082317Z ##[group]Run ./.github/actions/retry-install
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3082574Z with:
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3082862Z   run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" > /dev/null
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3083204Z   attempts: 3
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3083561Z   delay-seconds: 15
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3083733Z env:
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3083890Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3084067Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3084234Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3085957Z   GITHUB_TOKEN: ***
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3086173Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3086438Z   MISE_YES: 1
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3086678Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3087075Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3087379Z ##[endgroup]
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3091674Z ##[start-action display=Run set -uo pipefail;id=__self_2.__run]
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3173919Z ##[group]Run set -uo pipefail
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3174211Z ^[[36;1mset -uo pipefail^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3174390Z ^[[36;1m^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3174527Z ^[[36;1m#^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3174830Z ^[[36;1m# Prints the verify entries that are not satisfied, each preceded by a space. Empty when they^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3175348Z ^[[36;1m# all resolve. Word splitting on the input is intended: it is a space-separated list. An entry^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3175782Z ^[[36;1m# holding "|"-separated alternatives is satisfied by any one of them.^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3176066Z ^[[36;1m#^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3176221Z ^[[36;1mmissing_tools() {^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3176403Z ^[[36;1m    local missing=""^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3176600Z ^[[36;1m    local entry^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3176787Z ^[[36;1m    local alternative^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3176980Z ^[[36;1m    local found^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3177192Z ^[[36;1m    for entry in $RETRY_INSTALL_VERIFY; do^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3177439Z ^[[36;1m        found=""^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3177646Z ^[[36;1m        for alternative in ${entry//|/ }; do^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3177934Z ^[[36;1m            if command -v "$alternative" >/dev/null 2>&1; then^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3178179Z ^[[36;1m                found="yes"^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3178372Z ^[[36;1m                break^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3178560Z ^[[36;1m            fi^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3178735Z ^[[36;1m        done^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3178911Z ^[[36;1m        if [ -z "$found" ]; then^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3179139Z ^[[36;1m            missing="$missing $entry"^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3179357Z ^[[36;1m        fi^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3179513Z ^[[36;1m    done^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3179682Z ^[[36;1m    echo "$missing"^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3179864Z ^[[36;1m}^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3180007Z ^[[36;1m^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3180165Z ^[[36;1minstallStatus=0^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3180345Z ^[[36;1mmissing=""^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3180507Z ^[[36;1mattempt=1^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3180665Z ^[[36;1m^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3180866Z ^[[36;1mwhile [ "$attempt" -le "$RETRY_INSTALL_ATTEMPTS" ]; do^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3181107Z ^[[36;1m    installStatus=0^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3181343Z ^[[36;1m    bash -c "$RETRY_INSTALL_RUN" || installStatus=$?^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3181608Z ^[[36;1m    missing="$(missing_tools)"^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3181803Z ^[[36;1m^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3182007Z ^[[36;1m    if [ "$installStatus" -eq 0 ] && [ -z "$missing" ]; then^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3182259Z ^[[36;1m        exit 0^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3182422Z ^[[36;1m    fi^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3182576Z ^[[36;1m^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3182747Z ^[[36;1m    if [ "$installStatus" -ne 0 ]; then^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3183065Z ^[[36;1m        echo "Attempt $attempt of $RETRY_INSTALL_ATTEMPTS exited $installStatus."^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3183649Z ^[[36;1m    fi^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3183820Z ^[[36;1m    if [ -n "$missing" ]; then^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3184184Z ^[[36;1m        echo "Attempt $attempt of $RETRY_INSTALL_ATTEMPTS reported success but left these missing:$missing"^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3184656Z ^[[36;1m    fi^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3184808Z ^[[36;1m^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3185006Z ^[[36;1m    if [ "$attempt" -eq "$RETRY_INSTALL_ATTEMPTS" ]; then^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3185258Z ^[[36;1m        break^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3185434Z ^[[36;1m    fi^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3185572Z ^[[36;1m^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3185750Z ^[[36;1m    delay=$((RETRY_INSTALL_DELAY * attempt))^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3186011Z ^[[36;1m    echo "Waiting ${delay}s before retrying."^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3186235Z ^[[36;1m    sleep "$delay"^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3186419Z ^[[36;1m    attempt=$((attempt + 1))^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3186610Z ^[[36;1mdone^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3186754Z ^[[36;1m^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3186910Z ^[[36;1mif [ -n "$missing" ]; then^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3187284Z ^[[36;1m    echo "::error::Install failed after $RETRY_INSTALL_ATTEMPTS attempts; still missing:$missing"^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3187640Z ^[[36;1melse^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3187950Z ^[[36;1m    echo "::error::Install failed after $RETRY_INSTALL_ATTEMPTS attempts (last exit $installStatus)."^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3188309Z ^[[36;1mfi^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3188469Z ^[[36;1mexit 1^[[0m
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3214434Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3214715Z env:
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3214884Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3215059Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3215238Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3217014Z   GITHUB_TOKEN: ***
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3217230Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3217470Z   MISE_YES: 1
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3217721Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3218107Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3218579Z   RETRY_INSTALL_RUN: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;25.1.8937393" > /dev/null
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3218961Z   RETRY_INSTALL_VERIFY: 
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3219161Z   RETRY_INSTALL_ATTEMPTS: 3
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3219350Z   RETRY_INSTALL_DELAY: 15
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:12.3219536Z ##[endgroup]
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:20.0419484Z yes: standard output: Broken pipe
+smoke-tests-android	Install Android NDK (Android)	2026-11-22T22:56:20.0437568Z ##[end-action id=__self_2.__run;outcome=success;conclusion=success;duration_ms=7734]
+smoke-tests-android	Enable KVM (Android)	﻿2026-11-22T22:56:20.0456745Z ##[group]Run echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0457381Z ^[[36;1mecho 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules^[[0m
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0457855Z ^[[36;1msudo udevadm control --reload-rules^[[0m
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0458104Z ^[[36;1msudo udevadm trigger --name-match=kvm^[[0m
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0485854Z shell: /usr/bin/bash -e {0}
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0486088Z env:
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0486255Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0486436Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0486611Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0488414Z   GITHUB_TOKEN: ***
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0488644Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0488947Z   MISE_YES: 1
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0489184Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0489570Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0489904Z ##[endgroup]
+smoke-tests-android	Enable KVM (Android)	2026-11-22T22:56:20.0590521Z KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"
+smoke-tests-android	Restore the build	﻿2026-11-22T22:56:20.0838878Z ##[group]Run actions/cache/restore@v4
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0839137Z with:
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0839703Z   path: ziggy-build
+smoke-tests-android	Restore the build	.zig-cache
+smoke-tests-android	Restore the build	apps/ziggy-template/.zig-cache
+smoke-tests-android	Restore the build	apps/ziggy-test-app/.zig-cache
+smoke-tests-android	Restore the build	
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0840139Z   key: ziggy-build-android-e0b4c3793a5d458b405ce853ff5b1fbae4f32e56
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0840434Z   fail-on-cache-miss: true
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0840636Z   enableCrossOsArchive: false
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0840848Z   lookup-only: false
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0841022Z env:
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0841173Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0841348Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0841531Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0843243Z   GITHUB_TOKEN: ***
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0843611Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0843873Z   MISE_YES: 1
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0844128Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0844495Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.0844834Z ##[endgroup]
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.1633832Z (node:2436) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.1634515Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.4338581Z Cache hit for: ziggy-build-android-e0b4c3793a5d458b405ce853ff5b1fbae4f32e56
+smoke-tests-android	Restore the build	2026-11-22T22:56:20.4420415Z (node:2436) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+smoke-tests-android	Restore the build	2026-11-22T22:56:21.7671514Z Received 0 of 51702747 (0.0%), 0.0 MBs/sec
+smoke-tests-android	Restore the build	2026-11-22T22:56:22.4381776Z Received 51702747 of 51702747 (100.0%), 29.5 MBs/sec
+smoke-tests-android	Restore the build	2026-11-22T22:56:22.4383473Z Cache Size: ~49 MB (51702747 B)
+smoke-tests-android	Restore the build	2026-11-22T22:56:22.4429933Z [command]/usr/bin/tar -xf /home/runner/work/_temp/799bf476-baca-4e0d-a622-a6449f6f4661/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+smoke-tests-android	Restore the build	2026-11-22T22:56:22.6891486Z Cache restored successfully
+smoke-tests-android	Restore the build	2026-11-22T22:56:22.6970521Z Cache restored from key: ziggy-build-android-e0b4c3793a5d458b405ce853ff5b1fbae4f32e56
+smoke-tests-android	Point the smoke tests at the build app-build made	﻿2026-11-22T22:56:22.7052825Z ##[group]Run if [ "android" = windows ]; then
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7053314Z ^[[36;1mif [ "android" = windows ]; then^[[0m
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7053883Z ^[[36;1m    echo "ZIGGY_SMOKE_BUILD=$(cygpath -m "$PWD")/ziggy-build/app" >> "$GITHUB_ENV"^[[0m
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7054225Z ^[[36;1melse^[[0m
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7054469Z ^[[36;1m    echo "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"^[[0m
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7054735Z ^[[36;1mfi^[[0m
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7086635Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7086940Z env:
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7087115Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7087305Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7087492Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7089253Z   GITHUB_TOKEN: ***
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7089477Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7089747Z   MISE_YES: 1
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7090001Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7090433Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Point the smoke tests at the build app-build made	2026-11-22T22:56:22.7090723Z ##[endgroup]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	﻿2026-11-22T22:56:22.7211235Z ##[group]Run reactivecircus/android-emulator-runner@v2
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7211516Z with:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7211677Z   api-level: 35
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7211846Z   arch: x86_64
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7212016Z   target: google_apis
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7212201Z   disk-size: 4096M
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7212378Z   script: bun run test:smoke:android
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7212595Z   cores: 2
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7212756Z   avd-name: test
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7212940Z   force-avd-creation: true
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7213216Z   emulator-boot-timeout: 600
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7213659Z   emulator-port: 5554
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7214013Z   emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7214489Z   disable-animations: true
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7214705Z   disable-spellchecker: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7214933Z   disable-linux-hw-accel: auto
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7215136Z   enable-hw-keyboard: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7215331Z   channel: stable
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7215536Z env:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7215690Z   BUN_VERSION: 1.3.14
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7215868Z   NODE_VERSION: 24.15.0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7216052Z   MISE_LOG_LEVEL: info
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7217827Z   GITHUB_TOKEN: ***
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7218089Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7218353Z   MISE_YES: 1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7218608Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7218980Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7219345Z   ZIGGY_SMOKE_BUILD: /home/runner/work/ziggy/ziggy/ziggy-build/app
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7219627Z   ZIGGY_ANDROID_DEVICES: emulator-5554
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7219849Z ##[endgroup]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7684516Z ##[group]Configure emulator
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7685302Z API level: 35
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7685596Z System image API level: 35
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7685873Z target: google_apis
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7686121Z CPU architecture: x86_64
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7686424Z Hardware profile: 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7686650Z Cores: 2
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7686853Z RAM size: 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7687054Z Heap size: 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7687281Z SD card path or size: 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7688098Z Disk size: 4096M
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7688421Z AVD name: test
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7688694Z force avd creation: true
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7689069Z Emulator boot timeout: 600
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7689327Z emulator port: 5554
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7689810Z emulator options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7690220Z disable animations: true
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7690480Z disable spellchecker: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7690808Z disable Linux hardware acceleration: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7691127Z enable hardware keyboard: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7691388Z Channel: 0 (stable)
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7691621Z Script:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7693749Z bun run test:smoke:android
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7694045Z Pre emulator launch script:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7694530Z ##[endgroup]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7694903Z ##[group]Install Android SDK
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:22.7725479Z [command]/usr/bin/sh -c \yes | sdkmanager --licenses > /dev/null
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:23.8937621Z Installing latest build tools, platform tools, and platform.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:23.8946271Z [command]/usr/bin/sh -c \sdkmanager --install 'build-tools;37.0.0' platform-tools 'platforms;android-35'> /dev/null
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:25.6031169Z Installing latest emulator.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:25.6042010Z [command]/usr/bin/sh -c \sdkmanager --install emulator --channel=0 > /dev/null
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:31.7910185Z Installing system images.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:56:31.7921245Z [command]/usr/bin/sh -c \sdkmanager --install 'system-images;android-35;google_apis;x86_64' --channel=0 > /dev/null
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:00.2623822Z ##[endgroup]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:00.2624350Z ##[group]Create AVD
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:00.2624930Z Creating AVD.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:00.2634683Z [command]/usr/bin/sh -c \echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis;x86_64'
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:00.8067835Z Loading local repository...                                                     
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:00.8069257Z [=========                              ] 25% Loading local repository...       
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:00.8110831Z [=========                              ] 25% Fetch remote repository...        
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:00.8134245Z [=======================================] 100% Fetch remote repository...       
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0019454Z Auto-selecting single ABI x86_64
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0778010Z Do you wish to create a custom hardware profile? [no] [command]/usr/bin/sh -c \printf 'hw.cpu.ncore=2\ndisk.dataPartition.size=4096M\n' >> /home/runner/.android/avd/test.avd/config.ini
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0797437Z ##[endgroup]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0798876Z ##[group]Launch Emulator
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0799246Z Starting emulator.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0812010Z [command]/usr/bin/sh -c \/usr/local/lib/android/sdk/emulator/emulator -port 5554 -avd test -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim &
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0904890Z INFO         | Android emulator version 37.3.10.0 (build_id 16970787) (CL:N/A)
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0905323Z INFO         | Graphics backend: gfxstream
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.0905778Z INFO         | Found systemPath /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1273574Z INFO         | Saving last run QEMU version for the AVD to 2
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1274138Z INFO         | Increasing RAM size to 2560MB
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1274604Z ##############################################################################
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1275157Z ##                        WARNING - ACTION REQUIRED                         ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1275731Z ##  Consider using the '-metrics-collection' flag to help improve the       ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1276374Z ##  emulator by sending anonymized usage data. Or use the '-no-metrics'     ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1277014Z ##  flag to bypass this warning and turn off the metrics collection.        ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1277651Z ##  In a future release this warning will turn into a one-time blocking     ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1278275Z ##  prompt to ask for explicit user input regarding metrics collection.     ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1278816Z ##                                                                          ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1279381Z ##  Please see '-help-metrics-collection' for more details. You can use     ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1279956Z ##  '-metrics-to-file' or '-metrics-to-console' flags to see what type of   ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1280536Z ##  data is being collected by emulator as part of usage statistics.        ##
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1281095Z ##############################################################################
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1281537Z INFO         | Guest GLES Driver: Auto (ext controls)
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1282175Z INFO         | emuglConfig_init: vulkan_mode_selected:swiftshader gles_mode_selected:swiftshader
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1282803Z INFO         | Checking system compatibility:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1283248Z INFO         |   Checking: hasSufficientDiskSpace
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1283839Z INFO         |      Ok: Disk space requirements to run avd: `test` are met
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1284233Z INFO         |   Checking: hasSufficientHwGpu
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1284640Z INFO         |      Ok: Hardware GPU compatibility checks are not required
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1285029Z INFO         |   Checking: hasSufficientSystem
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1285452Z INFO         |      Ok: System requirements to run avd: `test` are met
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.1287252Z WARNING      | Feature QuickbootFileBacked is disabled due to stability issues, if you really want that, the environment variable ANDROID_EMU_FORCE_QUICKBOOT_FILE_BACKED need to set to 1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4591532Z ERROR        | Unable to connect to adb daemon on port: 5037
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4592682Z INFO         | Storing crashdata in: /tmp/android-runner/emu-crash-37.3.10.db, detection is enabled for process: 2736
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4593632Z INFO         | Initializing gfxstream backend
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4602238Z INFO         | startOpenglesRendererImpl: gpu info
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4602491Z INFO         | 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4605072Z INFO         | initIcdPaths: ICD set to 'swiftshader', using Swiftshader ICD
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4605715Z INFO         | Setting ICD filenames for the loader = /usr/local/lib/android/sdk/emulator/lib64/vulkan/vk_swiftshader_icd.json
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4606480Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4607298Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so.1]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4607956Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.4608511Z INFO         | Added library: /usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5294589Z INFO         | Selecting Vulkan device: SwiftShader Device (Subzero), Version: 1.3.0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5295344Z INFO         | Using Vulkan externalMemoryMode: OpaqueFd for VkEmulation
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5759078Z INFO         | Format VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16 does not support YCbCr sampler conversion
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5779383Z INFO         | SharedLibrary::open for [libX11]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5779852Z WARNING      | Could not open libX11.so, try libX11.so.6
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5780326Z INFO         | SharedLibrary::open for [libX11.so.6]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5780739Z INFO         | SharedLibrary::open for [libX11-xcb]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5781082Z WARNING      | Could not open libX11-xcb.so, try libX11-xcb.so.1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5781441Z INFO         | SharedLibrary::open for [libX11-xcb.so.1]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5798917Z INFO         | queryConfigs: Host EGL config 0x10 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5799366Z INFO         | queryConfigs: Host EGL config 0x11 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5799793Z INFO         | queryConfigs: Host EGL config 0x12 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5801019Z INFO         | queryConfigs: Host EGL config 0x13 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5804574Z INFO         | queryConfigs: Host EGL config 0x14 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5805123Z INFO         | queryConfigs: Host EGL config 0x15 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5805601Z INFO         | queryConfigs: Host EGL config 0x17 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5806026Z INFO         | queryConfigs: Host EGL config 0x18 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5806456Z INFO         | queryConfigs: Host EGL config 0x19 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5806900Z INFO         | queryConfigs: Host EGL config 0x1a was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5807318Z INFO         | queryConfigs: Host EGL config 0x1b was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5807736Z INFO         | queryConfigs: Host EGL config 0x1c was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5808163Z INFO         | queryConfigs: Host EGL config 0x1d was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5808575Z INFO         | queryConfigs: Host EGL config 0x1e was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5808997Z INFO         | queryConfigs: Host EGL config 0x1f was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5809419Z INFO         | queryConfigs: Host EGL config 0x21 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5809845Z INFO         | queryConfigs: Host EGL config 0x22 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5810250Z INFO         | queryConfigs: Host EGL config 0x23 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5810656Z INFO         | queryConfigs: Host EGL config 0x24 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5811072Z INFO         | queryConfigs: Host EGL config 0x25 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5811483Z INFO         | queryConfigs: Host EGL config 0x26 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5811890Z INFO         | queryConfigs: Host EGL config 0x27 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5812349Z INFO         | queryConfigs: Host EGL config 0x28 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5813048Z INFO         | queryConfigs: Host EGL config 0x29 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5813724Z INFO         | queryConfigs: Host EGL config 0x2a was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5814189Z INFO         | queryConfigs: Host EGL config 0x2b was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5814606Z INFO         | queryConfigs: Host EGL config 0x2c was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5815021Z INFO         | queryConfigs: Host EGL config 0x2d was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5815431Z INFO         | queryConfigs: Host EGL config 0x2e was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5815840Z INFO         | queryConfigs: Host EGL config 0x2f was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5816256Z INFO         | queryConfigs: Host EGL config 0x30 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5816761Z INFO         | queryConfigs: Host EGL config 0x31 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5817176Z INFO         | queryConfigs: Host EGL config 0x32 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5817589Z INFO         | queryConfigs: Host EGL config 0x33 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5818010Z INFO         | queryConfigs: Host EGL config 0x35 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5818424Z INFO         | queryConfigs: Host EGL config 0x36 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5818829Z INFO         | queryConfigs: Host EGL config 0x37 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5819244Z INFO         | queryConfigs: Host EGL config 0x38 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5819660Z INFO         | queryConfigs: Host EGL config 0x39 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5820079Z INFO         | queryConfigs: Host EGL config 0x3a was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5820498Z INFO         | queryConfigs: Host EGL config 0x3b was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5820916Z INFO         | queryConfigs: Host EGL config 0x3c was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5821329Z INFO         | queryConfigs: Host EGL config 0x3d was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5821758Z INFO         | queryConfigs: Host EGL config 0x3f was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5822174Z INFO         | queryConfigs: Host EGL config 0x40 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5822639Z INFO         | queryConfigs: Host EGL config 0x41 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5823048Z INFO         | queryConfigs: Host EGL config 0x42 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5823624Z INFO         | queryConfigs: Host EGL config 0x43 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5824182Z INFO         | queryConfigs: Host EGL config 0x44 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5824620Z INFO         | queryConfigs: Host EGL config 0x45 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5824948Z INFO         | queryConfigs: Host EGL config 0x46 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5825269Z INFO         | queryConfigs: Host EGL config 0x47 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5825595Z INFO         | queryConfigs: Host EGL config 0x48 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5825929Z INFO         | queryConfigs: Host EGL config 0x49 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5826402Z INFO         | queryConfigs: Host EGL config 0x4a was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5826817Z INFO         | queryConfigs: Host EGL config 0x4b was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5827147Z INFO         | queryConfigs: Host EGL config 0x1 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5827479Z INFO         | queryConfigs: Host EGL config 0x2 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5827799Z INFO         | queryConfigs: Host EGL config 0x3 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5828128Z INFO         | queryConfigs: Host EGL config 0x5 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5828450Z INFO         | queryConfigs: Host EGL config 0x6 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5828777Z INFO         | queryConfigs: Host EGL config 0x7 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5829104Z INFO         | queryConfigs: Host EGL config 0x8 was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5829433Z INFO         | queryConfigs: Host EGL config 0xa was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5829767Z INFO         | queryConfigs: Host EGL config 0xb was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5830092Z INFO         | queryConfigs: Host EGL config 0xc was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5830418Z INFO         | queryConfigs: Host EGL config 0xd was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5830868Z INFO         | queryConfigs: Host EGL config 0xe was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5831198Z INFO         | queryConfigs: Host EGL config 0xf was not added
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5860320Z INFO         | Initializing VkEmulation features:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5861096Z INFO         |     glInteropSupported: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5861621Z INFO         |     useDeferredCommands: true
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5862169Z INFO         |     createResourceWithRequirements: true
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5862707Z INFO         |     useVulkanComposition: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5863216Z INFO         |     useVulkanNativeSwapchain: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5863957Z INFO         |     enable guestRenderDoc: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5864660Z INFO         |     enable Ycbcr emulation: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5865154Z INFO         |     guestVulkanOnly: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5866047Z INFO         |     useDedicatedAllocations: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5866459Z INFO         |     guestVulkanMaxApiVersion: 1.3.0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5866892Z INFO         |     enableProtectedMemoryEmulation: false
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5869281Z INFO         |     VulkanDisableShaderFloatControls2: disabled ((vk_util::extensionSupported(mDeviceInfo.extensions, VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME) || mDeviceInfo.physdevProps.apiVersion >= VK_API_VERSION_1_4) && mDeviceInfo.physdevProps.vendorID == 0x1010)
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5870561Z INFO         | Graphics Adapter Vendor Google (Google Inc.)
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5871000Z INFO         | Graphics Adapter Android Emulator OpenGL ES Translator (Google SwiftShader)
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5871489Z INFO         | Graphics API Version OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5873677Z INFO         | Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_standard_derivatives GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5875315Z INFO         | Graphics Device Extensions N/A
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5875624Z INFO         | Disabling sparse binding feature support
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5937410Z INFO         | Sending adb public key [QAAAAA/c7sYRbX9lfJ53qd53NtBevL1JYPnWxL86xyiqWCCMnQymL9YF8YyzKDYL/pWXUTONzdmS3+fn9kEWFV+u1StbegrvC9z1cfp+pKk5vsNKOtIG/Dla7BXGT6gTSxDu3MsC2B3cKbvPGDXEucUODsB6g4tFslSITg4KF7cy5ugApYQy8gDtxGvdSZwj+XnpubWk5xctWbe2YSAiMHtRYIQUknvCcWyaBQdi5cpV/kh+/iMns7ljKd7F9HSM9rZXagfvJL7NjEQYJhSRZKYS51MQtXz1t3K6KikHJALpyxMt5YfbchQNYqsK5On/tQOy2usnJJGOtVOngao4J2CVJo/C9tmnUA6eOy7Hhb9YN7aAv1UOPIk58DcRjerLJzKi53TiR00CQK+j1r/K6QtpqCO/Jo1qsH96aAR6TL+fhmQJVLcApAyVTZe8tr63KufnUM++zONNI5L6PQEKJM+aWs8POhKcQJdOLCOTcTUDJ5kMxxgVeqvnSqwuTQALl7mxo/B7N2ld77iwAd9P5CI14mnH/zfO6eNPKwordJwVkbrEon8DqEteyFGbmObYIPyKY4X8edZ93AN2kB93Bp/EqFjC/TqOf+7iU5wZnzdZwlmetI1ana1t87Rbz1BXFlqx9rT1Ji1nrYB/2cSUI0cNWuwKl+UIhCylvpHFyGta0MtVCFemUwEAAQA= runner@unknown]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5941150Z INFO         | Userspace boot properties:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5941689Z INFO         |   androidboot.boot_devices=pci0000:00/0000:00:03.0 pci0000:00/0000:00:06.0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5942211Z INFO         |   androidboot.dalvik.vm.heapsize=576m
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5942658Z INFO         |   androidboot.debug.hwui.renderer=skiagl
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5943089Z INFO         |   androidboot.debug.sf.nobootanimation=1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5943719Z INFO         |   androidboot.hardware=ranchu
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5944152Z INFO         |   androidboot.hardware.gltransport=pipe
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5944584Z INFO         |   androidboot.hardware.vulkan=ranchu
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5944918Z INFO         |   androidboot.logcat=*:V
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5945225Z INFO         |   androidboot.opengles.version=196608
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5945694Z INFO         |   androidboot.qemu=1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5948516Z INFO         |   androidboot.qemu.adb.pubkey=QAAAAA/c7sYRbX9lfJ53qd53NtBevL1JYPnWxL86xyiqWCCMnQymL9YF8YyzKDYL/pWXUTONzdmS3+fn9kEWFV+u1StbegrvC9z1cfp+pKk5vsNKOtIG/Dla7BXGT6gTSxDu3MsC2B3cKbvPGDXEucUODsB6g4tFslSITg4KF7cy5ugApYQy8gDtxGvdSZwj+XnpubWk5xctWbe2YSAiMHtRYIQUknvCcWyaBQdi5cpV/kh+/iMns7ljKd7F9HSM9rZXagfvJL7NjEQYJhSRZKYS51MQtXz1t3K6KikHJALpyxMt5YfbchQNYqsK5On/tQOy2usnJJGOtVOngao4J2CVJo/C9tmnUA6eOy7Hhb9YN7aAv1UOPIk58DcRjerLJzKi53TiR00CQK+j1r/K6QtpqCO/Jo1qsH96aAR6TL+fhmQJVLcApAyVTZe8tr63KufnUM++zONNI5L6PQEKJM+aWs8POhKcQJdOLCOTcTUDJ5kMxxgVeqvnSqwuTQALl7mxo/B7N2ld77iwAd9P5CI14mnH/zfO6eNPKwordJwVkbrEon8DqEteyFGbmObYIPyKY4X8edZ93AN2kB93Bp/EqFjC/TqOf+7iU5wZnzdZwlmetI1ana1t87Rbz1BXFlqx9rT1Ji1nrYB/2cSUI0cNWuwKl+UIhCylvpHFyGta0MtVCFemUwEAAQA= runner@unknown
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5951006Z INFO         |   androidboot.qemu.avd_name=test
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5951352Z INFO         |   androidboot.qemu.camera_hq_edge_processing=0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5951697Z INFO         |   androidboot.qemu.camera_protocol_ver=1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5952035Z INFO         |   androidboot.qemu.cpuvulkan.version=4206592
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5952413Z INFO         |   androidboot.qemu.gltransport.drawFlushInterval=800
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5952778Z INFO         |   androidboot.qemu.gltransport.name=pipe
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5953095Z INFO         |   androidboot.qemu.hwcodec.avcdec=2
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5953566Z INFO         |   androidboot.qemu.hwcodec.hevcdec=2
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5953949Z INFO         |   androidboot.qemu.hwcodec.vpxdec=2
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5954347Z INFO         |   androidboot.qemu.settings.system.screen_off_timeout=2147483647
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5954715Z INFO         |   androidboot.qemu.skin=320x640
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5955006Z INFO         |   androidboot.qemu.virtiowifi=1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5955295Z INFO         |   androidboot.qemu.vsync=60
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5955603Z INFO         |   androidboot.serialno=EMULATOR37X3X10X0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5956074Z INFO         |   androidboot.vbmeta.digest=b3271ba499104f4631ae3723913d5c12574e01715fce5b82d60beed097ead264
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5956530Z INFO         |   androidboot.vbmeta.hash_alg=sha256
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5956808Z INFO         |   androidboot.vbmeta.size=6720
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.5957098Z INFO         |   androidboot.veritymode=enforcing
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.6098365Z WARNING: cannnot unmap ptr 0x7fc6cd001000 as it is in the protected range from 0x7fc62d000000 to 0x7fc6cd200000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:01.6265837Z INFO         | Monitoring duration of emulator setup.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:02.6159168Z INFO         | Successfully initialized netsim WiFi
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:02.6159894Z INFO         | Activated packet streamer for bluetooth emulation
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:02.6175439Z INFO         | Setting display: 0 configuration to: 320x640, dpi: 160x160 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:02.6176243Z INFO         | setDisplayActiveConfig: id:0, 320x640
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:02.6176894Z INFO         | emulatorSetupEnvironment: Environment scene is not required
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:02.6276612Z USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:02.6277438Z WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:02.7529183Z WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:11.0854507Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:11.0884561Z * daemon not running; starting now at tcp:5037
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:11.0906078Z * daemon started successfully
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:11.0906815Z adb: device offline
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:11.0914134Z The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:13.0946009Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:13.0987310Z The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:13.0987914Z adb: device offline
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:15.1024989Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:15.1439402Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:17.1525399Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:17.1702754Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:19.1795274Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:19.1937032Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:21.2010992Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:21.2201204Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:23.2265477Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:23.2839463Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:25.2879231Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:25.3344603Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:27.3388043Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:27.3585711Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:29.3619915Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:29.3749386Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:31.3796107Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:31.4033604Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:32.0451944Z INFO         | Boot completed in 30934 ms
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:32.0456375Z INFO         | Increasing screen off timeout, logcat buffer size to 2M.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:33.4065475Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:33.4316035Z 1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:33.4340358Z Emulator booted.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:33.4390724Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell input keyevent 82
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.0945256Z Disabling animations.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.0983563Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global window_animation_scale 0.0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.2319130Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global transition_animation_scale 0.0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.5589645Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global animator_duration_scale 0.0
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.6131968Z ##[endgroup]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.6183537Z [command]/usr/bin/sh -c bun run test:smoke:android
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.6199063Z $ bash ./smoke-tests/run.sh android
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.8488108Z Building the test app for android...
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:36.8965229Z --- 1-reply
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:44.3385210Z PASSED: 1-reply
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:44.3496638Z --- 2-short-task
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:52.8614866Z PASSED: 2-short-task
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:57:52.8679298Z --- 3-long-task-with-children
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:01.9063225Z PASSED: 3-long-task-with-children
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:01.9130591Z --- 4-cancel-long-task
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:09.1487051Z PASSED: 4-cancel-long-task
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:09.1544443Z --- 5-cancel-one-of-several-sources
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.5752762Z FAILED: get-text event-log failed: {"ok":false,"error":"AppDisconnected"}
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.5826615Z adb: error: device offline
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.5832848Z adb: device offline
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.5959093Z FAILED: 5-cancel-one-of-several-sources (exit 1). Its files are in /tmp/ziggy-tests/ziggy-test-app-5-cancel-one-of-several-sources-PiTexn
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.5976818Z --- the end of am-start.log:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.5999009Z Starting: Intent { cmp=dev.ziggy.testapp/.MainActivity (has extras) }
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6000423Z Status: ok
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6000762Z LaunchState: COLD
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6001196Z Activity: dev.ziggy.testapp/.MainActivity
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6008247Z TotalTime: 1274
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6015464Z WaitTime: 1285
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6015840Z Complete
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6018090Z --- the end of install.log:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6024939Z Performing Streamed Install
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6026057Z Success
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6038750Z --- the end of remote-control-server.log:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6048452Z The remote control server is listening: the app on 127.0.0.1:33345, the script on 127.0.0.1:35155.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.6109871Z --- 6-edges
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9091237Z adb: device 'emulator-5554' not found
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9092168Z FAILED: the app did not start
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9108019Z adb: device 'emulator-5554' not found
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9234742Z FAILED: 6-edges (exit 1). Its files are in /tmp/ziggy-tests/ziggy-test-app-6-edges-mDSBIT
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9244960Z --- the end of install.log:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9250997Z adb: device 'emulator-5554' not found
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9265496Z --- the end of remote-control-server.log:
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9273060Z The remote control server is listening: the app on 127.0.0.1:38059, the script on 127.0.0.1:33607.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:23.9324371Z --- 7-control-reports-bad-commands
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:29.8942397Z PASSED: 7-control-reports-bad-commands
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:29.9044944Z --- 8-starts-without-remote-control
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:52.7916510Z PASSED: 8-starts-without-remote-control
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:52.7973590Z --- 9-quit-ends-everything
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:56.0668235Z PASSED: 9-quit-ends-everything
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:58:56.0720354Z --- 10-pickers
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:00.1251748Z PASSED: 10-pickers
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:00.1335150Z --- 16-media-server
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:05.3857824Z PASSED: 16-media-server
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:05.3909145Z --- 17-ui-storage
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:18.6990246Z PASSED: 17-ui-storage
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:18.7055675Z --- 18-keep-alive-survives-leaving
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:23.6123662Z PASSED: 18-keep-alive-survives-leaving
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:23.6168770Z --- 21-app-own-code
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:30.6496041Z PASSED: 21-app-own-code
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:30.6551187Z --- 24-ui-address
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:34.8050662Z The UI shows href: https://ziggy-app.invalid/index.html?testMode=1, origin: https://ziggy-app.invalid, secure context: true, localStorage: kept, indexedDB: kept, fetch: 200 has the UI and xhr: 200 has the UI
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:35.3521244Z PASSED: 24-ui-address
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:35.3600365Z --- 26-log-files
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:38.2847184Z PASSED: 26-log-files
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:38.2900322Z --- 27-actions
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:41.9518702Z PASSED: 27-actions
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:41.9559445Z --- 28-config-and-state
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:48.8169107Z PASSED: 28-config-and-state
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:48.8214309Z --- 30-theme
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:55.4050253Z PASSED: 30-theme
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:55.4101934Z --- 32-external-links
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5278951Z INFO         | Created VkInstance:0x55ef23957000 for application:'Chromium' engine:''.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5304349Z ../../third_party/SwiftShader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5306079Z ../../third_party/SwiftShader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5307265Z ../../third_party/SwiftShader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5308256Z ../../third_party/SwiftShader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5309860Z ../../third_party/SwiftShader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5310853Z ../../third_party/SwiftShader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5312253Z ../../third_party/SwiftShader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000338000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5313187Z ../../third_party/SwiftShader/src/Vulkan/VkPhysicalDevice.cpp:649 WARNING: UNSUPPORTED: curExtension->sType: 1000437000
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T22:59:59.5316144Z INFO         | Destroyed VkInstance:0x55ef23957000 for application:'Chromium' engine:''.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:09.0298529Z The app asked the system to open each address on android
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.1115028Z PASSED: 32-external-links
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.1607780Z Passed 18, failed 2.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.1608205Z Failed: 5-cancel-one-of-several-sources 6-edges
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.2757126Z error: script "test:smoke:android" exited with code 1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9511407Z ##[error]The process '/usr/bin/sh' failed with exit code 1
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9512573Z ##[group]Terminate Emulator
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9519375Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 emu kill
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9547426Z OK: killing emulator, bye bye
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9547842Z OK
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9550630Z ##[endgroup]
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9551509Z INFO         | Wait for emulator (pid 2736) 20 seconds to shutdown gracefully before kill;you can set environment variable ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL(in seconds) to change the default value (20 seconds)
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9552082Z 
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9710420Z USER_INFO    | Snapshots have been disabled by the user, save request is ignored.
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:10.9712338Z INFO         | Saving snapshot 'default_boot' took 1 ms
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:11.6538194Z WARNING      | Emulator client has not yet been configured.. Call configure me first!
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:11.6635563Z INFO         | removeAll
+smoke-tests-android	Run the smoke tests on an emulator (Android)	2026-11-22T23:00:11.7122304Z WARNING      | Netsim Wifi dns:///localhost:34919 is gone due to Stream removed (CANCELLED)
+smoke-tests-android	Post Setup JDK 17 (Android)	﻿2026-11-22T23:00:12.7294587Z Post job cleanup.
+smoke-tests-android	Post Setup JDK 17 (Android)	2026-11-22T23:00:12.8331369Z (node:10016) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+smoke-tests-android	Post Setup JDK 17 (Android)	2026-11-22T23:00:12.8332050Z (Use `node --trace-deprecation ...` to show where the warning was created)
+smoke-tests-android	Post Checkout code	﻿2026-11-22T23:00:12.8454144Z Post job cleanup.
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9076973Z [command]/usr/bin/git version
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9107111Z git version 2.56.1
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9131579Z Temporarily overriding HOME='/home/runner/work/_temp/e69c9f56-3e37-4afe-8a3e-9d48964a7776' before making global git config changes
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9132555Z Adding repository directory to the temporary git global config as a safe directory
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9135736Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/ziggy/ziggy
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9169176Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9194524Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9371232Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9394750Z http.https://github.com/.extraheader
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9403592Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9428357Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9589183Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+smoke-tests-android	Post Checkout code	2026-11-22T23:00:12.9614763Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+smoke-tests-android	Complete job	﻿2026-11-22T23:00:12.9884179Z Cleaning up orphan processes
+smoke-tests-android	Complete job	2026-11-22T23:00:13.0146693Z Terminate orphan process: pid (2837) (adb)
+smoke-tests-android	Complete job	2026-11-22T23:00:13.0209931Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache/restore@v4, actions/cache@v4, actions/checkout@v4, actions/setup-java@v4, actions/setup-node@v4, jdx/mise-action@v2. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

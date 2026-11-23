@@ -1,0 +1,12 @@
+315:[   10.716123] init: starting service 'adbd'...
+316:[   10.717339] init: Created socket '/dev/socket/adbd', mode 660, user 1000, group 1000
+318:[   10.731490] init: ... started service 'adbd' has pid 444
+338:[   10.858267] init: Control message: Processed ctl.start for 'mdnsd' from pid: 444 (/apex/com.android.adbd/bin/adbd --root_seclabel=u:r:su:s0)
+383:[   11.083012] init: service 'adbd' requested start, but it is already running (flags: 132)
+438:[   11.452712] init: service 'adbd' requested start, but it is already running (flags: 132)
+439:[   11.460417] init: Control message: Processed ctl.start for 'adbd' from pid: 519 (/system/bin/usbd)
+1051:[  231.974441] init: Service 'adbd' (pid 444) exited with status 0
+1052:[  231.976107] init: Sending signal 9 to service 'adbd' (pid 444) process group...
+1056:[  231.983050] init: starting service 'adbd'...
+1057:[  231.984382] init: Created socket '/dev/socket/adbd', mode 660, user 1000, group 1000
+1058:[  232.009584] init: ... started service 'adbd' has pid 5361

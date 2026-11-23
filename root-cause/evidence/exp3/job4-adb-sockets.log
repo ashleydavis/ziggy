@@ -1,0 +1,532 @@
+--- 23:56:08.743871045
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:14.387882071
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:14.621348522
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:17.909087524
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:18.143205900
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:19.093998845
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 24 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:19.330715766
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:19.569052148
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:19.804262471
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:56:20.038783446
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:11.647320763
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:13.292487770
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:13.528158554
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:22.722191845
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:22.955241650
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:36.790562558
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:37.024289076
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:45.038623135
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:45.266006705
+State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:45.503762525
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:48.794367601
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:49.032071285
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:50.663063909
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:50.912634189
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:54.146397430
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:54.372504052
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:56.435715343
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:56.663168967
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:57.580456525
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:57:57.811317620
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:03.620684802
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:04.355857040
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:05.297113110
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:05.534736339
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:06.960238929
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:07.198346869
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:09.080165915
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:09.319482455
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:18.833842556
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:19.059144856
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:26.642810724
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:26.874393945
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:31.208812864
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:31.440617755
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:34.504240168
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:34.738565710
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:35.695455049
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:35.934788334
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:37.116730619
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:37.353052721
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:44.014437456
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:44.247292926
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:51.587757177
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:51.819709200
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:56.190918170
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:56.428838135
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:58.084873585
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:58.322815288
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:59.281133523
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:58:59.509253808
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:03.931596781
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:04.157484956
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:05.073569729
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:05.305272766
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:06.467720777
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:08.528825706
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:08.765244036
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:16.143800088
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:16.371762278
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:19.785629509
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:20.020763550
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:21.665711725
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:22.148014958
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:25.209588788
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 14752 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:25.442609622
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:25.677269503
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:28.909017960
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:29.135104087
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:37.153701272
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:37.383978290
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:40.839099741
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+--- 23:59:41.073741253
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))

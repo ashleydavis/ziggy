@@ -1,0 +1,744 @@
+﻿2026-11-23T00:53:06.5046440Z Current runner version: '2.338.2'
+2026-11-23T00:53:06.5068349Z ##[group]Runner Image Provisioner
+2026-11-23T00:53:06.5069030Z Hosted Compute Agent
+2026-11-23T00:53:06.5069518Z Version: 20261111.635
+2026-11-23T00:53:06.5069961Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-23T00:53:06.5070486Z Build Date: 2026-11-11T01:49:01Z
+2026-11-23T00:53:06.5070996Z Worker ID: {bcb6a49a-961b-48ea-98a3-91750e2e25a3}
+2026-11-23T00:53:06.5071544Z Region: us-east-1
+2026-11-23T00:53:06.5071968Z Cloud: AWS
+2026-11-23T00:53:06.5072339Z ##[endgroup]
+2026-11-23T00:53:06.5073554Z ##[group]Operating System
+2026-11-23T00:53:06.5074005Z Ubuntu
+2026-11-23T00:53:06.5074360Z 24.04.5
+2026-11-23T00:53:06.5074778Z LTS
+2026-11-23T00:53:06.5075150Z ##[endgroup]
+2026-11-23T00:53:06.5075540Z ##[group]Runner Image
+2026-11-23T00:53:06.5075967Z Image: ubuntu-24.04
+2026-11-23T00:53:06.5076359Z Version: 20261116.133.1
+2026-11-23T00:53:06.5077142Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261116.133/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-23T00:53:06.5078391Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261116.133
+2026-11-23T00:53:06.5079075Z ##[endgroup]
+2026-11-23T00:53:06.5079956Z ##[group]GITHUB_TOKEN Permissions
+2026-11-23T00:53:06.5082149Z Contents: read
+2026-11-23T00:53:06.5082592Z Metadata: read
+2026-11-23T00:53:06.5083053Z Packages: read
+2026-11-23T00:53:06.5083677Z ##[endgroup]
+2026-11-23T00:53:06.5085462Z Secret source: Actions
+2026-11-23T00:53:06.5086099Z Cache mode: write
+2026-11-23T00:53:06.5086883Z Prepare workflow directory
+2026-11-23T00:53:06.5439114Z Prepare all required actions
+2026-11-23T00:53:06.5493931Z Getting action download info
+2026-11-23T00:53:06.7607143Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-23T00:53:08.5014134Z Download action repository 'oven-sh/setup-bun@v2' (SHA:0c5077e51419868618aeaa5fe8019c62421857d6)
+2026-11-23T00:53:08.6287299Z Download action repository 'jdx/mise-action@v2' (SHA:c37c93293d6b742fc901e1406b8f764f6fb19dac)
+2026-11-23T00:53:08.7618657Z Download action repository 'actions/setup-java@v4' (SHA:cf277c60eb25467037889841efdb72551f06f6c3)
+2026-11-23T00:53:08.9582630Z Download action repository 'actions/download-artifact@v4' (SHA:d3f86a106a0bac45b974a628896c90dbdf5c8093)
+2026-11-23T00:53:09.1298473Z Download action repository 'reactivecircus/android-emulator-runner@v2' (SHA:a421e43855164a8197daf9d8d40fe71c6996bb0d)
+2026-11-23T00:53:09.2624168Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-23T00:53:09.6195748Z Complete job name: scenario-5 (4)
+﻿2026-11-23T00:53:09.6958448Z ##[group]Run actions/checkout@v4
+2026-11-23T00:53:09.6959615Z with:
+2026-11-23T00:53:09.6960301Z   repository: ashleydavis/ziggy
+2026-11-23T00:53:09.6966953Z   token: ***
+2026-11-23T00:53:09.6967648Z   ssh-strict: true
+2026-11-23T00:53:09.6968329Z   ssh-user: git
+2026-11-23T00:53:09.6969063Z   persist-credentials: true
+2026-11-23T00:53:09.6969846Z   clean: true
+2026-11-23T00:53:09.6970607Z   sparse-checkout-cone-mode: true
+2026-11-23T00:53:09.6971429Z   fetch-depth: 1
+2026-11-23T00:53:09.6972129Z   fetch-tags: false
+2026-11-23T00:53:09.6972848Z   show-progress: true
+2026-11-23T00:53:09.6973755Z   lfs: false
+2026-11-23T00:53:09.6974480Z   submodules: false
+2026-11-23T00:53:09.6975214Z   set-safe-directory: true
+2026-11-23T00:53:09.6976012Z   allow-unsafe-pr-checkout: false
+2026-11-23T00:53:09.6977094Z env:
+2026-11-23T00:53:09.6977747Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:09.6978483Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:09.6979317Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:09.6980369Z ##[endgroup]
+2026-11-23T00:53:12.5440253Z Syncing repository: ashleydavis/ziggy
+2026-11-23T00:53:12.5441510Z ##[group]Getting Git version info
+2026-11-23T00:53:12.5441873Z Working directory is '/home/runner/work/ziggy/ziggy'
+2026-11-23T00:53:12.5442393Z [command]/usr/bin/git version
+2026-11-23T00:53:12.7650890Z git version 2.56.1
+2026-11-23T00:53:12.7671668Z ##[endgroup]
+2026-11-23T00:53:12.7684776Z Temporarily overriding HOME='/home/runner/work/_temp/a50ebac5-8623-485e-851e-cb1456be00f0' before making global git config changes
+2026-11-23T00:53:12.7685776Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-23T00:53:12.7689311Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:12.7994341Z Deleting the contents of '/home/runner/work/ziggy/ziggy'
+2026-11-23T00:53:12.7997227Z ##[group]Initializing the repository
+2026-11-23T00:53:12.8001801Z [command]/usr/bin/git init /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:12.8397621Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-23T00:53:12.8398211Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-23T00:53:12.8398705Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-23T00:53:12.8399173Z hint: call:
+2026-11-23T00:53:12.8399412Z hint:
+2026-11-23T00:53:12.8399732Z hint: 	git config --global init.defaultBranch <name>
+2026-11-23T00:53:12.8400049Z hint:
+2026-11-23T00:53:12.8400329Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-23T00:53:12.8400752Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-23T00:53:12.8401089Z hint:
+2026-11-23T00:53:12.8405995Z hint: 	git branch -m <name>
+2026-11-23T00:53:12.8406699Z hint:
+2026-11-23T00:53:12.8407175Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-23T00:53:12.8407832Z Initialized empty Git repository in /home/runner/work/ziggy/ziggy/.git/
+2026-11-23T00:53:12.8415759Z [command]/usr/bin/git remote add origin https://github.com/ashleydavis/ziggy
+2026-11-23T00:53:12.8458617Z ##[endgroup]
+2026-11-23T00:53:12.8459450Z ##[group]Disabling automatic garbage collection
+2026-11-23T00:53:12.8461966Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-23T00:53:12.8483721Z ##[endgroup]
+2026-11-23T00:53:12.8484370Z ##[group]Setting up auth
+2026-11-23T00:53:12.8489591Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-23T00:53:12.8513341Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-23T00:53:13.1930137Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-23T00:53:13.1954811Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-23T00:53:13.2102282Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-23T00:53:13.2125089Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-23T00:53:13.2273020Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-23T00:53:13.2297495Z ##[endgroup]
+2026-11-23T00:53:13.2297940Z ##[group]Fetching the repository
+2026-11-23T00:53:13.2309190Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +2c0a39ebf72969612fc6f1615e7f806bb075d0a4:refs/remotes/origin/tmp-root-cause-android-offline
+2026-11-23T00:53:13.8412403Z From https://github.com/ashleydavis/ziggy
+2026-11-23T00:53:13.8413307Z  * [new ref]         2c0a39ebf72969612fc6f1615e7f806bb075d0a4 -> origin/tmp-root-cause-android-offline
+2026-11-23T00:53:13.8416591Z ##[endgroup]
+2026-11-23T00:53:13.8417112Z ##[group]Determining the checkout info
+2026-11-23T00:53:13.8419106Z ##[endgroup]
+2026-11-23T00:53:13.8424983Z [command]/usr/bin/git sparse-checkout disable
+2026-11-23T00:53:13.8514643Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-23T00:53:13.8530298Z ##[group]Checking out the ref
+2026-11-23T00:53:13.8530917Z [command]/usr/bin/git checkout --progress --force -B tmp-root-cause-android-offline refs/remotes/origin/tmp-root-cause-android-offline
+2026-11-23T00:53:14.0241775Z Switched to a new branch 'tmp-root-cause-android-offline'
+2026-11-23T00:53:14.0250728Z branch 'tmp-root-cause-android-offline' set up to track 'origin/tmp-root-cause-android-offline'.
+2026-11-23T00:53:14.0269639Z ##[endgroup]
+2026-11-23T00:53:14.0314737Z [command]/usr/bin/git log -1 --format=%H
+2026-11-23T00:53:14.0324847Z 2c0a39ebf72969612fc6f1615e7f806bb075d0a4
+﻿2026-11-23T00:53:14.0563408Z ##[group]Run oven-sh/setup-bun@v2
+2026-11-23T00:53:14.0563767Z with:
+2026-11-23T00:53:14.0563990Z   bun-version: 1.3.14
+2026-11-23T00:53:14.0564221Z   no-cache: false
+2026-11-23T00:53:14.0566290Z   token: ***
+2026-11-23T00:53:14.0566508Z env:
+2026-11-23T00:53:14.0566743Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:14.0566986Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:14.0567308Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:14.0567610Z ##[endgroup]
+2026-11-23T00:53:14.3171056Z Cache hit for: bun-fR4r1tsFeXfPQkusQwkKD2kGnsE=
+2026-11-23T00:53:14.6196476Z Received 33843769 of 33843769 (100.0%), 144.1 MBs/sec
+2026-11-23T00:53:14.6197579Z Cache Size: ~32 MB (33843769 B)
+2026-11-23T00:53:14.6221047Z [command]/usr/bin/tar -xf /home/runner/work/_temp/e5044c4f-4016-4d8b-8350-1428b47fde03/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+2026-11-23T00:53:14.7369662Z Cache restored successfully
+2026-11-23T00:53:14.7386657Z [command]/home/runner/.bun/bin/bun --revision
+2026-11-23T00:53:14.7429157Z 1.3.14+0d9b296af
+2026-11-23T00:53:14.7434111Z Using a cached version of Bun: 1.3.14+0d9b296af
+﻿2026-11-23T00:53:14.8437379Z ##[group]Run jdx/mise-action@v2
+2026-11-23T00:53:14.8437667Z with:
+2026-11-23T00:53:14.8438167Z   install_args: zig jq
+2026-11-23T00:53:14.8438426Z   install: true
+2026-11-23T00:53:14.8438653Z   cache: true
+2026-11-23T00:53:14.8438884Z   cache_save: true
+2026-11-23T00:53:14.8439098Z   cache_key_prefix: mise-v0
+2026-11-23T00:53:14.8439408Z   experimental: false
+2026-11-23T00:53:14.8439632Z   log_level: info
+2026-11-23T00:53:14.8439856Z   reshim: false
+2026-11-23T00:53:14.8441764Z   github_token: ***
+2026-11-23T00:53:14.8441995Z   fetch_from_github: true
+2026-11-23T00:53:14.8442248Z env:
+2026-11-23T00:53:14.8442451Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:14.8442706Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:14.8442967Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:14.8443453Z ##[endgroup]
+2026-11-23T00:53:14.9325476Z ##[group]Restoring mise cache
+2026-11-23T00:53:15.1295293Z [command]/usr/bin/ldd --version
+2026-11-23T00:53:15.1657205Z ldd (Ubuntu GLIBC 2.39-0ubuntu8.12) 2.39
+2026-11-23T00:53:15.1658461Z Copyright (C) 2024 Free Software Foundation, Inc.
+2026-11-23T00:53:15.1659059Z This is free software; see the source for copying conditions.  There is NO
+2026-11-23T00:53:15.1659762Z warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+2026-11-23T00:53:15.1660276Z Written by Roland McGrath and Ulrich Drepper.
+2026-11-23T00:53:15.2286565Z Cache hit for: mise-v0-linux-x64-9ce104d02e7009dbe537b57fda0e747a54fedf18a2f45dff9c2c4209b85ea59d-3bf4a0d67d88dc5aa5be7ff0ac03c5258bf51c307989c5c5477fdc7134d93fb1
+2026-11-23T00:53:15.7876161Z Received 141227464 of 141227464 (100.0%), 259.5 MBs/sec
+2026-11-23T00:53:15.7877766Z Cache Size: ~135 MB (141227464 B)
+2026-11-23T00:53:15.7981431Z [command]/usr/bin/tar -xf /home/runner/work/_temp/c40124ff-cbb9-4d46-bd86-52c28837c865/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+2026-11-23T00:53:16.4779194Z Cache restored successfully
+2026-11-23T00:53:16.4829450Z mise cache restored from key: mise-v0-linux-x64-9ce104d02e7009dbe537b57fda0e747a54fedf18a2f45dff9c2c4209b85ea59d-3bf4a0d67d88dc5aa5be7ff0ac03c5258bf51c307989c5c5477fdc7134d93fb1
+2026-11-23T00:53:16.4834416Z ##[group]Setting env vars
+2026-11-23T00:53:16.4834881Z Setting MISE_LOG_LEVEL=info
+2026-11-23T00:53:16.4838413Z Setting GITHUB_TOKEN=***
+2026-11-23T00:53:16.4838816Z Setting MISE_TRUSTED_CONFIG_PATHS=/home/runner/work/ziggy/ziggy
+2026-11-23T00:53:16.4839178Z Setting MISE_YES=1
+2026-11-23T00:53:16.4839536Z Adding /home/runner/.local/share/mise/shims to PATH
+2026-11-23T00:53:16.4839997Z ##[group]Running mise --version
+2026-11-23T00:53:16.4847913Z [command]/home/runner/.local/share/mise/bin/mise --version
+2026-11-23T00:53:16.4910129Z 2026.10.20 linux-x64 (2026-10-26)
+2026-11-23T00:53:16.4922385Z ##[endgroup]
+2026-11-23T00:53:16.4923033Z ##[group]Running mise install zig jq
+2026-11-23T00:53:16.4931185Z [command]/home/runner/.local/share/mise/bin/mise install zig jq
+2026-11-23T00:53:16.5025438Z ^[[2mmise^[[0m ^[[2mby @jdx^[[0m – installing 2 tools
+2026-11-23T00:53:16.5784609Z ^[[2mmise^[[0m ^[[38;5;11m⇢^[[0m ^[[34mzig^[[0m@0.16.0  74ms · already installed
+2026-11-23T00:53:16.6014804Z ^[[2mmise^[[0m ^[[38;5;11m⇢^[[0m ^[[34mjq^[[0m@1.7.1    97ms · already installed
+2026-11-23T00:53:16.6024385Z ^[[2mmise^[[0m ^[[36m████████████████^[[0m^[[31m^[[0m^[[2m^[[0m 2/2 · installed 0 tools · 2 already installed in 99ms
+2026-11-23T00:53:16.6352788Z ##[endgroup]
+2026-11-23T00:53:16.6353436Z ##[group]Running mise ls
+2026-11-23T00:53:16.6361114Z [command]/home/runner/.local/share/mise/bin/mise ls
+2026-11-23T00:53:16.6461783Z bun                              1.3.14 (missing)   ~/work/ziggy/ziggy/mise.toml  1.3.14
+2026-11-23T00:53:16.6467387Z github:ashleydavis/what-changed  0.0.6 (missing)    ~/work/ziggy/ziggy/mise.toml  0.0.6
+2026-11-23T00:53:16.6467889Z jq                               1.7.1              ~/work/ziggy/ziggy/mise.toml  1.7.1
+2026-11-23T00:53:16.6468295Z node                             24.15.0 (missing)  ~/work/ziggy/ziggy/mise.toml  24.15.0
+2026-11-23T00:53:16.6468671Z zig                              0.16.0             ~/work/ziggy/ziggy/mise.toml  0.16.0
+2026-11-23T00:53:16.6469745Z ##[endgroup]
+﻿2026-11-23T00:53:16.6615544Z ##[group]Run bun install
+2026-11-23T00:53:16.6615949Z ^[[36;1mbun install^[[0m
+2026-11-23T00:53:17.0274326Z shell: /usr/bin/bash -e {0}
+2026-11-23T00:53:17.0274689Z env:
+2026-11-23T00:53:17.0274947Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:17.0275251Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:17.0275541Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:17.0275888Z   MISE_LOG_LEVEL: info
+2026-11-23T00:53:17.0278057Z   GITHUB_TOKEN: ***
+2026-11-23T00:53:17.0278339Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:17.0278667Z   MISE_YES: 1
+2026-11-23T00:53:17.0278906Z ##[endgroup]
+2026-11-23T00:53:17.0368280Z bun install v1.3.14 (0d9b296a)
+2026-11-23T00:53:17.4513854Z 
+2026-11-23T00:53:17.4514987Z + express@5.3.0
+2026-11-23T00:53:17.4516493Z + ws@8.22.0
+2026-11-23T00:53:17.4516758Z 
+2026-11-23T00:53:17.4517022Z 776 packages installed [411.00ms]
+﻿2026-11-23T00:53:17.4591640Z ##[group]Run actions/setup-java@v4
+2026-11-23T00:53:17.4591982Z with:
+2026-11-23T00:53:17.4592226Z   distribution: temurin
+2026-11-23T00:53:17.4592487Z   java-version: 17
+2026-11-23T00:53:17.4592754Z   java-package: jdk
+2026-11-23T00:53:17.4592989Z   check-latest: false
+2026-11-23T00:53:17.4593442Z   server-id: github
+2026-11-23T00:53:17.4593702Z   server-username: GITHUB_ACTOR
+2026-11-23T00:53:17.4594194Z   server-password: GITHUB_TOKEN
+2026-11-23T00:53:17.4594482Z   overwrite-settings: true
+2026-11-23T00:53:17.4594736Z   job-status: success
+2026-11-23T00:53:17.4596789Z   token: ***
+2026-11-23T00:53:17.4596995Z env:
+2026-11-23T00:53:17.4597261Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:17.4597497Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:17.4597782Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:17.4598128Z   MISE_LOG_LEVEL: info
+2026-11-23T00:53:17.4599972Z   GITHUB_TOKEN: ***
+2026-11-23T00:53:17.4600293Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:17.4600585Z   MISE_YES: 1
+2026-11-23T00:53:17.4600922Z ##[endgroup]
+2026-11-23T00:53:17.5883446Z ##[warning]setup-java v4 is deprecated and will no longer receive updates. Please migrate to actions/setup-java@v5.
+2026-11-23T00:53:17.5889799Z ##[group]Installed distributions
+2026-11-23T00:53:17.6583411Z Resolved Java 17.0.21+9 from tool-cache
+2026-11-23T00:53:17.6583858Z Setting Java 17.0.21+9 as the default
+2026-11-23T00:53:17.6591207Z (node:2226) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-23T00:53:17.6591891Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-23T00:53:17.6593827Z Creating toolchains.xml for JDK version 17 from temurin
+2026-11-23T00:53:17.6667472Z Writing to /home/runner/.m2/toolchains.xml
+2026-11-23T00:53:17.6667809Z 
+2026-11-23T00:53:17.6667958Z Java configuration:
+2026-11-23T00:53:17.6668390Z   Distribution: temurin
+2026-11-23T00:53:17.6668689Z   Version: 17.0.21+9
+2026-11-23T00:53:17.6669105Z   Path: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:17.6669498Z 
+2026-11-23T00:53:17.6670095Z ##[endgroup]
+2026-11-23T00:53:17.6685000Z Creating settings.xml with server-id: github
+2026-11-23T00:53:17.6685493Z Writing to /home/runner/.m2/settings.xml
+﻿2026-11-23T00:53:17.6771008Z ##[group]Run echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+2026-11-23T00:53:17.6771765Z ^[[36;1mecho 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules^[[0m
+2026-11-23T00:53:17.6772233Z ^[[36;1msudo udevadm control --reload-rules^[[0m
+2026-11-23T00:53:17.6772544Z ^[[36;1msudo udevadm trigger --name-match=kvm^[[0m
+2026-11-23T00:53:17.6799217Z shell: /usr/bin/bash -e {0}
+2026-11-23T00:53:17.6799620Z env:
+2026-11-23T00:53:17.6799842Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:17.6800086Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:17.6800390Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:17.6800711Z   MISE_LOG_LEVEL: info
+2026-11-23T00:53:17.6802772Z   GITHUB_TOKEN: ***
+2026-11-23T00:53:17.6803061Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:17.6803531Z   MISE_YES: 1
+2026-11-23T00:53:17.6803872Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:17.6804404Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:17.6804790Z ##[endgroup]
+2026-11-23T00:53:17.6904149Z KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"
+﻿2026-11-23T00:53:17.7167178Z ##[group]Run actions/download-artifact@v4
+2026-11-23T00:53:17.7167823Z with:
+2026-11-23T00:53:17.7168158Z   name: app
+2026-11-23T00:53:17.7168387Z   path: fresh-build
+2026-11-23T00:53:17.7168654Z   merge-multiple: false
+2026-11-23T00:53:17.7168942Z   repository: ashleydavis/ziggy
+2026-11-23T00:53:17.7169195Z   run-id: 45090730783
+2026-11-23T00:53:17.7169459Z env:
+2026-11-23T00:53:17.7169661Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:17.7169934Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:17.7170237Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:17.7170542Z   MISE_LOG_LEVEL: info
+2026-11-23T00:53:17.7172662Z   GITHUB_TOKEN: ***
+2026-11-23T00:53:17.7172962Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:17.7173808Z   MISE_YES: 1
+2026-11-23T00:53:17.7174112Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:17.7174604Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:17.7174965Z ##[endgroup]
+2026-11-23T00:53:17.8344348Z Downloading single artifact
+2026-11-23T00:53:17.8457811Z (node:2247) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-23T00:53:17.8458599Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-23T00:53:17.9230805Z Preparing to download the following artifacts:
+2026-11-23T00:53:17.9231559Z - app (ID: 14781193220, Size: 2610274, Expected Digest: sha256:fbcac18ee1546944d60ce8efe10e5f7dca7be2e15fc9d1323f26b273f20989ac)
+2026-11-23T00:53:18.0535723Z Redirecting to blob download url: https://productionresultssa9.blob.core.windows.net/actions-results/aeef2d04-6b3c-87be-a7dc-e1f66cb18509/workflow-job-run-5fcee0c9-40a8-555a-8403-728f960bf96f/artifacts/a172cedcae47474b615c54d510a5d84a8dea3032e958587430b413538be3f333.zip
+2026-11-23T00:53:18.0537381Z Starting download of artifact to: /home/runner/work/ziggy/ziggy/fresh-build
+2026-11-23T00:53:18.1318240Z (node:2247) [DEP0005] DeprecationWarning: Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.
+2026-11-23T00:53:18.2027339Z SHA256 digest of downloaded artifact is fbcac18ee1546944d60ce8efe10e5f7dca7be2e15fc9d1323f26b273f20989ac
+2026-11-23T00:53:18.2027914Z Artifact download completed successfully.
+2026-11-23T00:53:18.2028390Z Total of 1 artifact(s) downloaded
+2026-11-23T00:53:18.2031501Z Download artifact has finished successfully
+﻿2026-11-23T00:53:18.2118122Z ##[group]Run echo "ZIGGY_SMOKE_BUILD=$PWD/fresh-build" >> "$GITHUB_ENV"
+2026-11-23T00:53:18.2118640Z ^[[36;1mecho "ZIGGY_SMOKE_BUILD=$PWD/fresh-build" >> "$GITHUB_ENV"^[[0m
+2026-11-23T00:53:18.2145963Z shell: /usr/bin/bash -e {0}
+2026-11-23T00:53:18.2146359Z env:
+2026-11-23T00:53:18.2146616Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:18.2146904Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:18.2147186Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:18.2147530Z   MISE_LOG_LEVEL: info
+2026-11-23T00:53:18.2149619Z   GITHUB_TOKEN: ***
+2026-11-23T00:53:18.2149906Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:18.2150250Z   MISE_YES: 1
+2026-11-23T00:53:18.2150547Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:18.2151022Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:18.2151384Z ##[endgroup]
+﻿2026-11-23T00:53:18.2220943Z ##[group]Run echo "EVIDENCE_DIR=$RUNNER_TEMP/evidence" >> "$GITHUB_ENV"
+2026-11-23T00:53:18.2221453Z ^[[36;1mecho "EVIDENCE_DIR=$RUNNER_TEMP/evidence" >> "$GITHUB_ENV"^[[0m
+2026-11-23T00:53:18.2242452Z shell: /usr/bin/bash -e {0}
+2026-11-23T00:53:18.2242791Z env:
+2026-11-23T00:53:18.2243056Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:18.2243445Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:18.2243775Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:18.2244110Z   MISE_LOG_LEVEL: info
+2026-11-23T00:53:18.2246115Z   GITHUB_TOKEN: ***
+2026-11-23T00:53:18.2246394Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:18.2246738Z   MISE_YES: 1
+2026-11-23T00:53:18.2247066Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:18.2247521Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:18.2248016Z   ZIGGY_SMOKE_BUILD: /home/runner/work/ziggy/ziggy/fresh-build
+2026-11-23T00:53:18.2248358Z ##[endgroup]
+﻿2026-11-23T00:53:18.2353914Z ##[group]Run reactivecircus/android-emulator-runner@v2
+2026-11-23T00:53:18.2354284Z with:
+2026-11-23T00:53:18.2354511Z   api-level: 35
+2026-11-23T00:53:18.2354800Z   arch: x86_64
+2026-11-23T00:53:18.2355039Z   target: google_apis
+2026-11-23T00:53:18.2355327Z   disk-size: 4096M
+2026-11-23T00:53:18.2355579Z   script: bash root-cause/proof.sh
+2026-11-23T00:53:18.2355889Z   cores: 2
+2026-11-23T00:53:18.2356176Z   avd-name: test
+2026-11-23T00:53:18.2356458Z   force-avd-creation: true
+2026-11-23T00:53:18.2356728Z   emulator-boot-timeout: 600
+2026-11-23T00:53:18.2357028Z   emulator-port: 5554
+2026-11-23T00:53:18.2357413Z   emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+2026-11-23T00:53:18.2357850Z   disable-animations: true
+2026-11-23T00:53:18.2358134Z   disable-spellchecker: false
+2026-11-23T00:53:18.2358438Z   disable-linux-hw-accel: auto
+2026-11-23T00:53:18.2358746Z   enable-hw-keyboard: false
+2026-11-23T00:53:18.2359021Z   channel: stable
+2026-11-23T00:53:18.2359295Z env:
+2026-11-23T00:53:18.2359561Z   BUN_VERSION: 1.3.14
+2026-11-23T00:53:18.2359854Z   NODE_VERSION: 24.15.0
+2026-11-23T00:53:18.2360266Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:53:18.2360568Z   MISE_LOG_LEVEL: info
+2026-11-23T00:53:18.2362551Z   GITHUB_TOKEN: ***
+2026-11-23T00:53:18.2362867Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-23T00:53:18.2363360Z   MISE_YES: 1
+2026-11-23T00:53:18.2363705Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:18.2364251Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:53:18.2364687Z   ZIGGY_SMOKE_BUILD: /home/runner/work/ziggy/ziggy/fresh-build
+2026-11-23T00:53:18.2365123Z   EVIDENCE_DIR: /home/runner/work/_temp/evidence
+2026-11-23T00:53:18.2365459Z   ZIGGY_ANDROID_DEVICES: emulator-5554
+2026-11-23T00:53:18.2365736Z ##[endgroup]
+2026-11-23T00:53:18.2796230Z ##[group]Configure emulator
+2026-11-23T00:53:18.2797535Z API level: 35
+2026-11-23T00:53:18.2797940Z System image API level: 35
+2026-11-23T00:53:18.2798370Z target: google_apis
+2026-11-23T00:53:18.2798706Z CPU architecture: x86_64
+2026-11-23T00:53:18.2799111Z Hardware profile: 
+2026-11-23T00:53:18.2804130Z Cores: 2
+2026-11-23T00:53:18.2804476Z RAM size: 
+2026-11-23T00:53:18.2804801Z Heap size: 
+2026-11-23T00:53:18.2805079Z SD card path or size: 
+2026-11-23T00:53:18.2805348Z Disk size: 4096M
+2026-11-23T00:53:18.2805603Z AVD name: test
+2026-11-23T00:53:18.2805882Z force avd creation: true
+2026-11-23T00:53:18.2806169Z Emulator boot timeout: 600
+2026-11-23T00:53:18.2806452Z emulator port: 5554
+2026-11-23T00:53:18.2806843Z emulator options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+2026-11-23T00:53:18.2807249Z disable animations: true
+2026-11-23T00:53:18.2807542Z disable spellchecker: false
+2026-11-23T00:53:18.2807922Z disable Linux hardware acceleration: false
+2026-11-23T00:53:18.2808375Z enable hardware keyboard: false
+2026-11-23T00:53:18.2808662Z Channel: 0 (stable)
+2026-11-23T00:53:18.2808912Z Script:
+2026-11-23T00:53:18.2809192Z bash root-cause/proof.sh
+2026-11-23T00:53:18.2809434Z Pre emulator launch script:
+2026-11-23T00:53:18.2809974Z ##[endgroup]
+2026-11-23T00:53:18.2810405Z ##[group]Install Android SDK
+2026-11-23T00:53:18.3949693Z [command]/usr/bin/sh -c \yes | sdkmanager --licenses > /dev/null
+2026-11-23T00:53:27.8186779Z Installing latest build tools, platform tools, and platform.
+2026-11-23T00:53:27.8196841Z [command]/usr/bin/sh -c \sdkmanager --install 'build-tools;37.0.0' platform-tools 'platforms;android-35'> /dev/null
+2026-11-23T00:53:29.7789256Z Installing latest emulator.
+2026-11-23T00:53:29.7801641Z [command]/usr/bin/sh -c \sdkmanager --install emulator --channel=0 > /dev/null
+2026-11-23T00:53:36.6296871Z Installing system images.
+2026-11-23T00:53:36.6308781Z [command]/usr/bin/sh -c \sdkmanager --install 'system-images;android-35;google_apis;x86_64' --channel=0 > /dev/null
+2026-11-23T00:54:07.8657601Z ##[endgroup]
+2026-11-23T00:54:07.8658167Z ##[group]Create AVD
+2026-11-23T00:54:07.8661008Z Creating AVD.
+2026-11-23T00:54:07.8671082Z [command]/usr/bin/sh -c \echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis;x86_64'
+2026-11-23T00:54:08.3837362Z Loading local repository...                                                     
+2026-11-23T00:54:08.3838828Z [=========                              ] 25% Loading local repository...       
+2026-11-23T00:54:08.3864853Z [=========                              ] 25% Fetch remote repository...        
+2026-11-23T00:54:08.3894337Z [=======================================] 100% Fetch remote repository...       
+2026-11-23T00:54:08.7352034Z Auto-selecting single ABI x86_64
+2026-11-23T00:54:08.8674840Z Do you wish to create a custom hardware profile? [no] [command]/usr/bin/sh -c \printf 'hw.cpu.ncore=2\ndisk.dataPartition.size=4096M\n' >> /home/runner/.android/avd/test.avd/config.ini
+2026-11-23T00:54:08.8691789Z ##[endgroup]
+2026-11-23T00:54:08.8692771Z ##[group]Launch Emulator
+2026-11-23T00:54:08.8693329Z Starting emulator.
+2026-11-23T00:54:08.8704333Z [command]/usr/bin/sh -c \/usr/local/lib/android/sdk/emulator/emulator -port 5554 -avd test -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim &
+2026-11-23T00:54:08.8796681Z INFO         | Android emulator version 37.3.10.0 (build_id 16970787) (CL:N/A)
+2026-11-23T00:54:08.8797176Z INFO         | Graphics backend: gfxstream
+2026-11-23T00:54:08.8797706Z INFO         | Found systemPath /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/
+2026-11-23T00:54:09.1380319Z INFO         | Saving last run QEMU version for the AVD to 2
+2026-11-23T00:54:09.1380883Z INFO         | Increasing RAM size to 2560MB
+2026-11-23T00:54:09.1381194Z ##############################################################################
+2026-11-23T00:54:09.1381579Z ##                        WARNING - ACTION REQUIRED                         ##
+2026-11-23T00:54:09.1382004Z ##  Consider using the '-metrics-collection' flag to help improve the       ##
+2026-11-23T00:54:09.1382473Z ##  emulator by sending anonymized usage data. Or use the '-no-metrics'     ##
+2026-11-23T00:54:09.1382921Z ##  flag to bypass this warning and turn off the metrics collection.        ##
+2026-11-23T00:54:09.1383540Z ##  In a future release this warning will turn into a one-time blocking     ##
+2026-11-23T00:54:09.1384099Z ##  prompt to ask for explicit user input regarding metrics collection.     ##
+2026-11-23T00:54:09.1384571Z ##                                                                          ##
+2026-11-23T00:54:09.1385136Z ##  Please see '-help-metrics-collection' for more details. You can use     ##
+2026-11-23T00:54:09.1385747Z ##  '-metrics-to-file' or '-metrics-to-console' flags to see what type of   ##
+2026-11-23T00:54:09.1386267Z ##  data is being collected by emulator as part of usage statistics.        ##
+2026-11-23T00:54:09.1386775Z ##############################################################################
+2026-11-23T00:54:09.1387212Z INFO         | Guest GLES Driver: Auto (ext controls)
+2026-11-23T00:54:09.1387724Z INFO         | emuglConfig_init: vulkan_mode_selected:swiftshader gles_mode_selected:swiftshader
+2026-11-23T00:54:09.1388192Z INFO         | Checking system compatibility:
+2026-11-23T00:54:09.1388519Z INFO         |   Checking: hasSufficientDiskSpace
+2026-11-23T00:54:09.1388894Z INFO         |      Ok: Disk space requirements to run avd: `test` are met
+2026-11-23T00:54:09.1389232Z INFO         |   Checking: hasSufficientHwGpu
+2026-11-23T00:54:09.1389596Z INFO         |      Ok: Hardware GPU compatibility checks are not required
+2026-11-23T00:54:09.1389945Z INFO         |   Checking: hasSufficientSystem
+2026-11-23T00:54:09.1390313Z INFO         |      Ok: System requirements to run avd: `test` are met
+2026-11-23T00:54:09.1390990Z WARNING      | Feature QuickbootFileBacked is disabled due to stability issues, if you really want that, the environment variable ANDROID_EMU_FORCE_QUICKBOOT_FILE_BACKED need to set to 1
+2026-11-23T00:54:09.1391985Z ERROR        | Unable to connect to adb daemon on port: 5037
+2026-11-23T00:54:09.1392645Z INFO         | Storing crashdata in: /tmp/android-runner/emu-crash-37.3.10.db, detection is enabled for process: 2584
+2026-11-23T00:54:09.1393393Z INFO         | Initializing gfxstream backend
+2026-11-23T00:54:09.1393826Z INFO         | startOpenglesRendererImpl: gpu info
+2026-11-23T00:54:09.1394173Z INFO         | 
+2026-11-23T00:54:09.1394674Z INFO         | initIcdPaths: ICD set to 'swiftshader', using Swiftshader ICD
+2026-11-23T00:54:09.1395407Z INFO         | Setting ICD filenames for the loader = /usr/local/lib/android/sdk/emulator/lib64/vulkan/vk_swiftshader_icd.json
+2026-11-23T00:54:09.1396273Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so]
+2026-11-23T00:54:09.1397120Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so.1]
+2026-11-23T00:54:09.1397841Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so]
+2026-11-23T00:54:09.1398567Z INFO         | Added library: /usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so
+2026-11-23T00:54:09.1802735Z INFO         | Selecting Vulkan device: SwiftShader Device (Subzero), Version: 1.3.0
+2026-11-23T00:54:09.1803717Z INFO         | Using Vulkan externalMemoryMode: OpaqueFd for VkEmulation
+2026-11-23T00:54:09.2229467Z INFO         | Format VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16 does not support YCbCr sampler conversion
+2026-11-23T00:54:09.2256270Z INFO         | SharedLibrary::open for [libX11]
+2026-11-23T00:54:09.2256959Z WARNING      | Could not open libX11.so, try libX11.so.6
+2026-11-23T00:54:09.2257312Z INFO         | SharedLibrary::open for [libX11.so.6]
+2026-11-23T00:54:09.2257718Z INFO         | SharedLibrary::open for [libX11-xcb]
+2026-11-23T00:54:09.2258093Z WARNING      | Could not open libX11-xcb.so, try libX11-xcb.so.1
+2026-11-23T00:54:09.2258924Z INFO         | SharedLibrary::open for [libX11-xcb.so.1]
+2026-11-23T00:54:09.2273417Z INFO         | queryConfigs: Host EGL config 0x10 was not added
+2026-11-23T00:54:09.2274034Z INFO         | queryConfigs: Host EGL config 0x11 was not added
+2026-11-23T00:54:09.2274569Z INFO         | queryConfigs: Host EGL config 0x12 was not added
+2026-11-23T00:54:09.2275073Z INFO         | queryConfigs: Host EGL config 0x13 was not added
+2026-11-23T00:54:09.2275525Z INFO         | queryConfigs: Host EGL config 0x14 was not added
+2026-11-23T00:54:09.2276022Z INFO         | queryConfigs: Host EGL config 0x15 was not added
+2026-11-23T00:54:09.2276456Z INFO         | queryConfigs: Host EGL config 0x17 was not added
+2026-11-23T00:54:09.2276937Z INFO         | queryConfigs: Host EGL config 0x18 was not added
+2026-11-23T00:54:09.2277358Z INFO         | queryConfigs: Host EGL config 0x19 was not added
+2026-11-23T00:54:09.2277816Z INFO         | queryConfigs: Host EGL config 0x1a was not added
+2026-11-23T00:54:09.2278240Z INFO         | queryConfigs: Host EGL config 0x1b was not added
+2026-11-23T00:54:09.2278726Z INFO         | queryConfigs: Host EGL config 0x1c was not added
+2026-11-23T00:54:09.2279190Z INFO         | queryConfigs: Host EGL config 0x1d was not added
+2026-11-23T00:54:09.2279635Z INFO         | queryConfigs: Host EGL config 0x1e was not added
+2026-11-23T00:54:09.2280129Z INFO         | queryConfigs: Host EGL config 0x1f was not added
+2026-11-23T00:54:09.2280546Z INFO         | queryConfigs: Host EGL config 0x21 was not added
+2026-11-23T00:54:09.2281055Z INFO         | queryConfigs: Host EGL config 0x22 was not added
+2026-11-23T00:54:09.2281481Z INFO         | queryConfigs: Host EGL config 0x23 was not added
+2026-11-23T00:54:09.2281951Z INFO         | queryConfigs: Host EGL config 0x24 was not added
+2026-11-23T00:54:09.2282372Z INFO         | queryConfigs: Host EGL config 0x25 was not added
+2026-11-23T00:54:09.2282860Z INFO         | queryConfigs: Host EGL config 0x26 was not added
+2026-11-23T00:54:09.2283497Z INFO         | queryConfigs: Host EGL config 0x27 was not added
+2026-11-23T00:54:09.2284213Z INFO         | queryConfigs: Host EGL config 0x28 was not added
+2026-11-23T00:54:09.2284686Z INFO         | queryConfigs: Host EGL config 0x29 was not added
+2026-11-23T00:54:09.2285115Z INFO         | queryConfigs: Host EGL config 0x2a was not added
+2026-11-23T00:54:09.2285594Z INFO         | queryConfigs: Host EGL config 0x2b was not added
+2026-11-23T00:54:09.2286013Z INFO         | queryConfigs: Host EGL config 0x2c was not added
+2026-11-23T00:54:09.2286496Z INFO         | queryConfigs: Host EGL config 0x2d was not added
+2026-11-23T00:54:09.2286932Z INFO         | queryConfigs: Host EGL config 0x2e was not added
+2026-11-23T00:54:09.2287400Z INFO         | queryConfigs: Host EGL config 0x2f was not added
+2026-11-23T00:54:09.2287765Z INFO         | queryConfigs: Host EGL config 0x30 was not added
+2026-11-23T00:54:09.2288200Z INFO         | queryConfigs: Host EGL config 0x31 was not added
+2026-11-23T00:54:09.2288598Z INFO         | queryConfigs: Host EGL config 0x32 was not added
+2026-11-23T00:54:09.2288958Z INFO         | queryConfigs: Host EGL config 0x33 was not added
+2026-11-23T00:54:09.2289581Z INFO         | queryConfigs: Host EGL config 0x35 was not added
+2026-11-23T00:54:09.2289971Z INFO         | queryConfigs: Host EGL config 0x36 was not added
+2026-11-23T00:54:09.2290430Z INFO         | queryConfigs: Host EGL config 0x37 was not added
+2026-11-23T00:54:09.2290847Z INFO         | queryConfigs: Host EGL config 0x38 was not added
+2026-11-23T00:54:09.2291292Z INFO         | queryConfigs: Host EGL config 0x39 was not added
+2026-11-23T00:54:09.2291741Z INFO         | queryConfigs: Host EGL config 0x3a was not added
+2026-11-23T00:54:09.2292148Z INFO         | queryConfigs: Host EGL config 0x3b was not added
+2026-11-23T00:54:09.2292597Z INFO         | queryConfigs: Host EGL config 0x3c was not added
+2026-11-23T00:54:09.2292990Z INFO         | queryConfigs: Host EGL config 0x3d was not added
+2026-11-23T00:54:09.2293579Z INFO         | queryConfigs: Host EGL config 0x3f was not added
+2026-11-23T00:54:09.2293949Z INFO         | queryConfigs: Host EGL config 0x40 was not added
+2026-11-23T00:54:09.2294340Z INFO         | queryConfigs: Host EGL config 0x41 was not added
+2026-11-23T00:54:09.2294748Z INFO         | queryConfigs: Host EGL config 0x42 was not added
+2026-11-23T00:54:09.2295128Z INFO         | queryConfigs: Host EGL config 0x43 was not added
+2026-11-23T00:54:09.2295518Z INFO         | queryConfigs: Host EGL config 0x44 was not added
+2026-11-23T00:54:09.2295858Z INFO         | queryConfigs: Host EGL config 0x45 was not added
+2026-11-23T00:54:09.2296253Z INFO         | queryConfigs: Host EGL config 0x46 was not added
+2026-11-23T00:54:09.2296588Z INFO         | queryConfigs: Host EGL config 0x47 was not added
+2026-11-23T00:54:09.2296985Z INFO         | queryConfigs: Host EGL config 0x48 was not added
+2026-11-23T00:54:09.2297326Z INFO         | queryConfigs: Host EGL config 0x49 was not added
+2026-11-23T00:54:09.2297718Z INFO         | queryConfigs: Host EGL config 0x4a was not added
+2026-11-23T00:54:09.2298087Z INFO         | queryConfigs: Host EGL config 0x4b was not added
+2026-11-23T00:54:09.2298445Z INFO         | queryConfigs: Host EGL config 0x1 was not added
+2026-11-23T00:54:09.2298816Z INFO         | queryConfigs: Host EGL config 0x2 was not added
+2026-11-23T00:54:09.2299162Z INFO         | queryConfigs: Host EGL config 0x3 was not added
+2026-11-23T00:54:09.2299557Z INFO         | queryConfigs: Host EGL config 0x5 was not added
+2026-11-23T00:54:09.2299889Z INFO         | queryConfigs: Host EGL config 0x6 was not added
+2026-11-23T00:54:09.2300283Z INFO         | queryConfigs: Host EGL config 0x7 was not added
+2026-11-23T00:54:09.2300616Z INFO         | queryConfigs: Host EGL config 0x8 was not added
+2026-11-23T00:54:09.2301009Z INFO         | queryConfigs: Host EGL config 0xa was not added
+2026-11-23T00:54:09.2301387Z INFO         | queryConfigs: Host EGL config 0xb was not added
+2026-11-23T00:54:09.2301732Z INFO         | queryConfigs: Host EGL config 0xc was not added
+2026-11-23T00:54:09.2302422Z INFO         | queryConfigs: Host EGL config 0xd was not added
+2026-11-23T00:54:09.2302797Z INFO         | queryConfigs: Host EGL config 0xe was not added
+2026-11-23T00:54:09.2303322Z INFO         | queryConfigs: Host EGL config 0xf was not added
+2026-11-23T00:54:09.2344309Z INFO         | Initializing VkEmulation features:
+2026-11-23T00:54:09.2345122Z INFO         |     glInteropSupported: false
+2026-11-23T00:54:09.2345658Z INFO         |     useDeferredCommands: true
+2026-11-23T00:54:09.2346284Z INFO         |     createResourceWithRequirements: true
+2026-11-23T00:54:09.2346936Z INFO         |     useVulkanComposition: false
+2026-11-23T00:54:09.2347496Z INFO         |     useVulkanNativeSwapchain: false
+2026-11-23T00:54:09.2348121Z INFO         |     enable guestRenderDoc: false
+2026-11-23T00:54:09.2348697Z INFO         |     enable Ycbcr emulation: false
+2026-11-23T00:54:09.2349241Z INFO         |     guestVulkanOnly: false
+2026-11-23T00:54:09.2349819Z INFO         |     useDedicatedAllocations: false
+2026-11-23T00:54:09.2350340Z INFO         |     guestVulkanMaxApiVersion: 1.3.0
+2026-11-23T00:54:09.2351186Z INFO         |     enableProtectedMemoryEmulation: false
+2026-11-23T00:54:09.2352503Z INFO         |     VulkanDisableShaderFloatControls2: disabled ((vk_util::extensionSupported(mDeviceInfo.extensions, VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME) || mDeviceInfo.physdevProps.apiVersion >= VK_API_VERSION_1_4) && mDeviceInfo.physdevProps.vendorID == 0x1010)
+2026-11-23T00:54:09.2354179Z INFO         | Graphics Adapter Vendor Google (Google Inc.)
+2026-11-23T00:54:09.2354853Z INFO         | Graphics Adapter Android Emulator OpenGL ES Translator (Google SwiftShader)
+2026-11-23T00:54:09.2355501Z INFO         | Graphics API Version OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+2026-11-23T00:54:09.2357384Z INFO         | Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_standard_derivatives GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888 
+2026-11-23T00:54:09.2358953Z INFO         | Graphics Device Extensions N/A
+2026-11-23T00:54:09.2359461Z INFO         | Disabling sparse binding feature support
+2026-11-23T00:54:09.2435262Z INFO         | Sending adb public key [QAAAAI817rKRtgBjio2G0+VvaXw6ENOxjycoDWQr3/8JiLWbqXs04z34+hzRClRr/PQNsyg86uGnvHagYjxRRU96rvNQGfQQcp0BVCTHdwEu+Lg+m2EVZkNSB7RIeoKMXjV7lrjtLpMVxXmzg88kgIT9bf20qAnVA6XXfdbNRWwx9EEgnjR4GL6UkGPzCVIq/QHkCAAKwSxgHFMwFNjRuzP5aXcI/q2fP0g7wlPTh1DQeJSegJY3XbEZf4SnThZmVXU1V0dm72HYrezzIm3Ioo6lsGvGFkE0CVFwHtLoU7eN0vOzAq4RnYFpcRcVVEcjYu8Y/UmadNjcCGlebyfqLu/4dDbNa0i2MWLn0QDUP4zRS07OSuM9UQUzMSqbWkxVmQrg8lZmJBVhj9DpQ0oPTlAM9X+OAMF6SJx7Ke5ko9akJuEZ7upm8+HXSjdEj0FGYEf0ThmpHz2dc8UpJ6B7QukWu7uXYxexN5+VD0o6bf0GCytGM58ua8x1FxtnPJB+XrKr3z/SF0Wrb/8WEv98iF0Cd7rW+ETh4TrgCKklX/hev14HykMDHTlNVbM/9O53h/32Jhz4I9CNl3D6nwFqPBulQN9tNixQWRygZ8woIHR2EgENFPjuZ1HrUhQuC8HHKk8ZJiqvn8TUjp1+xcpQSxz8S0UC9dKT/66t/mUWknZDkRQds4dhNwEAAQA= runner@unknown]
+2026-11-23T00:54:09.2437830Z INFO         | Userspace boot properties:
+2026-11-23T00:54:09.2438236Z INFO         |   androidboot.boot_devices=pci0000:00/0000:00:03.0 pci0000:00/0000:00:06.0
+2026-11-23T00:54:09.2438700Z INFO         |   androidboot.dalvik.vm.heapsize=576m
+2026-11-23T00:54:09.2439070Z INFO         |   androidboot.debug.hwui.renderer=skiagl
+2026-11-23T00:54:09.2439426Z INFO         |   androidboot.debug.sf.nobootanimation=1
+2026-11-23T00:54:09.2439772Z INFO         |   androidboot.hardware=ranchu
+2026-11-23T00:54:09.2440124Z INFO         |   androidboot.hardware.gltransport=pipe
+2026-11-23T00:54:09.2440466Z INFO         |   androidboot.hardware.vulkan=ranchu
+2026-11-23T00:54:09.2440910Z INFO         |   androidboot.logcat=*:V
+2026-11-23T00:54:09.2441237Z INFO         |   androidboot.opengles.version=196608
+2026-11-23T00:54:09.2441565Z INFO         |   androidboot.qemu=1
+2026-11-23T00:54:09.2444270Z INFO         |   androidboot.qemu.adb.pubkey=QAAAAI817rKRtgBjio2G0+VvaXw6ENOxjycoDWQr3/8JiLWbqXs04z34+hzRClRr/PQNsyg86uGnvHagYjxRRU96rvNQGfQQcp0BVCTHdwEu+Lg+m2EVZkNSB7RIeoKMXjV7lrjtLpMVxXmzg88kgIT9bf20qAnVA6XXfdbNRWwx9EEgnjR4GL6UkGPzCVIq/QHkCAAKwSxgHFMwFNjRuzP5aXcI/q2fP0g7wlPTh1DQeJSegJY3XbEZf4SnThZmVXU1V0dm72HYrezzIm3Ioo6lsGvGFkE0CVFwHtLoU7eN0vOzAq4RnYFpcRcVVEcjYu8Y/UmadNjcCGlebyfqLu/4dDbNa0i2MWLn0QDUP4zRS07OSuM9UQUzMSqbWkxVmQrg8lZmJBVhj9DpQ0oPTlAM9X+OAMF6SJx7Ke5ko9akJuEZ7upm8+HXSjdEj0FGYEf0ThmpHz2dc8UpJ6B7QukWu7uXYxexN5+VD0o6bf0GCytGM58ua8x1FxtnPJB+XrKr3z/SF0Wrb/8WEv98iF0Cd7rW+ETh4TrgCKklX/hev14HykMDHTlNVbM/9O53h/32Jhz4I9CNl3D6nwFqPBulQN9tNixQWRygZ8woIHR2EgENFPjuZ1HrUhQuC8HHKk8ZJiqvn8TUjp1+xcpQSxz8S0UC9dKT/66t/mUWknZDkRQds4dhNwEAAQA= runner@unknown
+2026-11-23T00:54:09.2446695Z INFO         |   androidboot.qemu.avd_name=test
+2026-11-23T00:54:09.2447077Z INFO         |   androidboot.qemu.camera_hq_edge_processing=0
+2026-11-23T00:54:09.2447495Z INFO         |   androidboot.qemu.camera_protocol_ver=1
+2026-11-23T00:54:09.2447980Z INFO         |   androidboot.qemu.cpuvulkan.version=4206592
+2026-11-23T00:54:09.2448374Z INFO         |   androidboot.qemu.gltransport.drawFlushInterval=800
+2026-11-23T00:54:09.2448780Z INFO         |   androidboot.qemu.gltransport.name=pipe
+2026-11-23T00:54:09.2449140Z INFO         |   androidboot.qemu.hwcodec.avcdec=2
+2026-11-23T00:54:09.2449471Z INFO         |   androidboot.qemu.hwcodec.hevcdec=2
+2026-11-23T00:54:09.2449841Z INFO         |   androidboot.qemu.hwcodec.vpxdec=2
+2026-11-23T00:54:09.2450234Z INFO         |   androidboot.qemu.settings.system.screen_off_timeout=2147483647
+2026-11-23T00:54:09.2450655Z INFO         |   androidboot.qemu.skin=320x640
+2026-11-23T00:54:09.2450963Z INFO         |   androidboot.qemu.virtiowifi=1
+2026-11-23T00:54:09.2451326Z INFO         |   androidboot.qemu.vsync=60
+2026-11-23T00:54:09.2451681Z INFO         |   androidboot.serialno=EMULATOR37X3X10X0
+2026-11-23T00:54:09.2452152Z INFO         |   androidboot.vbmeta.digest=b3271ba499104f4631ae3723913d5c12574e01715fce5b82d60beed097ead264
+2026-11-23T00:54:09.2571764Z INFO         |   androidboot.vbmeta.hash_alg=sha256
+2026-11-23T00:54:09.2572253Z INFO         |   androidboot.vbmeta.size=6720
+2026-11-23T00:54:09.2572636Z INFO         |   androidboot.veritymode=enforcing
+2026-11-23T00:54:09.2660513Z WARNING: cannnot unmap ptr 0x7f1d98001000 as it is in the protected range from 0x7f1cf8000000 to 0x7f1d98200000
+2026-11-23T00:54:09.2809157Z INFO         | Monitoring duration of emulator setup.
+2026-11-23T00:54:10.2649390Z INFO         | Activated packet streamer for bluetooth emulation
+2026-11-23T00:54:10.2649985Z INFO         | Successfully initialized netsim WiFi
+2026-11-23T00:54:10.2693624Z INFO         | Setting display: 0 configuration to: 320x640, dpi: 160x160 
+2026-11-23T00:54:10.2694103Z INFO         | setDisplayActiveConfig: id:0, 320x640
+2026-11-23T00:54:10.2694439Z INFO         | emulatorSetupEnvironment: Environment scene is not required
+2026-11-23T00:54:10.2774439Z USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.
+2026-11-23T00:54:10.2775724Z WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+2026-11-23T00:54:10.3618936Z WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+2026-11-23T00:54:18.8755644Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:18.8813816Z * daemon not running; starting now at tcp:5037
+2026-11-23T00:54:18.8832345Z * daemon started successfully
+2026-11-23T00:54:18.8833036Z adb: device 'emulator-5554' not found
+2026-11-23T00:54:18.8834780Z The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+2026-11-23T00:54:20.8869777Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:20.8905738Z adb: device offline
+2026-11-23T00:54:20.8914618Z The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+2026-11-23T00:54:22.8974336Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:22.9126842Z 
+2026-11-23T00:54:24.9176675Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:24.9393681Z 
+2026-11-23T00:54:26.9447399Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:26.9600087Z 
+2026-11-23T00:54:28.9656857Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:28.9817080Z 
+2026-11-23T00:54:30.9887036Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:31.0076078Z 
+2026-11-23T00:54:33.0117467Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:33.0489056Z 
+2026-11-23T00:54:35.0542333Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:35.0675256Z 
+2026-11-23T00:54:37.0729492Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:37.0901798Z 
+2026-11-23T00:54:39.0961706Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:39.1076507Z 
+2026-11-23T00:54:39.8651169Z INFO         | Boot completed in 30964 ms
+2026-11-23T00:54:39.8655696Z INFO         | Increasing screen off timeout, logcat buffer size to 2M.
+2026-11-23T00:54:41.1114853Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-23T00:54:41.1335841Z 1
+2026-11-23T00:54:41.1362061Z Emulator booted.
+2026-11-23T00:54:41.1362994Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell input keyevent 82
+2026-11-23T00:54:43.9374798Z Disabling animations.
+2026-11-23T00:54:43.9414979Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global window_animation_scale 0.0
+2026-11-23T00:54:44.0937436Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global transition_animation_scale 0.0
+2026-11-23T00:54:44.4335032Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global animator_duration_scale 0.0
+2026-11-23T00:54:44.4805036Z ##[endgroup]
+2026-11-23T00:54:44.4874601Z [command]/usr/bin/sh -c bash root-cause/proof.sh
+2026-11-23T00:54:44.5014526Z 11-23 00:54:44.499  2790  2790 D adb     : adb_trace.cpp:233 Android Debug Bridge version 1.0.41
+2026-11-23T00:54:44.5019494Z 11-23 00:54:44.499  2790  2790 D adb     : adb_trace.cpp:233 Version 37.0.3-16887417
+2026-11-23T00:54:44.5020311Z 11-23 00:54:44.499  2790  2790 D adb     : adb_trace.cpp:233 Installed as /usr/local/lib/android/sdk/platform-tools/adb
+2026-11-23T00:54:44.5021100Z 11-23 00:54:44.499  2790  2790 D adb     : adb_trace.cpp:233 Running on Linux 7.0.0-1014-aws (x86_64)
+2026-11-23T00:54:44.5021651Z 11-23 00:54:44.499  2790  2790 D adb     : adb_trace.cpp:233 
+2026-11-23T00:54:44.5022198Z 11-23 00:54:44.500  2790  2790 D adb     : commandline.cpp:1694 Using server socket: tcp:5037
+2026-11-23T00:54:44.5022879Z 11-23 00:54:44.500  2790  2790 D adb     : adb_client.cpp:355 adb_connect: service: host:start-server
+2026-11-23T00:54:44.5023928Z 11-23 00:54:44.500  2790  2790 D adb     : adb_client.cpp:157 _adb_connect: host:version
+2026-11-23T00:54:44.5024422Z * daemon not running; starting now at tcp:5037
+2026-11-23T00:54:44.5024901Z 11-23 00:54:44.501  2791  2791 D adb     : adb_trace.cpp:233 Android Debug Bridge version 1.0.41
+2026-11-23T00:54:44.5025842Z 11-23 00:54:44.501  2791  2791 D adb     : adb_trace.cpp:233 Version 37.0.3-16887417
+2026-11-23T00:54:44.5026581Z 11-23 00:54:44.501  2791  2791 D adb     : adb_trace.cpp:233 Installed as /usr/local/lib/android/sdk/platform-tools/adb
+2026-11-23T00:54:44.5027316Z 11-23 00:54:44.501  2791  2791 D adb     : adb_trace.cpp:233 Running on Linux 7.0.0-1014-aws (x86_64)
+2026-11-23T00:54:44.5027891Z 11-23 00:54:44.501  2791  2791 D adb     : adb_trace.cpp:233 
+2026-11-23T00:54:44.5028351Z 11-23 00:54:44.501  2791  2791 D adb     : commandline.cpp:1694 Using server socket: tcp:5037
+2026-11-23T00:54:44.5037304Z * daemon started successfully
+2026-11-23T00:54:44.5057723Z WARNING      | adb command '/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell am broadcast -a com.android.emulator.multidisplay.START -n com.android.emulator.multidisplay/.MultiDisplayServiceReceiver --user 0 ' failed: 'Broadcasting: Intent { act=com.android.emulator.multidisplay.START flg=0x400000 cmp=com.android.emulator.multidisplay/.MultiDisplayServiceReceiver }'
+2026-11-23T00:54:44.6476357Z 00:54:44.646967349 scenario 5, attempt 1
+2026-11-23T00:54:44.8804764Z Building the test app for android...
+2026-11-23T00:54:44.9200345Z --- 5-cancel-one-of-several-sources
+2026-11-23T00:55:20.5191701Z PASSED: 5-cancel-one-of-several-sources
+2026-11-23T00:55:20.5575990Z Passed 1, failed 0.
+2026-11-23T00:55:20.5777856Z 00:55:20.577268696 scenario 5, attempt 2
+2026-11-23T00:55:20.6705291Z Building the test app for android...
+2026-11-23T00:55:20.7204829Z --- 5-cancel-one-of-several-sources
+2026-11-23T00:55:48.9371556Z PASSED: 5-cancel-one-of-several-sources
+2026-11-23T00:55:48.9717845Z Passed 1, failed 0.
+2026-11-23T00:55:48.9884623Z 00:55:48.988119547 scenario 5, attempt 3
+2026-11-23T00:55:49.0768598Z Building the test app for android...
+2026-11-23T00:55:49.1315608Z --- 5-cancel-one-of-several-sources
+2026-11-23T00:56:14.3755405Z PASSED: 5-cancel-one-of-several-sources
+2026-11-23T00:56:14.4016121Z Passed 1, failed 0.
+2026-11-23T00:56:14.4136496Z 00:56:14.413309254 scenario 5, attempt 4
+2026-11-23T00:56:14.4738505Z Building the test app for android...
+2026-11-23T00:56:14.5066585Z --- 5-cancel-one-of-several-sources
+2026-11-23T00:56:38.0539379Z PASSED: 5-cancel-one-of-several-sources
+2026-11-23T00:56:38.0795335Z Passed 1, failed 0.
+2026-11-23T00:56:38.0912024Z 00:56:38.090863161 scenario 5, attempt 5
+2026-11-23T00:56:38.1486311Z Building the test app for android...
+2026-11-23T00:56:38.1809570Z --- 5-cancel-one-of-several-sources
+2026-11-23T00:57:00.9288637Z PASSED: 5-cancel-one-of-several-sources
+2026-11-23T00:57:00.9614608Z Passed 1, failed 0.
+2026-11-23T00:57:00.9772005Z 00:57:00.976864936 scenario 5, attempt 6
+2026-11-23T00:57:01.0584519Z Building the test app for android...
+2026-11-23T00:57:01.0924058Z --- 5-cancel-one-of-several-sources
+2026-11-23T00:57:23.9182518Z PASSED: 5-cancel-one-of-several-sources
+2026-11-23T00:57:23.9542260Z Passed 1, failed 0.
+2026-11-23T00:57:23.9717937Z 00:57:23.969664518 scenario 5, attempt 7
+2026-11-23T00:57:24.0514991Z Building the test app for android...
+2026-11-23T00:57:24.0874886Z --- 5-cancel-one-of-several-sources
+2026-11-23T00:57:46.9052042Z PASSED: 5-cancel-one-of-several-sources
+2026-11-23T00:57:46.9324310Z Passed 1, failed 0.
+2026-11-23T00:57:46.9482117Z 00:57:46.947915620 scenario 5, attempt 8
+2026-11-23T00:57:47.0285268Z Building the test app for android...
+2026-11-23T00:57:47.0617092Z --- 5-cancel-one-of-several-sources
+2026-11-23T00:58:11.7415390Z PASSED: 5-cancel-one-of-several-sources
+2026-11-23T00:58:11.7679610Z Passed 1, failed 0.
+2026-11-23T00:58:11.7789638Z === attempts of scenario 5 passed: 8 of 8
+2026-11-23T00:58:11.7912969Z === packets from the emulator: largest 34179 bytes, 0 of 60000 bytes or more
+2026-11-23T00:58:11.7913665Z === payload in flight at each drop
+2026-11-23T00:58:11.7929492Z === drops of the emulator's adb connection: 0
+2026-11-23T00:58:11.9996174Z ##[group]Terminate Emulator
+2026-11-23T00:58:12.0008631Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 emu kill
+2026-11-23T00:58:12.0037069Z OK: killing emulator, bye bye
+2026-11-23T00:58:12.0037638Z OK
+2026-11-23T00:58:12.0040498Z ##[endgroup]
+2026-11-23T00:58:12.0041363Z INFO         | Wait for emulator (pid 2584) 20 seconds to shutdown gracefully before kill;you can set environment variable ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL(in seconds) to change the default value (20 seconds)
+2026-11-23T00:58:12.0041976Z 
+2026-11-23T00:58:12.0169443Z USER_INFO    | Snapshots have been disabled by the user, save request is ignored.
+2026-11-23T00:58:12.0169879Z INFO         | Saving snapshot 'default_boot' took 0 ms
+2026-11-23T00:58:12.3132524Z WARNING      | Emulator client has not yet been configured.. Call configure me first!
+2026-11-23T00:58:12.3233598Z INFO         | removeAll
+2026-11-23T00:58:12.3690582Z WARNING      | Netsim Wifi dns:///localhost:44655 is gone due to Stream removed (CANCELLED)
+﻿2026-11-23T00:58:13.3864877Z ##[group]Run actions/upload-artifact@v4
+2026-11-23T00:58:13.3865137Z with:
+2026-11-23T00:58:13.3865311Z   name: evidence-4
+2026-11-23T00:58:13.3865506Z   path: /home/runner/work/_temp/evidence
+2026-11-23T00:58:13.3865870Z   if-no-files-found: warn
+2026-11-23T00:58:13.3866072Z   compression-level: 6
+2026-11-23T00:58:13.3866256Z   overwrite: false
+2026-11-23T00:58:13.3866437Z   include-hidden-files: false
+2026-11-23T00:58:13.3866641Z env:
+2026-11-23T00:58:13.3866800Z   BUN_VERSION: 1.3.14
+2026-11-23T00:58:13.3866984Z   NODE_VERSION: 24.15.0
+2026-11-23T00:58:13.3867213Z   SOURCE_PATCH: root-cause/small-get-text.patch
+2026-11-23T00:58:13.3867458Z   MISE_LOG_LEVEL: info
+2026-11-23T00:58:13.3869396Z   GITHUB_TOKEN: ***
+2026-11-23T00:58:13.3869614Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-23T00:58:13.3869870Z   MISE_YES: 1
+2026-11-23T00:58:13.3870164Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:58:13.3870539Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-23T00:58:13.3870916Z   ZIGGY_SMOKE_BUILD: /home/runner/work/ziggy/ziggy/fresh-build
+2026-11-23T00:58:13.3871204Z   EVIDENCE_DIR: /home/runner/work/_temp/evidence
+2026-11-23T00:58:13.3871461Z   ANDROID_AVD_HOME: /home/runner/.android/avd
+2026-11-23T00:58:13.3871682Z ##[endgroup]
+2026-11-23T00:58:13.5171818Z (node:9992) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-23T00:58:13.5172558Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-23T00:58:13.5209712Z With the provided path, there will be 1 file uploaded
+2026-11-23T00:58:13.5212954Z Artifact name is valid!
+2026-11-23T00:58:13.5213647Z Root directory input is valid!
+2026-11-23T00:58:13.7017235Z Beginning upload of artifact content to blob storage
+2026-11-23T00:58:13.7743531Z (node:9992) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-23T00:58:13.9019723Z Uploaded bytes 152777
+2026-11-23T00:58:13.9285680Z Finished uploading artifact content to blob storage!
+2026-11-23T00:58:13.9286654Z SHA256 digest of uploaded artifact zip is 4f4d2f9c2d60aa367bd9c62de5783eac6ac075f62bbf81424a57998da634fdbb
+2026-11-23T00:58:13.9287637Z Finalizing artifact upload
+2026-11-23T00:58:14.2370402Z Artifact evidence-4.zip successfully finalized. Artifact ID 14780689485
+2026-11-23T00:58:14.2371206Z Artifact evidence-4 has been successfully uploaded! Final size is 152777 bytes. Artifact ID is 14780689485
+2026-11-23T00:58:14.2376507Z Artifact download URL: https://github.com/ashleydavis/ziggy/actions/runs/45090730783/artifacts/14780689485
+﻿2026-11-23T00:58:14.2522755Z Post job cleanup.
+2026-11-23T00:58:14.3545515Z (node:10004) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-23T00:58:14.3546108Z (Use `node --trace-deprecation ...` to show where the warning was created)
+﻿2026-11-23T00:58:14.3654617Z Post job cleanup.
+﻿2026-11-23T00:58:14.5062065Z Post job cleanup.
+2026-11-23T00:58:14.5710203Z [command]/usr/bin/git version
+2026-11-23T00:58:14.5740080Z git version 2.56.1
+2026-11-23T00:58:14.5763878Z Temporarily overriding HOME='/home/runner/work/_temp/b760ce86-0751-48a6-bff2-c224fdf14f4d' before making global git config changes
+2026-11-23T00:58:14.5764469Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-23T00:58:14.5767281Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/ziggy/ziggy
+2026-11-23T00:58:14.5797300Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-23T00:58:14.5820860Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-23T00:58:14.5979004Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-23T00:58:14.6001850Z http.https://github.com/.extraheader
+2026-11-23T00:58:14.6008627Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-23T00:58:14.6032254Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-23T00:58:14.6186652Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-23T00:58:14.6210085Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+﻿2026-11-23T00:58:14.6480233Z Cleaning up orphan processes
+2026-11-23T00:58:14.6738256Z Terminate orphan process: pid (2791) (adb)
+2026-11-23T00:58:14.6782278Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/download-artifact@v4, actions/setup-java@v4, actions/upload-artifact@v4, jdx/mise-action@v2. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

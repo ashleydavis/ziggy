@@ -1,0 +1,60 @@
+== job 137400392229
+=== adb state changes
+23:43:32.710208784 device
+== job 137400392394
+=== adb state changes
+23:43:33.701530098 device
+== job 137400392397
+=== adb state changes
+23:43:44.882171154 device
+== job 137400392401
+=== adb state changes
+23:43:38.120288036 device
+== job 137400392426
+=== adb state changes
+23:43:33.340448878 device
+== job 137400392439
+=== adb state changes
+23:43:33.641408159 device
+== job 137400392449
+=== adb state changes
+23:43:58.737126067 device
+== job 137400392459
+=== adb state changes
+23:43:36.526609030 device
+== job 137400392479
+=== adb state changes
+23:49:10.482500405 device
+== job 137400392490
+=== adb state changes
+23:49:16.783805148 device
+== job 137400392491
+=== adb state changes
+23:49:20.772213469 device
+== job 137400392492
+=== adb state changes
+23:49:15.875046340 device
+== job 137400392495
+=== adb state changes
+23:45:20.580825676 device
+== job 137400392496
+=== adb state changes
+23:43:32.997191533 device
+== job 137400392500
+=== adb state changes
+23:43:37.095395982 device
+== job 137400392515
+=== adb state changes
+23:43:36.188521609 device
+== job 137400392539
+=== adb state changes
+23:47:09.428216616 device
+== job 137400392562
+=== adb state changes
+23:49:18.885415120 device
+== job 137400392590
+=== adb state changes
+23:49:07.707240628 device
+== job 137400392599
+=== adb state changes
+23:49:11.123480506 device

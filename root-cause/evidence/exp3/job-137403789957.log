@@ -1,0 +1,1398 @@
+﻿2026-11-22T23:54:21.4765168Z Current runner version: '2.338.2'
+2026-11-22T23:54:21.4790650Z ##[group]Runner Image Provisioner
+2026-11-22T23:54:21.4791759Z Hosted Compute Agent
+2026-11-22T23:54:21.4792322Z Version: 20261111.635
+2026-11-22T23:54:21.4793008Z Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+2026-11-22T23:54:21.4793711Z Build Date: 2026-11-11T01:49:01Z
+2026-11-22T23:54:21.4794345Z Worker ID: {16b8bbcc-43a2-4fdf-ad41-718e120b0c03}
+2026-11-22T23:54:21.4795063Z Region: westus2
+2026-11-22T23:54:21.4795571Z Cloud: Azure
+2026-11-22T23:54:21.4796088Z ##[endgroup]
+2026-11-22T23:54:21.4797329Z ##[group]Operating System
+2026-11-22T23:54:21.4798220Z Ubuntu
+2026-11-22T23:54:21.4798793Z 24.04.5
+2026-11-22T23:54:21.4799282Z LTS
+2026-11-22T23:54:21.4799781Z ##[endgroup]
+2026-11-22T23:54:21.4800343Z ##[group]Runner Image
+2026-11-22T23:54:21.4801274Z Image: ubuntu-24.04
+2026-11-22T23:54:21.4801970Z Version: 20261116.376.1
+2026-11-22T23:54:21.4803269Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261116.376/images/ubuntu/Ubuntu2404-Readme.md
+2026-11-22T23:54:21.4805688Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261116.376
+2026-11-22T23:54:21.4806628Z ##[endgroup]
+2026-11-22T23:54:21.4808156Z ##[group]GITHUB_TOKEN Permissions
+2026-11-22T23:54:21.4810476Z Contents: read
+2026-11-22T23:54:21.4811158Z Metadata: read
+2026-11-22T23:54:21.4811743Z Packages: read
+2026-11-22T23:54:21.4812406Z ##[endgroup]
+2026-11-22T23:54:21.4814652Z Secret source: Actions
+2026-11-22T23:54:21.4815549Z Cache mode: write
+2026-11-22T23:54:21.4816558Z Prepare workflow directory
+2026-11-22T23:54:21.5185895Z Prepare all required actions
+2026-11-22T23:54:21.5234343Z Getting action download info
+2026-11-22T23:54:21.9082137Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+2026-11-22T23:54:22.0237458Z Download action repository 'oven-sh/setup-bun@v2' (SHA:0c5077e51419868618aeaa5fe8019c62421857d6)
+2026-11-22T23:54:22.2351144Z Download action repository 'jdx/mise-action@v2' (SHA:c37c93293d6b742fc901e1406b8f764f6fb19dac)
+2026-11-22T23:54:22.4712149Z Download action repository 'actions/setup-java@v4' (SHA:cf277c60eb25467037889841efdb72551f06f6c3)
+2026-11-22T23:54:22.8964145Z Download action repository 'actions/cache@v4' (SHA:0057852bfaa89a56745cba8c7296529d2fc39830)
+2026-11-22T23:54:23.0705789Z Download action repository 'reactivecircus/android-emulator-runner@v2' (SHA:a421e43855164a8197daf9d8d40fe71c6996bb0d)
+2026-11-22T23:54:23.2940321Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2026-11-22T23:54:23.6267405Z Complete job name: android-offline (4)
+﻿2026-11-22T23:54:23.7731870Z ##[group]Run actions/checkout@v4
+2026-11-22T23:54:23.7733345Z with:
+2026-11-22T23:54:23.7734286Z   repository: ashleydavis/ziggy
+2026-11-22T23:54:23.7742209Z   token: ***
+2026-11-22T23:54:23.7743156Z   ssh-strict: true
+2026-11-22T23:54:23.7744053Z   ssh-user: git
+2026-11-22T23:54:23.7745015Z   persist-credentials: true
+2026-11-22T23:54:23.7746105Z   clean: true
+2026-11-22T23:54:23.7747055Z   sparse-checkout-cone-mode: true
+2026-11-22T23:54:23.7748217Z   fetch-depth: 1
+2026-11-22T23:54:23.7749100Z   fetch-tags: false
+2026-11-22T23:54:23.7750317Z   show-progress: true
+2026-11-22T23:54:23.7751256Z   lfs: false
+2026-11-22T23:54:23.7752081Z   submodules: false
+2026-11-22T23:54:23.7753023Z   set-safe-directory: true
+2026-11-22T23:54:23.7754066Z   allow-unsafe-pr-checkout: false
+2026-11-22T23:54:23.7755318Z env:
+2026-11-22T23:54:23.7756206Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:23.7757068Z ##[endgroup]
+2026-11-22T23:54:24.0821598Z Syncing repository: ashleydavis/ziggy
+2026-11-22T23:54:24.0824462Z ##[group]Getting Git version info
+2026-11-22T23:54:24.0825878Z Working directory is '/home/runner/work/ziggy/ziggy'
+2026-11-22T23:54:24.0827896Z [command]/usr/bin/git version
+2026-11-22T23:54:24.0886656Z git version 2.56.1
+2026-11-22T23:54:24.0906031Z ##[endgroup]
+2026-11-22T23:54:24.0918685Z Temporarily overriding HOME='/home/runner/work/_temp/5169d561-62ff-442f-bad1-a2bfa421e08f' before making global git config changes
+2026-11-22T23:54:24.0922755Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T23:54:24.0925418Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:24.0969562Z Deleting the contents of '/home/runner/work/ziggy/ziggy'
+2026-11-22T23:54:24.0972655Z ##[group]Initializing the repository
+2026-11-22T23:54:24.0976101Z [command]/usr/bin/git init /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:24.1072211Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-11-22T23:54:24.1074680Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-11-22T23:54:24.1076539Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-11-22T23:54:24.1078121Z hint: call:
+2026-11-22T23:54:24.1079307Z hint:
+2026-11-22T23:54:24.1080773Z hint: 	git config --global init.defaultBranch <name>
+2026-11-22T23:54:24.1082510Z hint:
+2026-11-22T23:54:24.1084133Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-11-22T23:54:24.1086625Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-11-22T23:54:24.1089233Z hint:
+2026-11-22T23:54:24.1090475Z hint: 	git branch -m <name>
+2026-11-22T23:54:24.1091881Z hint:
+2026-11-22T23:54:24.1093154Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-11-22T23:54:24.1094975Z Initialized empty Git repository in /home/runner/work/ziggy/ziggy/.git/
+2026-11-22T23:54:24.1098635Z [command]/usr/bin/git remote add origin https://github.com/ashleydavis/ziggy
+2026-11-22T23:54:24.1141274Z ##[endgroup]
+2026-11-22T23:54:24.1143116Z ##[group]Disabling automatic garbage collection
+2026-11-22T23:54:24.1144930Z [command]/usr/bin/git config --local gc.auto 0
+2026-11-22T23:54:24.1175262Z ##[endgroup]
+2026-11-22T23:54:24.1176906Z ##[group]Setting up auth
+2026-11-22T23:54:24.1180793Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T23:54:24.1211043Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T23:54:24.1542731Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T23:54:24.1573400Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T23:54:24.1756230Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T23:54:24.1784771Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-11-22T23:54:24.1964376Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-11-22T23:54:24.2002164Z ##[endgroup]
+2026-11-22T23:54:24.2003856Z ##[group]Fetching the repository
+2026-11-22T23:54:24.2014832Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +ea5c7dedc78398b573a5e162eb822175ead70113:refs/remotes/origin/tmp-root-cause-android-offline
+2026-11-22T23:54:24.8578327Z From https://github.com/ashleydavis/ziggy
+2026-11-22T23:54:24.8579447Z  * [new ref]         ea5c7dedc78398b573a5e162eb822175ead70113 -> origin/tmp-root-cause-android-offline
+2026-11-22T23:54:24.8582951Z ##[endgroup]
+2026-11-22T23:54:24.8583629Z ##[group]Determining the checkout info
+2026-11-22T23:54:24.8585043Z ##[endgroup]
+2026-11-22T23:54:24.8590530Z [command]/usr/bin/git sparse-checkout disable
+2026-11-22T23:54:24.8647040Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-11-22T23:54:24.8678001Z ##[group]Checking out the ref
+2026-11-22T23:54:24.8681597Z [command]/usr/bin/git checkout --progress --force -B tmp-root-cause-android-offline refs/remotes/origin/tmp-root-cause-android-offline
+2026-11-22T23:54:24.9839608Z Switched to a new branch 'tmp-root-cause-android-offline'
+2026-11-22T23:54:24.9844400Z branch 'tmp-root-cause-android-offline' set up to track 'origin/tmp-root-cause-android-offline'.
+2026-11-22T23:54:24.9860926Z ##[endgroup]
+2026-11-22T23:54:24.9901901Z [command]/usr/bin/git log -1 --format=%H
+2026-11-22T23:54:24.9924038Z ea5c7dedc78398b573a5e162eb822175ead70113
+﻿2026-11-22T23:54:25.0207538Z ##[group]Run oven-sh/setup-bun@v2
+2026-11-22T23:54:25.0208299Z with:
+2026-11-22T23:54:25.0208775Z   bun-version: 1.3.14
+2026-11-22T23:54:25.0209183Z   no-cache: false
+2026-11-22T23:54:25.0211844Z   token: ***
+2026-11-22T23:54:25.0212262Z env:
+2026-11-22T23:54:25.0212637Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:25.0213051Z ##[endgroup]
+2026-11-22T23:54:25.4278716Z Cache hit for: bun-fR4r1tsFeXfPQkusQwkKD2kGnsE=
+2026-11-22T23:54:26.7276140Z Received 25455161 of 33843769 (75.2%), 24.2 MBs/sec
+2026-11-22T23:54:26.8370575Z Received 33843769 of 33843769 (100.0%), 29.1 MBs/sec
+2026-11-22T23:54:26.8371906Z Cache Size: ~32 MB (33843769 B)
+2026-11-22T23:54:26.8398837Z [command]/usr/bin/tar -xf /home/runner/work/_temp/696358d1-5f70-4b4f-b812-80744ca45958/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+2026-11-22T23:54:26.9960106Z Cache restored successfully
+2026-11-22T23:54:26.9979745Z [command]/home/runner/.bun/bin/bun --revision
+2026-11-22T23:54:27.0027359Z 1.3.14+0d9b296af
+2026-11-22T23:54:27.0032364Z Using a cached version of Bun: 1.3.14+0d9b296af
+﻿2026-11-22T23:54:27.0217337Z ##[group]Run jdx/mise-action@v2
+2026-11-22T23:54:27.0217873Z with:
+2026-11-22T23:54:27.0218238Z   install_args: zig jq
+2026-11-22T23:54:27.0218547Z   install: true
+2026-11-22T23:54:27.0218827Z   cache: true
+2026-11-22T23:54:27.0219185Z   cache_save: true
+2026-11-22T23:54:27.0219506Z   cache_key_prefix: mise-v0
+2026-11-22T23:54:27.0219915Z   experimental: false
+2026-11-22T23:54:27.0220211Z   log_level: info
+2026-11-22T23:54:27.0220559Z   reshim: false
+2026-11-22T23:54:27.0222954Z   github_token: ***
+2026-11-22T23:54:27.0223262Z   fetch_from_github: true
+2026-11-22T23:54:27.0223658Z env:
+2026-11-22T23:54:27.0223937Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:27.0224241Z ##[endgroup]
+2026-11-22T23:54:27.1335595Z ##[group]Restoring mise cache
+2026-11-22T23:54:27.3461030Z [command]/usr/bin/ldd --version
+2026-11-22T23:54:27.3512175Z ldd (Ubuntu GLIBC 2.39-0ubuntu8.12) 2.39
+2026-11-22T23:54:27.3513035Z Copyright (C) 2024 Free Software Foundation, Inc.
+2026-11-22T23:54:27.3513952Z This is free software; see the source for copying conditions.  There is NO
+2026-11-22T23:54:27.3515101Z warranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+2026-11-22T23:54:27.3515959Z Written by Roland McGrath and Ulrich Drepper.
+2026-11-22T23:54:27.5802865Z Cache hit for: mise-v0-linux-x64-9ce104d02e7009dbe537b57fda0e747a54fedf18a2f45dff9c2c4209b85ea59d-3bf4a0d67d88dc5aa5be7ff0ac03c5258bf51c307989c5c5477fdc7134d93fb1
+2026-11-22T23:54:28.8563936Z Received 37748736 of 141227464 (26.7%), 35.9 MBs/sec
+2026-11-22T23:54:29.7104312Z Received 141227464 of 141227464 (100.0%), 72.6 MBs/sec
+2026-11-22T23:54:29.7105313Z Cache Size: ~135 MB (141227464 B)
+2026-11-22T23:54:29.7146445Z [command]/usr/bin/tar -xf /home/runner/work/_temp/9c178417-e4a5-4532-bdd7-ff41a1f7790a/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+2026-11-22T23:54:30.7824362Z Cache restored successfully
+2026-11-22T23:54:30.7878874Z mise cache restored from key: mise-v0-linux-x64-9ce104d02e7009dbe537b57fda0e747a54fedf18a2f45dff9c2c4209b85ea59d-3bf4a0d67d88dc5aa5be7ff0ac03c5258bf51c307989c5c5477fdc7134d93fb1
+2026-11-22T23:54:30.7884523Z ##[group]Setting env vars
+2026-11-22T23:54:30.7885064Z Setting MISE_LOG_LEVEL=info
+2026-11-22T23:54:30.7889909Z Setting GITHUB_TOKEN=***
+2026-11-22T23:54:30.7890513Z Setting MISE_TRUSTED_CONFIG_PATHS=/home/runner/work/ziggy/ziggy
+2026-11-22T23:54:30.7891267Z Setting MISE_YES=1
+2026-11-22T23:54:30.7891688Z Adding /home/runner/.local/share/mise/shims to PATH
+2026-11-22T23:54:30.7892993Z ##[group]Running mise --version
+2026-11-22T23:54:30.7901797Z [command]/home/runner/.local/share/mise/bin/mise --version
+2026-11-22T23:54:30.8012011Z 2026.10.20 linux-x64 (2026-10-26)
+2026-11-22T23:54:30.8022359Z ##[endgroup]
+2026-11-22T23:54:30.8023218Z ##[group]Running mise install zig jq
+2026-11-22T23:54:30.8034070Z [command]/home/runner/.local/share/mise/bin/mise install zig jq
+2026-11-22T23:54:30.8159457Z ^[[2mmise^[[0m ^[[2mby @jdx^[[0m – installing 2 tools
+2026-11-22T23:54:30.9551717Z ^[[2mmise^[[0m ^[[38;5;11m⇢^[[0m ^[[34mzig^[[0m@0.16.0  137ms · already installed
+2026-11-22T23:54:30.9553268Z ^[[2mmise^[[0m ^[[38;5;11m⇢^[[0m ^[[34mjq^[[0m@1.7.1    138ms · already installed
+2026-11-22T23:54:30.9554284Z ^[[2mmise^[[0m ^[[36m████████████████^[[0m^[[31m^[[0m^[[2m^[[0m 2/2 · installed 0 tools · 2 already installed in 139ms
+2026-11-22T23:54:30.9943838Z ##[endgroup]
+2026-11-22T23:54:30.9944761Z ##[group]Running mise ls
+2026-11-22T23:54:30.9957122Z [command]/home/runner/.local/share/mise/bin/mise ls
+2026-11-22T23:54:31.0097192Z bun                              1.3.14 (missing)   ~/work/ziggy/ziggy/mise.toml  1.3.14
+2026-11-22T23:54:31.0098289Z github:ashleydavis/what-changed  0.0.6 (missing)    ~/work/ziggy/ziggy/mise.toml  0.0.6
+2026-11-22T23:54:31.0099208Z jq                               1.7.1              ~/work/ziggy/ziggy/mise.toml  1.7.1
+2026-11-22T23:54:31.0100013Z node                             24.15.0 (missing)  ~/work/ziggy/ziggy/mise.toml  24.15.0
+2026-11-22T23:54:31.0100738Z zig                              0.16.0             ~/work/ziggy/ziggy/mise.toml  0.16.0
+2026-11-22T23:54:31.0113709Z ##[endgroup]
+﻿2026-11-22T23:54:31.1378735Z ##[group]Run bun install
+2026-11-22T23:54:31.1379315Z ^[[36;1mbun install^[[0m
+2026-11-22T23:54:31.1396609Z shell: /usr/bin/bash -e {0}
+2026-11-22T23:54:31.1396976Z env:
+2026-11-22T23:54:31.1397364Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:31.1397841Z   MISE_LOG_LEVEL: info
+2026-11-22T23:54:31.1400280Z   GITHUB_TOKEN: ***
+2026-11-22T23:54:31.1400703Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:31.1401186Z   MISE_YES: 1
+2026-11-22T23:54:31.1401531Z ##[endgroup]
+2026-11-22T23:54:31.1484462Z bun install v1.3.14 (0d9b296a)
+2026-11-22T23:54:31.4458972Z 
+2026-11-22T23:54:31.4459828Z + express@5.3.0
+2026-11-22T23:54:31.4460575Z + ws@8.22.0
+2026-11-22T23:54:31.4460833Z 
+2026-11-22T23:54:31.4461118Z 776 packages installed [298.00ms]
+﻿2026-11-22T23:54:31.4597204Z ##[group]Run actions/setup-java@v4
+2026-11-22T23:54:31.4597563Z with:
+2026-11-22T23:54:31.4598201Z   distribution: temurin
+2026-11-22T23:54:31.4598615Z   java-version: 17
+2026-11-22T23:54:31.4598959Z   java-package: jdk
+2026-11-22T23:54:31.4599295Z   check-latest: false
+2026-11-22T23:54:31.4599594Z   server-id: github
+2026-11-22T23:54:31.4599974Z   server-username: GITHUB_ACTOR
+2026-11-22T23:54:31.4600304Z   server-password: GITHUB_TOKEN
+2026-11-22T23:54:31.4600668Z   overwrite-settings: true
+2026-11-22T23:54:31.4601027Z   job-status: success
+2026-11-22T23:54:31.4603339Z   token: ***
+2026-11-22T23:54:31.4603660Z env:
+2026-11-22T23:54:31.4603947Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:31.4604292Z   MISE_LOG_LEVEL: info
+2026-11-22T23:54:31.4606389Z   GITHUB_TOKEN: ***
+2026-11-22T23:54:31.4606827Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:31.4607221Z   MISE_YES: 1
+2026-11-22T23:54:31.4607551Z ##[endgroup]
+2026-11-22T23:54:31.6288822Z ##[warning]setup-java v4 is deprecated and will no longer receive updates. Please migrate to actions/setup-java@v5.
+2026-11-22T23:54:31.6296494Z ##[group]Installed distributions
+2026-11-22T23:54:31.6331010Z Resolved Java 17.0.21+9 from tool-cache
+2026-11-22T23:54:31.6331628Z Setting Java 17.0.21+9 as the default
+2026-11-22T23:54:31.6340257Z (node:2415) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T23:54:31.6341005Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T23:54:31.6343406Z Creating toolchains.xml for JDK version 17 from temurin
+2026-11-22T23:54:31.6411991Z Writing to /home/runner/.m2/toolchains.xml
+2026-11-22T23:54:31.6412548Z 
+2026-11-22T23:54:31.6413039Z Java configuration:
+2026-11-22T23:54:31.6413647Z   Distribution: temurin
+2026-11-22T23:54:31.6414171Z   Version: 17.0.21+9
+2026-11-22T23:54:31.6414612Z   Path: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:31.6414937Z 
+2026-11-22T23:54:31.6415341Z ##[endgroup]
+2026-11-22T23:54:31.6437634Z Creating settings.xml with server-id: github
+2026-11-22T23:54:31.6458087Z Writing to /home/runner/.m2/settings.xml
+﻿2026-11-22T23:54:31.6571226Z ##[group]Run echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+2026-11-22T23:54:31.6572168Z ^[[36;1mecho 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules^[[0m
+2026-11-22T23:54:31.6572806Z ^[[36;1msudo udevadm control --reload-rules^[[0m
+2026-11-22T23:54:31.6573222Z ^[[36;1msudo udevadm trigger --name-match=kvm^[[0m
+2026-11-22T23:54:31.6587596Z shell: /usr/bin/bash -e {0}
+2026-11-22T23:54:31.6588238Z env:
+2026-11-22T23:54:31.6588537Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:31.6588908Z   MISE_LOG_LEVEL: info
+2026-11-22T23:54:31.6591453Z   GITHUB_TOKEN: ***
+2026-11-22T23:54:31.6591906Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:31.6592305Z   MISE_YES: 1
+2026-11-22T23:54:31.6592752Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:31.6593312Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:31.6593868Z ##[endgroup]
+2026-11-22T23:54:31.6689669Z KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"
+﻿2026-11-22T23:54:31.7001102Z ##[group]Run actions/cache/restore@v4
+2026-11-22T23:54:31.7001551Z with:
+2026-11-22T23:54:31.7002017Z   path: ziggy-build
+.zig-cache
+apps/ziggy-template/.zig-cache
+apps/ziggy-test-app/.zig-cache
+
+2026-11-22T23:54:31.7002708Z   key: ziggy-build-android-e0b4c3793a5d458b405ce853ff5b1fbae4f32e56
+2026-11-22T23:54:31.7003239Z   fail-on-cache-miss: true
+2026-11-22T23:54:31.7003609Z   enableCrossOsArchive: false
+2026-11-22T23:54:31.7003992Z   lookup-only: false
+2026-11-22T23:54:31.7004301Z env:
+2026-11-22T23:54:31.7004619Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:31.7004959Z   MISE_LOG_LEVEL: info
+2026-11-22T23:54:31.7007802Z   GITHUB_TOKEN: ***
+2026-11-22T23:54:31.7008205Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:31.7008656Z   MISE_YES: 1
+2026-11-22T23:54:31.7009120Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:31.7009723Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:31.7010263Z ##[endgroup]
+2026-11-22T23:54:31.8045460Z (node:2436) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T23:54:31.8046244Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T23:54:32.0402602Z Cache hit for: ziggy-build-android-e0b4c3793a5d458b405ce853ff5b1fbae4f32e56
+2026-11-22T23:54:32.0535130Z (node:2436) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T23:54:33.3484634Z Received 29360128 of 51702747 (56.8%), 28.0 MBs/sec
+2026-11-22T23:54:33.5779776Z Received 51702747 of 51702747 (100.0%), 40.1 MBs/sec
+2026-11-22T23:54:33.5780457Z Cache Size: ~49 MB (51702747 B)
+2026-11-22T23:54:33.5939609Z [command]/usr/bin/tar -xf /home/runner/work/_temp/92f5fb1d-6bca-4180-8a78-7ddbc2e24933/cache.tzst -P -C /home/runner/work/ziggy/ziggy --use-compress-program unzstd
+2026-11-22T23:54:33.9273176Z Cache restored successfully
+2026-11-22T23:54:33.9448839Z Cache restored from key: ziggy-build-android-e0b4c3793a5d458b405ce853ff5b1fbae4f32e56
+﻿2026-11-22T23:54:33.9550351Z ##[group]Run echo "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"
+2026-11-22T23:54:33.9551012Z ^[[36;1mecho "ZIGGY_SMOKE_BUILD=$PWD/ziggy-build/app" >> "$GITHUB_ENV"^[[0m
+2026-11-22T23:54:33.9564765Z shell: /usr/bin/bash -e {0}
+2026-11-22T23:54:33.9565155Z env:
+2026-11-22T23:54:33.9565518Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:33.9565820Z   MISE_LOG_LEVEL: info
+2026-11-22T23:54:33.9568448Z   GITHUB_TOKEN: ***
+2026-11-22T23:54:33.9568847Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:33.9569297Z   MISE_YES: 1
+2026-11-22T23:54:33.9569721Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:33.9570305Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:33.9570742Z ##[endgroup]
+﻿2026-11-22T23:54:33.9641879Z ##[group]Run echo "EVIDENCE_DIR=$RUNNER_TEMP/evidence" >> "$GITHUB_ENV"
+2026-11-22T23:54:33.9642514Z ^[[36;1mecho "EVIDENCE_DIR=$RUNNER_TEMP/evidence" >> "$GITHUB_ENV"^[[0m
+2026-11-22T23:54:33.9655790Z shell: /usr/bin/bash -e {0}
+2026-11-22T23:54:33.9656165Z env:
+2026-11-22T23:54:33.9656511Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:33.9656875Z   MISE_LOG_LEVEL: info
+2026-11-22T23:54:33.9659526Z   GITHUB_TOKEN: ***
+2026-11-22T23:54:33.9659972Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:33.9660404Z   MISE_YES: 1
+2026-11-22T23:54:33.9660874Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:33.9661470Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:33.9662009Z   ZIGGY_SMOKE_BUILD: /home/runner/work/ziggy/ziggy/ziggy-build/app
+2026-11-22T23:54:33.9662505Z ##[endgroup]
+﻿2026-11-22T23:54:33.9780802Z ##[group]Run reactivecircus/android-emulator-runner@v2
+2026-11-22T23:54:33.9781274Z with:
+2026-11-22T23:54:33.9781545Z   api-level: 35
+2026-11-22T23:54:33.9781911Z   arch: x86_64
+2026-11-22T23:54:33.9782222Z   target: google_apis
+2026-11-22T23:54:33.9782572Z   disk-size: 4096M
+2026-11-22T23:54:33.9782899Z   script: bash root-cause/experiment.sh
+2026-11-22T23:54:33.9783300Z   cores: 2
+2026-11-22T23:54:33.9783644Z   avd-name: test
+2026-11-22T23:54:33.9783951Z   force-avd-creation: true
+2026-11-22T23:54:33.9784333Z   emulator-boot-timeout: 600
+2026-11-22T23:54:33.9784652Z   emulator-port: 5554
+2026-11-22T23:54:33.9785239Z   emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+2026-11-22T23:54:33.9785747Z   disable-animations: true
+2026-11-22T23:54:33.9786133Z   disable-spellchecker: false
+2026-11-22T23:54:33.9786476Z   disable-linux-hw-accel: auto
+2026-11-22T23:54:33.9786870Z   enable-hw-keyboard: false
+2026-11-22T23:54:33.9787219Z   channel: stable
+2026-11-22T23:54:33.9787758Z env:
+2026-11-22T23:54:33.9788053Z   BUN_VERSION: 1.3.14
+2026-11-22T23:54:33.9788410Z   MISE_LOG_LEVEL: info
+2026-11-22T23:54:33.9790746Z   GITHUB_TOKEN: ***
+2026-11-22T23:54:33.9791108Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-22T23:54:33.9791540Z   MISE_YES: 1
+2026-11-22T23:54:33.9791919Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:33.9792545Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:54:33.9793067Z   ZIGGY_SMOKE_BUILD: /home/runner/work/ziggy/ziggy/ziggy-build/app
+2026-11-22T23:54:33.9793566Z   EVIDENCE_DIR: /home/runner/work/_temp/evidence
+2026-11-22T23:54:33.9793985Z   ZIGGY_ANDROID_DEVICES: emulator-5554
+2026-11-22T23:54:33.9794370Z ##[endgroup]
+2026-11-22T23:54:34.0354393Z ##[group]Configure emulator
+2026-11-22T23:54:34.0356001Z API level: 35
+2026-11-22T23:54:34.0356507Z System image API level: 35
+2026-11-22T23:54:34.0357125Z target: google_apis
+2026-11-22T23:54:34.0357613Z CPU architecture: x86_64
+2026-11-22T23:54:34.0358453Z Hardware profile: 
+2026-11-22T23:54:34.0358896Z Cores: 2
+2026-11-22T23:54:34.0359362Z RAM size: 
+2026-11-22T23:54:34.0360057Z Heap size: 
+2026-11-22T23:54:34.0360629Z SD card path or size: 
+2026-11-22T23:54:34.0363607Z Disk size: 4096M
+2026-11-22T23:54:34.0364394Z AVD name: test
+2026-11-22T23:54:34.0364989Z force avd creation: true
+2026-11-22T23:54:34.0365510Z Emulator boot timeout: 600
+2026-11-22T23:54:34.0366076Z emulator port: 5554
+2026-11-22T23:54:34.0366818Z emulator options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+2026-11-22T23:54:34.0367956Z disable animations: true
+2026-11-22T23:54:34.0368467Z disable spellchecker: false
+2026-11-22T23:54:34.0369017Z disable Linux hardware acceleration: false
+2026-11-22T23:54:34.0369554Z enable hardware keyboard: false
+2026-11-22T23:54:34.0369980Z Channel: 0 (stable)
+2026-11-22T23:54:34.0370423Z Script:
+2026-11-22T23:54:34.0370802Z bash root-cause/experiment.sh
+2026-11-22T23:54:34.0371245Z Pre emulator launch script:
+2026-11-22T23:54:34.0371847Z ##[endgroup]
+2026-11-22T23:54:34.0372415Z ##[group]Install Android SDK
+2026-11-22T23:54:34.0433555Z [command]/usr/bin/sh -c \yes | sdkmanager --licenses > /dev/null
+2026-11-22T23:54:36.4211784Z Installing latest build tools, platform tools, and platform.
+2026-11-22T23:54:36.4223234Z [command]/usr/bin/sh -c \sdkmanager --install 'build-tools;37.0.0' platform-tools 'platforms;android-35'> /dev/null
+2026-11-22T23:54:39.3240013Z Installing latest emulator.
+2026-11-22T23:54:39.3251549Z [command]/usr/bin/sh -c \sdkmanager --install emulator --channel=0 > /dev/null
+2026-11-22T23:54:50.1960113Z Installing system images.
+2026-11-22T23:54:50.1971563Z [command]/usr/bin/sh -c \sdkmanager --install 'system-images;android-35;google_apis;x86_64' --channel=0 > /dev/null
+2026-11-22T23:55:30.7194918Z ##[endgroup]
+2026-11-22T23:55:30.7196187Z ##[group]Create AVD
+2026-11-22T23:55:30.7198609Z Creating AVD.
+2026-11-22T23:55:30.7212027Z [command]/usr/bin/sh -c \echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis;x86_64'
+2026-11-22T23:55:31.3861531Z Loading local repository...                                                     
+2026-11-22T23:55:31.3862706Z [=========                              ] 25% Loading local repository...       
+2026-11-22T23:55:31.3889442Z [=========                              ] 25% Fetch remote repository...        
+2026-11-22T23:55:31.3890451Z [=======================================] 100% Fetch remote repository...       
+2026-11-22T23:55:31.4319148Z Auto-selecting single ABI x86_64
+2026-11-22T23:55:31.4896951Z Do you wish to create a custom hardware profile? [no] [command]/usr/bin/sh -c \printf 'hw.cpu.ncore=2\ndisk.dataPartition.size=4096M\n' >> /home/runner/.android/avd/test.avd/config.ini
+2026-11-22T23:55:31.4918561Z ##[endgroup]
+2026-11-22T23:55:31.4920034Z ##[group]Launch Emulator
+2026-11-22T23:55:31.4920526Z Starting emulator.
+2026-11-22T23:55:31.4934598Z [command]/usr/bin/sh -c \/usr/local/lib/android/sdk/emulator/emulator -port 5554 -avd test -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim &
+2026-11-22T23:55:31.5043018Z INFO         | Android emulator version 37.3.10.0 (build_id 16970787) (CL:N/A)
+2026-11-22T23:55:31.5043698Z INFO         | Graphics backend: gfxstream
+2026-11-22T23:55:31.5044283Z INFO         | Found systemPath /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/
+2026-11-22T23:55:31.5472681Z INFO         | Saving last run QEMU version for the AVD to 2
+2026-11-22T23:55:31.5473909Z INFO         | Increasing RAM size to 2560MB
+2026-11-22T23:55:31.5474746Z ##############################################################################
+2026-11-22T23:55:31.5475682Z ##                        WARNING - ACTION REQUIRED                         ##
+2026-11-22T23:55:31.5476624Z ##  Consider using the '-metrics-collection' flag to help improve the       ##
+2026-11-22T23:55:31.5477979Z ##  emulator by sending anonymized usage data. Or use the '-no-metrics'     ##
+2026-11-22T23:55:31.5479045Z ##  flag to bypass this warning and turn off the metrics collection.        ##
+2026-11-22T23:55:31.5480048Z ##  In a future release this warning will turn into a one-time blocking     ##
+2026-11-22T23:55:31.5481103Z ##  prompt to ask for explicit user input regarding metrics collection.     ##
+2026-11-22T23:55:31.5482368Z ##                                                                          ##
+2026-11-22T23:55:31.5485268Z ##  Please see '-help-metrics-collection' for more details. You can use     ##
+2026-11-22T23:55:31.5486217Z ##  '-metrics-to-file' or '-metrics-to-console' flags to see what type of   ##
+2026-11-22T23:55:31.5487287Z ##  data is being collected by emulator as part of usage statistics.        ##
+2026-11-22T23:55:31.5488442Z ##############################################################################
+2026-11-22T23:55:31.5489271Z INFO         | Guest GLES Driver: Auto (ext controls)
+2026-11-22T23:55:31.5490331Z INFO         | emuglConfig_init: vulkan_mode_selected:swiftshader gles_mode_selected:swiftshader
+2026-11-22T23:55:31.5491407Z INFO         | Checking system compatibility:
+2026-11-22T23:55:31.5492150Z INFO         |   Checking: hasSufficientDiskSpace
+2026-11-22T23:55:31.5493010Z INFO         |      Ok: Disk space requirements to run avd: `test` are met
+2026-11-22T23:55:31.5493834Z INFO         |   Checking: hasSufficientHwGpu
+2026-11-22T23:55:31.5494740Z INFO         |      Ok: Hardware GPU compatibility checks are not required
+2026-11-22T23:55:31.5495647Z INFO         |   Checking: hasSufficientSystem
+2026-11-22T23:55:31.5496503Z INFO         |      Ok: System requirements to run avd: `test` are met
+2026-11-22T23:55:31.5498102Z WARNING      | Feature QuickbootFileBacked is disabled due to stability issues, if you really want that, the environment variable ANDROID_EMU_FORCE_QUICKBOOT_FILE_BACKED need to set to 1
+2026-11-22T23:55:31.8738937Z ERROR        | Unable to connect to adb daemon on port: 5037
+2026-11-22T23:55:31.8740646Z INFO         | Storing crashdata in: /tmp/android-runner/emu-crash-37.3.10.db, detection is enabled for process: 2773
+2026-11-22T23:55:31.8742322Z INFO         | Initializing gfxstream backend
+2026-11-22T23:55:31.8753192Z INFO         | startOpenglesRendererImpl: gpu info
+2026-11-22T23:55:31.8753802Z INFO         | 
+2026-11-22T23:55:31.8756842Z INFO         | initIcdPaths: ICD set to 'swiftshader', using Swiftshader ICD
+2026-11-22T23:55:31.8758723Z INFO         | Setting ICD filenames for the loader = /usr/local/lib/android/sdk/emulator/lib64/vulkan/vk_swiftshader_icd.json
+2026-11-22T23:55:31.8759947Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so]
+2026-11-22T23:55:31.8761089Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so.1]
+2026-11-22T23:55:31.8762221Z INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so]
+2026-11-22T23:55:31.8763119Z INFO         | Added library: /usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so
+2026-11-22T23:55:31.8844328Z INFO         | Selecting Vulkan device: SwiftShader Device (Subzero), Version: 1.3.0
+2026-11-22T23:55:31.8845423Z INFO         | Using Vulkan externalMemoryMode: OpaqueFd for VkEmulation
+2026-11-22T23:55:31.9449193Z INFO         | Format VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16 does not support YCbCr sampler conversion
+2026-11-22T23:55:31.9479023Z INFO         | SharedLibrary::open for [libX11]
+2026-11-22T23:55:31.9479856Z WARNING      | Could not open libX11.so, try libX11.so.6
+2026-11-22T23:55:31.9480490Z INFO         | SharedLibrary::open for [libX11.so.6]
+2026-11-22T23:55:31.9481050Z INFO         | SharedLibrary::open for [libX11-xcb]
+2026-11-22T23:55:31.9481679Z WARNING      | Could not open libX11-xcb.so, try libX11-xcb.so.1
+2026-11-22T23:55:31.9482561Z INFO         | SharedLibrary::open for [libX11-xcb.so.1]
+2026-11-22T23:55:31.9501392Z INFO         | queryConfigs: Host EGL config 0x10 was not added
+2026-11-22T23:55:31.9502254Z INFO         | queryConfigs: Host EGL config 0x11 was not added
+2026-11-22T23:55:31.9503033Z INFO         | queryConfigs: Host EGL config 0x12 was not added
+2026-11-22T23:55:31.9503721Z INFO         | queryConfigs: Host EGL config 0x13 was not added
+2026-11-22T23:55:31.9504850Z INFO         | queryConfigs: Host EGL config 0x14 was not added
+2026-11-22T23:55:31.9505581Z INFO         | queryConfigs: Host EGL config 0x15 was not added
+2026-11-22T23:55:31.9506268Z INFO         | queryConfigs: Host EGL config 0x17 was not added
+2026-11-22T23:55:31.9506891Z INFO         | queryConfigs: Host EGL config 0x18 was not added
+2026-11-22T23:55:31.9507503Z INFO         | queryConfigs: Host EGL config 0x19 was not added
+2026-11-22T23:55:31.9508304Z INFO         | queryConfigs: Host EGL config 0x1a was not added
+2026-11-22T23:55:31.9508967Z INFO         | queryConfigs: Host EGL config 0x1b was not added
+2026-11-22T23:55:31.9509753Z INFO         | queryConfigs: Host EGL config 0x1c was not added
+2026-11-22T23:55:31.9510470Z INFO         | queryConfigs: Host EGL config 0x1d was not added
+2026-11-22T23:55:31.9511197Z INFO         | queryConfigs: Host EGL config 0x1e was not added
+2026-11-22T23:55:31.9511792Z INFO         | queryConfigs: Host EGL config 0x1f was not added
+2026-11-22T23:55:31.9512433Z INFO         | queryConfigs: Host EGL config 0x21 was not added
+2026-11-22T23:55:31.9513070Z INFO         | queryConfigs: Host EGL config 0x22 was not added
+2026-11-22T23:55:31.9513729Z INFO         | queryConfigs: Host EGL config 0x23 was not added
+2026-11-22T23:55:31.9514762Z INFO         | queryConfigs: Host EGL config 0x24 was not added
+2026-11-22T23:55:31.9515403Z INFO         | queryConfigs: Host EGL config 0x25 was not added
+2026-11-22T23:55:31.9516113Z INFO         | queryConfigs: Host EGL config 0x26 was not added
+2026-11-22T23:55:31.9516782Z INFO         | queryConfigs: Host EGL config 0x27 was not added
+2026-11-22T23:55:31.9517506Z INFO         | queryConfigs: Host EGL config 0x28 was not added
+2026-11-22T23:55:31.9518557Z INFO         | queryConfigs: Host EGL config 0x29 was not added
+2026-11-22T23:55:31.9519292Z INFO         | queryConfigs: Host EGL config 0x2a was not added
+2026-11-22T23:55:31.9520003Z INFO         | queryConfigs: Host EGL config 0x2b was not added
+2026-11-22T23:55:31.9520607Z INFO         | queryConfigs: Host EGL config 0x2c was not added
+2026-11-22T23:55:31.9521342Z INFO         | queryConfigs: Host EGL config 0x2d was not added
+2026-11-22T23:55:31.9521963Z INFO         | queryConfigs: Host EGL config 0x2e was not added
+2026-11-22T23:55:31.9522713Z INFO         | queryConfigs: Host EGL config 0x2f was not added
+2026-11-22T23:55:31.9523418Z INFO         | queryConfigs: Host EGL config 0x30 was not added
+2026-11-22T23:55:31.9524106Z INFO         | queryConfigs: Host EGL config 0x31 was not added
+2026-11-22T23:55:31.9524815Z INFO         | queryConfigs: Host EGL config 0x32 was not added
+2026-11-22T23:55:31.9525492Z INFO         | queryConfigs: Host EGL config 0x33 was not added
+2026-11-22T23:55:31.9526256Z INFO         | queryConfigs: Host EGL config 0x35 was not added
+2026-11-22T23:55:31.9526861Z INFO         | queryConfigs: Host EGL config 0x36 was not added
+2026-11-22T23:55:31.9527560Z INFO         | queryConfigs: Host EGL config 0x37 was not added
+2026-11-22T23:55:31.9528415Z INFO         | queryConfigs: Host EGL config 0x38 was not added
+2026-11-22T23:55:31.9529158Z INFO         | queryConfigs: Host EGL config 0x39 was not added
+2026-11-22T23:55:31.9529835Z INFO         | queryConfigs: Host EGL config 0x3a was not added
+2026-11-22T23:55:31.9530488Z INFO         | queryConfigs: Host EGL config 0x3b was not added
+2026-11-22T23:55:31.9531289Z INFO         | queryConfigs: Host EGL config 0x3c was not added
+2026-11-22T23:55:31.9532680Z INFO         | queryConfigs: Host EGL config 0x3d was not added
+2026-11-22T23:55:31.9533479Z INFO         | queryConfigs: Host EGL config 0x3f was not added
+2026-11-22T23:55:31.9534102Z INFO         | queryConfigs: Host EGL config 0x40 was not added
+2026-11-22T23:55:31.9534786Z INFO         | queryConfigs: Host EGL config 0x41 was not added
+2026-11-22T23:55:31.9535413Z INFO         | queryConfigs: Host EGL config 0x42 was not added
+2026-11-22T23:55:31.9536239Z INFO         | queryConfigs: Host EGL config 0x43 was not added
+2026-11-22T23:55:31.9537146Z INFO         | queryConfigs: Host EGL config 0x44 was not added
+2026-11-22T23:55:31.9537987Z INFO         | queryConfigs: Host EGL config 0x45 was not added
+2026-11-22T23:55:31.9538682Z INFO         | queryConfigs: Host EGL config 0x46 was not added
+2026-11-22T23:55:31.9539368Z INFO         | queryConfigs: Host EGL config 0x47 was not added
+2026-11-22T23:55:31.9540611Z INFO         | queryConfigs: Host EGL config 0x48 was not added
+2026-11-22T23:55:31.9541213Z INFO         | queryConfigs: Host EGL config 0x49 was not added
+2026-11-22T23:55:31.9541946Z INFO         | queryConfigs: Host EGL config 0x4a was not added
+2026-11-22T23:55:31.9542608Z INFO         | queryConfigs: Host EGL config 0x4b was not added
+2026-11-22T23:55:31.9543337Z INFO         | queryConfigs: Host EGL config 0x1 was not added
+2026-11-22T23:55:31.9543935Z INFO         | queryConfigs: Host EGL config 0x2 was not added
+2026-11-22T23:55:31.9544571Z INFO         | queryConfigs: Host EGL config 0x3 was not added
+2026-11-22T23:55:31.9545321Z INFO         | queryConfigs: Host EGL config 0x5 was not added
+2026-11-22T23:55:31.9545938Z INFO         | queryConfigs: Host EGL config 0x6 was not added
+2026-11-22T23:55:31.9546627Z INFO         | queryConfigs: Host EGL config 0x7 was not added
+2026-11-22T23:55:31.9547225Z INFO         | queryConfigs: Host EGL config 0x8 was not added
+2026-11-22T23:55:31.9548176Z INFO         | queryConfigs: Host EGL config 0xa was not added
+2026-11-22T23:55:31.9548850Z INFO         | queryConfigs: Host EGL config 0xb was not added
+2026-11-22T23:55:31.9549552Z INFO         | queryConfigs: Host EGL config 0xc was not added
+2026-11-22T23:55:31.9550165Z INFO         | queryConfigs: Host EGL config 0xd was not added
+2026-11-22T23:55:31.9551075Z INFO         | queryConfigs: Host EGL config 0xe was not added
+2026-11-22T23:55:31.9551765Z INFO         | queryConfigs: Host EGL config 0xf was not added
+2026-11-22T23:55:31.9590500Z INFO         | Initializing VkEmulation features:
+2026-11-22T23:55:31.9591249Z INFO         |     glInteropSupported: false
+2026-11-22T23:55:31.9591878Z INFO         |     useDeferredCommands: true
+2026-11-22T23:55:31.9592886Z INFO         |     createResourceWithRequirements: true
+2026-11-22T23:55:31.9593477Z INFO         |     useVulkanComposition: false
+2026-11-22T23:55:31.9594088Z INFO         |     useVulkanNativeSwapchain: false
+2026-11-22T23:55:31.9594806Z INFO         |     enable guestRenderDoc: false
+2026-11-22T23:55:31.9595472Z INFO         |     enable Ycbcr emulation: false
+2026-11-22T23:55:31.9596205Z INFO         |     guestVulkanOnly: false
+2026-11-22T23:55:31.9597055Z INFO         |     useDedicatedAllocations: false
+2026-11-22T23:55:31.9597597Z INFO         |     guestVulkanMaxApiVersion: 1.3.0
+2026-11-22T23:55:31.9598611Z INFO         |     enableProtectedMemoryEmulation: false
+2026-11-22T23:55:31.9602456Z INFO         |     VulkanDisableShaderFloatControls2: disabled ((vk_util::extensionSupported(mDeviceInfo.extensions, VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME) || mDeviceInfo.physdevProps.apiVersion >= VK_API_VERSION_1_4) && mDeviceInfo.physdevProps.vendorID == 0x1010)
+2026-11-22T23:55:31.9604237Z INFO         | Graphics Adapter Vendor Google (Google Inc.)
+2026-11-22T23:55:31.9605102Z INFO         | Graphics Adapter Android Emulator OpenGL ES Translator (Google SwiftShader)
+2026-11-22T23:55:31.9605756Z INFO         | Graphics API Version OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+2026-11-22T23:55:31.9607964Z INFO         | Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_standard_derivatives GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888 
+2026-11-22T23:55:31.9610729Z INFO         | Graphics Device Extensions N/A
+2026-11-22T23:55:31.9611355Z INFO         | Disabling sparse binding feature support
+2026-11-22T23:55:31.9700776Z INFO         | Sending adb public key [QAAAAEcS3t2JCLqUjzafHSxxy+r7eBg/AhZkN5PeV8uV3eBa1JACdvN0FBWvN+uUg/g5HSxPJpmBpwDLdIC8Dz5JlwW1bGOmeA4WHR9zfq5N8Zloj1LQdpZynYf258F011sg42n5fPGMuBsbCNb/Jb8RQe+0VOoh+ByxNlVWBNf7wSIqgHZ14DC7CilKrKh7V58RbyuQbrxzCprMHWaSiakLQ/1tuzZvNfLigX/G1IngBnfwD3nXUtMCzqlGwx4R2KUztJtfI80AAkGs7gbYoZC6fTNCVdVEFwydi8+F9npy3vief57hsAFst6tV6JDJUT1+qW1B2R4aSmrc1s1w1gCBjZghE165GAhPd/TPBNSrUzY47CyIeyoV/2pV3o4fBjRQEaf/wWqOXWIk8c8UCfwoxAexgn4rGzAngObbHZsE+X4tNTfeIcK1F6oQwHGbu0X1ZyXv9DhIuTb4LWxdBuDOuRon684iLO2pZoYn+pkFCbpVNo0G0hX76Tz4Te002WdqSiIGus22irnwzzfXL7iF3SyfvTVLuPSXDKF/ROC73zaoFIUOGbWpWltBzam4HOXQXRukPJDEOXqbU9opMNtHpb2MpfDHIr9u0GBXDIZ1fGBKTOREjHWas59JfcsFtqpDxADfywRRLOwPtjnz5FHucNmqlQh6oIXiHJ+8a1X9vTBWQxvXpAEAAQA= runner@unknown]
+2026-11-22T23:55:31.9706052Z INFO         | Userspace boot properties:
+2026-11-22T23:55:31.9706873Z INFO         |   androidboot.boot_devices=pci0000:00/0000:00:03.0 pci0000:00/0000:00:06.0
+2026-11-22T23:55:31.9707823Z INFO         |   androidboot.dalvik.vm.heapsize=576m
+2026-11-22T23:55:31.9708543Z INFO         |   androidboot.debug.hwui.renderer=skiagl
+2026-11-22T23:55:31.9709249Z INFO         |   androidboot.debug.sf.nobootanimation=1
+2026-11-22T23:55:31.9709947Z INFO         |   androidboot.hardware=ranchu
+2026-11-22T23:55:31.9710641Z INFO         |   androidboot.hardware.gltransport=pipe
+2026-11-22T23:55:31.9711270Z INFO         |   androidboot.hardware.vulkan=ranchu
+2026-11-22T23:55:31.9711915Z INFO         |   androidboot.logcat=*:V
+2026-11-22T23:55:31.9713227Z INFO         |   androidboot.opengles.version=196608
+2026-11-22T23:55:31.9713886Z INFO         |   androidboot.qemu=1
+2026-11-22T23:55:31.9718999Z INFO         |   androidboot.qemu.adb.pubkey=QAAAAEcS3t2JCLqUjzafHSxxy+r7eBg/AhZkN5PeV8uV3eBa1JACdvN0FBWvN+uUg/g5HSxPJpmBpwDLdIC8Dz5JlwW1bGOmeA4WHR9zfq5N8Zloj1LQdpZynYf258F011sg42n5fPGMuBsbCNb/Jb8RQe+0VOoh+ByxNlVWBNf7wSIqgHZ14DC7CilKrKh7V58RbyuQbrxzCprMHWaSiakLQ/1tuzZvNfLigX/G1IngBnfwD3nXUtMCzqlGwx4R2KUztJtfI80AAkGs7gbYoZC6fTNCVdVEFwydi8+F9npy3vief57hsAFst6tV6JDJUT1+qW1B2R4aSmrc1s1w1gCBjZghE165GAhPd/TPBNSrUzY47CyIeyoV/2pV3o4fBjRQEaf/wWqOXWIk8c8UCfwoxAexgn4rGzAngObbHZsE+X4tNTfeIcK1F6oQwHGbu0X1ZyXv9DhIuTb4LWxdBuDOuRon684iLO2pZoYn+pkFCbpVNo0G0hX76Tz4Te002WdqSiIGus22irnwzzfXL7iF3SyfvTVLuPSXDKF/ROC73zaoFIUOGbWpWltBzam4HOXQXRukPJDEOXqbU9opMNtHpb2MpfDHIr9u0GBXDIZ1fGBKTOREjHWas59JfcsFtqpDxADfywRRLOwPtjnz5FHucNmqlQh6oIXiHJ+8a1X9vTBWQxvXpAEAAQA= runner@unknown
+2026-11-22T23:55:31.9723753Z INFO         |   androidboot.qemu.avd_name=test
+2026-11-22T23:55:31.9724601Z INFO         |   androidboot.qemu.camera_hq_edge_processing=0
+2026-11-22T23:55:31.9725227Z INFO         |   androidboot.qemu.camera_protocol_ver=1
+2026-11-22T23:55:31.9725865Z INFO         |   androidboot.qemu.cpuvulkan.version=4206592
+2026-11-22T23:55:31.9726584Z INFO         |   androidboot.qemu.gltransport.drawFlushInterval=800
+2026-11-22T23:55:31.9727307Z INFO         |   androidboot.qemu.gltransport.name=pipe
+2026-11-22T23:55:31.9728182Z INFO         |   androidboot.qemu.hwcodec.avcdec=2
+2026-11-22T23:55:31.9728700Z INFO         |   androidboot.qemu.hwcodec.hevcdec=2
+2026-11-22T23:55:31.9729369Z INFO         |   androidboot.qemu.hwcodec.vpxdec=2
+2026-11-22T23:55:31.9730050Z INFO         |   androidboot.qemu.settings.system.screen_off_timeout=2147483647
+2026-11-22T23:55:31.9730789Z INFO         |   androidboot.qemu.skin=320x640
+2026-11-22T23:55:31.9731385Z INFO         |   androidboot.qemu.virtiowifi=1
+2026-11-22T23:55:31.9731910Z INFO         |   androidboot.qemu.vsync=60
+2026-11-22T23:55:31.9732361Z INFO         |   androidboot.serialno=EMULATOR37X3X10X0
+2026-11-22T23:55:31.9732998Z INFO         |   androidboot.vbmeta.digest=b3271ba499104f4631ae3723913d5c12574e01715fce5b82d60beed097ead264
+2026-11-22T23:55:31.9733543Z INFO         |   androidboot.vbmeta.hash_alg=sha256
+2026-11-22T23:55:31.9734205Z INFO         |   androidboot.vbmeta.size=6720
+2026-11-22T23:55:31.9734617Z INFO         |   androidboot.veritymode=enforcing
+2026-11-22T23:55:31.9921691Z WARNING: cannnot unmap ptr 0x7f2773001000 as it is in the protected range from 0x7f26d3000000 to 0x7f2773200000
+2026-11-22T23:55:32.0119753Z INFO         | Monitoring duration of emulator setup.
+2026-11-22T23:55:32.9964550Z INFO         | Activated packet streamer for bluetooth emulation
+2026-11-22T23:55:32.9965677Z INFO         | Successfully initialized netsim WiFi
+2026-11-22T23:55:33.0019875Z INFO         | Setting display: 0 configuration to: 320x640, dpi: 160x160 
+2026-11-22T23:55:33.0020664Z INFO         | setDisplayActiveConfig: id:0, 320x640
+2026-11-22T23:55:33.0021746Z INFO         | emulatorSetupEnvironment: Environment scene is not required
+2026-11-22T23:55:33.0099743Z USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.
+2026-11-22T23:55:33.0101289Z WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+2026-11-22T23:55:33.1161265Z WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+2026-11-22T23:55:41.4991689Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:41.5038890Z * daemon not running; starting now at tcp:5037
+2026-11-22T23:55:41.5082617Z * daemon started successfully
+2026-11-22T23:55:41.5112355Z adb: device offline
+2026-11-22T23:55:41.5129040Z The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+2026-11-22T23:55:43.5170097Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:43.5209839Z The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+2026-11-22T23:55:43.5210997Z adb: device offline
+2026-11-22T23:55:45.5435078Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:45.6095976Z 
+2026-11-22T23:55:47.6199302Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:47.6439888Z 
+2026-11-22T23:55:49.6489516Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:49.6695787Z 
+2026-11-22T23:55:51.6759733Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:51.6955836Z 
+2026-11-22T23:55:53.7044876Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:53.7305572Z 
+2026-11-22T23:55:55.7359290Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:55.7874148Z 
+2026-11-22T23:55:57.7929360Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:57.8571200Z 
+2026-11-22T23:55:59.8742814Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:55:59.9129929Z 
+2026-11-22T23:56:01.9192695Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:56:01.9412501Z 
+2026-11-22T23:56:03.9450399Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:56:03.9690287Z 
+2026-11-22T23:56:05.9738176Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:56:05.9937971Z 
+2026-11-22T23:56:07.9155554Z INFO         | Boot completed in 36386 ms
+2026-11-22T23:56:07.9156615Z INFO         | Increasing screen off timeout, logcat buffer size to 2M.
+2026-11-22T23:56:07.9976746Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+2026-11-22T23:56:08.0226393Z 1
+2026-11-22T23:56:08.0236983Z Emulator booted.
+2026-11-22T23:56:08.0268442Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell input keyevent 82
+2026-11-22T23:56:08.1245995Z Disabling animations.
+2026-11-22T23:56:08.1270017Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global window_animation_scale 0.0
+2026-11-22T23:56:08.1749418Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global transition_animation_scale 0.0
+2026-11-22T23:56:08.2338606Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global animator_duration_scale 0.0
+2026-11-22T23:56:08.2936959Z ##[endgroup]
+2026-11-22T23:56:08.2955321Z [command]/usr/bin/sh -c bash root-cause/experiment.sh
+2026-11-22T23:56:08.3109020Z ERROR        | Unable to connect to adb daemon on port: 5037
+2026-11-22T23:56:08.3134211Z 11-22 23:56:08.313  2966  2966 D adb     : adb_trace.cpp:233 Android Debug Bridge version 1.0.41
+2026-11-22T23:56:08.3134896Z 11-22 23:56:08.313  2966  2966 D adb     : adb_trace.cpp:233 Version 37.0.3-16887417
+2026-11-22T23:56:08.3135993Z 11-22 23:56:08.313  2966  2966 D adb     : adb_trace.cpp:233 Installed as /usr/local/lib/android/sdk/platform-tools/adb
+2026-11-22T23:56:08.3136748Z 11-22 23:56:08.313  2966  2966 D adb     : adb_trace.cpp:233 Running on Linux 7.0.0-1017-azure (x86_64)
+2026-11-22T23:56:08.3137322Z 11-22 23:56:08.313  2966  2966 D adb     : adb_trace.cpp:233 
+2026-11-22T23:56:08.3138005Z 11-22 23:56:08.313  2966  2966 D adb     : commandline.cpp:1694 Using server socket: tcp:5037
+2026-11-22T23:56:08.3138695Z 11-22 23:56:08.313  2966  2966 D adb     : adb_client.cpp:355 adb_connect: service: host:start-server
+2026-11-22T23:56:08.3139618Z 11-22 23:56:08.313  2966  2966 D adb     : adb_client.cpp:157 _adb_connect: host:version
+2026-11-22T23:56:08.3179824Z * daemon not running; starting now at tcp:5037
+2026-11-22T23:56:08.3181021Z 11-22 23:56:08.315  2969  2969 D adb     : adb_trace.cpp:233 Android Debug Bridge version 1.0.41
+2026-11-22T23:56:08.3181941Z 11-22 23:56:08.315  2969  2969 D adb     : adb_trace.cpp:233 Version 37.0.3-16887417
+2026-11-22T23:56:08.3183027Z 11-22 23:56:08.315  2969  2969 D adb     : adb_trace.cpp:233 Installed as /usr/local/lib/android/sdk/platform-tools/adb
+2026-11-22T23:56:08.3184129Z 11-22 23:56:08.315  2969  2969 D adb     : adb_trace.cpp:233 Running on Linux 7.0.0-1017-azure (x86_64)
+2026-11-22T23:56:08.3185003Z 11-22 23:56:08.315  2969  2969 D adb     : adb_trace.cpp:233 
+2026-11-22T23:56:08.3185797Z 11-22 23:56:08.315  2969  2969 D adb     : commandline.cpp:1694 Using server socket: tcp:5037
+2026-11-22T23:56:08.3186547Z * daemon started successfully
+2026-11-22T23:56:08.4548966Z 23:56:08.424251528 guest uptime: 35.12 8.84
+2026-11-22T23:56:08.4608771Z 23:56:08.454391323 scenario 5, attempt 1
+2026-11-22T23:56:08.6091335Z Building the test app for android...
+2026-11-22T23:56:08.6714865Z --- 5-cancel-one-of-several-sources
+2026-11-22T23:57:01.2637338Z PASSED: 5-cancel-one-of-several-sources
+2026-11-22T23:57:01.3179038Z Passed 1, failed 0.
+2026-11-22T23:57:01.3488937Z 23:57:01.343064795 scenario 5, attempt 2
+2026-11-22T23:57:01.4891392Z Building the test app for android...
+2026-11-22T23:57:01.5521425Z --- 5-cancel-one-of-several-sources
+2026-11-22T23:57:45.0880176Z FAILED: get-text event-log failed: {"ok":false,"error":"AppDisconnected"}
+2026-11-22T23:57:45.0933657Z adb: error: device offline
+2026-11-22T23:57:45.1001676Z adb: device offline
+2026-11-22T23:57:45.1111487Z FAILED: 5-cancel-one-of-several-sources (exit 1). Its files are in /tmp/ziggy-tests/ziggy-test-app-5-cancel-one-of-several-sources-tL1jRG
+2026-11-22T23:57:45.1126702Z --- the end of am-start.log:
+2026-11-22T23:57:45.1140108Z Starting: Intent { cmp=dev.ziggy.testapp/.MainActivity (has extras) }
+2026-11-22T23:57:45.1140739Z Status: ok
+2026-11-22T23:57:45.1141108Z LaunchState: COLD
+2026-11-22T23:57:45.1141533Z Activity: dev.ziggy.testapp/.MainActivity
+2026-11-22T23:57:45.1141959Z TotalTime: 2361
+2026-11-22T23:57:45.1142555Z WaitTime: 2378
+2026-11-22T23:57:45.1142896Z Complete
+2026-11-22T23:57:45.1159790Z --- the end of install.log:
+2026-11-22T23:57:45.1167496Z Performing Streamed Install
+2026-11-22T23:57:45.1168921Z Success
+2026-11-22T23:57:45.1182224Z --- the end of remote-control-server.log:
+2026-11-22T23:57:45.1192188Z The remote control server is listening: the app on 127.0.0.1:38789, the script on 127.0.0.1:42087.
+2026-11-22T23:57:45.1529190Z Passed 0, failed 1.
+2026-11-22T23:57:45.1530297Z Failed: 5-cancel-one-of-several-sources
+2026-11-22T23:57:45.1714655Z 23:57:45.170865644 scenario 5, attempt 3
+2026-11-22T23:57:45.3929050Z Building the test app for android...
+2026-11-22T23:57:45.4379794Z --- 5-cancel-one-of-several-sources
+2026-11-22T23:58:03.6292666Z FAILED: get-text event-log failed: {"ok":false,"error":"AppDisconnected"}
+2026-11-22T23:58:03.6362005Z adb: error: device offline
+2026-11-22T23:58:03.6388968Z adb: device offline
+2026-11-22T23:58:03.6553638Z FAILED: 5-cancel-one-of-several-sources (exit 1). Its files are in /tmp/ziggy-tests/ziggy-test-app-5-cancel-one-of-several-sources-4po7iH
+2026-11-22T23:58:03.6569822Z --- the end of am-start.log:
+2026-11-22T23:58:03.6582277Z Starting: Intent { cmp=dev.ziggy.testapp/.MainActivity (has extras) }
+2026-11-22T23:58:03.6583126Z Status: ok
+2026-11-22T23:58:03.6583557Z LaunchState: COLD
+2026-11-22T23:58:03.6584052Z Activity: dev.ziggy.testapp/.MainActivity
+2026-11-22T23:58:03.6584617Z TotalTime: 1301
+2026-11-22T23:58:03.6585053Z WaitTime: 1343
+2026-11-22T23:58:03.6585475Z Complete
+2026-11-22T23:58:03.6596883Z --- the end of install.log:
+2026-11-22T23:58:03.6605861Z Performing Streamed Install
+2026-11-22T23:58:03.6606400Z Success
+2026-11-22T23:58:03.6621365Z --- the end of remote-control-server.log:
+2026-11-22T23:58:03.6630567Z The remote control server is listening: the app on 127.0.0.1:41053, the script on 127.0.0.1:41609.
+2026-11-22T23:58:03.6965708Z Passed 0, failed 1.
+2026-11-22T23:58:03.7147486Z Failed: 5-cancel-one-of-several-sources
+2026-11-22T23:58:03.7148150Z 23:58:03.714254398 scenario 5, attempt 4
+2026-11-22T23:58:03.8125458Z Building the test app for android...
+2026-11-22T23:58:03.8690659Z --- 5-cancel-one-of-several-sources
+2026-11-22T23:58:04.1743989Z adb: device 'emulator-5554' not found
+2026-11-22T23:58:04.1745018Z FAILED: the app did not start
+2026-11-22T23:58:04.1768298Z adb: device 'emulator-5554' not found
+2026-11-22T23:58:04.1935470Z FAILED: 5-cancel-one-of-several-sources (exit 1). Its files are in /tmp/ziggy-tests/ziggy-test-app-5-cancel-one-of-several-sources-QMp0Wn
+2026-11-22T23:58:04.1954144Z --- the end of install.log:
+2026-11-22T23:58:04.1966522Z adb: device 'emulator-5554' not found
+2026-11-22T23:58:04.1984705Z --- the end of remote-control-server.log:
+2026-11-22T23:58:04.1998792Z The remote control server is listening: the app on 127.0.0.1:46193, the script on 127.0.0.1:43447.
+2026-11-22T23:58:04.2397429Z Passed 0, failed 1.
+2026-11-22T23:58:04.2399513Z Failed: 5-cancel-one-of-several-sources
+2026-11-22T23:58:04.2547194Z 23:58:04.254310062 scenario 5, attempt 5
+2026-11-22T23:58:04.3549189Z Building the test app for android...
+2026-11-22T23:58:04.4009700Z --- 5-cancel-one-of-several-sources
+2026-11-22T23:58:30.2551777Z PASSED: 5-cancel-one-of-several-sources
+2026-11-22T23:58:30.2879467Z Passed 1, failed 0.
+2026-11-22T23:58:30.3028753Z 23:58:30.302442514 scenario 5, attempt 6
+2026-11-22T23:58:30.3885532Z Building the test app for android...
+2026-11-22T23:58:30.4478561Z --- 5-cancel-one-of-several-sources
+2026-11-22T23:58:55.2421472Z PASSED: 5-cancel-one-of-several-sources
+2026-11-22T23:58:55.2749201Z Passed 1, failed 0.
+2026-11-22T23:58:55.2890579Z 23:58:55.288584694 scenario 5, attempt 7
+2026-11-22T23:58:55.3712507Z Building the test app for android...
+2026-11-22T23:58:55.4272708Z --- 5-cancel-one-of-several-sources
+2026-11-22T23:59:20.7652437Z PASSED: 5-cancel-one-of-several-sources
+2026-11-22T23:59:20.7982544Z Passed 1, failed 0.
+2026-11-22T23:59:20.8132605Z 23:59:20.812711775 scenario 5, attempt 8
+2026-11-22T23:59:20.9002947Z Building the test app for android...
+2026-11-22T23:59:20.9625297Z --- 5-cancel-one-of-several-sources
+2026-11-22T23:59:45.6580271Z PASSED: 5-cancel-one-of-several-sources
+2026-11-22T23:59:45.6883074Z Passed 1, failed 0.
+2026-11-22T23:59:45.7284439Z 23:59:45.702108417 guest uptime: 252.39 84.74
+2026-11-22T23:59:45.7287976Z === adb state changes
+2026-11-22T23:59:45.7296281Z 23:56:08.463723878 device
+2026-11-22T23:59:45.7296621Z 23:57:45.244596443 offline
+2026-11-22T23:59:45.7296921Z 23:57:45.476691383 device
+2026-11-22T23:59:45.7297257Z 23:58:03.829109682 offline
+2026-11-22T23:59:45.7297580Z 23:58:04.070343117 absent
+2026-11-22T23:59:45.7298047Z 23:58:04.562975844 device
+2026-11-22T23:59:45.7490707Z === adb server log lines naming the emulator
+2026-11-22T23:59:45.7575953Z 11-22 23:59:44.238  2969  2969 D adb     : sockets.cpp:194 LS(2041): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7577351Z 11-22 23:59:44.238  2969  2969 D adb     : sockets.cpp:194 LS(2041): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7578837Z 11-22 23:59:44.310  2969  2969 D adb     : sockets.cpp:194 LS(1851): post adb_read(fd=15,...) r=45 (errno=0) avail=1048576
+2026-11-22T23:59:45.7579946Z 11-22 23:59:44.310  2969  2969 D adb     : sockets.cpp:194 LS(1851): post adb_read(fd=15,...) r=-1 (errno=11) avail=1048531
+2026-11-22T23:59:45.7580676Z 11-22 23:59:44.464  2969  2969 D adb     : sockets.cpp:194 LS(2042): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7581412Z 11-22 23:59:44.464  2969  2969 D adb     : sockets.cpp:194 LS(2042): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7582112Z 11-22 23:59:44.464  2969  2969 D adb     : sockets.cpp:194 LS(2043): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7583099Z 11-22 23:59:44.464  2969  2969 D adb     : sockets.cpp:194 LS(2043): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7583794Z 11-22 23:59:44.526  2969  2969 D adb     : sockets.cpp:194 LS(1851): post adb_read(fd=15,...) r=40 (errno=0) avail=1048576
+2026-11-22T23:59:45.7584506Z 11-22 23:59:44.526  2969  2969 D adb     : sockets.cpp:194 LS(1851): post adb_read(fd=15,...) r=-1 (errno=11) avail=1048536
+2026-11-22T23:59:45.7585192Z 11-22 23:59:44.558  2969  2969 D adb     : sockets.cpp:194 LS(2044): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7585887Z 11-22 23:59:44.558  2969  2969 D adb     : sockets.cpp:194 LS(2044): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7586712Z 11-22 23:59:44.558  2969  2969 D adb     : sockets.cpp:194 LS(2045): post adb_read(fd=14,...) r=35 (errno=0) avail=1048576
+2026-11-22T23:59:45.7587873Z 11-22 23:59:44.558  2969  2969 D adb     : sockets.cpp:194 LS(2045): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048541
+2026-11-22T23:59:45.7589575Z 11-22 23:59:44.558  2969  2969 D adb     : sockets.cpp:194 LS(2045): post adb_read(fd=14,...) r=33 (errno=0) avail=1048576
+2026-11-22T23:59:45.7590789Z 11-22 23:59:44.558  2969  2969 D adb     : sockets.cpp:194 LS(2045): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048543
+2026-11-22T23:59:45.7591560Z 11-22 23:59:44.560  2969  2969 D adb     : sockets.cpp:363 LS(2045): closing peer. peer->id=86 peer->fd=-1
+2026-11-22T23:59:45.7592356Z 11-22 23:59:44.561  2969  2969 D adb     : sockets.cpp:194 LS(2046): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7593116Z 11-22 23:59:44.561  2969  2969 D adb     : sockets.cpp:194 LS(2046): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7593959Z 11-22 23:59:44.562  2969  2969 D adb     : sockets.cpp:194 LS(2047): post adb_read(fd=14,...) r=38 (errno=0) avail=1048576
+2026-11-22T23:59:45.7594709Z 11-22 23:59:44.562  2969  2969 D adb     : sockets.cpp:194 LS(2047): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048538
+2026-11-22T23:59:45.7595559Z 11-22 23:59:44.562  2969  2969 D adb     : sockets.cpp:194 LS(2048): post adb_read(fd=14,...) r=35 (errno=0) avail=1048576
+2026-11-22T23:59:45.7596516Z 11-22 23:59:44.562  2969  2969 D adb     : sockets.cpp:194 LS(2048): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048541
+2026-11-22T23:59:45.7597284Z 11-22 23:59:44.562  2969  2969 D adb     : sockets.cpp:194 LS(2048): post adb_read(fd=14,...) r=48 (errno=0) avail=1048576
+2026-11-22T23:59:45.7598264Z 11-22 23:59:44.562  2969  2969 D adb     : sockets.cpp:194 LS(2048): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048528
+2026-11-22T23:59:45.7599080Z 11-22 23:59:44.566  2969  2969 D adb     : sockets.cpp:194 LS(2048): post adb_read(fd=14,...) r=5 (errno=0) avail=1048576
+2026-11-22T23:59:45.7599927Z 11-22 23:59:44.566  2969  2969 D adb     : sockets.cpp:194 LS(2048): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048571
+2026-11-22T23:59:45.7600928Z 11-22 23:59:44.618  2969  2969 D adb     : sockets.cpp:363 LS(2048): closing peer. peer->id=87 peer->fd=-1
+2026-11-22T23:59:45.7601742Z 11-22 23:59:44.621  2969  2969 D adb     : sockets.cpp:194 LS(1851): post adb_read(fd=15,...) r=0 (errno=0) avail=1048576
+2026-11-22T23:59:45.7602562Z 11-22 23:59:44.621  2969  2969 D adb     : sockets.cpp:257  closing because is_eof=1
+2026-11-22T23:59:45.7603400Z 11-22 23:59:44.621  2969  2969 D adb     : sockets.cpp:363 LS(1851): closing peer. peer->id=85 peer->fd=-1
+2026-11-22T23:59:45.7604278Z 11-22 23:59:44.693  2969  2969 D adb     : sockets.cpp:194 LS(2049): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7605203Z 11-22 23:59:44.693  2969  2969 D adb     : sockets.cpp:194 LS(2049): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7605822Z 11-22 23:59:44.694  2969  2969 D adb     : sockets.cpp:194 LS(2050): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7606607Z 11-22 23:59:44.694  2969  2969 D adb     : sockets.cpp:194 LS(2050): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7607279Z 11-22 23:59:44.934  2969  2969 D adb     : sockets.cpp:194 LS(2051): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7608233Z 11-22 23:59:44.934  2969  2969 D adb     : sockets.cpp:194 LS(2051): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7608828Z 11-22 23:59:44.934  2969  2969 D adb     : sockets.cpp:194 LS(2052): post adb_read(fd=15,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7609401Z 11-22 23:59:44.934  2969  2969 D adb     : sockets.cpp:194 LS(2052): post adb_read(fd=15,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7609965Z 11-22 23:59:45.166  2969  2969 D adb     : sockets.cpp:194 LS(2053): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7610540Z 11-22 23:59:45.166  2969  2969 D adb     : sockets.cpp:194 LS(2053): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7611118Z 11-22 23:59:45.166  2969  2969 D adb     : sockets.cpp:194 LS(2054): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7611698Z 11-22 23:59:45.166  2969  2969 D adb     : sockets.cpp:194 LS(2054): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7612272Z 11-22 23:59:45.390  2969  2969 D adb     : sockets.cpp:194 LS(2055): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7612853Z 11-22 23:59:45.390  2969  2969 D adb     : sockets.cpp:194 LS(2055): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7613555Z 11-22 23:59:45.390  2969  2969 D adb     : sockets.cpp:194 LS(2056): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7614208Z 11-22 23:59:45.390  2969  2969 D adb     : sockets.cpp:194 LS(2056): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7614866Z 11-22 23:59:45.615  2969  2969 D adb     : sockets.cpp:194 LS(2057): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7615764Z 11-22 23:59:45.615  2969  2969 D adb     : sockets.cpp:194 LS(2057): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7616335Z 11-22 23:59:45.615  2969  2969 D adb     : sockets.cpp:194 LS(2058): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7617283Z 11-22 23:59:45.615  2969  2969 D adb     : sockets.cpp:194 LS(2058): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7618291Z 11-22 23:59:45.703  2969  2969 D adb     : sockets.cpp:194 LS(2059): post adb_read(fd=14,...) r=16 (errno=0) avail=1048576
+2026-11-22T23:59:45.7619130Z 11-22 23:59:45.703  2969  2969 D adb     : sockets.cpp:194 LS(2059): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048560
+2026-11-22T23:59:45.7619951Z 11-22 23:59:45.703  2969  2969 D adb     : sockets.cpp:194 LS(2060): post adb_read(fd=14,...) r=38 (errno=0) avail=1048576
+2026-11-22T23:59:45.7620794Z 11-22 23:59:45.703  2969  2969 D adb     : sockets.cpp:194 LS(2060): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048538
+2026-11-22T23:59:45.7621619Z 11-22 23:59:45.704  2969  2969 D adb     : sockets.cpp:194 LS(2061): post adb_read(fd=14,...) r=35 (errno=0) avail=1048576
+2026-11-22T23:59:45.7622476Z 11-22 23:59:45.704  2969  2969 D adb     : sockets.cpp:194 LS(2061): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048541
+2026-11-22T23:59:45.7623305Z 11-22 23:59:45.704  2969  2969 D adb     : sockets.cpp:194 LS(2061): post adb_read(fd=14,...) r=33 (errno=0) avail=1048576
+2026-11-22T23:59:45.7624122Z 11-22 23:59:45.704  2969  2969 D adb     : sockets.cpp:194 LS(2061): post adb_read(fd=14,...) r=-1 (errno=11) avail=1048543
+2026-11-22T23:59:45.7624885Z 11-22 23:59:45.727  2969  2969 D adb     : sockets.cpp:363 LS(2061): closing peer. peer->id=88 peer->fd=-1
+2026-11-22T23:59:45.7625433Z === socket changes on port 5555
+2026-11-22T23:59:45.7625789Z --- 23:56:08.743871045
+2026-11-22T23:59:45.7626238Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7627070Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7627908Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7628484Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7628846Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7629234Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7629550Z --- 23:56:14.387882071
+2026-11-22T23:59:45.7629853Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7630266Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7630693Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7631109Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7631463Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7631805Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7632110Z --- 23:56:14.621348522
+2026-11-22T23:59:45.7632436Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7633084Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7633717Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7634321Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7634829Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7635309Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7635761Z --- 23:56:17.909087524
+2026-11-22T23:59:45.7636185Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7636793Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7637446Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7638208Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7638727Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7639423Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7639876Z --- 23:56:18.143205900
+2026-11-22T23:59:45.7640302Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7640915Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7641535Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7642153Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7642645Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7643151Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7643614Z --- 23:56:19.093998845
+2026-11-22T23:59:45.7644051Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7644676Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7645267Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7645858Z ESTAB 24 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7646303Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7646762Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7647176Z --- 23:56:19.330715766
+2026-11-22T23:59:45.7647562Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7648411Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7649045Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7649763Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7650190Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7650765Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7651093Z --- 23:56:19.569052148
+2026-11-22T23:59:45.7651389Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7651783Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7652199Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7652602Z ESTAB 0 24 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7652940Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7653264Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7653569Z --- 23:56:19.804262471
+2026-11-22T23:59:45.7653858Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7654268Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7654678Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7655093Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7655421Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7655742Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7656050Z --- 23:56:20.038783446
+2026-11-22T23:59:45.7656337Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7656735Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7657291Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7658174Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7658627Z TIME-WAIT 0 0 127.0.0.1:47487 127.0.0.1:5555 
+2026-11-22T23:59:45.7659086Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7659383Z --- 23:57:11.647320763
+2026-11-22T23:59:45.7659808Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7660208Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7660631Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7661045Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7661422Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7661732Z --- 23:57:13.292487770
+2026-11-22T23:59:45.7662019Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7662419Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7662833Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7663242Z ESTAB 0 24 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7663618Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7663924Z --- 23:57:13.528158554
+2026-11-22T23:59:45.7664208Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7664607Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7665029Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7665433Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7665816Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7666116Z --- 23:57:22.722191845
+2026-11-22T23:59:45.7666407Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7666873Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7667296Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7667836Z ESTAB 0 24 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7668370Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7668674Z --- 23:57:22.955241650
+2026-11-22T23:59:45.7668965Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7669365Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7669776Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7670182Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7670548Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7670855Z --- 23:57:36.790562558
+2026-11-22T23:59:45.7671136Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7671535Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7671943Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7672362Z ESTAB 0 24 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7672735Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7673040Z --- 23:57:37.024289076
+2026-11-22T23:59:45.7673326Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7673729Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7674151Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7674551Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7674934Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7675236Z --- 23:57:45.038623135
+2026-11-22T23:59:45.7675527Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7676001Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7676436Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:40965 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7676852Z ESTAB 0 0 127.0.0.1:40965 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7677352Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7677883Z --- 23:57:45.266006705
+2026-11-22T23:59:45.7678319Z State Recv-Q Send-Q Local Address:Port Peer Address:PortProcess 
+2026-11-22T23:59:45.7678961Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7679539Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7680008Z --- 23:57:45.503762525
+2026-11-22T23:59:45.7680408Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7681043Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7681665Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7682301Z ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7682881Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7683338Z --- 23:57:48.794367601
+2026-11-22T23:59:45.7683760Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7684369Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7684999Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7685621Z ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7686417Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7686870Z --- 23:57:49.032071285
+2026-11-22T23:59:45.7687318Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7688149Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7688826Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7689632Z ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7690369Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7690859Z --- 23:57:50.663063909
+2026-11-22T23:59:45.7691315Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7691957Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7692629Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7693296Z ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7693891Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7694379Z --- 23:57:50.912634189
+2026-11-22T23:59:45.7694842Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7695480Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7696152Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7696813Z ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7697413Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7698048Z --- 23:57:54.146397430
+2026-11-22T23:59:45.7698538Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7699205Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7699866Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7700533Z ESTAB 0 24 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7701362Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7701814Z --- 23:57:54.372504052
+2026-11-22T23:59:45.7702262Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7702965Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7703630Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7704246Z ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7704836Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7705307Z --- 23:57:56.435715343
+2026-11-22T23:59:45.7705746Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7706396Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7707085Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7707885Z ESTAB 0 24 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7708506Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7708971Z --- 23:57:56.663168967
+2026-11-22T23:59:45.7709410Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7710032Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7710673Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7711315Z ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7711904Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7712560Z --- 23:57:57.580456525
+2026-11-22T23:59:45.7712995Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7713628Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7714307Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7714934Z ESTAB 0 24 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7715528Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7715993Z --- 23:57:57.811317620
+2026-11-22T23:59:45.7716443Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7717081Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7717954Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:41009 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7718610Z ESTAB 0 0 127.0.0.1:41009 127.0.0.1:5555 users:(("adb",pid=2969,fd=14)) 
+2026-11-22T23:59:45.7719225Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7719679Z --- 23:58:03.620684802
+2026-11-22T23:59:45.7720128Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7720759Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7721254Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7721778Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7722221Z --- 23:58:04.355857040
+2026-11-22T23:59:45.7722637Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7723190Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7723841Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7724391Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7724926Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7725513Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7726001Z --- 23:58:05.297113110
+2026-11-22T23:59:45.7726670Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7727368Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7728282Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7728897Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7729441Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7730066Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7730569Z --- 23:58:05.534736339
+2026-11-22T23:59:45.7731018Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7731710Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7732397Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7732952Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7733459Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7734026Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7734477Z --- 23:58:06.960238929
+2026-11-22T23:59:45.7734911Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7735512Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7736139Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7736710Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7737210Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7738061Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7738455Z --- 23:58:07.198346869
+2026-11-22T23:59:45.7738855Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7739462Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7740111Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7740609Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7741047Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7741517Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7741939Z --- 23:58:09.080165915
+2026-11-22T23:59:45.7742321Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7742805Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7743379Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7743896Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7744322Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7744846Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7745230Z --- 23:58:09.319482455
+2026-11-22T23:59:45.7745611Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7746209Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7746843Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7747378Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7748072Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7748674Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7749152Z --- 23:58:18.833842556
+2026-11-22T23:59:45.7749523Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7750042Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7750644Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7751392Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7751891Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7752480Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7752936Z --- 23:58:19.059144856
+2026-11-22T23:59:45.7753383Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7754008Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7754668Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7755232Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7755731Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7756317Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7756777Z --- 23:58:26.642810724
+2026-11-22T23:59:45.7757224Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7759734Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7760521Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7761084Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7761576Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7762135Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7762580Z --- 23:58:26.874393945
+2026-11-22T23:59:45.7763005Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7770789Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7771475Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7772039Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7772551Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7773102Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7773540Z --- 23:58:31.208812864
+2026-11-22T23:59:45.7773973Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7774565Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7775170Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7775683Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7776136Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7776701Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7777130Z --- 23:58:31.440617755
+2026-11-22T23:59:45.7777537Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7778224Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7778780Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7779275Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7779711Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7780243Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7780665Z --- 23:58:34.504240168
+2026-11-22T23:59:45.7781057Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7781623Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7782213Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7782698Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7783206Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7783919Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7784230Z --- 23:58:34.738565710
+2026-11-22T23:59:45.7784631Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7785185Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7785850Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7786206Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7786535Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7786906Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7787217Z --- 23:58:35.695455049
+2026-11-22T23:59:45.7787505Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7788117Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7788553Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7788924Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7789271Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7789654Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7789963Z --- 23:58:35.934788334
+2026-11-22T23:59:45.7790252Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7790841Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7791469Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7791982Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7792593Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7793107Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7793419Z --- 23:58:37.116730619
+2026-11-22T23:59:45.7793715Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7794110Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7794527Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7794881Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7795204Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7795576Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7795872Z --- 23:58:37.353052721
+2026-11-22T23:59:45.7796163Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7796686Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7797243Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7797872Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7798287Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7798664Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7798977Z --- 23:58:44.014437456
+2026-11-22T23:59:45.7799266Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7799672Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7800094Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7800444Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7800782Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7801154Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7801461Z --- 23:58:44.247292926
+2026-11-22T23:59:45.7801742Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7802257Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7802717Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7803091Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7803454Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7804013Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7804454Z --- 23:58:51.587757177
+2026-11-22T23:59:45.7804871Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7805426Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7806018Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7806654Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7807272Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7807992Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7808429Z --- 23:58:51.819709200
+2026-11-22T23:59:45.7809030Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7809453Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7809870Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7810224Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7810549Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7811070Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7811370Z --- 23:58:56.190918170
+2026-11-22T23:59:45.7811669Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7812065Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7812494Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7812855Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7813188Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7813553Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7813859Z --- 23:58:56.428838135
+2026-11-22T23:59:45.7814143Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7814552Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7814966Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7815329Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7815652Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7816018Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7816324Z --- 23:58:58.084873585
+2026-11-22T23:59:45.7816606Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7817005Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7817754Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7818327Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7818810Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7819339Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7819754Z --- 23:58:58.322815288
+2026-11-22T23:59:45.7820163Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7820730Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7821314Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7821949Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7822400Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7822925Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7823349Z --- 23:58:59.281133523
+2026-11-22T23:59:45.7823807Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7824415Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7824837Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7825376Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7825865Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7826421Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7826879Z --- 23:58:59.509253808
+2026-11-22T23:59:45.7827323Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7828086Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7828717Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7829241Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7829758Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7830324Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7830790Z --- 23:59:03.931596781
+2026-11-22T23:59:45.7831223Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7832018Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7832638Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7833182Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7833664Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7834229Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7834663Z --- 23:59:04.157484956
+2026-11-22T23:59:45.7835060Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7835638Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7836235Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7836751Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7837230Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7837924Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7838394Z --- 23:59:05.073569729
+2026-11-22T23:59:45.7838829Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7839417Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7840022Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7840557Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7841073Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7841675Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7842132Z --- 23:59:05.305272766
+2026-11-22T23:59:45.7842547Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7843135Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7843774Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7844310Z TIME-WAIT 0 0 127.0.0.1:5555 127.0.0.1:41009 
+2026-11-22T23:59:45.7844818Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7845549Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7846028Z --- 23:59:06.467720777
+2026-11-22T23:59:45.7846477Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7847098Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7847901Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7848532Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7849111Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7849565Z --- 23:59:08.528825706
+2026-11-22T23:59:45.7850008Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7850597Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7851237Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7851861Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7852404Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7852964Z --- 23:59:08.765244036
+2026-11-22T23:59:45.7853409Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7853993Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7854601Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7855190Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7855739Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7856390Z --- 23:59:16.143800088
+2026-11-22T23:59:45.7856873Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7857478Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7858236Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7858829Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7859379Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7859807Z --- 23:59:16.371762278
+2026-11-22T23:59:45.7860260Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7860858Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7861436Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7861983Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7862507Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7862963Z --- 23:59:19.785629509
+2026-11-22T23:59:45.7863412Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7864046Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7864697Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7865274Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7865837Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7866279Z --- 23:59:20.020763550
+2026-11-22T23:59:45.7866704Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7867317Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7868105Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7868703Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7869282Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7869938Z --- 23:59:21.665711725
+2026-11-22T23:59:45.7870351Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7870998Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7871642Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7872182Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7872562Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7872870Z --- 23:59:22.148014958
+2026-11-22T23:59:45.7873159Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7873569Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7873990Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7874390Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7874763Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7875062Z --- 23:59:25.209588788
+2026-11-22T23:59:45.7875354Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7875742Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7876178Z ESTAB 0 14752 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7876595Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7876968Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7877266Z --- 23:59:25.442609622
+2026-11-22T23:59:45.7877833Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7878385Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7878811Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7879229Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7879598Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7879908Z --- 23:59:25.677269503
+2026-11-22T23:59:45.7880196Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7880596Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7881007Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7881410Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7881780Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7882086Z --- 23:59:28.909017960
+2026-11-22T23:59:45.7882368Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7882771Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7883195Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7883601Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7884107Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7884609Z --- 23:59:29.135104087
+2026-11-22T23:59:45.7885084Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7885707Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7886400Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7886964Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7887488Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7888184Z --- 23:59:37.153701272
+2026-11-22T23:59:45.7888494Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7889051Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7889461Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7889866Z ESTAB 0 24 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7890243Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7890548Z --- 23:59:37.383978290
+2026-11-22T23:59:45.7890829Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7891234Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7891645Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7892047Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7892412Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7892724Z --- 23:59:40.839099741
+2026-11-22T23:59:45.7893007Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7893402Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7893821Z ESTAB 0 24 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7894220Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7894591Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.7895057Z --- 23:59:41.073741253
+2026-11-22T23:59:45.7895531Z State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+2026-11-22T23:59:45.7896027Z LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2773,fd=43))
+2026-11-22T23:59:45.7896626Z ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59519 users:(("qemu-system-x86",pid=2773,fd=91))
+2026-11-22T23:59:45.7897164Z ESTAB 0 0 127.0.0.1:59519 127.0.0.1:5555 users:(("adb",pid=2969,fd=4)) 
+2026-11-22T23:59:45.7897834Z LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2773,fd=44))
+2026-11-22T23:59:45.8704812Z restarting adbd as root
+2026-11-22T23:59:49.9986903Z === logcat lines naming adbd
+2026-11-22T23:59:50.0018731Z 11-22 23:56:48.592  2663  2663 I auditd  : type=1400 audit(0.0:34): avc:  denied  { read } for  comm="binder:2663_5" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0021046Z 11-22 23:56:48.592  2663  2663 I auditd  : type=1400 audit(0.0:35): avc:  denied  { read } for  comm="binder:2663_5" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0023424Z 11-22 23:56:52.872  2663  2663 I auditd  : type=1400 audit(0.0:38): avc:  denied  { read } for  comm="binder:2663_1" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0025685Z 11-22 23:56:52.872  2663  2663 I auditd  : type=1400 audit(0.0:39): avc:  denied  { read } for  comm="binder:2663_1" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0027806Z 11-22 23:56:55.556  2663  2663 I auditd  : type=1400 audit(0.0:40): avc:  denied  { read } for  comm="binder:2663_1" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0030125Z 11-22 23:56:55.560  2663  2663 I auditd  : type=1400 audit(0.0:41): avc:  denied  { read } for  comm="binder:2663_1" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0032744Z 11-22 23:56:56.860  2663  2663 I auditd  : type=1400 audit(0.0:42): avc:  denied  { read } for  comm="binder:2663_5" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0034869Z 11-22 23:56:56.860  2663  2663 I auditd  : type=1400 audit(0.0:43): avc:  denied  { read } for  comm="binder:2663_5" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0037200Z 11-22 23:56:59.848  2663  2663 I auditd  : type=1400 audit(0.0:44): avc:  denied  { read } for  comm="binder:2663_5" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0039867Z 11-22 23:56:59.848  2663  2663 I auditd  : type=1400 audit(0.0:45): avc:  denied  { read } for  comm="binder:2663_5" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0042176Z 11-22 23:57:06.464  2663  2663 I auditd  : type=1400 audit(0.0:53): avc:  denied  { read } for  comm="binder:2663_1" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0044674Z 11-22 23:57:06.464  2663  2663 I auditd  : type=1400 audit(0.0:54): avc:  denied  { read } for  comm="binder:2663_1" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0046615Z 11-22 23:57:21.748  2663  2663 I auditd  : type=1400 audit(0.0:55): avc:  denied  { read } for  comm="binder:2663_1" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0048549Z 11-22 23:57:21.748  2663  2663 I auditd  : type=1400 audit(0.0:56): avc:  denied  { read } for  comm="binder:2663_1" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0050554Z 11-22 23:57:39.876  2663  2663 I auditd  : type=1400 audit(0.0:57): avc:  denied  { read } for  comm="IntentService[D" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0052072Z 11-22 23:57:39.888  2663  2663 I auditd  : type=1400 audit(0.0:58): avc:  denied  { read } for  comm="IntentService[D" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0053604Z 11-22 23:58:35.412  2663  2663 I auditd  : type=1400 audit(0.0:80): avc:  denied  { read } for  comm="binder:2663_6" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0055665Z 11-22 23:58:35.412  2663  2663 I auditd  : type=1400 audit(0.0:81): avc:  denied  { read } for  comm="binder:2663_6" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0058254Z 11-22 23:58:36.440  2663  2663 I auditd  : type=1400 audit(0.0:82): avc:  denied  { read } for  comm="IntentService[D" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0060455Z 11-22 23:58:36.448  2663  2663 I auditd  : type=1400 audit(0.0:83): avc:  denied  { read } for  comm="IntentService[D" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+2026-11-22T23:59:50.0061589Z 11-22 23:59:22.181   441   451 I adbd    : jdwp connection from 5224
+2026-11-22T23:59:50.0062036Z 11-22 23:59:44.756   441   441 I adbd    : Remote process closed the socket (on MSG_PEEK)
+2026-11-22T23:59:50.0062415Z === result 1
+2026-11-22T23:59:50.0066442Z ##[error]The process '/usr/bin/sh' failed with exit code 1
+2026-11-22T23:59:50.0068102Z ##[group]Terminate Emulator
+2026-11-22T23:59:50.0068571Z [command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 emu kill
+2026-11-22T23:59:50.0085103Z OK: killing emulator, bye bye
+2026-11-22T23:59:50.0085543Z OK
+2026-11-22T23:59:50.0086168Z ##[endgroup]
+2026-11-22T23:59:50.0087261Z INFO         | Wait for emulator (pid 2773) 20 seconds to shutdown gracefully before kill;you can set environment variable ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL(in seconds) to change the default value (20 seconds)
+2026-11-22T23:59:50.0088211Z 
+2026-11-22T23:59:50.0233420Z USER_INFO    | Snapshots have been disabled by the user, save request is ignored.
+2026-11-22T23:59:50.0234378Z INFO         | Saving snapshot 'default_boot' took 0 ms
+2026-11-22T23:59:50.0688124Z WARNING      | Emulator client has not yet been configured.. Call configure me first!
+2026-11-22T23:59:50.0796973Z INFO         | removeAll
+2026-11-22T23:59:50.1301259Z WARNING      | Netsim Wifi dns:///localhost:35867 is gone due to Stream removed (CANCELLED)
+﻿2026-11-22T23:59:51.1399708Z ##[group]Run actions/upload-artifact@v4
+2026-11-22T23:59:51.1400024Z with:
+2026-11-22T23:59:51.1400228Z   name: evidence-4
+2026-11-22T23:59:51.1400474Z   path: /home/runner/work/_temp/evidence
+2026-11-22T23:59:51.1400756Z   if-no-files-found: warn
+2026-11-22T23:59:51.1401004Z   compression-level: 6
+2026-11-22T23:59:51.1401222Z   overwrite: false
+2026-11-22T23:59:51.1401452Z   include-hidden-files: false
+2026-11-22T23:59:51.1401689Z env:
+2026-11-22T23:59:51.1401888Z   BUN_VERSION: 1.3.14
+2026-11-22T23:59:51.1402101Z   MISE_LOG_LEVEL: info
+2026-11-22T23:59:51.1404239Z   GITHUB_TOKEN: ***
+2026-11-22T23:59:51.1404521Z   MISE_TRUSTED_CONFIG_PATHS: /home/runner/work/ziggy/ziggy
+2026-11-22T23:59:51.1404831Z   MISE_YES: 1
+2026-11-22T23:59:51.1405167Z   JAVA_HOME: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:59:51.1405640Z   JAVA_HOME_17_X64: /opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.21-9/x64
+2026-11-22T23:59:51.1406089Z   ZIGGY_SMOKE_BUILD: /home/runner/work/ziggy/ziggy/ziggy-build/app
+2026-11-22T23:59:51.1406502Z   EVIDENCE_DIR: /home/runner/work/_temp/evidence
+2026-11-22T23:59:51.1406810Z   ANDROID_AVD_HOME: /home/runner/.android/avd
+2026-11-22T23:59:51.1407092Z ##[endgroup]
+2026-11-22T23:59:51.3002514Z (node:17275) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T23:59:51.3003294Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-11-22T23:59:51.3171898Z With the provided path, there will be 75 files uploaded
+2026-11-22T23:59:51.3176353Z Artifact name is valid!
+2026-11-22T23:59:51.3176755Z Root directory input is valid!
+2026-11-22T23:59:51.6807367Z Beginning upload of artifact content to blob storage
+2026-11-22T23:59:52.2671991Z (node:17275) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+2026-11-22T23:59:53.3120496Z Uploaded bytes 8388608
+2026-11-22T23:59:53.6702761Z Uploaded bytes 16777216
+2026-11-22T23:59:53.8883359Z Uploaded bytes 21518783
+2026-11-22T23:59:53.9627294Z Finished uploading artifact content to blob storage!
+2026-11-22T23:59:53.9630829Z SHA256 digest of uploaded artifact zip is 4d67361190b03bcf7d0272c6ab5a7375c15b7e92c7a40adfe60b829748ec121d
+2026-11-22T23:59:53.9633031Z Finalizing artifact upload
+2026-11-22T23:59:54.3317144Z Artifact evidence-4.zip successfully finalized. Artifact ID 14779057259
+2026-11-22T23:59:54.3318341Z Artifact evidence-4 has been successfully uploaded! Final size is 21518783 bytes. Artifact ID is 14779057259
+2026-11-22T23:59:54.3325006Z Artifact download URL: https://github.com/ashleydavis/ziggy/actions/runs/45085731955/artifacts/14779057259
+﻿2026-11-22T23:59:54.3526873Z Post job cleanup.
+2026-11-22T23:59:54.4876789Z (node:17287) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-11-22T23:59:54.4877847Z (Use `node --trace-deprecation ...` to show where the warning was created)
+﻿2026-11-22T23:59:54.5026595Z Post job cleanup.
+2026-11-22T23:59:54.5842561Z [command]/usr/bin/git version
+2026-11-22T23:59:54.5878694Z git version 2.56.1
+2026-11-22T23:59:54.5910517Z Temporarily overriding HOME='/home/runner/work/_temp/ec7f40d1-525f-4a8f-926a-12038901bbd9' before making global git config changes
+2026-11-22T23:59:54.5911685Z Adding repository directory to the temporary git global config as a safe directory
+2026-11-22T23:59:54.5915051Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/ziggy/ziggy
+2026-11-22T23:59:54.5950887Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-11-22T23:59:54.5980692Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-11-22T23:59:54.6173209Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-11-22T23:59:54.6197929Z http.https://github.com/.extraheader
+2026-11-22T23:59:54.6206805Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2026-11-22T23:59:54.6238104Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-11-22T23:59:54.6423563Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-11-22T23:59:54.6450517Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+﻿2026-11-22T23:59:54.6808655Z Cleaning up orphan processes
+2026-11-22T23:59:54.7100839Z Terminate orphan process: pid (2969) (adb)
+2026-11-22T23:59:54.7174389Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/cache/restore@v4, actions/checkout@v4, actions/setup-java@v4, actions/upload-artifact@v4, jdx/mise-action@v2. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

@@ -1,0 +1,7 @@
+--- adb starting (pid 2714) ---
+11-22 23:25:57.398  2714  2714 I adb     : main.cpp:65 Android Debug Bridge version 1.0.41
+11-22 23:25:57.398  2714  2714 I adb     : main.cpp:65 Version 37.0.3-16887417
+11-22 23:25:57.398  2714  2714 I adb     : main.cpp:65 Installed as /usr/local/lib/android/sdk/platform-tools/adb
+11-22 23:25:57.398  2714  2714 I adb     : main.cpp:65 Running on Linux 7.0.0-1014-aws (x86_64)
+11-22 23:25:57.398  2714  2714 I adb     : main.cpp:65 
+11-22 23:27:14.020  2714  2722 I adb     : transport.cpp:1226 emulator-5554: connection terminated: read failed

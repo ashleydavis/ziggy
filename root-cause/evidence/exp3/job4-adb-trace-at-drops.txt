@@ -1,0 +1,27 @@
+25741-11-22 23:57:45.020  2969  2969 D adb     : adb.cpp:436 packet <-- WRTE
+25742-11-22 23:57:45.020  2969  2969 D adb     : sockets.cpp:266 LS(552): enqueue 14
+25743-11-22 23:57:45.020  2969  2969 D adb     : sockets.cpp:121 LS(552) local_socket_flush_incoming: 14 bytes in queue
+25744-11-22 23:57:45.020  2969  2969 D adb     : sockets.cpp:127 LS(552) local_socket_flush_incoming: rc = 14
+25745-11-22 23:57:45.020  2969  2969 D adb     : transport.cpp:619 packet --> OKAY
+25746-11-22 23:57:45.020  2969  2969 D adb     : transport.cpp:631 emulator-5554: to remote: [OKAY] arg0=0x228 arg1=39 (len=0)  
+25747-11-22 23:57:45.020  2969  2979 D adb     : adb_io.cpp:79 readx: fd=14 wanted=24
+25748-11-22 23:57:45.020  2969  2980 D adb     : adb_io.cpp:106 writex: fd=14 len=24 4f4b4159280200002700000000000000 OKAY(...'....... [truncated]
+25749-11-22 23:57:45.025  2969  2979 D adb     : adb_io.cpp:96 readx: fd=14 wanted=24 got=24 575254452700000028020000e6f10100 WRTE'...(....... [truncated]
+25750-11-22 23:57:45.025  2969  2979 D adb     : adb_io.cpp:79 readx: fd=14 wanted=127462
+25751-11-22 23:57:45.063  2969  2979 D adb     : adb_io.cpp:90 readx: fd=14 disconnected
+25752-11-22 23:57:45.064  2969  2979 D adb     : transport.cpp:499 remote local: terminated (data)
+25753:11-22 23:57:45.064  2969  2979 D adb     : transport.cpp:356 emulator-5554: read failed
+--
+31987-11-22 23:58:03.601  2969  2969 D adb     : fdevent_epoll.cpp:163 (fdevent 0: fd 5 R) got events 0x1
+31988-11-22 23:58:03.601  2969  2969 D adb     : adb.cpp:436 packet <-- WRTE
+31989-11-22 23:58:03.601  2969  2969 D adb     : sockets.cpp:266 LS(931): enqueue 14
+31990-11-22 23:58:03.601  2969  2969 D adb     : sockets.cpp:121 LS(931) local_socket_flush_incoming: 14 bytes in queue
+31991-11-22 23:58:03.601  2969  2969 D adb     : sockets.cpp:127 LS(931) local_socket_flush_incoming: rc = 14
+31992-11-22 23:58:03.601  2969  2969 D adb     : transport.cpp:619 packet --> OKAY
+31993-11-22 23:58:03.601  2969  2969 D adb     : transport.cpp:631 emulator-5554: to remote: [OKAY] arg0=0x3a3 arg1=47 (len=0)  
+31994-11-22 23:58:03.601  2969  8016 D adb     : adb_io.cpp:106 writex: fd=14 len=24 4f4b4159a30300002f00000000000000 OKAY..../....... [truncated]
+31995-11-22 23:58:03.601  2969  8015 D adb     : adb_io.cpp:96 readx: fd=14 wanted=24 got=24 575254452f000000a30300000e560100 WRTE/........V.. [truncated]
+31996-11-22 23:58:03.601  2969  8015 D adb     : adb_io.cpp:79 readx: fd=14 wanted=87566
+31997-11-22 23:58:03.606  2969  8015 D adb     : adb_io.cpp:90 readx: fd=14 disconnected
+31998-11-22 23:58:03.606  2969  8015 D adb     : transport.cpp:499 remote local: terminated (data)
+31999:11-22 23:58:03.606  2969  8015 D adb     : transport.cpp:356 emulator-5554: read failed

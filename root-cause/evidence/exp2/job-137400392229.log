@@ -1,0 +1,552 @@
+Current runner version: '2.338.2'
+##[group]Runner Image Provisioner
+Hosted Compute Agent
+Version: 20261111.635
+Commit: b8a594ea514ff44cadb5342986c68b1eac6e22ed
+Build Date: 2026-11-11T01:49:01Z
+Worker ID: {3602400f-0850-4bbe-9574-a3c86f76273b}
+Region: centralus
+Cloud: Azure
+##[endgroup]
+##[group]Operating System
+Ubuntu
+24.04.5
+LTS
+##[endgroup]
+##[group]Runner Image
+Image: ubuntu-24.04
+Version: 20261116.376.1
+Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20261116.376/images/ubuntu/Ubuntu2404-Readme.md
+Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20261116.376
+##[endgroup]
+##[group]GITHUB_TOKEN Permissions
+Contents: read
+Metadata: read
+Packages: read
+##[endgroup]
+Secret source: Actions
+Cache mode: write
+Prepare workflow directory
+Prepare all required actions
+Getting action download info
+Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+Download action repository 'reactivecircus/android-emulator-runner@v2' (SHA:a421e43855164a8197daf9d8d40fe71c6996bb0d)
+Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+Complete job name: android-offline-idle (2)
+##[group]Run actions/checkout@v4
+with:
+  repository: ashleydavis/ziggy
+  token: ***
+  ssh-strict: true
+  ssh-user: git
+  persist-credentials: true
+  clean: true
+  sparse-checkout-cone-mode: true
+  fetch-depth: 1
+  fetch-tags: false
+  show-progress: true
+  lfs: false
+  submodules: false
+  set-safe-directory: true
+  allow-unsafe-pr-checkout: false
+##[endgroup]
+Syncing repository: ashleydavis/ziggy
+##[group]Getting Git version info
+Working directory is '/home/runner/work/ziggy/ziggy'
+[command]/usr/bin/git version
+git version 2.56.1
+##[endgroup]
+Temporarily overriding HOME='/home/runner/work/_temp/bbd17b84-c5a8-49f8-aaec-73df8e7434f3' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+[command]/usr/bin/git config --global --add safe.directory /home/runner/work/ziggy/ziggy
+Deleting the contents of '/home/runner/work/ziggy/ziggy'
+##[group]Initializing the repository
+[command]/usr/bin/git init /home/runner/work/ziggy/ziggy
+hint: Using 'master' as the name for the initial branch. This default branch name
+hint: will change to "main" in Git 3.0. To configure the initial branch name
+hint: to use in all of your new repositories, which will suppress this warning,
+hint: call:
+hint:
+hint: 	git config --global init.defaultBranch <name>
+hint:
+hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+hint: 'development'. The just-created branch can be renamed via this command:
+hint:
+hint: 	git branch -m <name>
+hint:
+hint: Disable this message with "git config set advice.defaultBranchName false"
+Initialized empty Git repository in /home/runner/work/ziggy/ziggy/.git/
+[command]/usr/bin/git remote add origin https://github.com/ashleydavis/ziggy
+##[endgroup]
+##[group]Disabling automatic garbage collection
+[command]/usr/bin/git config --local gc.auto 0
+##[endgroup]
+##[group]Setting up auth
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+[command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+##[endgroup]
+##[group]Fetching the repository
+[command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +a68febbe9a73c3c5534cefc83c51a3e5b7470d37:refs/remotes/origin/tmp-root-cause-android-offline
+From https://github.com/ashleydavis/ziggy
+ * [new ref]         a68febbe9a73c3c5534cefc83c51a3e5b7470d37 -> origin/tmp-root-cause-android-offline
+##[endgroup]
+##[group]Determining the checkout info
+##[endgroup]
+[command]/usr/bin/git sparse-checkout disable
+[command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+##[group]Checking out the ref
+[command]/usr/bin/git checkout --progress --force -B tmp-root-cause-android-offline refs/remotes/origin/tmp-root-cause-android-offline
+Switched to a new branch 'tmp-root-cause-android-offline'
+branch 'tmp-root-cause-android-offline' set up to track 'origin/tmp-root-cause-android-offline'.
+##[endgroup]
+[command]/usr/bin/git log -1 --format=%H
+a68febbe9a73c3c5534cefc83c51a3e5b7470d37
+##[group]Run echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+[36;1mecho 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules[0m
+[36;1msudo udevadm control --reload-rules[0m
+[36;1msudo udevadm trigger --name-match=kvm[0m
+shell: /usr/bin/bash -e {0}
+##[endgroup]
+KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"
+##[group]Run echo "EVIDENCE_DIR=$RUNNER_TEMP/evidence" >> "$GITHUB_ENV"
+[36;1mecho "EVIDENCE_DIR=$RUNNER_TEMP/evidence" >> "$GITHUB_ENV"[0m
+shell: /usr/bin/bash -e {0}
+##[endgroup]
+##[group]Run reactivecircus/android-emulator-runner@v2
+with:
+  api-level: 35
+  arch: x86_64
+  target: google_apis
+  disk-size: 4096M
+  script: bash root-cause/experiment.sh
+  cores: 2
+  avd-name: test
+  force-avd-creation: true
+  emulator-boot-timeout: 600
+  emulator-port: 5554
+  emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+  disable-animations: true
+  disable-spellchecker: false
+  disable-linux-hw-accel: auto
+  enable-hw-keyboard: false
+  channel: stable
+env:
+  EVIDENCE_DIR: /home/runner/work/_temp/evidence
+  IDLE_SECONDS: 240
+##[endgroup]
+##[group]Configure emulator
+API level: 35
+System image API level: 35
+target: google_apis
+CPU architecture: x86_64
+Hardware profile: 
+Cores: 2
+RAM size: 
+Heap size: 
+SD card path or size: 
+Disk size: 4096M
+AVD name: test
+force avd creation: true
+Emulator boot timeout: 600
+emulator port: 5554
+emulator options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+disable animations: true
+disable spellchecker: false
+disable Linux hardware acceleration: false
+enable hardware keyboard: false
+Channel: 0 (stable)
+Script:
+bash root-cause/experiment.sh
+Pre emulator launch script:
+##[endgroup]
+##[group]Install Android SDK
+[command]/usr/bin/sh -c \yes | sdkmanager --licenses > /dev/null
+Installing latest build tools, platform tools, and platform.
+[command]/usr/bin/sh -c \sdkmanager --install 'build-tools;37.0.0' platform-tools 'platforms;android-35'> /dev/null
+Installing latest emulator.
+[command]/usr/bin/sh -c \sdkmanager --install emulator --channel=0 > /dev/null
+Installing system images.
+[command]/usr/bin/sh -c \sdkmanager --install 'system-images;android-35;google_apis;x86_64' --channel=0 > /dev/null
+##[endgroup]
+##[group]Create AVD
+Creating AVD.
+[command]/usr/bin/sh -c \echo no | avdmanager create avd --force -n test --package 'system-images;android-35;google_apis;x86_64'
+Loading local repository...                                                     
+[=========                              ] 25% Loading local repository...       
+[=========                              ] 25% Fetch remote repository...        
+[=======================================] 100% Fetch remote repository...       
+Auto-selecting single ABI x86_64
+Do you wish to create a custom hardware profile? [no] [command]/usr/bin/sh -c \printf 'hw.cpu.ncore=2\ndisk.dataPartition.size=4096M\n' >> /home/runner/.android/avd/test.avd/config.ini
+##[endgroup]
+##[group]Launch Emulator
+Starting emulator.
+[command]/usr/bin/sh -c \/usr/local/lib/android/sdk/emulator/emulator -port 5554 -avd test -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim &
+INFO         | Android emulator version 37.3.10.0 (build_id 16970787) (CL:N/A)
+INFO         | Graphics backend: gfxstream
+INFO         | Found systemPath /usr/local/lib/android/sdk/system-images/android-35/google_apis/x86_64/
+INFO         | Saving last run QEMU version for the AVD to 2
+INFO         | Increasing RAM size to 2560MB
+##############################################################################
+##                        WARNING - ACTION REQUIRED                         ##
+##  Consider using the '-metrics-collection' flag to help improve the       ##
+##  emulator by sending anonymized usage data. Or use the '-no-metrics'     ##
+##  flag to bypass this warning and turn off the metrics collection.        ##
+##  In a future release this warning will turn into a one-time blocking     ##
+##  prompt to ask for explicit user input regarding metrics collection.     ##
+##                                                                          ##
+##  Please see '-help-metrics-collection' for more details. You can use     ##
+##  '-metrics-to-file' or '-metrics-to-console' flags to see what type of   ##
+##  data is being collected by emulator as part of usage statistics.        ##
+##############################################################################
+INFO         | Guest GLES Driver: Auto (ext controls)
+INFO         | emuglConfig_init: vulkan_mode_selected:swiftshader gles_mode_selected:swiftshader
+INFO         | Checking system compatibility:
+INFO         |   Checking: hasSufficientDiskSpace
+INFO         |      Ok: Disk space requirements to run avd: `test` are met
+INFO         |   Checking: hasSufficientHwGpu
+INFO         |      Ok: Hardware GPU compatibility checks are not required
+INFO         |   Checking: hasSufficientSystem
+INFO         |      Ok: System requirements to run avd: `test` are met
+WARNING      | Feature QuickbootFileBacked is disabled due to stability issues, if you really want that, the environment variable ANDROID_EMU_FORCE_QUICKBOOT_FILE_BACKED need to set to 1
+ERROR        | Unable to connect to adb daemon on port: 5037
+INFO         | Storing crashdata in: /tmp/android-runner/emu-crash-37.3.10.db, detection is enabled for process: 2451
+INFO         | Initializing gfxstream backend
+INFO         | startOpenglesRendererImpl: gpu info
+INFO         | 
+INFO         | initIcdPaths: ICD set to 'swiftshader', using Swiftshader ICD
+INFO         | Setting ICD filenames for the loader = /usr/local/lib/android/sdk/emulator/lib64/vulkan/vk_swiftshader_icd.json
+INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so]
+INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/qemu/linux-x86_64/lib64/vulkan/libvulkan.so.1]
+INFO         | SharedLibrary::open for [/usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so]
+INFO         | Added library: /usr/local/lib/android/sdk/emulator/lib64/vulkan/libvulkan.so
+INFO         | Selecting Vulkan device: SwiftShader Device (Subzero), Version: 1.3.0
+INFO         | Using Vulkan externalMemoryMode: OpaqueFd for VkEmulation
+INFO         | Format VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16 does not support YCbCr sampler conversion
+INFO         | SharedLibrary::open for [libX11]
+WARNING      | Could not open libX11.so, try libX11.so.6
+INFO         | SharedLibrary::open for [libX11.so.6]
+INFO         | SharedLibrary::open for [libX11-xcb]
+WARNING      | Could not open libX11-xcb.so, try libX11-xcb.so.1
+INFO         | SharedLibrary::open for [libX11-xcb.so.1]
+INFO         | queryConfigs: Host EGL config 0x10 was not added
+INFO         | queryConfigs: Host EGL config 0x11 was not added
+INFO         | queryConfigs: Host EGL config 0x12 was not added
+INFO         | queryConfigs: Host EGL config 0x13 was not added
+INFO         | queryConfigs: Host EGL config 0x14 was not added
+INFO         | queryConfigs: Host EGL config 0x15 was not added
+INFO         | queryConfigs: Host EGL config 0x17 was not added
+INFO         | queryConfigs: Host EGL config 0x18 was not added
+INFO         | queryConfigs: Host EGL config 0x19 was not added
+INFO         | queryConfigs: Host EGL config 0x1a was not added
+INFO         | queryConfigs: Host EGL config 0x1b was not added
+INFO         | queryConfigs: Host EGL config 0x1c was not added
+INFO         | queryConfigs: Host EGL config 0x1d was not added
+INFO         | queryConfigs: Host EGL config 0x1e was not added
+INFO         | queryConfigs: Host EGL config 0x1f was not added
+INFO         | queryConfigs: Host EGL config 0x21 was not added
+INFO         | queryConfigs: Host EGL config 0x22 was not added
+INFO         | queryConfigs: Host EGL config 0x23 was not added
+INFO         | queryConfigs: Host EGL config 0x24 was not added
+INFO         | queryConfigs: Host EGL config 0x25 was not added
+INFO         | queryConfigs: Host EGL config 0x26 was not added
+INFO         | queryConfigs: Host EGL config 0x27 was not added
+INFO         | queryConfigs: Host EGL config 0x28 was not added
+INFO         | queryConfigs: Host EGL config 0x29 was not added
+INFO         | queryConfigs: Host EGL config 0x2a was not added
+INFO         | queryConfigs: Host EGL config 0x2b was not added
+INFO         | queryConfigs: Host EGL config 0x2c was not added
+INFO         | queryConfigs: Host EGL config 0x2d was not added
+INFO         | queryConfigs: Host EGL config 0x2e was not added
+INFO         | queryConfigs: Host EGL config 0x2f was not added
+INFO         | queryConfigs: Host EGL config 0x30 was not added
+INFO         | queryConfigs: Host EGL config 0x31 was not added
+INFO         | queryConfigs: Host EGL config 0x32 was not added
+INFO         | queryConfigs: Host EGL config 0x33 was not added
+INFO         | queryConfigs: Host EGL config 0x35 was not added
+INFO         | queryConfigs: Host EGL config 0x36 was not added
+INFO         | queryConfigs: Host EGL config 0x37 was not added
+INFO         | queryConfigs: Host EGL config 0x38 was not added
+INFO         | queryConfigs: Host EGL config 0x39 was not added
+INFO         | queryConfigs: Host EGL config 0x3a was not added
+INFO         | queryConfigs: Host EGL config 0x3b was not added
+INFO         | queryConfigs: Host EGL config 0x3c was not added
+INFO         | queryConfigs: Host EGL config 0x3d was not added
+INFO         | queryConfigs: Host EGL config 0x3f was not added
+INFO         | queryConfigs: Host EGL config 0x40 was not added
+INFO         | queryConfigs: Host EGL config 0x41 was not added
+INFO         | queryConfigs: Host EGL config 0x42 was not added
+INFO         | queryConfigs: Host EGL config 0x43 was not added
+INFO         | queryConfigs: Host EGL config 0x44 was not added
+INFO         | queryConfigs: Host EGL config 0x45 was not added
+INFO         | queryConfigs: Host EGL config 0x46 was not added
+INFO         | queryConfigs: Host EGL config 0x47 was not added
+INFO         | queryConfigs: Host EGL config 0x48 was not added
+INFO         | queryConfigs: Host EGL config 0x49 was not added
+INFO         | queryConfigs: Host EGL config 0x4a was not added
+INFO         | queryConfigs: Host EGL config 0x4b was not added
+INFO         | queryConfigs: Host EGL config 0x1 was not added
+INFO         | queryConfigs: Host EGL config 0x2 was not added
+INFO         | queryConfigs: Host EGL config 0x3 was not added
+INFO         | queryConfigs: Host EGL config 0x5 was not added
+INFO         | queryConfigs: Host EGL config 0x6 was not added
+INFO         | queryConfigs: Host EGL config 0x7 was not added
+INFO         | queryConfigs: Host EGL config 0x8 was not added
+INFO         | queryConfigs: Host EGL config 0xa was not added
+INFO         | queryConfigs: Host EGL config 0xb was not added
+INFO         | queryConfigs: Host EGL config 0xc was not added
+INFO         | queryConfigs: Host EGL config 0xd was not added
+INFO         | queryConfigs: Host EGL config 0xe was not added
+INFO         | queryConfigs: Host EGL config 0xf was not added
+INFO         | Initializing VkEmulation features:
+INFO         |     glInteropSupported: false
+INFO         |     useDeferredCommands: true
+INFO         |     createResourceWithRequirements: true
+INFO         |     useVulkanComposition: false
+INFO         |     useVulkanNativeSwapchain: false
+INFO         |     enable guestRenderDoc: false
+INFO         |     enable Ycbcr emulation: false
+INFO         |     guestVulkanOnly: false
+INFO         |     useDedicatedAllocations: false
+INFO         |     guestVulkanMaxApiVersion: 1.3.0
+INFO         |     enableProtectedMemoryEmulation: false
+INFO         |     VulkanDisableShaderFloatControls2: disabled ((vk_util::extensionSupported(mDeviceInfo.extensions, VK_KHR_SHADER_FLOAT_CONTROLS_2_EXTENSION_NAME) || mDeviceInfo.physdevProps.apiVersion >= VK_API_VERSION_1_4) && mDeviceInfo.physdevProps.vendorID == 0x1010)
+INFO         | Graphics Adapter Vendor Google (Google Inc.)
+INFO         | Graphics Adapter Android Emulator OpenGL ES Translator (Google SwiftShader)
+INFO         | Graphics API Version OpenGL ES 3.0 (OpenGL ES 3.0 SwiftShader 4.0.0.1)
+INFO         | Graphics API Extensions GL_OES_EGL_sync GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_depth24 GL_OES_depth32 GL_OES_element_index_uint GL_OES_texture_float GL_OES_texture_float_linear GL_OES_compressed_paletted_texture GL_OES_compressed_ETC1_RGB8_texture GL_OES_depth_texture GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_packed_depth_stencil GL_OES_vertex_half_float GL_OES_standard_derivatives GL_OES_texture_npot GL_OES_rgb8_rgba8 GL_EXT_color_buffer_float GL_EXT_color_buffer_half_float GL_EXT_texture_format_BGRA8888 GL_APPLE_texture_format_BGRA8888 
+INFO         | Graphics Device Extensions N/A
+INFO         | Disabling sparse binding feature support
+INFO         | Sending adb public key [QAAAAOvOmw89lmbhAF0a7eQ1lczZZ5HIxdQojF5ED0oP1kVw+6IP8SGCZ/0k7DRw5CAnYI9Hoz9QZ5FwycKHYw7yRinbGk5PIV4uKF2y4fewq7IX/EpPIabVFmQewOze332mTrKCKUoL/YHUpOfanjE9c5gdECmis1BxPtZPcEO/DPBVuJjAGsEg7Ep5wJR+PilvzCwGuzLD7o2xfq4yxizBlmiOzB0A4b0KSO44Mcm/eyIq6UGhlXpnhH6W/sFTceHUwIbDZoFwMJ9wOtVKKCNAJYJEfbrKmXatZoYF4/++tR4dj2nY4xdyxHTZVwUAon6csrWYUQZgBNoKPO46zxmOPSFZf+SqlQCoE8TxZtTmiSn49Fu86Q6xu6GOcaCD5pROCwS3K7AWDr2zMp9MSqcwMVhFitegq04dN3H5XbIBGhw2yje9Bg9UO3zxsOCuK1D5nPPXPwk5rIicS+qy0Gdhp0oEa3hRDlWioHC3N43iJ/RIUUkk0ScEbaUW08j4Q0jSK9BZnO82Sl3ab3DzTWMLpj7bh1NcR1JdaaesBX10fVDPza2+vTazXVBqz+pis3OxiVS5Il9y+tJg/ft/Vmdx372nF+TMnMVhS1POgmT0YmNprj3ZDNLIjN3zhigA2BwYaLt0kxAdJjh8Jpiv8ukdOh1+kSdQ1RuIYYybVGNCOlDXncqOpAEAAQA= runner@unknown]
+INFO         | Userspace boot properties:
+INFO         |   androidboot.boot_devices=pci0000:00/0000:00:03.0 pci0000:00/0000:00:06.0
+INFO         |   androidboot.dalvik.vm.heapsize=576m
+INFO         |   androidboot.debug.hwui.renderer=skiagl
+INFO         |   androidboot.debug.sf.nobootanimation=1
+INFO         |   androidboot.hardware=ranchu
+INFO         |   androidboot.hardware.gltransport=pipe
+INFO         |   androidboot.hardware.vulkan=ranchu
+INFO         |   androidboot.logcat=*:V
+INFO         |   androidboot.opengles.version=196608
+INFO         |   androidboot.qemu=1
+INFO         |   androidboot.qemu.adb.pubkey=QAAAAOvOmw89lmbhAF0a7eQ1lczZZ5HIxdQojF5ED0oP1kVw+6IP8SGCZ/0k7DRw5CAnYI9Hoz9QZ5FwycKHYw7yRinbGk5PIV4uKF2y4fewq7IX/EpPIabVFmQewOze332mTrKCKUoL/YHUpOfanjE9c5gdECmis1BxPtZPcEO/DPBVuJjAGsEg7Ep5wJR+PilvzCwGuzLD7o2xfq4yxizBlmiOzB0A4b0KSO44Mcm/eyIq6UGhlXpnhH6W/sFTceHUwIbDZoFwMJ9wOtVKKCNAJYJEfbrKmXatZoYF4/++tR4dj2nY4xdyxHTZVwUAon6csrWYUQZgBNoKPO46zxmOPSFZf+SqlQCoE8TxZtTmiSn49Fu86Q6xu6GOcaCD5pROCwS3K7AWDr2zMp9MSqcwMVhFitegq04dN3H5XbIBGhw2yje9Bg9UO3zxsOCuK1D5nPPXPwk5rIicS+qy0Gdhp0oEa3hRDlWioHC3N43iJ/RIUUkk0ScEbaUW08j4Q0jSK9BZnO82Sl3ab3DzTWMLpj7bh1NcR1JdaaesBX10fVDPza2+vTazXVBqz+pis3OxiVS5Il9y+tJg/ft/Vmdx372nF+TMnMVhS1POgmT0YmNprj3ZDNLIjN3zhigA2BwYaLt0kxAdJjh8Jpiv8ukdOh1+kSdQ1RuIYYybVGNCOlDXncqOpAEAAQA= runner@unknown
+INFO         |   androidboot.qemu.avd_name=test
+INFO         |   androidboot.qemu.camera_hq_edge_processing=0
+INFO         |   androidboot.qemu.camera_protocol_ver=1
+INFO         |   androidboot.qemu.cpuvulkan.version=4206592
+INFO         |   androidboot.qemu.gltransport.drawFlushInterval=800
+INFO         |   androidboot.qemu.gltransport.name=pipe
+INFO         |   androidboot.qemu.hwcodec.avcdec=2
+INFO         |   androidboot.qemu.hwcodec.hevcdec=2
+INFO         |   androidboot.qemu.hwcodec.vpxdec=2
+INFO         |   androidboot.qemu.settings.system.screen_off_timeout=2147483647
+INFO         |   androidboot.qemu.skin=320x640
+INFO         |   androidboot.qemu.virtiowifi=1
+INFO         |   androidboot.qemu.vsync=60
+INFO         |   androidboot.serialno=EMULATOR37X3X10X0
+INFO         |   androidboot.vbmeta.digest=b3271ba499104f4631ae3723913d5c12574e01715fce5b82d60beed097ead264
+INFO         |   androidboot.vbmeta.hash_alg=sha256
+INFO         |   androidboot.vbmeta.size=6720
+INFO         |   androidboot.veritymode=enforcing
+WARNING: cannnot unmap ptr 0x7fce7c401000 as it is in the protected range from 0x7fcddc400000 to 0x7fce7c600000
+INFO         | Monitoring duration of emulator setup.
+INFO         | Successfully initialized netsim WiFi
+INFO         | Activated packet streamer for bluetooth emulation
+INFO         | Setting display: 0 configuration to: 320x640, dpi: 160x160 
+INFO         | setDisplayActiveConfig: id:0, 320x640
+INFO         | emulatorSetupEnvironment: Environment scene is not required
+USER_INFO    | Emulator is performing a full startup. This may take upto two minutes, or more.
+WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+WARNING      | Failed to process .ini file /home/runner/.android/emu-update-last-check.ini for reading.
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+* daemon not running; starting now at tcp:5037
+* daemon started successfully
+adb: device offline
+The process '/usr/local/lib/android/sdk/platform-tools/adb' failed with exit code 1
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+
+INFO         | Boot completed in 26672 ms
+INFO         | Increasing screen off timeout, logcat buffer size to 2M.
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell getprop sys.boot_completed
+1
+Emulator booted.
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell input keyevent 82
+Disabling animations.
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global window_animation_scale 0.0
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global transition_animation_scale 0.0
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 shell settings put global animator_duration_scale 0.0
+##[endgroup]
+[command]/usr/bin/sh -c bash root-cause/experiment.sh
+11-22 23:43:32.509  2658  2658 D adb     : adb_trace.cpp:233 Android Debug Bridge version 1.0.41
+11-22 23:43:32.509  2658  2658 D adb     : adb_trace.cpp:233 Version 37.0.3-16887417
+11-22 23:43:32.509  2658  2658 D adb     : adb_trace.cpp:233 Installed as /usr/local/lib/android/sdk/platform-tools/adb
+11-22 23:43:32.509  2658  2658 D adb     : adb_trace.cpp:233 Running on Linux 7.0.0-1017-azure (x86_64)
+11-22 23:43:32.509  2658  2658 D adb     : adb_trace.cpp:233 
+11-22 23:43:32.509  2658  2658 D adb     : commandline.cpp:1694 Using server socket: tcp:5037
+11-22 23:43:32.509  2658  2658 D adb     : adb_client.cpp:355 adb_connect: service: host:start-server
+11-22 23:43:32.509  2658  2658 D adb     : adb_client.cpp:157 _adb_connect: host:version
+* daemon not running; starting now at tcp:5037
+11-22 23:43:32.511  2659  2659 D adb     : adb_trace.cpp:233 Android Debug Bridge version 1.0.41
+11-22 23:43:32.511  2659  2659 D adb     : adb_trace.cpp:233 Version 37.0.3-16887417
+11-22 23:43:32.511  2659  2659 D adb     : adb_trace.cpp:233 Installed as /usr/local/lib/android/sdk/platform-tools/adb
+11-22 23:43:32.511  2659  2659 D adb     : adb_trace.cpp:233 Running on Linux 7.0.0-1017-azure (x86_64)
+11-22 23:43:32.511  2659  2659 D adb     : adb_trace.cpp:233 
+11-22 23:43:32.511  2659  2659 D adb     : commandline.cpp:1694 Using server socket: tcp:5037
+* daemon started successfully
+23:43:32.624318614 guest uptime: 29.93 8.88
+23:43:32.704613430 idle for 240 s
+23:47:32.711871975 guest uptime: 269.97 393.95
+=== adb state changes
+23:43:32.710208784 device
+=== adb server log lines naming the emulator
+11-22 23:47:32.736  2659  2659 D adb     : sockets.cpp:363 LS(2151): closing peer. peer->id=19 peer->fd=-1
+=== socket changes on port 5555
+--- 23:43:32.765810106
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2451,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59293 users:(("qemu-system-x86",pid=2451,fd=77))
+TIME-WAIT 0 0 127.0.0.1:53147 127.0.0.1:5555 
+ESTAB 0 0 127.0.0.1:59293 127.0.0.1:5555 users:(("adb",pid=2659,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2451,fd=44))
+--- 23:44:33.272734605
+State Recv-Q Send-Q Local Address:Port Peer Address:Port Process 
+LISTEN 0 5 127.0.0.1:5555 0.0.0.0:* users:(("qemu-system-x86",pid=2451,fd=43))
+ESTAB 0 0 127.0.0.1:5555 127.0.0.1:59293 users:(("qemu-system-x86",pid=2451,fd=77))
+ESTAB 0 0 127.0.0.1:59293 127.0.0.1:5555 users:(("adb",pid=2659,fd=14)) 
+LISTEN 0 5 [::1]:5555 [::]:* users:(("qemu-system-x86",pid=2451,fd=44))
+restarting adbd as root
+=== logcat lines naming adbd
+11-22 23:43:32.313   441   459 I adbd    : host-17: connection terminated: read failed
+11-22 23:43:32.313   441   441 I adbd    : host-17: offline
+11-22 23:43:32.315   441   441 I adbd    : destroying transport host-17
+11-22 23:43:32.315   441   441 I adbd    : BlockingConnectionAdapter(host-17): stopping
+11-22 23:43:32.315   441   441 I adbd    : BlockingConnectionAdapter(host-17): stopped
+11-22 23:43:32.315   441   441 I adbd    : BlockingConnectionAdapter(host-17): destructing
+11-22 23:43:32.315   441   441 I adbd    : BlockingConnectionAdapter(host-17): already stopped
+11-22 23:43:32.323   441  2229 I adbd    : host-18: read thread spawning
+11-22 23:43:32.323   441   441 I adbd    : host-18: already offline
+11-22 23:43:32.323   441   441 I adbd    : authentication not required
+11-22 23:43:32.323   441  2230 I adbd    : host-18: write thread spawning
+11-22 23:43:42.688  1067  1118 D PrefCtrlListHelper: Could not find Context-only controller for pref: com.android.settings.development.AdbDeviceNamePreferenceController
+11-22 23:43:43.493  1067  3141 D PrefCtrlListHelper: Could not find Context-only controller for pref: com.android.settings.development.AdbDeviceNamePreferenceController
+11-22 23:43:43.752   441   455 I adbd    : jdwp connection from 3207
+11-22 23:43:46.396  2094  2094 I auditd  : type=1400 audit(0.0:27): avc:  denied  { read } for  comm="binder:2094_4" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:46.396  2094  2094 W binder:2094_4: type=1400 audit(0.0:27): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:46.408  2094  2094 I auditd  : type=1400 audit(0.0:28): avc:  denied  { read } for  comm="binder:2094_4" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:46.408  2094  2094 W binder:2094_4: type=1400 audit(0.0:28): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:46.612   441   455 I adbd    : jdwp connection from 3434
+11-22 23:43:46.884  2094  2094 I auditd  : type=1400 audit(0.0:29): avc:  denied  { read } for  comm="binder:2094_1" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:46.884  2094  2094 W binder:2094_1: type=1400 audit(0.0:29): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:46.888  2094  2094 I auditd  : type=1400 audit(0.0:30): avc:  denied  { read } for  comm="binder:2094_1" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:46.888  2094  2094 W binder:2094_1: type=1400 audit(0.0:30): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:48.524  2094  2094 I auditd  : type=1400 audit(0.0:33): avc:  denied  { read } for  comm="binder:2094_2" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:48.524  2094  2094 W binder:2094_2: type=1400 audit(0.0:33): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:48.524  2094  2094 I auditd  : type=1400 audit(0.0:34): avc:  denied  { read } for  comm="binder:2094_2" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:48.524  2094  2094 W binder:2094_2: type=1400 audit(0.0:34): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:49.780  2094  2094 I auditd  : type=1400 audit(0.0:35): avc:  denied  { read } for  comm="binder:2094_5" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:49.780  2094  2094 W binder:2094_5: type=1400 audit(0.0:35): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:49.788  2094  2094 I auditd  : type=1400 audit(0.0:36): avc:  denied  { read } for  comm="binder:2094_5" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:49.788  2094  2094 W binder:2094_5: type=1400 audit(0.0:36): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:51.044  2094  2094 I auditd  : type=1400 audit(0.0:37): avc:  denied  { read } for  comm="binder:2094_5" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:51.044  2094  2094 W binder:2094_5: type=1400 audit(0.0:37): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:51.044  2094  2094 I auditd  : type=1400 audit(0.0:38): avc:  denied  { read } for  comm="binder:2094_5" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:51.044  2094  2094 W binder:2094_5: type=1400 audit(0.0:38): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:43:52.697  1067  1118 D PrefCtrlListHelper: Could not find Context-only controller for pref: com.android.settings.development.AdbDeviceNamePreferenceController
+11-22 23:44:00.752  2094  2094 I auditd  : type=1400 audit(0.0:39): avc:  denied  { read } for  comm="binder:2094_3" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:00.752  2094  2094 W binder:2094_3: type=1400 audit(0.0:39): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:00.756  2094  2094 I auditd  : type=1400 audit(0.0:40): avc:  denied  { read } for  comm="binder:2094_3" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:00.756  2094  2094 W binder:2094_3: type=1400 audit(0.0:40): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:05.192  2094  2094 I auditd  : type=1400 audit(0.0:41): avc:  denied  { read } for  comm="binder:2094_3" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:05.192  2094  2094 W binder:2094_3: type=1400 audit(0.0:41): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:05.192  2094  2094 I auditd  : type=1400 audit(0.0:42): avc:  denied  { read } for  comm="binder:2094_3" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:05.192  2094  2094 W binder:2094_3: type=1400 audit(0.0:42): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:14.636  2094  2094 I auditd  : type=1400 audit(0.0:43): avc:  denied  { read } for  comm="binder:2094_1" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:14.636  2094  2094 W binder:2094_1: type=1400 audit(0.0:43): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:14.636  2094  2094 I auditd  : type=1400 audit(0.0:44): avc:  denied  { read } for  comm="binder:2094_1" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:14.636  2094  2094 W binder:2094_1: type=1400 audit(0.0:44): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:42.408  2094  2094 I auditd  : type=1400 audit(0.0:45): avc:  denied  { read } for  comm="IntentService[D" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:42.408  2094  2094 W IntentService[D: type=1400 audit(0.0:45): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:42.416  2094  2094 I auditd  : type=1400 audit(0.0:46): avc:  denied  { read } for  comm="IntentService[D" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:42.416  2094  2094 W IntentService[D: type=1400 audit(0.0:46): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:43.676  2094  2094 I auditd  : type=1400 audit(0.0:47): avc:  denied  { read } for  comm="binder:2094_3" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:43.676  2094  2094 W binder:2094_3: type=1400 audit(0.0:47): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:43.676  2094  2094 I auditd  : type=1400 audit(0.0:48): avc:  denied  { read } for  comm="binder:2094_3" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:44:43.676  2094  2094 W binder:2094_3: type=1400 audit(0.0:48): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:45:43.068  2094  2094 I auditd  : type=1400 audit(0.0:49): avc:  denied  { read } for  comm="IntentService[D" name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:45:43.068  2094  2094 W IntentService[D: type=1400 audit(0.0:49): avc:  denied  { read } for  name="u:object_r:system_adbd_prop:s0" dev="tmpfs" ino=318 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:system_adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:45:43.068  2094  2094 I auditd  : type=1400 audit(0.0:50): avc:  denied  { read } for  comm="IntentService[D" name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+11-22 23:45:43.068  2094  2094 W IntentService[D: type=1400 audit(0.0:50): avc:  denied  { read } for  name="u:object_r:adbd_prop:s0" dev="tmpfs" ino=63 scontext=u:r:gmscore_app:s0:c512,c768 tcontext=u:object_r:adbd_prop:s0 tclass=file permissive=0 app=com.google.android.gms
+=== result 0
+##[group]Terminate Emulator
+[command]/usr/local/lib/android/sdk/platform-tools/adb -s emulator-5554 emu kill
+OK: killing emulator, bye bye
+OK
+INFO         | Wait for emulator (pid 2451) 20 seconds to shutdown gracefully before kill;you can set environment variable ANDROID_EMULATOR_WAIT_TIME_BEFORE_KILL(in seconds) to change the default value (20 seconds)
+
+##[endgroup]
+USER_INFO    | Snapshots have been disabled by the user, save request is ignored.
+INFO         | Saving snapshot 'default_boot' took 0 ms
+WARNING      | Emulator client has not yet been configured.. Call configure me first!
+INFO         | removeAll
+WARNING      | Netsim Wifi dns:///localhost:36165 is gone due to Stream removed (CANCELLED)
+##[group]Run actions/upload-artifact@v4
+with:
+  name: evidence-2
+  path: /home/runner/work/_temp/evidence
+  if-no-files-found: warn
+  compression-level: 6
+  overwrite: false
+  include-hidden-files: false
+env:
+  EVIDENCE_DIR: /home/runner/work/_temp/evidence
+  ANDROID_AVD_HOME: /home/runner/.android/avd
+##[endgroup]
+(node:12691) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+With the provided path, there will be 6 files uploaded
+Artifact name is valid!
+Root directory input is valid!
+Beginning upload of artifact content to blob storage
+(node:12691) [DEP0169] DeprecationWarning: `url.parse()` behavior is not standardized and prone to errors that have security implications. Use the WHATWG URL API instead. CVEs are not issued for `url.parse()` vulnerabilities.
+Uploaded bytes 1573867
+Finished uploading artifact content to blob storage!
+SHA256 digest of uploaded artifact zip is 4803611682379145d21b1341de57ed83d0071b04d9d90ee64d1e123d1ee3a8b8
+Finalizing artifact upload
+Artifact evidence-2.zip successfully finalized. Artifact ID 14779151467
+Artifact evidence-2 has been successfully uploaded! Final size is 1573867 bytes. Artifact ID is 14779151467
+Artifact download URL: https://github.com/ashleydavis/ziggy/actions/runs/45084649054/artifacts/14779151467
+Post job cleanup.
+[command]/usr/bin/git version
+git version 2.56.1
+Temporarily overriding HOME='/home/runner/work/_temp/9b7874c8-04a9-4231-8197-283ce4d250a7' before making global git config changes
+Adding repository directory to the temporary git global config as a safe directory
+[command]/usr/bin/git config --global --add safe.directory /home/runner/work/ziggy/ziggy
+[command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+http.https://github.com/.extraheader
+[command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+[command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+[command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+[command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+Cleaning up orphan processes
+Terminate orphan process: pid (2659) (adb)
+##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4, actions/upload-artifact@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

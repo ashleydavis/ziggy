@@ -1,0 +1,13 @@
+18842-11-22 23:56:56.422  2868  2868 D adb     : adb_io.cpp:106 writex: fd=4 len=25 30303135656d756c61746f722d353535 0015emulator-555 [truncated]
+18843-11-22 23:56:56.422  2868  2868 D adb     : sockets.cpp:890 SS(0): handled host service 'devices'
+18844-11-22 23:56:56.422  2868  2868 D adb     : sockets.cpp:981 SS(0): closed
+18845-11-22 23:56:56.422  2868  2868 D adb     : sockets.cpp:359 entered local_socket_close. LS(613) fd=4
+18846-11-22 23:56:56.422  2868  2868 D adb     : sockets.cpp:345 LS(613): destroying fde.fd=4
+18847-11-22 23:56:56.422  2868  2868 D adb     : sockets.cpp:383 LS(613): closed
+18848-11-22 23:56:56.422  2868  2868 D adb     : sockets.cpp:227 LS(613): fd=4 post peer->enqueue(). r=-1
+18849-11-22 23:56:56.422  2868  2868 D adb     : fdevent_epoll.cpp:163 (fdevent 1227: fd 4 R) got events 0x5
+18850-11-22 23:56:56.520  2868  2877 D adb     : adb_io.cpp:96 readx: fd=10 wanted=24 got=24 5752544526000000d50100006c2e0100 WRTE&.......l... [truncated]
+18851-11-22 23:56:56.520  2868  2877 D adb     : adb_io.cpp:79 readx: fd=10 wanted=77420
+18852-11-22 23:56:56.520  2868  2877 D adb     : adb_io.cpp:90 readx: fd=10 disconnected
+18853-11-22 23:56:56.520  2868  2877 D adb     : transport.cpp:499 remote local: terminated (data)
+18854:11-22 23:56:56.520  2868  2877 D adb     : transport.cpp:356 emulator-5554: read failed
