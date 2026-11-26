@@ -271,7 +271,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.has_native_call = nativeCallHandler != nil
         // A mobile has no menu and no shortcut.
         config.is_mobile = true
-        config.worker_threads = 5
+        // Five is the floor, so the pool is the same size on every platform and never too small for the tasks that wait on the child
+        // tasks they queued.
+        config.worker_threads = UInt32(max(ProcessInfo.processInfo.activeProcessorCount, 5))
         config.max_concurrent_child_tasks = 2
         //
         // The system's theme is read only once the theme setting is system (see followSystemTheme), so the core starts with light

@@ -199,7 +199,9 @@ public final class ZiggyNativeApp implements ZiggyNativeCalls {
         this.activity = activity;
         this.webView = webView;
         this.nativeLibraryName = nativeLibraryName;
-        this.workerThreads = workerThreads;
+        // Five is the floor: a task that waits on the child tasks it queued keeps its worker, so a smaller pool can stop when several
+        // wait.
+        this.workerThreads = Math.max(workerThreads, 5);
         this.maxConcurrentChildTasks = maxConcurrentChildTasks;
     }
 

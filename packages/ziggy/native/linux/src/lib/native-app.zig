@@ -339,7 +339,8 @@ fn start(native_app: *NativeApp) !void {
     config.has_key_press = true;
     config.has_new_window = true;
     config.has_native_call = native_app.app_config.native_call != null;
-    config.worker_threads = c.g_get_num_processors();
+    // Five is the floor: a task that waits on the child tasks it queued keeps its worker, so a smaller pool can stop when several wait.
+    config.worker_threads = @max(c.g_get_num_processors(), 5);
     config.max_concurrent_child_tasks = 10;
     config.app_url_prefix = app_url_prefix;
     config.data_dir = native_app.data_directory;

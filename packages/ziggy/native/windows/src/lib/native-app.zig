@@ -1194,7 +1194,8 @@ fn onControllerCreated(native_app: *NativeApp, controller: *c.ICoreWebView2Contr
     config.has_new_window = true;
     var system_info: c.SYSTEM_INFO = undefined;
     c.GetSystemInfo(&system_info);
-    config.worker_threads = system_info.dwNumberOfProcessors;
+    // Five is the floor: a task that waits on the child tasks it queued keeps its worker, so a smaller pool can stop when several wait.
+    config.worker_threads = @max(system_info.dwNumberOfProcessors, 5);
     config.max_concurrent_child_tasks = 10;
     config.app_url_prefix = app_url_prefix;
     config.data_dir = native_app.data_directory.ptr;

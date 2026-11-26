@@ -292,7 +292,9 @@ public final class ZiggyBridge: NSObject, WKScriptMessageHandler, WKNavigationDe
         config.has_screenshot = true
         config.has_key_press = true
         config.has_new_window = true
-        config.worker_threads = UInt32(ProcessInfo.processInfo.activeProcessorCount)
+        // Five is the floor: a task that waits on the child tasks it queued keeps its worker, so a pool smaller than the tasks that can
+        // be waiting at once stops. A three-processor Mac held the background passes and an import and none of their child tasks ran.
+        config.worker_threads = UInt32(max(ProcessInfo.processInfo.activeProcessorCount, 5))
         config.max_concurrent_child_tasks = 10
         // The system's theme is read only once the setting is system (see followSystemTheme), so the core starts with light until then.
         config.system_theme = Int32(ZIGGY_THEME_LIGHT)
